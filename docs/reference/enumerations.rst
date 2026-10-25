@@ -140,8 +140,8 @@ WaterLevel
    :undoc-members:
    :no-index:
 
-Hot water level indicator displayed as gauge in app. IDs are non-sequential,
-likely represent bit positions for multi-level displays.
+Hot water level indicator. IDs are non-sequential and likely represent bit
+positions for multi-level displays.
 
 FilterChange
 ~~~~~~~~~~~~
@@ -162,8 +162,7 @@ RecirculationMode
    :undoc-members:
    :no-index:
 
-Recirculation pump operation mode, as the NaviLink app's
-``MgppRecirculationOperationMode`` sends and decodes it:
+Recirculation pump operation mode:
 
 - **ALWAYS_ON** (1): Pump runs continuously (``ALWAYS`` is an alias)
 - **WEEKLY** (2): Follows the recirculation schedule
@@ -178,8 +177,7 @@ ReservationMode
    :undoc-members:
    :no-index:
 
-Operation mode carried by a weekly-schedule (reservation) entry, the NaviLink
-app's ``MgppReservationMode``. Values 1-4 match ``DhwOperationSetting``; 5 is
+Operation mode carried by a weekly-schedule (reservation) entry. Values 1-4 match ``DhwOperationSetting``; 5 is
 ``POWER_OFF`` (there is no vacation entry) and 0 marks an unused slot.
 ``ReservationEntry.mode_name`` resolves through this enum.
 
@@ -240,7 +238,8 @@ rounding algorithms when converting internal Celsius values to Fahrenheit:
 - **ASYMMETRIC** (Type 0): Special rounding based on raw value remainder
 - **STANDARD** (Type 1): Simple round to nearest integer
 
-This keeps the mobile app display in sync with the device's built-in display.
+Using the device's formula keeps a converted value in step with the
+device's built-in display.
 
 Device Type Enumerations
 -------------------------
@@ -272,10 +271,9 @@ DeviceType
    :undoc-members:
    :no-index:
 
-Communication device type. The NWP500 reports 52, which the NaviLink app
-calls ``HPWH_MODEL`` (``DeviceType.HPWH``, an alias of ``NPF700_WIFI``).
-``NFB700_MAIN``/``NFB700_SUB`` follow the app's names; ``NPF700_MAIN`` and
-``NPF700_SUB`` remain as aliases.
+Communication device type. The NWP500 reports 52 (``DeviceType.HPWH``,
+an alias of ``NPF700_WIFI``). ``NPF700_MAIN`` and ``NPF700_SUB`` remain as
+aliases of ``NFB700_MAIN`` and ``NFB700_SUB``.
 
 FirmwareType
 ~~~~~~~~~~~~

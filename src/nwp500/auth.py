@@ -677,8 +677,8 @@ class NavienAuthClient:
         Posts the current access token to ``/auth/session/refresh``. The
         response carries only the AWS credential fields (``accessKeyId``,
         ``secretKey``, ``sessionToken``, ``authorizationExpiresIn``); any
-        field the server omits keeps its stored value, as the NaviLink app
-        does. The JWT tokens are untouched.
+        field the server omits keeps its stored value. The JWT tokens are
+        untouched.
 
         Serialized with ``refresh_token()`` on the same lock so concurrent
         callers cannot stampede the endpoint.
@@ -712,8 +712,8 @@ class NavienAuthClient:
     ) -> tuple[AuthTokens, set[str]]:
         """Overlay the token fields the server sent onto ``current``.
 
-        Only keys present and non-empty in ``data`` are overwritten, as
-        the app does. A renewed access token re-stamps ``issued_at``;
+        Only keys present and non-empty in ``data`` are overwritten. A
+        renewed access token re-stamps ``issued_at``;
         renewed AWS credentials re-stamp ``aws_credentials_issued_at``
         without touching the JWT's expiry. A renewed access token without
         AWS credentials pins the kept credentials' issue time, so their
@@ -777,7 +777,7 @@ class NavienAuthClient:
                 if not isinstance(data, dict):
                     raise ValueError("'data' is not an object")
 
-                # Overwrite only the keys the server sent (mirrors the app).
+                # Overwrite only the keys the server sent.
                 new_tokens, updated = self._merge_token_fields(current, data)
                 if not updated & self._AWS_KEYS:
                     raise TokenRefreshError(
@@ -811,8 +811,8 @@ class NavienAuthClient:
         The response carries user info, legal notices and a ``token``
         object. Only the token fields the server sends are overwritten;
         in practice that is the AWS credentials, so the current JWT access
-        and refresh tokens are kept. The app uses this on auto-login and
-        falls back to the password only if it fails.
+        and refresh tokens are kept. Use this on auto-login and fall back
+        to the password only if it fails.
 
         Serialized with ``refresh_token()`` and ``refresh_session()`` by the
         refresh lock, so an in-flight refresh cannot merge stale tokens over
@@ -1131,8 +1131,8 @@ class NavienAuthClient:
     def default_headers() -> dict[str, str]:
         """Headers sent on every request, authenticated or not.
 
-        The NaviLink app sends its User-Agent on sign-in and refresh calls
-        too, so the library identifies itself on those as well.
+        The library identifies itself with its User-Agent on every call,
+        sign-in and refresh included.
         """
         return {
             "User-Agent": f"nwp500-python/{__version__}",

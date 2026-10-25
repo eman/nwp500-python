@@ -127,7 +127,7 @@ Renewing AWS Credentials Without the Password
 
 The MQTT connection signs with AWS credentials that expire separately from
 the JWT, and ``/auth/refresh`` does not renew them. When they expire the
-library follows the NaviLink app and tries, in order:
+library tries, in order:
 
 1. ``refresh_session()``: ``POST /auth/session/refresh`` with the current
    access token; returns new AWS credentials only. If the JWT has also

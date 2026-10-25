@@ -83,11 +83,11 @@ DHW (Domestic Hot Water) Temperatures
    * - ``dhwTemperatureSetting``
      - HalfCelsiusToF
      - °F
-     - **User-configured target temperature** for DHW delivery. Adjustable range: 95-150°F. Default: 120°F. This is the setpoint users configure in the app.
+     - **User-configured target temperature** for DHW delivery. Adjustable range: 95-150°F. Default: 120°F. This is the setpoint users configure.
    * - ``currentInletTemperature``
      - HalfCelsiusToF
      - °F
-     - **Cold water inlet temperature** to the water heater. The NWP500 always reports 0 here (32°F after conversion) and the NaviLink app never displays it for this model, so treat it as unavailable; see :doc:`/explanation/unknown-values`.
+     - **Cold water inlet temperature** to the water heater. The NWP500 always reports 0 here (32°F after conversion), so treat it as unavailable; see :doc:`/explanation/unknown-values`.
    * - ``dhwTargetTemperatureSetting``
      - HalfCelsiusToF
      - °F
@@ -501,11 +501,11 @@ Safety and Diagnostic Fields
    * - ``airFilterAlarmElapsed``
      - None (direct value)
      - hours
-     - **Reported but not used by the NaviLink app**, which never reads it. Its semantics are unconfirmed; do not rely on it for filter life.
+     - **Reported, semantics unconfirmed**; do not rely on it for filter life.
    * - ``cumulatedOpTimeEvaFan``
      - None (direct value)
      - hours
-     - **Evaporator fan run time since the last air-filter reset**. The NaviLink app computes remaining filter life as ``airFilterAlarmPeriod - cumulatedOpTimeEvaFan`` hours (shown in days as ``ceil(hours / 24)``); ``DeviceStatus.air_filter_remaining_hours`` does the same. The lifetime fan total is the diagnostics field of the same name.
+     - **Evaporator fan run time since the last air-filter reset**. Remaining filter life is ``airFilterAlarmPeriod - cumulatedOpTimeEvaFan`` hours (``ceil(hours / 24)`` in days); ``DeviceStatus.air_filter_remaining_hours`` gives the hours. The lifetime fan total is the diagnostics field of the same name.
    * - ``wtrOvrSensorUse``
      - device_bool
      - Boolean
@@ -565,11 +565,11 @@ Vacation and Scheduling Fields
    * - ``drEventStatus``
      - enum
      - ``DREvent``
-     - **Demand Response event status** (CTA-2045). An enumerated value, not a bitfield: 0 = Not Applied, 1 = Run Normal, 2 = Shed, 3 = Load Up, 4 = Advanced Load Up, 5 = CPE (Customer Peak Event), 6 = Grid Emergency. The NaviLink app's ``HPWHDREvent`` declares both CPE and Grid Emergency with id 5 but decodes the field by array position, so raw 6 is Grid Emergency.
+     - **Demand Response event status** (CTA-2045). An enumerated value, not a bitfield: 0 = Not Applied, 1 = Run Normal, 2 = Shed, 3 = Load Up, 4 = Advanced Load Up, 5 = CPE (Customer Peak Event), 6 = Grid Emergency.
    * - ``drOverrideStatus``
      - None (direct value)
      - 0 / 1 / 2
-     - **Demand Response override flag**, in the device's on/off convention: 0 = unknown, 1 = off, 2 = on. The NaviLink app decodes it with its on/off enum and shows "DR applied" when it is 2. It is not an hour count. ``DeviceStatus.dr_override_active`` is True when it is 2.
+     - **Demand Response override flag**, in the device's on/off convention: 0 = unknown, 1 = off, 2 = on. It is not an hour count. ``DeviceStatus.dr_override_active`` is True when it is 2.
    * - ``touOverrideStatus``
      - None (direct value)
      - See explanation
@@ -605,7 +605,7 @@ Network and Diagnostic Fields
    * - ``minorCode``
      - None (direct value)
      - Alarm code
-     - **Secondary alarm code**, shown by the NaviLink app as ``R%03d`` next to the error code. 0 = none; 101 is the one code the app lets the user reset.
+     - **Secondary alarm code**, formatted as ``R%03d`` next to the error code. 0 = none.
 
 Advanced Technical Fields
 -------------------------
@@ -667,7 +667,7 @@ These fields reflect device settings (as opposed to real-time measurements):
    * - ``temperatureType``
      - None (direct value)
      - Enum
-     - **Temperature display unit setting** (1=Celsius, 2=Fahrenheit). Reflects user's app setting.
+     - **Temperature display unit setting** (1=Celsius, 2=Fahrenheit). Reflects the user's unit setting.
    * - ``tempFormulaType``
      - None (direct value)
      - Enum

@@ -144,7 +144,7 @@ unset and twelve ``data`` items:
 - ``request_energy_usage_monthly(device, years)`` /
   ``subscribe_energy_usage_monthly(device, callback)``: per-month data
 - ``request_energy_usage_hourly(device, year, month, days)`` /
-  ``subscribe_energy_usage_hourly(device, callback)``: the app's per-hour
+  ``subscribe_energy_usage_hourly(device, callback)``: the per-hour
   query, which the NWP500 tested never answered
 
 **Response Fields:**

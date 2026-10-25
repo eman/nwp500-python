@@ -277,7 +277,6 @@ This design:
 - Namespaces commands by device type
 - Allows filtering by device ID
 - Supports wildcard subscriptions
-- Matches the Navien mobile app
 
 Recent Enhancements (2025)
 --------------------------

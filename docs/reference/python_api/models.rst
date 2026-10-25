@@ -255,7 +255,7 @@ Firmware version information.
    * ``cur_version`` (int): Current version number
    * ``downloaded_version`` (int, optional): Downloaded update version
    * ``device_group`` (FirmwareDeviceGroup | str, optional): Group
-     membership, ``None`` for a stand-alone unit. The NaviLink app reads an
+     membership, ``None`` for a stand-alone unit. The cloud sends an
      object with ``group_seq`` and ``unit_num``; a bare string is still
      accepted.
    * ``device_group_unit_no`` (int, optional): Unit number within the
@@ -286,16 +286,14 @@ Description of one firmware image, from
 
    **Fields:**
 
-   * ``description`` (str, optional): Release notes shown by the app
+   * ``description`` (str, optional): Release notes
    * ``model_number``, ``model_type``, ``product_family`` (int)
    * ``register_at`` (int): When the image was registered, epoch
      milliseconds
-   * ``run_time`` (int): Estimated update duration in minutes (new in
-     NaviLink 2.04.00)
+   * ``run_time`` (int): Estimated update duration in minutes
    * ``sw_code``, ``sw_version`` (int): The pair the image was looked up by
 
-   Each integer field reads a ``null`` from the cloud as 0, as the app
-   does.
+   Each integer field reads a ``null`` from the cloud as 0.
 
 DisplayPreferences
 ------------------
@@ -312,8 +310,7 @@ Unit display preferences stored by the cloud, from
      (metric)
    * ``temperature_display_format`` (str, optional): ``"F"`` or ``"C"``
 
-   Those four letters are the only values the NaviLink app compares
-   against or writes.
+   Those four letters are the only defined values.
 
 SimpleDevice
 ------------
@@ -349,8 +346,8 @@ One recorded fault from :meth:`~nwp500.NavienAPIClient.get_error_history`.
      the API as ``errorOccuredTime``. An ISO 8601 string is converted.
      Pass the last entry's value back as ``continuous_key`` for the next
      page.
-   * ``time_zone`` (str, optional): The list's ``timeZone``, which the app
-     formats the times in
+   * ``time_zone`` (str, optional): The list's ``timeZone``, the zone the
+     times are local to
    * ``occurred_at`` (datetime, property): ``error_occurred_time`` as an
      aware UTC datetime
    * ``occurred_at_local`` (datetime, property): ``occurred_at`` in
@@ -372,11 +369,11 @@ One recorded air-filter or CIP replacement, from
 
    * ``maintenance_date`` (str): The date the owner entered, as the cloud
      returns it (``YYYY-M-D``, no zero padding)
-   * ``register_at`` (int, optional): When the record was created. The
-     NaviLink app reads it as an integer; its unit is not documented.
+   * ``register_at`` (int, optional): When the record was created, an
+     integer; its unit is not documented.
 
 The matching request helper ``format_maintenance_date(date)`` renders a
-:class:`datetime.date` the way the app sends it (``2025-3-7``).
+:class:`datetime.date` the way the cloud expects it (``2025-3-7``).
 
 Account Models
 ==============
@@ -401,7 +398,7 @@ The signed-in user's profile, from
    * ``user_email`` (str)
 
    A ``null`` from the cloud reads as ``""`` in the string fields and as
-   0 in ``user_seq``, as in the app.
+   0 in ``user_seq``.
    * ``full_name`` (str, property)
 
 AppVersionInfo
@@ -413,7 +410,7 @@ Answer to :meth:`~nwp500.NavienAPIClient.get_app_version`.
 
    **Fields:**
 
-   * ``app_version`` (str, optional): Latest NaviLink release
+   * ``app_version`` (str, optional): Latest client release
    * ``app_force_version`` (str, optional): Oldest release the cloud still
      serves
    * ``server_check_text`` (str, optional): Maintenance notice, present
@@ -690,9 +687,8 @@ Full programmed reservation schedule used by ``request_reservations()`` and
 RecirculationScheduleEntry
 --------------------------
 
-A single recirculation pump schedule entry. The NaviLink app builds these
-with the same ``Reservation`` class as the temperature schedule, so the
-wire fields match :class:`ReservationEntry`.
+A single recirculation pump schedule entry. It has the same wire fields
+as the temperature schedule's :class:`ReservationEntry`.
 
 .. py:class:: RecirculationScheduleEntry
 
@@ -702,10 +698,10 @@ wire fields match :class:`ReservationEntry`.
    * ``week`` (int): Weekday bitfield
    * ``hour`` (int): Hour (0-23)
    * ``min`` (int): Minute (0-59)
-   * ``mode`` (int): In the app's schedule editor, the entry's on/off
-     toggle (``2`` pump on, ``1`` pump off)
-   * ``param`` (int): Unused for recirculation; the app sends ``-1``. The
-     hex read-back's ``0xFF`` is normalized to ``-1``.
+   * ``mode`` (int): The entry's on/off action (``2`` pump on, ``1`` pump
+     off)
+   * ``param`` (int): Unused for recirculation; sent as ``-1``. The hex
+     read-back's ``0xFF`` is normalized to ``-1``.
 
    **Computed Properties:**
 
@@ -714,8 +710,8 @@ wire fields match :class:`ReservationEntry`.
    * ``time`` (str)
    * ``pump_on`` (bool)
 
-   The ``mode``/``param`` semantics are inferred from the app and not
-   confirmed on a unit with recirculation fitted. All six fields are
+   The ``mode``/``param`` semantics are not confirmed on a unit with
+   recirculation fitted. All six fields are
    strict integers: ``True`` or ``6.0`` is rejected rather than coerced.
 
 RecirculationSchedule
@@ -895,8 +891,8 @@ per requested year with ``month`` absent and twelve ``data`` items.
    * ``year`` (int): Year
    * ``month`` (int | None): Month (1-12) for the daily query, ``None``
      for the monthly query
-   * ``day`` (int | None): Declared by the app for the hourly query, which
-     the NWP500 did not answer in testing
+   * ``day`` (int | None): Day for the hourly query, which the NWP500 did
+     not answer in testing
    * ``data`` (list[EnergyUsageDay]): Per-day or per-month items
      (index 0 = day 1 or January)
 
@@ -966,8 +962,8 @@ Seasonal TOU schedule.
    **Fields:**
 
    * ``season`` (int): Season identifier/months
-   * ``nickname`` (str, optional): Season label carried by the NaviLink
-     app's schedule object; absent from most responses
+   * ``nickname`` (str, optional): Season label; absent from most
+     responses
    * ``intervals`` (list[dict]): Time intervals with pricing tiers
 
 MQTT Models

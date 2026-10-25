@@ -485,9 +485,8 @@ A control command the device refuses gets no acknowledgement on the
 control ack topic; the device publishes a control failure on
 ``cmd/52/navilink-{mac}/res/ctrl-fail`` instead, which the library parses
 and emits as the ``control_failed`` event for every device subscription
-(no extra subscription needed) and logs at WARNING level. The one
-``failCode`` the NaviLink app interprets is 2, "DHW control interval
-exceeded": the previous DHW control (mode, temperature, power) was sent
+(no extra subscription needed) and logs at WARNING level. The one known
+``failCode`` is 2, "DHW control interval exceeded": the previous DHW control (mode, temperature, power) was sent
 too recently, so wait and resend. The message names the client whose
 command failed, so ``event.own_command`` tells your rejections from
 another client's. A command that is neither acknowledged nor rejected was

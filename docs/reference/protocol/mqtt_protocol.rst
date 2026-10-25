@@ -3,9 +3,9 @@ MQTT Protocol
 ======================
 
 This document describes the MQTT protocol used for real-time communication
-with Navien NWP500 devices via AWS IoT Core. Everything here is what the
-NaviLink app sends, confirmed against captured traffic and live queries
-to an NWP500 wherever a capture exists; the exceptions are marked.
+with Navien NWP500 devices via AWS IoT Core. Everything here is
+confirmed against captured traffic and live queries to an NWP500 wherever
+a capture exists; the exceptions are marked.
 
 .. warning::
    This document describes the underlying MQTT protocol. Most users should use the
@@ -36,7 +36,8 @@ publishes there.
    cmd/{deviceType}/{clientId}/res/{suffix}                  # query reply
    cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/res/{suffix}
                                                              # query reply,
-                                                             # app form
+                                                             # five-segment
+                                                             # form
    cmd/{deviceType}/navilink-{mac}/res/dl-sw-info            # device-keyed
                                                              # reply
    cmd/{deviceType}/navilink-{mac}/res/ctrl-fail             # control
@@ -49,8 +50,8 @@ publishes there.
 * ``{deviceType}``: Device type code (52 for NWP500)
 * ``{mac}``: Device MAC address without separators
 * ``{clientId}``: MQTT client ID
-* ``{homeSeq}``, ``{userSeq}``: The NaviLink app builds its reply topics with
-  the home and user sequence numbers from the REST API. The cloud does not
+* ``{homeSeq}``, ``{userSeq}``: The home and user sequence numbers from the
+  REST API. The cloud does not
   check the values; it keys one behaviour (the ``td/rd`` JSON decode below)
   on the five-segment *shape*. The library passes ``DeviceInfo.home_seq``
   and ``0``.
@@ -88,7 +89,7 @@ Request suffixes
      - recirculation schedule read
    * - ``st/td/rd``
      - 16777228
-     - ``res/td/rd`` (app form only)
+     - ``res/td/rd`` (five-segment form only)
      - installer diagnostics
    * - ``st/dl-sw-info``
      - 16777227
@@ -124,7 +125,7 @@ Request suffixes
      - Time-of-Use schedule write
    * - ``ctrl/commit-ota``
      - 33554442
-     - ``res/commit-ota`` (app form)
+     - ``res/commit-ota`` (five-segment form)
      - firmware commit (not exercised)
 
 The reservation read and the recirculation read also produce a second
@@ -192,8 +193,8 @@ Request Object
 * ``macAddress`` (str): Device MAC address
 * ``additionalValue`` (str): Additional device identifier
 * ``mode`` (str): Control commands only: the command's mode string.
-  The device acts on the numeric ``command`` code; the mode string is
-  sent to match the app but does not select the action.
+  The device acts on the numeric ``command`` code; the mode string does
+  not select the action.
 * ``param`` (array): Control commands only: integer parameters
 * ``paramStr`` (str): Control commands only: always ``""``
 * ``year``, ``month``, ``day``: Energy queries only (see below)
@@ -206,10 +207,8 @@ Queries carry no ``mode``/``param``/``paramStr``.
 Command Codes
 =============
 
-The codes mirror the app's ``DeviceControlMGPP`` enum. Codes marked
-*declared only* exist in that enum but the app has no code path that
-sends them; their payloads are unknown and the library has no method for
-them.
+Codes marked *payload unknown* belong to the command set, but their
+payloads are unknown and the library has no method for them.
 
 .. note::
 
@@ -218,7 +217,7 @@ them.
    (``heatMinOpTemperature``, ``freezeProtectionTemperature``) but no
    command code in the enumerated range sets them. This was checked
    exhaustively: the full code range was swept with in-range payloads and
-   none moved these fields, and ``FREZ_TEMP`` (33554451, *declared only*)
+   none moved these fields, and ``FREZ_TEMP`` (33554451, *payload unknown*)
    had no effect. They are changed from the front-panel Installer Menu, or
    by Navien's service tool through its authenticated server. The same is
    true over Bluetooth, where these blocks are read-only.
@@ -313,7 +312,7 @@ Scheduling and Reservations
      - Description
    * - Weekly Reservation
      - 33554438
-     - *Declared only.* The app writes its weekly schedule with 16777226 on
+     - *Payload unknown.* The weekly schedule is written with 16777226 on
        ``ctrl/rsv/rd``
    * - Configure TOU Schedule
      - 33554439
@@ -431,7 +430,7 @@ Maintenance
      - Configure air filter service interval
    * - Reset Condenser Fault
      - 33554463
-     - Clear a condenser fault (installer-level in the app)
+     - Clear a condenser fault (installer-level control)
 
 Firmware Updates
 ~~~~~~~~~~~~~~~~
@@ -448,21 +447,20 @@ Firmware Updates
      - Commit pending firmware update
    * - Check for OTA Updates
      - 33554443
-     - *Declared only*
+     - *Payload unknown*
 
-Declared but never sent
-~~~~~~~~~~~~~~~~~~~~~~~
+Codes with unknown payloads
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Five more codes exist: OTA Check (33554443), WiFi Reconnect (33554446),
 WiFi Reset (33554447), Freeze Protection Temperature (33554451) and
-Smart Diagnostic (33554455). No NaviLink client publishes them, and
-their payloads are unknown. Versions of this library before 9.4 sent
+Smart Diagnostic (33554455). Their payloads are unknown. Versions of this library before 9.4 sent
 made-up ``mode`` strings for them; those methods were removed.
 
 Cooling Mode (33554460), Water Filter Reset (33554461) and Pre-Filter
 Reset (33554462) are real MGPP commands (``cooling-mode [n]``,
 ``water-filter-reset []``, ``pre-filter-reset []``) but belong to the
-hydronic product line's screens, not the NWP500.
+hydronic product line, not the NWP500.
 
 Control Command Details
 =======================
@@ -526,8 +524,8 @@ When mode is 5 (VACATION), a second parameter specifies number of days:
    }
 
 .. note::
-   Vacation mode is the only DHW mode that requires two parameters. This is
-   how the app enters vacation mode; see also ``goout-day`` below.
+   Vacation mode is the only DHW mode that requires two parameters; see
+   also ``goout-day`` below.
 
 DHW Temperature
 ---------------
@@ -572,7 +570,7 @@ Anti-Legionella
      "paramStr": ""
    }
 
-Both mode strings appear in captured app traffic.
+Both mode strings appear in captured traffic.
 
 TOU Enable/Disable
 ------------------
@@ -632,13 +630,10 @@ Vacation Duration
    }
 
 .. note::
-   The NaviLink app sends only ``mode`` and ``param`` for this command;
-   the library sends ``paramStr`` as well, which the device accepts.
-   Verified live: ``vacationDaySetting`` changes and
-   ``dhwOperationSetting`` does not. No screen in the app sends this
-   command (the same is true of the demand response and
-   intelligent-mode commands); it enters vacation mode through
-   ``dhw-mode [5, days]``.
+   The library sends ``paramStr`` along with ``mode`` and ``param``, and
+   the device accepts it. Verified live: ``vacationDaySetting`` changes
+   and ``dhwOperationSetting`` does not. Vacation mode itself is entered
+   through ``dhw-mode [5, days]``.
 
 Intelligent/Adaptive Mode
 --------------------------
@@ -725,8 +720,8 @@ Control recirculation pump operation.
      "paramStr": ""
    }
 
-**Recirculation Mode Values** (the app's ``MgppRecirculationOperationMode``;
-the same ids come back in ``recircOperationMode``):
+**Recirculation Mode Values** (the same ids come back in
+``recircOperationMode``):
 
 * 1 = Always On
 * 2 = Weekly (follow the recirculation schedule)
@@ -737,11 +732,11 @@ Recirculation Schedule Write
 ----------------------------
 
 Published on ``cmd/52/navilink-{mac}/ctrl/recirc-rsv/rd`` with
-``responseTopic`` ``.../res/recirc-rsv/rd``, where the app expects the
-written schedule back. That echo has not been observed, because the only
-unit tested has no recirculation pump. Same envelope as the reservation
-write; the entries use the reservation entry fields. The app's editor
-allows at most 20 entries.
+``responseTopic`` ``.../res/recirc-rsv/rd``, where the written schedule
+is expected back. That echo has not been observed, because the only unit
+tested has no recirculation pump. Same envelope as the reservation write;
+the entries use the reservation entry fields. A schedule holds at most 20
+entries.
 
 .. code-block:: json
 
@@ -756,10 +751,9 @@ allows at most 20 entries.
      ]
    }
 
-In the app's schedule editor ``mode`` is the entry's on/off toggle
-(2 = pump on, 1 = pump off) and ``param`` is left at ``-1``. These
-semantics are inferred from the app and not confirmed on a unit with
-recirculation.
+In a recirculation entry ``mode`` is the entry's on/off toggle
+(2 = pump on, 1 = pump off) and ``param`` is ``-1``. These semantics are
+not confirmed on a unit with recirculation.
 
 Air Filter Maintenance
 ----------------------
@@ -788,8 +782,8 @@ Air Filter Maintenance
 
 .. note::
    The parameter is the service interval in evaporator-fan hours divided
-   by 500. The app offers 0 (alarm off) or 1000 to 10000 hours in 500-hour
-   steps, so the wire value is 0 or 2 to 20; the example above is 3000
+   by 500. The interval is 0 (alarm off) or 1000 to 10000 hours in
+   500-hour steps, so the wire value is 0 or 2 to 20; the example above is 3000
    hours. The device reports the interval back as ``airFilterAlarmPeriod``
    in hours (verified live).
 
@@ -808,8 +802,8 @@ Condenser Fault Reset
    }
 
 .. note::
-   The app shows this only to installer accounts; the gate is in the app.
-   A consumer account's unit acknowledges it with a status object; no
+   This is an installer-level control, but the device does not check the
+   account: a consumer account's unit acknowledges it with a status object; no
    fault was present when tested, so the clearing effect is unverified.
 
 Firmware Updates
@@ -818,9 +812,8 @@ Firmware Updates
 **Commit Update (command 33554442):**
 
 Published on ``cmd/52/navilink-{mac}/ctrl/commit-ota`` with the reply
-requested on ``res/commit-ota`` in the app's five-segment topic form
-(``setPublishMgppControlOTA`` in the app). It uses a special
-RequestControlOta structure. Not exercised against a device, since it
+requested on ``res/commit-ota`` in the five-segment topic form. It uses
+its own ``commitOta`` structure. Not exercised against a device, since it
 would install firmware.
 
 .. code-block:: json
@@ -886,8 +879,8 @@ Energy Usage Queries
      "day": [11]
    }
 
-The hourly query is what the app sends, but the NWP500 tested did not
-answer it in four attempts with both reply-topic forms.
+The NWP500 tested did not answer the hourly query in four attempts with
+both reply-topic forms.
 
 Diagnostics (command 16777228)
 ------------------------------
@@ -895,7 +888,7 @@ Diagnostics (command 16777228)
 Published on ``st/td/rd`` with no extra fields. The device answers on
 ``res/td`` with packed little-endian hex strings; the NaviLink cloud
 decodes them and republishes JSON on ``res/td/rd``, but only when the
-``responseTopic`` has the app's five-segment form. Request accordingly:
+``responseTopic`` has the five-segment form. Request accordingly:
 
 .. code-block:: json
 
@@ -919,8 +912,8 @@ Published on ``st/dl-sw-info``. The device answers on its own topic
 Session End (command 16777218)
 ------------------------------
 
-Published on ``st/end`` with no extra fields whenever the app leaves a
-device screen. No reply to it has been observed. The library sends it
+Published on ``st/end`` with no extra fields when a client is done with
+a device. No reply to it has been observed. The library sends it
 from ``disconnect()`` for every subscribed device unless
 ``MqttConnectionConfig.send_session_end_on_disconnect`` is off; its effect
 on other clients connected to the same device is not known.
@@ -1024,7 +1017,7 @@ does not send them.
 Diagnostics Response
 --------------------
 
-On ``res/td/rd`` (app-form reply topic only):
+On ``res/td/rd`` (five-segment reply topic only):
 
 .. code-block:: json
 
@@ -1095,8 +1088,7 @@ counters; ``taData`` and ``tdData``: ``uint32`` arrays in the key order
 above). ``cumulatedPwrHp``/``cumulatedPwrHe`` equal the energy query's
 lifetime totals and ``cumulatedOpTimeComp``/``cumulatedOpTimeUhe`` equal
 its lifetime ``hpTime``/``heTime``, which fixes their units as watt-hours
-and hours. The app's diagnostics screen labels the ``tdData`` values without
-converting them: ``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in litres,
+and hours. The ``tdData`` values need no conversion: ``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in litres,
 ``dhwUseTotalTime`` and ``longDhwUseTotalTime`` in hours,
 ``avrageRecoveryTime`` in minutes, and the ``numOf*`` fields as counts. The
 remaining counters have no documented unit.
@@ -1141,8 +1133,8 @@ The same schedule is also republished on ``res/rsv`` / ``res/recirc-rsv``
 with ``reservation`` as a hex string of six bytes per entry
 (``enable, week, hour, min, mode, param``).
 
-In a weekly (``rsv``) entry, ``mode`` is the app's ``MgppReservationMode``
-(``ReservationMode`` in the library): 0 = not reserved, 1 = Heat Pump,
+In a weekly (``rsv``) entry, ``mode`` is ``ReservationMode`` in the
+library: 0 = not reserved, 1 = Heat Pump,
 2 = Electric, 3 = Energy Saver, 4 = High Demand, 5 = Power Off. This is
 not the ``dhw-mode`` numbering: there is no vacation entry, and 5 is
 Power Off rather than Vacation.
@@ -1159,8 +1151,7 @@ Control Failure Response
 
 When the device refuses a control command it publishes on its own topic,
 ``cmd/52/navilink-{mac}/res/ctrl-fail``, which the
-``cmd/52/navilink-{mac}/#`` wildcard subscription receives. The NaviLink
-app subscribes to this topic for the NWP500. The message:
+``cmd/52/navilink-{mac}/#`` wildcard subscription receives. The message:
 
 .. code-block:: json
 
@@ -1179,8 +1170,7 @@ app subscribes to this topic for the NWP500. The message:
    }
 
 The envelope names the client whose command failed; ``requestTopic`` is
-the topic that command was published on. The app interprets exactly one
-``failCode``:
+the topic that command was published on. One ``failCode`` is known:
 
 .. list-table::
    :header-rows: 1
@@ -1188,11 +1178,10 @@ the topic that command was published on. The app interprets exactly one
    * - ``failCode``
      - Meaning
    * - 2
-     - DHW control interval exceeded. The app shows "DHW control
-       interval exceeded" and refreshes the screen; the previous DHW
-       control was too recent, so wait and resend.
+     - DHW control interval exceeded: the previous DHW control was too
+       recent, so wait and resend.
    * - other
-     - Not interpreted by the app. The library keeps the raw integer.
+     - Meaning unknown. The library keeps the raw integer.
 
 There is no acknowledgement for the failed command on the control ack
 topic, so a client that only waits for a status response sees nothing
@@ -1204,10 +1193,10 @@ but silence. The library parses the message into
 App Connection Event and Last-Will
 ----------------------------------
 
-``evt/52/navilink-{mac}/app-connection`` announces client presence. The
-NaviLink app registers its MQTT Last-Will on it when it connects to a
-device: the broker publishes the will if the app's connection is lost
-without a DISCONNECT. The payload is the app's ``RequestLastWill``:
+``evt/52/navilink-{mac}/app-connection`` announces client presence. A
+client registers its MQTT Last-Will on it when it connects to a device:
+the broker publishes the will if the client's connection is lost without
+a DISCONNECT. The payload:
 
 .. code-block:: json
 
@@ -1230,18 +1219,15 @@ without a DISCONNECT. The payload is the app's ``RequestLastWill``:
 
 ``event.connection.status`` is 0 in the will. A client announcing that
 it is connected publishes the same shape with ``status`` 1; readers treat
-any value at or below 0 as "disconnected" (the app's screens show a
-"device disconnected" notice on it). ``os`` is the publisher's platform
-tag: ``"A"`` for the Android app, ``"P"`` for this library. Nothing that
+any value at or below 0 as "disconnected". ``os`` is the publisher's
+platform tag: ``"A"`` for Android, ``"P"`` for this library. Nothing that
 reads the topic looks at ``os``, and AWS IoT delivers the message either
-way, so the library does not impersonate the app. A ``connection`` may
+way. A ``connection`` may
 also carry a ``sessionNumber``, as the device's own
 ``evt/52/navilink-{mac}/connection`` event does.
 
-Two caveats. First, the app only registers the will; it never publishes
-a ``status`` 1 announcement itself. Second, the NaviLink app does not
-subscribe to ``app-connection`` for the NWP500, so for the NWP500 the
-topic is read only by other library clients. The will is QoS 1 and not retained.
+For the NWP500, only other library clients are known to read this
+topic. The will is QoS 1 and not retained.
 
 The library registers the same will when
 ``MqttConnectionConfig.last_will_device`` is set, publishes the ``status``
@@ -1270,8 +1256,8 @@ Connection Flow
 
    Publish to ``evt/52/navilink-{mac}/app-connection`` with
    ``event.connection.status`` 1 (the shape is under *App Connection
-   Event and Last-Will* above). The app registers the ``status`` 0 form
-   of the same message as its Last-Will in step 2.
+   Event and Last-Will* above). A client can register the ``status`` 0
+   form of the same message as its Last-Will in step 2.
 
 5. **Send Commands / Requests**
 

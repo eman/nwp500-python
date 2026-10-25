@@ -10,11 +10,11 @@ class EnergyUsageBase(NavienBaseModel):
     heat_element_usage: int = Field(default=0, alias="heUsage")
     heat_pump_time: int = Field(default=0, alias="hpTime")
     heat_element_time: int = Field(default=0, alias="heTime")
-    #: Declared in the NaviLink app's usage model; the NWP500 does not
-    #: report it (raw int, semantics unknown).
+    #: Part of the usage record; the NWP500 does not report it (raw int,
+    #: semantics unknown).
     ep_usage: int = Field(default=0, alias="epUsage")
-    #: Declared in the NaviLink app's usage model; the NWP500 does not
-    #: report it (raw int, semantics unknown).
+    #: Part of the usage record; the NWP500 does not report it (raw int,
+    #: semantics unknown).
     water_usage: int = Field(default=0, alias="waterUsage")
 
     @property

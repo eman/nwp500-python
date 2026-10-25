@@ -285,9 +285,9 @@ ControlFailedEvent
    **Fields:**
 
    * ``device_mac`` (str): MAC address of the device that refused the command.
-   * ``fail_code`` (:class:`~nwp500.models.mqtt_models.ControlFailCode` | int) -
+   * ``fail_code`` (:class:`~nwp500.models.mqtt_models.ControlFailCode` | int):
      The failure code. 2 (``DHW_CONTROL_INTERVAL_EXCEEDED``) is the only code
-     the NaviLink app interprets; others stay plain integers.
+     with a defined meaning; others stay plain integers.
    * ``reason`` (str): Human-readable meaning of ``fail_code``.
    * ``own_command`` (bool): Whether the failed command was sent by this
      client (the message's ``clientID`` matches ours).

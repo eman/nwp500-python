@@ -594,7 +594,7 @@ Changed
   says so in ``defaults_used`` (#232). They raised in every walk, and a
   book left them unpriced. ``sim_adapters.with_circulation_terms`` does
   this for the books.
-- A status in Standby is Power Off, as the NaviLink app counts it (#232).
+- A status in Standby counts as Power Off (#232).
   It raised.
 - ``book_from_changes`` books from the flow's first reading when its
   history starts later than the window, rather than raising (#232).
@@ -970,7 +970,7 @@ Added
   ``TOUPeriod``, the cloud's model, reading the controller's 40-slot table
   whole (a ``TOU_PLAN`` read's payload byte is the last slot, not a
   length; ``build_tou_read()``). ``write_tou_records()`` stores a plan of
-  up to twelve intervals (``build_tou_write()``: the NaviLink app's clock
+  up to twelve intervals (``build_tou_write()``: an 8-byte clock
   header, then the records in the read layout) and reads it back. It
   refuses to write over a longer stored plan, whose extra intervals no
   Bluetooth write can clear, and raises ``TouWriteError`` when the
@@ -981,8 +981,8 @@ Added
   (``MSCD``) and ``SoftwareInfoBlock`` (``MSWD``) use the cloud models'
   field names for the fields matched against them.
   ``read_sub_status()`` decodes the ``SSD`` block into two DIP-switch
-  words (``SubStatus``), using the layout Navien's boiler service toolkit
-  reads; it is unconfirmed on the NWP500.
+  words (``SubStatus``), using the boiler layout; it is unconfirmed on
+  the NWP500.
   ``read_status()`` returns live status: the class-50 session command 200
   makes the heater push the ``RTMD`` block about every 300 ms until the
   connection closes, and ``RealTimeStatus`` decodes the fields checked
@@ -1007,10 +1007,10 @@ Added
   (``/user/get-push-settings``, ``/user/set-push-settings``),
   ``record_filter_change()`` / ``record_cip_change()`` and
   ``get_filter_history()`` / ``get_cip_history()`` (the cloud's maintenance
-  log; dates are sent ``YYYY-M-D`` without zero padding, as the app does),
+  log; dates are sent ``YYYY-M-D`` without zero padding),
   ``get_display_preferences()`` / ``set_display_preferences()``
-  (``/device/preferences/format``; the cloud rejects it for the NWP500,
-  the app only uses it for the IoT-module hydro unit), ``get_user_profile()`` (``/user/info``),
+  (``/device/preferences/format``; the cloud rejects it for the NWP500;
+  it serves the IoT-module hydro unit), ``get_user_profile()`` (``/user/info``),
   ``get_firmware_detail()`` (``/firmware/info``; ``run_time`` is the
   estimated update time in minutes), ``delete_tou()``
   (``DELETE /device/tou``), ``get_manufacture_id()``,
@@ -1020,24 +1020,24 @@ Added
   ``get_app_version()`` (unauthenticated; a 403 maintenance notice is
   returned as ``server_check_text``; ``nwp500.get_app_version()`` asks
   before sign-in, without a client). ``set_push_settings()`` keeps the
-  current value of a flag left ``None``, since the app always sends
-  every flag. ``get_error_history()`` entries carry the list's
+  current value of a flag left ``None``, since the cloud expects every
+  flag. ``get_error_history()`` entries carry the list's
   ``timeZone`` (``time_zone``, ``occurred_at_local``). New models: ``PushSettings``,
   ``DeviceInstaller``, ``FirmwareDeviceGroup``, ``FirmwareDetail``,
   ``DisplayPreferences``, ``SimpleDevice``, ``DeviceErrorHistoryEntry``,
   ``MaintenanceHistoryEntry``, ``UserProfile``, ``AppVersionInfo``. Push
   flags are 1 = on, 2 = off, the reverse of the device's on/off flags, and
   decode to ``True``/``False``/``None``. ``Device.installer`` and
-  ``Device.alarm_info`` are parsed from ``/device/info`` as the app does;
+  ``Device.alarm_info`` are parsed from ``/device/info``;
   ``TOUSchedule.nickname`` is modelled.
 - **AWS credentials renew without the password.**
   ``NavienAuthClient.refresh_session()`` posts to ``/auth/session/refresh``
   with the access token and updates only the AWS credential fields the
-  server returns, as the app does when the MQTT connection fails with an
-  auth error. ``secured_sign_in()`` posts to ``/user/secured-sign-in`` with
+  server returns; it is the step used when the MQTT connection fails with
+  an auth error. ``secured_sign_in()`` posts to ``/user/secured-sign-in`` with
   the access token and overlays whatever token fields come back (observed
-  live: the AWS credentials only; the JWTs are kept), which the app uses
-  for auto-login. When the AWS credentials expire, ``ensure_valid_token()``
+  live: the AWS credentials only; the JWTs are kept), the auto-login
+  step. When the AWS credentials expire, ``ensure_valid_token()``
   and the context manager's stored-token check now try session refresh,
   then secured sign-in, and only then the password sign-in; both token
   steps are skipped when the access token has expired and cannot be
@@ -1052,14 +1052,14 @@ Added
   control command it publishes on ``cmd/52/navilink-{mac}/res/ctrl-fail``
   instead of acknowledging it; the library silently dropped that message.
   It is now parsed into ``ControlFailResponse``
-  (``ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED`` = 2 is the only code
-  the app interprets: the previous DHW control was too recent) and emitted
+  (``ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED`` = 2 is the only known
+  code: the previous DHW control was too recent) and emitted
   as the ``control_failed`` client event (``ControlFailedEvent`` with
   ``own_command`` and ``reason``) for every device subscription, with a
   WARNING log. ``subscribe_control_fail_response()`` /
   ``unsubscribe_control_fail_response()`` add a plain callback.
 - **MQTT Last-Will and app-connection presence.** Set
-  ``MqttConnectionConfig.last_will_device`` to register the app's Last-Will
+  ``MqttConnectionConfig.last_will_device`` to register a Last-Will
   on ``evt/52/navilink-{mac}/app-connection`` (``event.connection.status``
   0, QoS 1) so other clients learn when this one drops; every rebuilt
   connection carries it. ``subscribe_app_connection()`` /
@@ -1067,22 +1067,22 @@ Added
   ``AppConnectionEvent`` and emit ``app_connection_received``
   (``AppConnectionReceivedEvent``). New ``MqttTopicBuilder`` helpers
   ``control_fail_response_topic()`` and ``app_connection_topic()``.
-- **``DeviceStatus.air_filter_remaining_hours``**: the app's remaining
+- **``DeviceStatus.air_filter_remaining_hours``**: the remaining
   filter life (``None`` when the reminder period is 0, else clamped at 0).
-- **``DeviceStatus.minor_code``** (``minorCode``): the secondary alarm code
-  the app shows as ``R%03d``; 101 is the one it lets the user reset.
+- **``DeviceStatus.minor_code``** (``minorCode``): the secondary alarm code,
+  formatted as ``R%03d``; 101 is the one a user can reset.
   Defaults to 0 for payloads that omit it.
-- **``DhwOperationSetting.STANDBY`` (0)**, the app's
-  ``MgppOperationMode.STANDBY``. ``DeviceStatus.dhw_operation_setting``
+- **``DhwOperationSetting.STANDBY`` (0)**, the device's Standby mode.
+  ``DeviceStatus.dhw_operation_setting``
   previously rejected a 0. It is status-only: ``set_dhw_mode()`` refuses
   it, as it now refuses any id outside 1-6. ``sim_adapters.settings()``
   refuses a Standby status, which the simulator does not model.
 - **``DREvent.GRID_EMERGENCY`` (6).** Raw 6 is Grid Emergency; ``CPE`` (5) stays "Customer Peak Event".
 - **``UnitType``** NCB700 (22), NFB700_H (24), CAS_NFB700_H (25),
   NPF_SYSTEM (514); **``DeviceType``** IOT_MODULE (8), NFB700_MAIN (50),
-  NFB700_SUB (51) (the app's names; ``NPF700_MAIN``/``NPF700_SUB`` remain
-  as aliases) and ``HPWH`` as an alias of 52, which is the NWP500
-  (``DefineData.HPWH_MODEL``), not an NPF700 WiFi module. A dumped device
+  NFB700_SUB (51) (``NPF700_MAIN``/``NPF700_SUB`` remain as aliases) and
+  ``HPWH`` as an alias of 52, which is the NWP500, not an NPF700 WiFi
+  module. A dumped device
   of type 50 or 51 now names it ``NFB700_MAIN`` or ``NFB700_SUB``.
 - **A recovery model's inputs, through ``nwp500.sim.simulate``** (#165).
   Beside ``recovery=``, ``simulate`` takes what a learned model was
@@ -1436,11 +1436,10 @@ Added
 
 Changed
 -------
-- **Recirculation mode values follow the NaviLink app.** ``RecirculationMode``
-  had 2 and 3 swapped and 4 wrong: the app's
-  ``MgppRecirculationOperationMode`` (sent by ``recirc-mode`` and decoded
-  from ``recircOperationMode``) is 1 Always on, 2 Weekly, 3 HotButton only,
-  4 No recirculation. The members are now ``ALWAYS_ON``, ``WEEKLY``,
+- **Recirculation mode values corrected.** ``RecirculationMode``
+  had 2 and 3 swapped and 4 wrong: the recirculation mode (sent by
+  ``recirc-mode`` and decoded from ``recircOperationMode``) is 1 Always
+  on, 2 Weekly, 3 HotButton only, 4 No recirculation. The members are now ``ALWAYS_ON``, ``WEEKLY``,
   ``HOT_BUTTON_ONLY`` and ``OFF``; ``ALWAYS`` remains as an alias of
   ``ALWAYS_ON``. **Behaviour change:** ``BUTTON``, ``SCHEDULE`` and
   ``TEMPERATURE`` are removed, since their meanings were wrong; code that
@@ -1451,7 +1450,7 @@ Changed
   ``"ALWAYS"``) and ``"WEEKLY"`` for 2 (was ``"BUTTON"``); code keyed on
   the old strings must follow.
 - **Reservation mode 5 is Power Off, not Vacation.** Weekly-schedule
-  entries carry the app's ``MgppReservationMode`` (0 not reserved, 1 Heat
+  entries carry a reservation mode (0 not reserved, 1 Heat
   Pump, 2 Electric, 3 Energy Saver, 4 High Demand, 5 Power Off; there is
   no vacation entry), now the ``ReservationMode`` enum.
   ``ReservationEntry.mode_name`` resolves through it, so a mode-5 entry
@@ -1465,20 +1464,19 @@ Changed
   (``update_reservations(kept=)``). Changing such an entry needs a mode
   of 1-5. The simulator's reservation entries take the same numbering
   (``sim.inputs.EntryMode``); only 1-4 are modelled, as before.
-- **``dr_override_status`` is an on/off flag, not hours.** The app decodes
-  it with its 0/1/2 on-off enum and shows "DR applied" when it is 2. The
+- **``dr_override_status`` is an on/off flag, not hours.** It is a 0/1/2
+  on-off value, and 2 means DR applied. The
   field stays an ``int`` but no longer carries an ``hours`` unit; the new
   ``DeviceStatus.dr_override_active`` is True when it is 2.
-- **Air-filter life comes from ``cumulated_op_time_eva_fan``.** The app
-  computes remaining filter life as ``air_filter_alarm_period -
-  cumulated_op_time_eva_fan`` and never reads ``air_filter_alarm_elapsed``.
+- **Air-filter life comes from ``cumulated_op_time_eva_fan``.** Remaining
+  filter life is ``air_filter_alarm_period - cumulated_op_time_eva_fan``;
+  ``air_filter_alarm_elapsed`` is not part of it.
   The two descriptions were the wrong way round; ``cumulated_op_time_eva_fan``
   is fan hours since the last filter reset and ``air_filter_alarm_elapsed``
   is unconfirmed.
-- **``signal_app_connection()`` sends the app's message shape.** It
+- **``signal_app_connection()`` sends the Last-Will message shape.** It
   published ``{clientID, timestamp}``, a shape nothing reads. It now
-  publishes the NaviLink app's ``RequestLastWill`` envelope with
-  ``event.connection.status`` 1.
+  publishes the Last-Will envelope with ``event.connection.status`` 1.
 - Sign-in and ``/auth/refresh`` requests now send the library's
   ``User-Agent`` and ``Content-Type`` headers, as every other request does.
 - **The heater's own air reading is not as close as documented in
@@ -1510,15 +1508,14 @@ Changed
   describe both fields as differences.
 - **Vacation accepts 1-99 days** (#155). ``set_dhw_mode()`` (vacation),
   ``set_vacation_days()`` and ``set_vacation_duration()`` rejected anything
-  over 30 days. The NaviLink app's vacation picker and the front panel
-  (User's Information Manual, section 3.4.5) both offer 1-99, so the
-  library now accepts the same. The ``vacation`` and
+  over 30 days. The front panel (User's Information Manual, section
+  3.4.5) offers 1-99, so the library now accepts the same. The ``vacation`` and
   ``vacation-duration`` CLI commands follow.
 
 Fixed
 -----
-- ``FirmwareInfo.device_group`` was typed as a string; the app reads an
-  object ``{groupSeq, unitNum}`` (plus a top-level ``deviceGroupUnitNo``).
+- ``FirmwareInfo.device_group`` was typed as a string; the cloud returns
+  an object ``{groupSeq, unitNum}`` (plus a top-level ``deviceGroupUnitNo``).
   It is now ``FirmwareDeviceGroup``, with a bare string still accepted.
 - ``convert_tou()`` hard-coded ``userType: "O"``; it now sends the
   signed-in user's type from the sign-in response, defaulting to ``"O"``.
@@ -1553,8 +1550,6 @@ Documentation
   physics with a learned correction, and are removed. The "cold starts
   about 55 min short" figure is replaced by the recorded errors by time
   left. The lower trigger's in-window wait is given with its full count.
-- ``unknown-values``, ``tank-energy`` and the MQTT protocol reference now
-  cite the current NaviLink app release they were checked against.
 - ``docs/openapi.yaml`` and ``rest_api.rst`` describe every endpoint above
   plus ``POST /auth/session/refresh`` and ``POST /user/secured-sign-in``;
   ``mqtt_protocol.rst`` documents ``res/ctrl-fail`` and the
@@ -1592,13 +1587,12 @@ Documentation
   - The ambient effect on the compressor is about 1.18x, not 1.7x; the
     standby soak's figures, the 60 h gap prior and the circulation runs
     behind the lower-zone drop are stated as measured.
-- **Docs that contradicted the code or the vendor's sources** (#155). Each
+- **Docs that contradicted the code or the protocol** (#155). Each
   now has one value with its source:
 
   - The mode-ID table in ``device_features.rst`` numbered Energy Saver 2,
     High Demand 3 and Electric 4. The IDs are Electric 2, Energy Saver 3,
-    High Demand 4, as in ``DhwOperationSetting`` and the NaviLink app's
-    ``MgppOperationMode``.
+    High Demand 4, as in ``DhwOperationSetting``.
   - ``track-energy.rst`` used ``comp_running_minute_total`` and
     ``heater1/2_running_minute_total``, which do not exist. Lifetime run
     times come from the diagnostics query, in hours
@@ -1629,12 +1623,11 @@ Documentation
 - **Flow-rate units corrected** (#154). The protocol reference said
   ``currentDhwFlowRate`` and ``recircDhwFlowRate`` were tenths of a GPM and
   ``cumulatedDhwFlowRate`` was gallons, while the properties treated them as
-  tenths of an LPM and as litres. The properties are right. Navien's
-  NaviLink app shows ``currentDhwFlowRate`` as
-  ``raw / 10`` LPM in Celsius and ``raw / 3.785 / 10`` GPM in Fahrenheit.
+  tenths of an LPM and as litres. The properties are right.
+  ``currentDhwFlowRate`` is ``raw / 10`` LPM in Celsius and
+  ``raw / 3.785 / 10`` GPM in Fahrenheit.
   The NWP500 manual lists the panel's water-flow reading in LPM even though
-  the panel defaults to GPM. The app's diagnostics screen shows the heater's
-  hot-water volume totals in whole litres in either setting. Flow rates are
+  the panel defaults to GPM. Flow rates are
   0.1 LPM and the cumulative counter is whole litres in both unit systems.
   ``device_status.rst``, ``data_conversions.rst`` and ``mqtt_protocol.rst``
   now say so, and ``DiagnosticsDhwUsage`` documents its units (litres, hours,
@@ -1645,7 +1638,7 @@ Documentation
   fixed ``"GPM"`` or ``"gal"`` ``unit_of_measurement``, which contradicted
   their raw units. ``get_field_unit()``, which was already driven by
   ``device_class``, returns the same units as before. New tests pin both
-  flow properties to the app's formula in each unit system.
+  flow properties to these formulas in each unit system.
 
 Version 9.4.3 (2026-10-01)
 ==========================
@@ -1816,30 +1809,30 @@ Fixed
 Version 9.4.0 (2026-09-12)
 ==========================
 
-This release realigns the MQTT command set with what the NaviLink app
-sends. Every query it sends now has a
-method, six commands it never sends were removed, and the recirculation
-schedule write was corrected. Breaking changes are listed under
+This release realigns the MQTT command set with the NaviLink protocol.
+Every query in the protocol now has a method, six commands that are not
+part of it were removed, and the recirculation schedule write was
+corrected. Breaking changes are listed under
 *Removed* and *Changed*.
 
 Added
 -----
 - **Installer diagnostics query.** ``request_diagnostics()`` /
   ``subscribe_diagnostics()`` and the ``nwp-cli diagnostics`` command
-  return the lifetime counters the app's installer screen shows: heat
+  return the device's lifetime installer counters: heat
   pump and element energy, days since installation, fault event counts,
   demand-response operation times, hot-water draw statistics and
   component run times and start counts, as
   :class:`~nwp500.models.DeviceDiagnostics`. The device answers the
   ``st/td/rd`` query with packed hex; the NaviLink cloud decodes it into
-  JSON only when the reply topic has the app's five-segment form, so the
+  JSON only when the reply topic has the five-segment form, so the
   library requests that form. Verified live: the energies and compressor
   and element run times match the energy query's lifetime totals.
 - **Monthly energy query.** ``request_energy_usage_monthly()`` /
   ``subscribe_energy_usage_monthly()`` and ``nwp-cli energy --years``
   return one entry per year with twelve per-month items. Verified live.
 - **Hourly energy query.** ``request_energy_usage_hourly()`` /
-  ``subscribe_energy_usage_hourly()`` send the app's per-hour query. The
+  ``subscribe_energy_usage_hourly()`` send the per-hour query. The
   NWP500 tested never answered it in four attempts, so it has no CLI
   command.
 - **Recirculation schedule read.** ``request_recirculation_schedule()``
@@ -1856,46 +1849,43 @@ Added
   ``subscribe_firmware_download_info()`` and ``nwp-cli firmware info``
   return :class:`~nwp500.models.FirmwareDownloadInfo`. The device replies
   on its own topic rather than a client-keyed one. Verified live.
-- **Session end.** ``end_session()`` sends the ``st/end`` query the app
-  sends whenever it leaves a device. No reply to it has been observed.
+- **Session end.** ``end_session()`` sends the ``st/end`` query that
+  ends a session with a device. No reply to it has been observed.
   Unlike other commands it is never queued while disconnected (it raises
   ``MqttNotConnectedError``), since a session end replayed after a
   reconnect would end the new session.
 - ``MqttConnectionConfig.send_session_end_on_disconnect`` (default
   ``True``) controls whether ``disconnect()`` sends it.
 - ``subscribe_firmware_commit_response()`` receives the reply to
-  ``commit_firmware_update()``, which is requested on the app-form
+  ``commit_firmware_update()``, which is requested on the five-segment
   ``res/commit-ota`` topic that no other subscription covers.
-- **Controls the app can send that had no method:**
-  ``set_vacation_duration(days)`` (``goout-day``; no screen in the app
-  sends it; verified live to change the day count
-  without changing the operation mode),
+- **Controls that had no method:**
+  ``set_vacation_duration(days)`` (``goout-day``; verified live to change
+  the day count without changing the operation mode),
   ``set_air_filter_life(hours)`` (``air-filter-life``; the wire value is
-  hours divided by 500, matching the app's 0 or 1000-10000 picker;
+  hours divided by 500, for 0 or 1000-10000 hours;
   verified live) and ``reset_condenser_fault()`` (``cond-fault-reset``,
-  installer-level in the app; acknowledged live, clearing effect not
+  an installer-level control; acknowledged live, clearing effect not
   observable without a fault). CLI: ``vacation-duration``,
   ``filter-life``, ``reset-condenser-fault``.
-- **Command codes** for every member of the app's ``DeviceControlMGPP``
-  enum, with the declared-but-never-sent ones annotated.
+- **Command codes** for every known control command, with the
+  declared-only ones annotated.
 - ``EnergyUsageResponse.type_of_usage``, ``get_year_data()``,
   ``MonthlyEnergyData.day`` and ``EnergyUsageDay.ep_usage`` /
-  ``water_usage`` (declared by the app; not reported by the NWP500).
+  ``water_usage`` (part of the protocol; not reported by the NWP500).
 
 Changed
 -------
-- **Recirculation schedule models take the app's entry shape** (breaking).
+- **Recirculation schedule models take the reservation entry shape** (breaking).
   :class:`~nwp500.models.RecirculationScheduleEntry` is now
   ``enable``/``week``/``hour``/``min``/``mode``/``param`` like a
-  reservation entry (``mode`` is the entry's pump on/off toggle in the
-  app's editor) and :class:`~nwp500.models.RecirculationSchedule` carries
+  reservation entry (``mode`` is the entry's pump on/off toggle) and :class:`~nwp500.models.RecirculationSchedule` carries
   ``reservation_use`` plus ``reservation`` instead of ``schedule``. The
   previous start/end window fields were not what the device accepts.
 - ``MonthlyEnergyData.month`` is optional: monthly-query entries have no
   month.
 - **``NavienMqttClient.disconnect()`` now sends ``st/end``** to every
-  device that was passed to any subscription, as the NaviLink app does
-  when it leaves a device. The publishes go straight to the connection,
+  device that was passed to any subscription. The publishes go straight to the connection,
   never into the offline command queue, stop if the connection drops,
   are bounded by a short timeout and never fail the disconnect. What it
   does to other clients connected to the same device (for example a Home
@@ -1919,12 +1909,12 @@ Fixed
 -----
 - **``configure_recirculation_schedule()`` published to the wrong topic
   with the wrong keys.** It sent ``{"schedule": [...]}`` on the bare
-  ``ctrl`` topic; the app publishes RECIR_RESERVATION on
-  ``ctrl/recirc-rsv/rd`` with ``reservationUse`` and ``reservation`` and
-  asks for the echo on ``recirc-rsv/rd``.
+  ``ctrl`` topic; RECIR_RESERVATION goes on ``ctrl/recirc-rsv/rd``
+  with ``reservationUse`` and ``reservation`` and asks for the echo on
+  ``recirc-rsv/rd``.
 - **``commit_firmware_update()`` published to the bare ``ctrl`` topic.**
-  The app publishes OTA_COMMIT on ``ctrl/commit-ota`` and asks for the
-  reply on ``res/commit-ota``; the library now does the same. Not
+  OTA_COMMIT goes on ``ctrl/commit-ota`` and asks for the reply on
+  ``res/commit-ota``; the library now does the same. Not
   exercised against a device.
 - **Unsubscribing could remove the wrong handler.** When one callback was
   registered for more than one device-wildcard subscription (status,
@@ -1938,8 +1928,8 @@ Fixed
 - Recirculation read-backs in hex carry the unused ``param`` as ``0xFF``
   and in JSON as ``-1``; the model normalizes to ``-1`` so the two compare
   equal.
-- **Protocol documentation** rewritten from what the app sends and
-  live captures: real topic structure, the anti-legionella
+- **Protocol documentation** rewritten from the protocol and live
+  captures: real topic structure, the anti-legionella
   modes (``anti-leg-on [days]`` / ``anti-leg-off``, not
   ``anti-legionella-setting``), the message example that paired the
   weekly-reservation code with ``dhw-temperature``, the undocumented
@@ -1956,16 +1946,16 @@ Fixed
 
 Removed
 -------
-- **Six MQTT commands the NaviLink app never sends** (breaking):
+- **Six MQTT commands that are not part of the protocol** (breaking):
   ``check_firmware_update()``, ``reconnect_wifi()``, ``reset_wifi()``,
   ``set_freeze_protection_temperature()``, ``run_smart_diagnostic()`` and
   ``update_weekly_reservation()`` with
   ``subscribe_weekly_reservation_response()`` and the
   ``WeeklyReservationEntry`` / ``WeeklyReservationSchedule`` models. The
-  no NaviLink client sends the first five codes, so the library's ``ota-check``, ``wifi-reconnect``,
-  ``wifi-reset``, ``frez-temp`` and ``smart-diagnostic`` mode strings were
-  invented. The app's weekly schedule is the ordinary reservation
-  program: it writes with 16777226 on ``ctrl/rsv/rd``
+  first five codes are declared only, so the library's ``ota-check``,
+  ``wifi-reconnect``, ``wifi-reset``, ``frez-temp`` and
+  ``smart-diagnostic`` mode strings were invented. The weekly schedule is
+  the ordinary reservation program: it is written with 16777226 on ``ctrl/rsv/rd``
   (``update_reservations()``), never with 33554438 or a ``rsv-weekly/rd``
   topic. The ``CommandCode`` members stay, annotated as declared only.
 
@@ -2031,12 +2021,10 @@ Removed
   waited for a reply on ``res/tou/rd``. No reply ever comes: a live device
   with TOU provisioned (``program_reservation_use`` true, a valid controller
   serial, and a plan the REST API returns in full) stayed silent for 45
-  seconds. ``ctrl/tou/rd`` with that command code is the *write* - it is what
-  :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes and what
-  the vendor app publishes from its TOU editor
-  (``TouScheduleViewmodel.setPublishMgppControlTou``), and the device answers
-  on ``res/tou/rd`` only to confirm such a write. The vendor app reads TOU
-  over REST, which is the only TOU read the protocol has.
+  seconds. ``ctrl/tou/rd`` with that command code is the *write*: it is what
+  :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes, and the
+  device answers on ``res/tou/rd`` only to confirm such a write. REST is the
+  only TOU read the protocol has.
 
   Beyond returning nothing, the call published a write-shaped command with no
   schedule attached. This device ignored it (``touStatus`` was unchanged
@@ -2155,9 +2143,6 @@ Changed
 - **Status flags now preserve the device's unknown state.** The protocol
   encodes these flags as ``0 = unknown, 1 = OFF, 2 = ON``, and the library
   was collapsing 0 to ``False``, inventing an OFF the device never claimed.
-  Navien's own NaviLink app treats exactly this set of fields as
-  ``UNKNOWN(0), OFF(1), ON(2)``, and shows the zero of two related
-  fields as ``"-"`` and ``"Not Applied"`` rather than as an off state.
 
   Affected: ``operation_busy``, ``comp_use``, ``anti_legionella_use``,
   ``anti_legionella_operation_busy``, ``heat_upper_use``, ``heat_lower_use``,
@@ -2169,7 +2154,7 @@ Changed
   this is the wanted shape: ``None`` renders as "Unknown" instead of writing
   a fabricated OFF into the recorder database.
 
-- ``OnOffFlag`` gains the vendor's ``UNKNOWN = 0`` member. It previously
+- ``OnOffFlag`` gains an ``UNKNOWN = 0`` member. It previously
   started at ``OFF = 1``, leaving the device's reserved value unrepresented.
 
 - The CLI renders these flags as ``Unknown`` rather than ``No``. Both
@@ -2194,7 +2179,7 @@ Added
   report. ``converters.device_bool_to_python`` is unchanged and remains
   correct for capability flags.
 - New ``docs/explanation/unknown-values.rst`` recording which field families
-  use 0 as a sentinel and which do not, with the app evidence for each.
+  use 0 as a sentinel and which do not, with the evidence for each.
 
 Removed
 -------
@@ -2223,8 +2208,6 @@ Fixed
 - ``dhwTemperature`` is documented as an outlet temperature but is
   measured inside the tank: it tracks ``tankUpperTemperature`` to within
   one 0.5 degC step, and the device has no sensor downstream of itself.
-  Navien's own app agrees, labelling it "DHW Temp." beside the tank
-  thermistors and showing ``dischargeTemperature`` separately.
 - ``docs/explanation/tank-energy.rst`` tabulated ``totalEnergyCapacity``
   and ``availableEnergyCapacity`` at ten times their raw wire values,
   under column headings naming the raw protocol fields. The series had
@@ -2242,18 +2225,16 @@ Fixed
   in the changelog, the model field description and the protocol
   reference.
 - New ``docs/explanation/tank-energy.rst`` records what the two fields
-  measure and the calibration evidence behind the scale change,
-  including that Navien's own NaviLink app reads neither field, so no vendor-side corroboration exists.
+  measure and the calibration evidence behind the scale change.
 
-- Documented that **temperature fields carry no sentinel at all**. The app
-  has no out-of-band constant (no ``0xFFFF``/``-999``/``-1``), no zero-guard
-  in any display path, and formats whatever arrives, so a temperature of
-  zero means zero. This closes a recurring source of bugs where zero-as-none
+- Documented that **temperature fields carry no sentinel at all**. There
+  is no out-of-band constant (no ``0xFFFF``/``-999``/``-1``), so a
+  temperature of zero means zero. This closes a recurring source of bugs where zero-as-none
   was applied to temperature converters and reported working sensors as
   missing during cold-weather operation.
-- Documented that capability flags are a distinct case: the app hides a
-  feature's entire UI when its DID ``Use`` flag reads 0, so 0 there means
-  "not fitted" and the existing ``bool`` mapping is correct.
+- Documented that capability flags are a distinct case: a DID ``Use``
+  flag of 0 means "not fitted", so the existing ``bool`` mapping is
+  correct.
 
 Version 9.2.1 (2026-07-30)
 ==========================
@@ -2547,8 +2528,8 @@ Bug Fixes
   (default 300 s, ``None`` to disable) are now discarded at send time.
 - **Fix Fahrenheit conversion for sub-zero temperatures** (ASYMMETRIC
   formula): the rounding used Python's floored ``%``, which is always
-  non-negative, while the firmware/app uses a truncated remainder. Raw
-  ``-11`` (-5.5 °C) decoded to 22 °F instead of the app's 23 °F. Now
+  non-negative, while the firmware uses a truncated remainder. Raw
+  ``-11`` (-5.5 °C) decoded to 22 °F instead of 23 °F. Now
   uses ``math.fmod`` semantics.
 - **Fix freeze protection default limits**: the defaults (43/65) were
   Fahrenheit display values stored in raw half-Celsius fields, decoding
@@ -2977,7 +2958,7 @@ Fixed
 - **Vacation mode sent wrong MQTT command**: ``set_vacation_days()`` used
   ``CommandCode.GOOUT_DAY`` (33554466), which the device silently accepted
   but did not activate vacation mode; the operating mode remained unchanged.
-  HAR capture of the official Navien app confirms the correct command is
+  A HAR capture of NaviLink traffic confirms the correct command is
   ``DHW_MODE`` (33554437) with ``param=[5, days]``
   (``DhwOperationSetting.VACATION``). The valid range has also been corrected
   from 1-365 to 1-30 to match the device's actual constraint.
@@ -3050,7 +3031,7 @@ Added
 -----
 - **OpenEI Client Module**: New ``OpenEIClient`` async client (``nwp500.openei``) for browsing utility rate plans from the OpenEI API by zip code. Supports listing utilities, filtering rate plans, and fetching plan details. API key read from ``OPENEI_API_KEY`` environment variable.
 - **Convert TOU API**: ``NavienAPIClient.convert_tou()`` sends raw OpenEI rate data to the Navien backend for server-side conversion into device-ready TOU schedules with season/week bitfields and scaled pricing.
-- **Update TOU API**: ``NavienAPIClient.update_tou()`` applies a converted TOU rate plan to a device, matching the mobile app's ``PUT /device/tou`` endpoint.
+- **Update TOU API**: ``NavienAPIClient.update_tou()`` applies a converted TOU rate plan to a device through the cloud's ``PUT /device/tou`` endpoint.
 - **ConvertedTOUPlan Model**: New Pydantic model for parsed ``convert_tou()`` results (utility, name, schedule).
 - **CLI ``tou rates``**: Browse utilities and rate plans for a zip code (``nwp500 tou rates 94903``).
 - **CLI ``tou plan``**: View converted rate plan details with decoded pricing (``nwp500 tou plan 94903 "EV Rate A"``).
@@ -3065,7 +3046,7 @@ Changed
 Fixed
 -----
 - **Week Bitfield Encoding**: Fixed MGPP week bitfield encoding to match the NaviLink protocol. Sunday is now correctly bit 7 (128), Monday bit 6 (64), ..., Saturday bit 1 (2); bit 0 is unused. Affects all reservation and TOU schedule operations. Verified against reference captures.
-- **Enable/Disable Convention**: Fixed reservation and TOU enable/disable flags to use standard device boolean convention (1=OFF, 2=ON) instead of inverted logic. This aligns with other device binary sensors and matches app behavior. Global reservation status now correctly shows DISABLED when ``reservationUse=1``.
+- **Enable/Disable Convention**: Fixed reservation and TOU enable/disable flags to use standard device boolean convention (1=OFF, 2=ON) instead of inverted logic. This aligns with other device binary sensors. Global reservation status now correctly shows DISABLED when ``reservationUse=1``.
 - **Reservation Set Command Timeout**: Fixed ``reservations set`` subscription pattern that had extra wildcards preventing response matching. Command now receives confirmations correctly.
 - **Intermittent Fetch Bug**: Tightened MQTT topic filter for reservation fetch from ``/res/`` to ``/res/rsv/`` with content validation to prevent false matches on unrelated response messages.
 
@@ -4877,7 +4858,7 @@ Fixed
   - Power-off now uses command code ``33554433``
   - Power-on now uses command code ``33554434``
   - DHW mode control now uses command code ``33554437``
-  - Discovered through network traffic analysis of official app
+  - Discovered through network traffic analysis
 
 - **Bug**: MQTT topic pattern matching with wildcards
 

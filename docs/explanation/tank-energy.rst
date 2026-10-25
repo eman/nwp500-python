@@ -65,8 +65,8 @@ Both fields fit a single two-parameter model:
    full_recovery_energy  = k * (setpoint - reference_temperature)
 
 where ``k`` is the tank's heat capacity and ``reference_temperature`` is
-the device's own minimum setpoint, ``dhwTemperatureMin`` (40.5 degC /
-104.9 degF), except during a Time-of-Use window that raises
+the device's own minimum setpoint, ``dhwTemperatureMin`` (sent in
+half-degrees C: 40.5 degC / 104.9 degF), except during a Time-of-Use window that raises
 ``hpUpperOnTempSetting``. Then both fields measure to a target 2 degC
 below the setpoint, which puts ``full_recovery_energy``'s reference
 2 degC higher; see `Two branches`_.
@@ -174,13 +174,12 @@ slope is stronger evidence for the quantum than either alone.
 
 Converting that to Watt-hours needs a water mass, and this is where care
 is required: a "65 gallon" tank does not hold 65 gallons of water. The
-nameplate is an upper bound. The vendor's own app shows it, mapping
-``volumeCode`` 1/2/3 to 189.2 L, **246.0 L** and 302.8 L (see
-`In the NaviLink app`_), and the water in the tank must come in under
-it. Rather than assume nominal volume and derive an odd-looking quantum,
-assume the quantum is a round number, as every other conversion in this
-protocol is (half-degrees, tenths), and see which one implies a sensible
-volume:
+nameplate is an upper bound: ``volumeCode`` 1/2/3 stands for 50, 65 and
+80 gal, or 189.2 L, **246.0 L** and 302.8 L, and the water in the tank
+must come in under it. Rather than assume nominal volume and derive an
+odd-looking quantum, assume the quantum is a round number, as every other
+conversion in this protocol is (half-degrees, tenths), and see which one
+implies a sensible volume:
 
 .. list-table::
    :header-rows: 1
@@ -325,49 +324,12 @@ two. On one device, ``energy_to_setpoint / full_recovery_energy``
 implies 30 % charged while ``dhwChargePer`` reads 59 %; over two weeks
 the two differ by a mean of 48 points with 32 points of scatter.
 
-It is nonetheless the number Navien shows its own users: the NaviLink app
-prints it unmodified as a percentage labelled "DHW Charge", with no
-client-side arithmetic of any kind. Whatever it means, it is computed on
-the device, and a user comparing the app against this library will see
-the app's figure and not the ratio above.
+The field is a percentage as sent, with no scaling. Whatever it means,
+it is computed on the device.
 
 Treat it as an opaque vendor heuristic rather than a defined fraction of
 anything. For a charge figure with defined meaning, use
 ``usable_energy``.
-
-
-.. _what the vendor app does with these fields:
-
-In the NaviLink app
-===================
-
-Nothing. Navien's own NaviLink app never shows either field, so there is
-no vendor label, scale factor or formula to check the conclusions above
-against: the evidence here is the only account of these two fields. It
-also explains why the protocol names mislead: nothing Navien ships has
-to act on them.
-
-The app does corroborate the surrounding facts this page leans on:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 60
-
-   * - What the app does
-     - What it confirms
-   * - Its status screen shows ``volumeCode`` 1/2/3 as "50"/"65"/"80"
-       gallons and 189.2/246.0/302.8 L, under the label "Volume"
-     - The nominal volume the quantum candidates are judged against is
-       the vendor's own figure, not an assumption of ours
-   * - Its temperature control reads ``dhwTemperatureMin`` as
-       half-degrees C
-     - 40.5 degC / 104.9 degF is the exact value the regression lands
-       on. The app rounds for display and shows 105 degF
-   * - The status screen labels ``dhwTemperature`` "DHW Temp." next to
-       "Upper Temp." and "Lower Temp.", and gives ``dischargeTemperature``
-       a separate "Discharge Temp." row
-     - The vendor UI does not treat ``dhwTemperature`` as an outlet
-       reading, and reserves a different field for what leaves the unit
 
 
 Drawable energy

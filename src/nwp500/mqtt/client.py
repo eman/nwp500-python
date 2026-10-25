@@ -434,8 +434,7 @@ class NavienMqttClient(
     def _build_will(self) -> MqttWill | None:
         """The Last-Will for ``config.last_will_device``, or ``None``.
 
-        Mirrors the NaviLink app, which registers its will on the
-        device's ``app-connection`` event topic with
+        The will goes on the device's ``app-connection`` event topic with
         ``event.connection.status`` 0 so a dropped client is announced.
         """
         device = self.config.last_will_device
@@ -609,8 +608,8 @@ class NavienMqttClient(
                     await self._auth_client.refresh_token(
                         current_tokens.refresh_token
                     )
-                    # The NaviLink app answers an MQTT auth failure with a
-                    # session refresh: AWS IoT can reject SigV4 credentials
+                    # An MQTT auth failure is answered with a session
+                    # refresh: AWS IoT can reject SigV4 credentials
                     # before they are locally "expired", so renew them
                     # explicitly rather than trusting the stored expiry.
                     await self._auth_client.refresh_session()
@@ -923,15 +922,14 @@ class NavienMqttClient(
     async def _end_device_sessions(self) -> None:
         """Send ``st/end`` to every subscribed device before disconnecting.
 
-        Mirrors the NaviLink app, which sends the session-end query
-        whenever it leaves a device. Publishes straight to the connection
-        manager rather than through :meth:`publish`, so a connection that
-        drops part-way through can never leave a stale ``st/end`` in the
-        offline command queue to be replayed on the next connect. Stops
-        as soon as either the client or the connection manager reports
-        disconnected. Never raises: each publish is bounded by
-        ``_SESSION_END_TIMEOUT`` and failures are logged at debug level.
-        Disabled by ``config.send_session_end_on_disconnect``.
+        Publishes straight to the connection manager rather than through
+        :meth:`publish`, so a connection that drops part-way through can
+        never leave a stale ``st/end`` in the offline command queue to be
+        replayed on the next connect. Stops as soon as either the client
+        or the connection manager reports disconnected. Never raises: each
+        publish is bounded by ``_SESSION_END_TIMEOUT`` and failures are
+        logged at debug level. Disabled by
+        ``config.send_session_end_on_disconnect``.
         """
         if not self.config.send_session_end_on_disconnect:
             return
@@ -966,8 +964,7 @@ class NavienMqttClient(
     async def end_session(self, device: Device) -> int:
         """Tell the device the client is done with it (``st/end``).
 
-        The NaviLink app sends this whenever it leaves a device screen; no
-        reply to it has been observed. :meth:`disconnect` sends it
+        No reply to it has been observed. :meth:`disconnect` sends it
         automatically for every subscribed device, so call this directly
         only when you stop using one device while staying connected.
 

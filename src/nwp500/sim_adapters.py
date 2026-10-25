@@ -197,8 +197,7 @@ def heater_state(status: DeviceStatus) -> HeaterState:
 def settings(status: DeviceStatus) -> Settings:
     """The setpoint, the operation mode, the lower zone's start and stop
     thresholds, and the upper zone's start threshold. Standby (0), a
-    status-only mode, is Power Off: the NaviLink app counts the heater
-    off in either."""
+    status-only mode, is Power Off: the heater is off in either."""
     mode = int(status.dhw_operation_setting)
     if status.dhw_operation_setting == DhwOperationSetting.STANDBY:
         mode = POWER_OFF

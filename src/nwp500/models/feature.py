@@ -95,10 +95,7 @@ class DeviceFeature(NavienBaseModel):
         )
     )
     wifi_sw_version: int = Field(
-        description=(
-            "WiFi module firmware version - "
-            "handles app connectivity and cloud communication"
-        )
+        description=("WiFi module firmware version, for cloud communication")
     )
     controller_sw_code: int = Field(
         description=(

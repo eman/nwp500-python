@@ -58,7 +58,7 @@ class MqttWill:
     """An MQTT Last-Will message, registered with the CONNECT packet.
 
     The broker publishes it if the connection is lost without a
-    DISCONNECT. The NaviLink app registers one on the device's
+    DISCONNECT. A client registers one on the device's
     ``app-connection`` event topic.
 
     Attributes:

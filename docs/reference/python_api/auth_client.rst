@@ -196,7 +196,7 @@ secured_sign_in()
    carries user info, legal notices and a ``token`` object; only the token
    fields the server sends are overwritten. Observed live, the ``token``
    object holds the AWS credentials only, so the JWT access and refresh
-   tokens are kept. This is what the NaviLink app uses for auto-login.
+   tokens are kept.
 
    :return: Authentication response with user info and tokens
    :rtype: AuthenticationResponse

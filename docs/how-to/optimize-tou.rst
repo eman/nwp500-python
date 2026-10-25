@@ -1,7 +1,7 @@
 Time of Use (TOU) Pricing
 ==========================
 
-The Navien NWP500 supports Time of Use (TOU) pricing schedules, allowing the water heater to optimize heating based on electricity rates that vary throughout the day. The Navien mobile app integrates with the OpenEI (Open Energy Information) API to retrieve utility rate information.
+The Navien NWP500 supports Time of Use (TOU) pricing schedules, allowing the water heater to optimize heating based on electricity rates that vary throughout the day. Utility rate information comes from the OpenEI (Open Energy Information) API.
 
 Overview
 --------
@@ -19,7 +19,7 @@ The system uses utility rate data from OpenEI to configure heating schedules bas
 OpenEI API Integration
 ----------------------
 
-The Navien mobile app queries the OpenEI Utility Rates API to retrieve current electricity rate information for the user's location, then presents available rate plans and configures TOU schedules.
+The OpenEI Utility Rates API returns the current electricity rate plans for a location. A plan picked from it is converted and applied to the device as a TOU schedule.
 
 API Endpoint
 ~~~~~~~~~~~~
@@ -48,7 +48,7 @@ The following parameters are used to query utility rates:
      - Response format (``json``)
    * - ``api_key``
      - string
-     - OpenEI API key (embedded in Navien app)
+     - OpenEI API key
    * - ``detail``
      - string
      - Level of detail (``full`` for complete rate structure)
@@ -367,10 +367,10 @@ schedule with its pricing intervals.
 
    There is no MQTT read for the TOU schedule. ``ctrl/tou/rd`` with
    ``CommandCode.TOU_RESERVATION`` is the *write*: it is what
-   :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes, and what
-   the vendor app publishes from its TOU editor. The device replies on
-   ``cmd/{deviceType}/{clientId}/res/tou/rd`` to confirm such a write; it does
-   not answer a request that carries no schedule. Read the plan over REST.
+   :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes. The
+   device replies on ``cmd/{deviceType}/{clientId}/res/tou/rd`` to confirm
+   such a write; it does not answer a request that carries no schedule.
+   Read the plan over REST.
 
 Building TOU Periods
 --------------------
@@ -752,8 +752,7 @@ Example 5: Apply Rate Plan from OpenEI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use the ``OpenEIClient`` and ``convert_tou()``/``update_tou()`` methods to
-browse, convert, and apply a rate plan from OpenEI. This is the same workflow the
-Navien mobile app uses:
+browse, convert, and apply a rate plan from OpenEI:
 
 .. code-block:: python
 

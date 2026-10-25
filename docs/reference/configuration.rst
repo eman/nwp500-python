@@ -9,7 +9,7 @@ Credentials
 ===========
 
 The library requires your Navien Smart Control credentials (email and
-password used in the Navilink mobile app).
+password of your NaviLink account).
 
 Environment Variables (Recommended)
 ------------------------------------

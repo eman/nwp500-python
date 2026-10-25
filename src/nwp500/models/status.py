@@ -33,7 +33,7 @@ DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 #: An on/off flag the device may decline to report. 0 becomes ``None``
 #: rather than ``False``, because the device reserves 0 to mean "unknown"
 #: and a fabricated OFF is worse than an absent value. Applied only to the
-#: fields the vendor's own client decodes through its on/off enum - see
+#: fields the protocol codes as an on/off enum: see
 #: ``docs/explanation/unknown-values.rst``.
 DeviceTriState = Annotated[
     bool | None, BeforeValidator(device_tristate_to_python)
@@ -124,9 +124,8 @@ class DeviceStatus(NavienBaseModel):
     minor_code: int = Field(
         default=0,
         description=(
-            "Secondary alarm code, shown by the NaviLink app as 'R%03d' "
-            "alongside error_code. 0 = none. 101 is the one code the app "
-            "lets the user reset from the alarm screen."
+            "Secondary alarm code, written 'R%03d' (R101) alongside "
+            "error_code. 0 = none."
         ),
     )
     vacation_day_setting: int = Field(
@@ -184,8 +183,7 @@ class DeviceStatus(NavienBaseModel):
     )
     air_filter_alarm_elapsed: int = Field(
         description=(
-            "Reported by the device but never read by the NaviLink app, "
-            "which derives remaining filter life from "
+            "Reported by the device; remaining filter life comes from "
             "cumulated_op_time_eva_fan instead. Its semantics are "
             "unconfirmed; see air_filter_remaining_hours"
         ),
@@ -194,7 +192,7 @@ class DeviceStatus(NavienBaseModel):
     cumulated_op_time_eva_fan: int = Field(
         description=(
             "Evaporator fan run time since the last air-filter reset. "
-            "The NaviLink app computes remaining filter life as "
+            "Remaining filter life is "
             "air_filter_alarm_period minus this value "
             "(see air_filter_remaining_hours). The lifetime fan total "
             "is DeviceDiagnostics.ta_data.cumulated_op_time_eva_fan"
@@ -233,9 +231,8 @@ class DeviceStatus(NavienBaseModel):
     dr_override_status: int = Field(
         description=(
             "Demand Response override flag, tri-state in the device's "
-            "on/off convention: 0 = unknown, 1 = off, 2 = on. The "
-            "NaviLink app decodes it through its on/off enum and shows "
-            "'DR applied' when it is 2. Kept as a raw int; use "
+            "on/off convention: 0 = unknown, 1 = off, 2 = on "
+            "('DR applied'). Kept as a raw int; use "
             "dr_override_active for the boolean reading"
         ),
     )
@@ -439,10 +436,7 @@ class DeviceStatus(NavienBaseModel):
         "0.5 degC step, while tank_lower_temperature is uncorrelated. "
         "Prefer tank_upper_temperature, which reports the same water at "
         "0.1 degC resolution. The device has no sensor downstream of "
-        "itself, so this cannot measure water leaving the appliance. "
-        "Navien's own app agrees: it labels this 'DHW Temp.' alongside "
-        "the tank thermistors and shows dischargeTemperature separately "
-        "as 'Discharge Temp.'",
+        "itself, so this cannot measure water leaving the appliance.",
         alias="dhwTemperature",
     )
     dhw_temperature_setting_raw: int = temperature_field(
@@ -1006,8 +1000,8 @@ class DeviceStatus(NavienBaseModel):
     def dr_override_active(self) -> bool:
         """Whether a Demand Response override is in force.
 
-        True when ``dr_override_status`` is 2 (ON), the value the NaviLink
-        app shows as "DR applied". 0 (unknown) and 1 (off) both read False.
+        True when ``dr_override_status`` is 2 (ON, "DR applied").
+        0 (unknown) and 1 (off) both read False.
         """
         return self.dr_override_status == 2
 
@@ -1016,9 +1010,8 @@ class DeviceStatus(NavienBaseModel):
     def air_filter_remaining_hours(self) -> int | None:
         """Evaporator-fan hours left before the air-filter reminder.
 
-        The NaviLink app's calculation: ``air_filter_alarm_period -
-        cumulated_op_time_eva_fan``, clamped at zero (the app shows it in
-        days as ``ceil(hours / 24)``). ``None`` when the reminder period is
+        ``air_filter_alarm_period - cumulated_op_time_eva_fan``, clamped
+        at zero. ``None`` when the reminder period is
         0 (reminder off), since there is nothing to count down to.
         """
         if self.air_filter_alarm_period == 0:

@@ -176,8 +176,8 @@ update_device_info()
 .. py:method:: update_device_info(mac_address, additional_value, device_name, device_type=DeviceType.NPF700_WIFI, install_type=None, location=None)
 
    Rename a device or update its installation type and location
-   (``POST /device/change-info``). Following the NaviLink app,
-   ``install_type`` is omitted when empty, ``location`` is sent only when
+   (``POST /device/change-info``). ``install_type`` is omitted when
+   empty, ``location`` is sent only when
    it has a state, city or address, and empty strings and zero
    coordinates inside it are left out.
 
@@ -209,8 +209,7 @@ list_simple_devices()
 
    The trimmed device list from ``POST /device/simple-list``: identifiers,
    type and name only. ``target_user_id`` defaults to the signed-in user;
-   the NaviLink app passes an owner's ID when an installer views that
-   owner's devices.
+   an installer passes an owner's ID to list that owner's devices.
 
    :return: List of SimpleDevice objects
    :rtype: list[SimpleDevice]
@@ -221,9 +220,8 @@ get_error_history()
 .. py:method:: get_error_history(mac_address, additional_value, continuous_key=None, count=20, installer_id=None)
 
    Faults the cloud has recorded for a device (``POST /device/error/list``),
-   readable while the device is offline. The NaviLink app calls this only
-   from its installer screens and sends the signed-in user's ID as
-   ``installerId``; this method does the same by default. Whether the
+   readable while the device is offline. It is an installer request: this
+   method sends the signed-in user's ID as ``installerId`` by default. Whether the
    backend accepts an owner's ID there is untested.
 
    To fetch the next page pass the last entry's ``error_occurred_time`` as
@@ -288,9 +286,9 @@ get_firmware_detail()
 
    Describe a firmware image (``POST /firmware/info``) by the
    ``cur_sw_code``/``cur_version`` pair (or ``downloaded_version`` when an
-   update is pending) from :class:`~nwp500.models.FirmwareInfo`. The
-   NaviLink app shows ``description`` on its update screen and ``run_time``
-   as the estimated update time in minutes.
+   update is pending) from :class:`~nwp500.models.FirmwareInfo`.
+   ``description`` holds the release notes and ``run_time`` the estimated
+   update time in minutes.
 
    :param sw_code: Firmware component code
    :type sw_code: int
@@ -365,8 +363,7 @@ delete_tou()
 .. py:method:: delete_tou(mac_address, additional_value, register_path="wifi", source_type="openei", controller_id=None, user_type=None)
 
    Remove the TOU rate plan from a device (``DELETE /device/tou``). The
-   request fields travel as a query string, as the NaviLink app sends
-   them. Pass ``register_path="bt"`` and the ``controller_id`` for a plan
+   request fields travel as a query string. Pass ``register_path="bt"`` and the ``controller_id`` for a plan
    that was registered over Bluetooth. ``user_type`` defaults to the
    signed-in user's type.
 
@@ -379,8 +376,8 @@ get_manufacture_id()
 .. py:method:: get_manufacture_id(mac_address, additional_value, controller_id)
 
    The manufacture ID the TOU service holds for a device
-   (``GET /device/tou/manufacture-id``). The NaviLink app treats
-   ``"000000000000000"`` as "not available".
+   (``GET /device/tou/manufacture-id``). ``"000000000000000"`` means
+   not available.
 
    :return: Manufacture ID
    :rtype: str
@@ -410,10 +407,10 @@ set_push_settings()
 .. py:method:: set_push_settings(mac_address, additional_value="", *, error_alarm=None, descaling_alarm=None, etc_alarm=None)
 
    Enable or disable push notifications (``POST /user/set-push-settings``).
-   The app always sends every flag the account has, so a flag left
-   ``None`` keeps its current value, read first with
-   :meth:`get_push_settings`. One the cloud does not report (a member
-   account's descaling flag) is omitted, as the app omits it. On the
+   Every flag the account has is sent, so a flag left ``None`` keeps its
+   current value, read first with :meth:`get_push_settings`. One the
+   cloud does not report (a member account's descaling flag) is omitted.
+   On the
    wire 1 is on and 2 is off, the reverse of the device's on/off flags,
    which the library handles for you.
 
@@ -460,7 +457,7 @@ record_filter_change() / record_cip_change()
 
    Record a replacement date (``POST /device/filter/change-info`` and
    ``POST /device/cip/change-info``). The date is sent as ``YYYY-M-D``
-   without zero padding, exactly as the NaviLink app formats it.
+   without zero padding.
 
    :param maintenance_date: Date of the replacement
    :type maintenance_date: datetime.date
@@ -489,7 +486,7 @@ get_display_preferences()
 
    Unit display preferences the cloud stores for a device
    (``GET /device/preferences/format``). The cloud answers with a list;
-   the NaviLink app uses the first entry.
+   the first entry is the one in effect.
 
    :return: List of DisplayPreferences objects
    :rtype: list[DisplayPreferences]
@@ -497,8 +494,8 @@ get_display_preferences()
    .. note::
 
       Not accepted for the NWP500 (``400 COMMON_BAD_REQUEST`` for device
-      type 52, checked live); the app only uses it for the IoT-module hydro
-      unit (device type 8).
+      type 52, checked live); it serves the IoT-module hydro unit (device
+      type 8).
 
 set_display_preferences()
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -506,8 +503,8 @@ set_display_preferences()
 .. py:method:: set_display_preferences(mac_address, additional_value, pressure_display_format, temperature_display_format, model_type_code=None)
 
    Store the display preferences (``POST /device/preferences/format``).
-   The NaviLink app writes ``"F"``/``"C"`` for temperature and ``"P"``
-   (psi)/``"M"`` (metric) for pressure.
+   Temperature is ``"F"``/``"C"`` and pressure ``"P"`` (psi)/``"M"``
+   (metric).
 
    :return: True on success
    :rtype: bool
@@ -536,10 +533,9 @@ get_app_version()
 
 .. py:method:: get_app_version(os="A")
 
-   The NaviLink app versions the cloud expects (``POST /app/version``),
-   sent **without** authentication as the app does on its splash screen.
-   When the backend is down for maintenance the cloud answers 403 with a
-   notice, which is returned as
+   The client release versions the cloud expects (``POST /app/version``),
+   sent **without** authentication. When the backend is down for
+   maintenance the cloud answers 403 with a notice, which is returned as
    :class:`~nwp500.models.AppVersionInfo` with ``server_check_text`` set
    (``is_under_maintenance`` is ``True``) instead of raising.
 

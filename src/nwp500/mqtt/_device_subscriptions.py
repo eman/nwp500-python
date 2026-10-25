@@ -244,7 +244,7 @@ class DeviceSubscriptionsMixin:
         :class:`~nwp500.models.mqtt_models.ControlFailResponse` whenever
         the device rejects a control command. ``failCode`` 2 means the
         DHW control interval was exceeded (send the command again later);
-        other codes are not interpreted by the NaviLink app. The
+        other codes have no known meaning. The
         ``control_failed`` client event fires for every device
         subscription without this call; this adds a plain callback.
 

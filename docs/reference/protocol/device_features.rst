@@ -61,7 +61,7 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``wifiSwVersion``
      - int
      - None
-     - WiFi module firmware version: handles WiFi app connectivity and cloud communication
+     - WiFi module firmware version: handles WiFi and cloud communication
      - None
    * - ``controllerSwCode``
      - int
@@ -212,7 +212,7 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
 Operation Mode Support Matrix
 -----------------------------
 
-The NWP500 supports five primary operation modes as indicated by the capability flags. The mode IDs are ``DhwOperationSetting`` values, which match the NaviLink app's ``MgppOperationMode``; descriptions follow the User's Information Manual, section 3.4.
+The NWP500 supports five primary operation modes as indicated by the capability flags. The mode IDs are ``DhwOperationSetting`` values; descriptions follow the User's Information Manual, section 3.4.
 
 .. list-table::
    :header-rows: 1
@@ -269,7 +269,7 @@ The device feature data corresponds to these official NWP500 specifications:
    * ECO (Energy Cut Off) high-limit safety switch
 
 **Smart Features & Connectivity**
-   * WiFi app connectivity
+   * WiFi connectivity to the NaviLink cloud
    * Self-diagnostic system with error codes
    * CTA-2045 Demand Response module support
    * Anti-Legionella periodic disinfection (1-30 day intervals)
@@ -292,7 +292,7 @@ The device returns three separate firmware components for full system identifica
    * Status indicator control and user feedback
 
 **WiFi Module (``wifiSwVersion``, ``wifiSwCode``)**
-   * Cloud connectivity and app communication
+   * Cloud connectivity
    * Wireless network management and security
    * Remote monitoring and control capabilities
 

@@ -8,7 +8,7 @@ Prerequisites
 =============
 
 * Python 3.14 or higher
-* Navien Smart Control account (via Navilink mobile app)
+* NaviLink (Navien Smart Control) account
 * At least one Navien NWP500 device registered to your account
 * Valid email and password for your Navien account
 
@@ -263,12 +263,12 @@ Common Issues
 =============
 
 **Authentication Failed**
-   Verify your email and password are correct. You can test them in the
-   Navilink mobile app first.
+   Verify your email and password are correct by signing in to your
+   NaviLink account.
 
 **No Devices Found**
-   Check that your device is registered to your account in the Navilink app
-   and is online.
+   Check that your device is registered to your NaviLink account and is
+   online.
 
 **Connection Timeout**
    Check your network connection. The library needs internet access to

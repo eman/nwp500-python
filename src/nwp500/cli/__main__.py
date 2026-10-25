@@ -352,8 +352,7 @@ async def reset_filter(mqtt: NavienMqttClient, device: Any) -> None:
 async def filter_life(mqtt: NavienMqttClient, device: Any, hours: int) -> None:
     """Set the air filter service interval in fan hours.
 
-    HOURS is 0 to disable the alarm, or 1000-10000 in steps of 500 (the
-    values the NaviLink app offers).
+    HOURS is 0 to disable the alarm, or 1000-10000 in steps of 500.
     """
     await handlers.handle_set_air_filter_life_request(mqtt, device, hours)
 
@@ -367,7 +366,7 @@ async def diagnostics(
     """Show the installer diagnostics counters.
 
     Lifetime energy and fault counters, hot-water draw statistics and
-    component run times, as shown on the NaviLink app's installer screen.
+    component run times.
     """
     await handlers.handle_diagnostics_request(mqtt, device, output_json)
 
@@ -375,7 +374,7 @@ async def diagnostics(
 @cli.command()  # type: ignore[attr-defined]
 @async_command
 async def reset_condenser_fault(mqtt: NavienMqttClient, device: Any) -> None:
-    """Clear a condenser fault (installer-level in the NaviLink app)."""
+    """Clear a condenser fault (an installer-level control)."""
     await handlers.handle_reset_condenser_fault_request(mqtt, device)
 
 
@@ -494,7 +493,7 @@ async def vacation_duration(
 ) -> None:
     """Set the vacation day count without entering vacation mode.
 
-    Sends the app's goout-day command. Use ``vacation`` to enter vacation
+    Sends the goout-day command. Use ``vacation`` to enter vacation
     mode for a number of days.
     """
     await handlers.handle_set_vacation_duration_request(mqtt, device, days)

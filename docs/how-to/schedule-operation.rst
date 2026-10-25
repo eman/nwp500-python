@@ -616,8 +616,7 @@ Important Notes
 Weekly Reservations
 ===================
 
-The NaviLink app's "weekly" schedule screen is the reservation program
-above: it writes with ``update_reservations()`` on ``ctrl/rsv/rd`` and
+A "weekly" schedule is the reservation program above: it writes with ``update_reservations()`` on ``ctrl/rsv/rd`` and
 reads with ``request_reservations()``. There is no separate weekly
 command.
 
@@ -626,8 +625,8 @@ Recirculation Scheduling
 
 Recirculation schedules are represented by
 :class:`~nwp500.models.RecirculationSchedule` and
-:class:`~nwp500.models.RecirculationScheduleEntry`. The app builds these
-entries with the same fields as a reservation entry: a day bitfield, a
+:class:`~nwp500.models.RecirculationScheduleEntry`. These entries have
+the same fields as a reservation entry: a day bitfield, a
 time, and ``mode`` as the entry's on/off toggle (``2`` pump on, ``1``
 pump off). The write goes to ``ctrl/recirc-rsv/rd`` and asks for the
 schedule back on ``recirc-rsv/rd``; the read is
@@ -661,8 +660,8 @@ in-range fields.
    await mqtt.configure_recirculation_schedule(device, schedule)
    await mqtt.request_recirculation_schedule(device)              # read back
 
-The ``mode``/``param`` semantics and the write echo are inferred from the
-app and have not been confirmed on a unit with recirculation fitted.
+The ``mode``/``param`` semantics and the write echo have not been
+confirmed on a unit with recirculation fitted.
 
 Use :meth:`nwp500.mqtt.client.NavienMqttClient.set_recirculation_mode` to switch
 between always-on, button, schedule, and temperature modes.

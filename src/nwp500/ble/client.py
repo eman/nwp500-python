@@ -345,8 +345,8 @@ class NavienBleClient:
     async def read_sub_status(self) -> SubStatus:
         """Read and decode the ``SSD`` block: two DIP-switch settings.
 
-        The layout is from Navien's boiler service toolkit and is
-        unconfirmed on the NWP500; see :class:`SubStatus`.
+        The layout is the boilers' and is unconfirmed on the NWP500; see
+        :class:`SubStatus`.
 
         Raises:
             CrcMismatchError: The reply failed its checksum.
@@ -446,7 +446,7 @@ class NavienBleClient:
     async def read_parameter_blocks(self) -> dict[ClassCode, bytes]:
         """Read the four boiler parameter blocks (classes 51-54).
 
-        These are the blocks Navien's service app reads on boilers. An
+        These blocks carry the installer parameters on boilers. An
         NWP500 did not answer them (see
         :data:`~nwp500.ble.NWP500_RESPONDING_CLASSES`), so on the heat
         pump expect a :class:`TimeoutError`; the classes it does answer
@@ -518,8 +518,8 @@ class NavienBleClient:
     ) -> Packet:
         """EXPERIMENTAL: write a whole block and return the device's reply.
 
-        The service app writes installer parameters as a full class-54
-        block. Only send bytes read from the same class with a deliberate
+        Installer parameters are written as a full class-54 block. Only
+        send bytes read from the same class with a deliberate
         change; an unknown layout written blindly can misconfigure the
         heater.
         """

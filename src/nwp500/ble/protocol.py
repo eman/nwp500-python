@@ -1,19 +1,18 @@
 """Framing for the NWP500's Bluetooth LE service.
 
-The water heater exposes a GATT service that carries the controller's
-native class-code protocol: one request packet is written to the write
-characteristic and one reply packet arrives as a notification. The framing
-below mirrors what the NaviLink app sends to the heater in Bluetooth
-pairing mode (with the heater off, hold Back and Power for five seconds; it
-then advertises as ``HPWH1…``). In its Wi-Fi setup mode the heater
-advertises as ``HPWH4610`` instead, and accepts a connection but answers
-nothing.
+The water heater exposes a GATT service that carries the controller's native
+class-code protocol: one request packet is written to the write
+characteristic and one reply packet arrives as a notification. The heater
+answers the framing below in Bluetooth pairing mode (with the heater off,
+hold Back and Power for five seconds; it then advertises as ``HPWH1…``). In
+its Wi-Fi setup mode the heater advertises as ``HPWH4610`` instead, and
+accepts a connection but answers nothing.
 
 Packet layout (all single bytes unless noted)::
 
     header   0xF7
     system   0x20
-    source   0x01   (the app)
+    source   0x01   (the client)
     dest     0x03   (the controller)
     command  3 = read, 16 = write; replies are 131 and 144
     length   payload length + 2 (+5 for the firmware classes 210/211,
@@ -67,9 +66,9 @@ class Command(IntEnum):
 class ClassCode(IntEnum):
     """Data classes the controller serves over Bluetooth.
 
-    Names are the app's abbreviations. The parameter blocks 51-54 are what
-    the Navien service app reads before showing installer parameters and
-    writes back (class 54) after a change.
+    Names are the protocol's abbreviations. The parameter blocks 51-54
+    carry installer parameters: they are read before a change and class
+    54 is written back after it.
     """
 
     SSD = 17  # status data
@@ -95,10 +94,10 @@ class ClassCode(IntEnum):
     MSWD = 244
 
 
-#: Expected reply length sent with each read request. The first six are
-#: what the apps send; the rest were confirmed to answer on an NWP500
-#: (the device returns its real block size regardless, e.g. 192 bytes for
-#: ``TOU_PLAN``).
+#: Expected reply length sent with each read request. The first six are the
+#: protocol's lengths for those classes; the rest were confirmed to answer
+#: on an NWP500 (the device returns its real block size regardless, e.g. 192
+#: bytes for ``TOU_PLAN``).
 DEFAULT_READ_LENGTHS: dict[int, int] = {
     ClassCode.DID: 58,
     ClassCode.MSCD: 40,
@@ -137,9 +136,9 @@ NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset({ClassCode.TOU_PLAN})
 #: Bytes in a ``SAPCD`` (class 50) session command.
 SESSION_COMMAND_LENGTH = 30
 
-#: The session command that starts the ``RTMD`` status stream. Navien's
-#: service apps send it on connecting; on an NWP500 the heater then pushes
-#: an ``RTMD`` block about every 300 ms until the connection closes.
+#: The session command that starts the ``RTMD`` status stream. On an NWP500
+#: the heater then pushes an ``RTMD`` block about every 300 ms until the
+#: connection closes.
 START_STATUS_STREAM = 200
 
 
@@ -148,10 +147,7 @@ class CrcMismatchError(ValueError):
 
 
 def crc16(data: bytes) -> int:
-    """CRC-16/MODBUS: reflected polynomial 0xA001, initial value 0xFFFF.
-
-    Identical to the table-driven ``CRC16Checker`` in the NaviLink app.
-    """
+    """CRC-16/MODBUS: reflected polynomial 0xA001, initial value 0xFFFF."""
     crc = 0xFFFF
     for byte in data:
         crc ^= byte
@@ -169,8 +165,8 @@ def build_packet(
         command: :attr:`Command.READ` or :attr:`Command.WRITE`.
         class_code: Data class (:class:`ClassCode` or raw int).
         payload: Request data. For a read, one byte: the expected length.
-        address: Block address; 0 for every class the apps use except the
-            firmware classes, which take a byte offset.
+        address: Block address; 0 for every class except the firmware
+            classes, which take a byte offset.
     """
     wide = class_code in _WIDE_ADDRESS_CLASSES
     length = len(payload) + (5 if wide else 2)
@@ -201,21 +197,17 @@ def build_packet(
 def build_session_command(code: int) -> bytes:
     """Frame a ``SAPCD`` (class 50) session command.
 
-    The command is a write of a 30-byte block whose first byte is
-    ``code`` and whose other bytes are zero, as Navien's service apps
-    send it. The heater sends no reply to it. On an NWP500 (2026-10-19,
-    2026-10-20):
+    The command is a write of a 30-byte block whose first byte is ``code``
+    and whose other bytes are zero. The heater sends no reply to it. On an
+    NWP500 (2026-10-19, 2026-10-20):
 
     * 200 (:data:`START_STATUS_STREAM`) starts the ``RTMD`` stream, a
       block about every 300 ms.
-    * 202, the service app's Stop on its monitoring graph, starts the
-      stream at about one block a second, or slows a running one.
+    * 202 starts the stream at about one block a second, or slows a
+      running one.
     * 201 stops the stream, after one more block. A read or write does too.
-    * 210, which the service app sends other models on connecting, pushed
-      one block after a 201 and nothing otherwise.
-
-    * 220, the service app's error-history reset, left the ``EHD`` block
-      unchanged.
+    * 210 pushed one block after a 201 and nothing otherwise.
+    * 220, the error-history reset code, left the ``EHD`` block unchanged.
 
     Each of 201, 202, 210 and 220 drew one ``RTMD`` block in reply.
     """
@@ -230,8 +222,8 @@ def build_read(
 ) -> bytes:
     """Frame a read request for ``class_code`` at ``address``.
 
-    ``expected_length`` defaults to the length the apps use for that class
-    (:data:`DEFAULT_READ_LENGTHS`) and must be given for other classes.
+    ``expected_length`` defaults to the class's length in
+    :data:`DEFAULT_READ_LENGTHS` and must be given for other classes.
     """
     if expected_length is None:
         try:
@@ -313,12 +305,11 @@ class DeviceInfoBlock:
     """The 58-byte ``DID`` block.
 
     Fields checked against the same heater's MQTT device-info report
-    (:class:`~nwp500.models.DeviceFeature`) carry that model's names and
-    raw encodings: ``dhw_temperature_max_raw`` and
-    ``dhw_temperature_min_raw`` (bytes 16 and 17, half-degrees Celsius),
-    ``model_type_code`` (byte 21) and ``country_code`` (byte 24). The
-    others keep the names of the NaviLink app's ``DeviceInfo`` class, which
-    was written for boilers. Unlisted bytes are kept in ``raw``. Not to be
+    (:class:`~nwp500.models.DeviceFeature`) carry that model's names and raw
+    encodings: ``dhw_temperature_max_raw`` and ``dhw_temperature_min_raw``
+    (bytes 16 and 17, half-degrees Celsius), ``model_type_code`` (byte 21)
+    and ``country_code`` (byte 24). The others keep the names of this
+    block's boiler layout. Unlisted bytes are kept in ``raw``. Not to be
     confused with :class:`nwp500.models.DeviceInfo`, the cloud's device
     record.
     """
@@ -483,16 +474,14 @@ class SubStatus:
     """The ``SSD`` block (class 17): two DIP-switch settings.
 
     This is not live status, which comes in the ``RTMD`` stream
-    (:class:`RealTimeStatus`). The
-    layout comes from Navien's UK service toolkit, which names the block
-    "DeviceSubStatusInfo" and reads two little-endian 16-bit words from
-    it, labelled DIP switch 1 (bytes 16-17) and DIP switch 2 (bytes
-    18-19). That toolkit was written for boilers and expects a 60-byte
-    block, while an NWP500 sends 59, so on the heat pump the layout is
-    unconfirmed and what each bit means is not known. On the unit
-    checked (2026-10-16) the words were 0x0004 and 0x0000; every other
-    byte was zero. The NWP500 does have DIP switches (error E593,
-    "Abnormal DIP switch settings"). The whole block is kept in ``raw``.
+    (:class:`RealTimeStatus`). The block's boiler layout holds two
+    little-endian 16-bit words, labelled DIP switch 1 (bytes 16-17) and DIP
+    switch 2 (bytes 18-19), in a 60-byte block, while an NWP500 sends 59, so
+    on the heat pump the layout is unconfirmed and what each bit means is
+    not known. On the unit checked (2026-10-16) the words were 0x0004 and
+    0x0000; every other byte was zero. The NWP500 does have DIP switches
+    (error E593, "Abnormal DIP switch settings"). The whole block is kept in
+    ``raw``.
     """
 
     dip_switch_1: int
@@ -692,10 +681,9 @@ def parse_tou_record(data: bytes) -> TOUPeriod:
 
     Checked on an NWP500 (2026-10-16): the intervals read equal the plan
     the cloud holds for that heater, field for field. Price max and min
-    were equal in every interval checked, so their order is taken from the
-    NaviLink app. The controller takes the same layout in a write
-    (:func:`build_tou_write`); the app's own encoder writes the season
-    differently, which the controller does not read back as written.
+    were equal in every interval checked, so their order is not confirmed
+    on a device. The controller takes the same layout in a write
+    (:func:`build_tou_write`).
 
     Raises:
         ValueError: If ``data`` is not 16 bytes.
@@ -741,8 +729,7 @@ def parse_tou_records(data: bytes) -> list[TOUPeriod]:
 
 
 #: Slots in the controller's ``TOU_PLAN`` table. Reads past the last slot
-#: return other data. The NaviLink app also refuses plans of more than 40
-#: intervals.
+#: return other data.
 TOU_PLAN_SLOTS = 40
 
 #: Most records one ``TOU_PLAN`` read returns. Fifteen (240 bytes) do not
@@ -817,13 +804,13 @@ def build_tou_write(
 ) -> bytes:
     """Frame a ``TOU_PLAN`` write of ``periods`` into slots 0 onward.
 
-    The payload is the NaviLink app's: an 8-byte clock header (year
-    little-endian, month, day, weekday with Sunday = 1, hour, minute,
-    second), then the records. The address is always 0. On an NWP500
-    (2026-10-19, 2026-10-20) any other address was answered with ``04``
-    and cleared the whole table, and a second write at address 0
-    overwrites the first instead of continuing it. So one write sets
-    slots ``0`` to ``len(periods) - 1`` and leaves the rest as they were.
+    The payload is an 8-byte clock header (year little-endian, month, day,
+    weekday with Sunday = 1, hour, minute, second), then the records. The
+    address is always 0. On an NWP500 (2026-10-19, 2026-10-20) any other
+    address was answered with ``04`` and cleared the whole table, and a
+    second write at address 0 overwrites the first instead of continuing it.
+    So one write sets slots ``0`` to ``len(periods) - 1`` and leaves the
+    rest as they were.
 
     Args:
         periods: One to :data:`TOU_WRITE_MAX_RECORDS` intervals.
@@ -839,7 +826,7 @@ def build_tou_write(
             f"a TOU write carries 1-{TOU_WRITE_MAX_RECORDS} intervals, "
             f"got {len(periods)}"
         )
-    # The heater's clock is local time, as the app sends it.
+    # The heater's clock is local time.
     now = now or datetime.datetime.now().astimezone()
     header = now.year.to_bytes(2, "little") + bytes(
         [

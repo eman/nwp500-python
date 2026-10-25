@@ -1053,10 +1053,10 @@ def build_yearly_energy_report(
 def build_diagnostics_rows(diagnostics: Any) -> list[StatusRow]:
     """Build presentation-neutral rows for installer diagnostics.
 
-    Labels follow the NaviLink app's installer screen. All values are raw
-    device counters; ``cumulated_op_time_*`` are hours and the two
-    ``cumulated_pwr_*`` values are watt-hours (both cross-checked against
-    the energy query), everything else is a count with no documented unit.
+    All values are raw device counters; ``cumulated_op_time_*`` are hours
+    and the two ``cumulated_pwr_*`` values are watt-hours (both
+    cross-checked against the energy query), everything else is a count
+    with no documented unit.
 
     Args:
         diagnostics: DeviceDiagnostics object
