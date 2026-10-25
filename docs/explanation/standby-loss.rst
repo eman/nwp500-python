@@ -256,6 +256,16 @@ measured. The 0.44 is that split and any shortfall of the probes
 together. That share held from 15 minutes to 2 hours after a run. At
 4 hours it read 0.56, on 32 windows.
 
+Those figures price a run at the September loop with its return at the
+air. At the current run model (19.36 gal, the return at the air plus
+7.84 degF, the pipe cooling on 0.464 h), the calibration's own fit
+(``fit_ungated_observability``) gives **0.263** on 165 windows from
+April to October, and 0.117 on the 50 since September. The simulator
+uses 0.263. The share only prices the runs inside a metered COP cycle
+(``metered_withdrawn``), and there the latest 45 cycles held out came
+out at a median error of 6.3 % with 0.398, 6.1 % with 0.263 and 5.1 %
+with 0.117.
+
 A run into a stratified tank can take the lower probe to its turn-on
 setting while the upper probe has not moved, and the lower-tank trigger
 then applies as it does after a draw (see :doc:`what-starts-a-recovery`).

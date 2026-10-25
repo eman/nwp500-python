@@ -38,6 +38,17 @@ Changed
 Fixed
 -----
 
+- **The ungated circulation share is the library's own fit.**
+  ``site_example_params``' ``DrawParams.ungated_observability`` was
+  0.398, measured outside the library at the run model's earlier
+  terms, and the library's ``fit_ungated_observability`` never
+  reproduced it (0.200 at those terms on the same record). It is now
+  0.263, that fit on 165 windows from April to October at the current
+  run model; 0.117 on the windows since September. It prices the runs
+  inside a metered COP cycle: held out, the latest 45 cycles' median
+  error is 6.1 % against 6.3 % with 0.398. See
+  :doc:`/explanation/standby-loss`.
+
 - **High Demand's element restarts later in a stint.** After the entry
   run the simulator never ran High Demand's element again. On the
   record it restarts the upper element with the upper zone about 4 °F
