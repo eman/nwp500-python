@@ -682,23 +682,47 @@ class TestMeteredPricing:
         p = site_example_params()
         w = cal.metered_withdrawn(p)
         drawn = w(self._row(draw_gal=10.0, draw_t_upper=130.0))
-        run = w(self._row(circulation_runs=((10.0, 130.0, None),)))
+        run = w(self._row(circulation_runs=((10.0, 130.0, None, 0.0),)))
         assert drawn is not None and drawn > 0
         assert run is not None and run > 0
         both = w(
             self._row(
                 draw_gal=10.0,
                 draw_t_upper=130.0,
-                circulation_runs=((10.0, 130.0, None),),
+                circulation_runs=((10.0, 130.0, None, 0.0),),
             )
         )
         assert both == pytest.approx(drawn + run)
         # Circulation without the installation's terms is unpriceable.
         bare = cal.metered_withdrawn(replace(p, circulation=None))
-        assert bare(self._row(circulation_runs=((10.0, 130.0, None),))) is None
+        assert (
+            bare(self._row(circulation_runs=((10.0, 130.0, None, 0.0),)))
+            is None
+        )
         lead = cal.metered_lead(p)
         assert cast(float, lead(self._row(draw_lead_gal=4.0))) > 0
         assert lead(self._row()) == 0.0
+
+    def test_a_run_under_way_is_priced_from_where_it_was(self) -> None:
+        """A snapshot that takes a run up partway charges only what the
+        run displaces inside it: once its volume is through, nothing."""
+        from nwp500.sim import site_example_params
+
+        p = site_example_params()
+        c = p.circulation
+        assert c is not None
+        w = cal.metered_withdrawn(p)
+        whole = c.displaced_gal / c.flow_gpm
+        late = w(self._row(circulation_runs=((3.0, 130.0, None, whole + 1.0),)))
+        assert late == 0.0
+        fresh = cast(
+            float, w(self._row(circulation_runs=((3.0, 130.0, None, 0.0),)))
+        )
+        part = cast(
+            float,
+            w(self._row(circulation_runs=((3.0, 130.0, None, whole - 1.0),))),
+        )
+        assert part == pytest.approx(fresh / 3.0)
 
     def test_a_run_is_priced_at_the_flow_it_ran_at(self) -> None:
         """A slower circulation displaces its volume later, so a short
@@ -707,7 +731,7 @@ class TestMeteredPricing:
 
         p = site_example_params()
         row = self._row(
-            circulation_runs=((2.0, 135.0, None),),
+            circulation_runs=((2.0, 135.0, None, 0.0),),
             start_time=pd.Timestamp("2026-07-10", tz="UTC"),
         )
         today = cal.metered_withdrawn(p)(row)
@@ -727,7 +751,7 @@ class TestMeteredPricing:
         rows = cal.snapshots(h, draws=draws, circulation=runs)
         row = next(rows.loc[rows.offset_minutes == 0].itertuples())
         assert row.draw_gal == 3.0 and row.draw_lead_gal == 2.0
-        assert row.circulation_runs == ((10.0, 135.0, None),)
+        assert row.circulation_runs == ((10.0, 135.0, None, 0.0),)
         plain = cal.snapshots(h)
         assert plain.draw_gal.isna().all()
 

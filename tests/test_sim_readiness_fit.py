@@ -231,6 +231,26 @@ class TestCirculationFits:
         assert cal.fit_return(runs[:10]) is None
         # No rest known: the cooling is not seen.
         assert cal.fit_return([replace(r, rest_h=None) for r in runs]) is None
+        # No run longer than the volume: the volume is not seen.
+        short = [
+            replace(
+                r,
+                minutes=2.0,
+                flow_gpm=1.0,
+                btu=cal.run_heat_btu(
+                    2.0,
+                    130.0,
+                    cast(float, r.air_f),
+                    10.0,
+                    1.0,
+                    rest_offset_f=7.0,
+                    rest_h=r.rest_h,
+                    cool_tau_h=0.5,
+                ),
+            )
+            for r in runs
+        ]
+        assert cal.fit_return(short) is None
 
     def test_the_recent_flow_and_the_lookup(self) -> None:
         runs = self._runs(6.0)
@@ -271,6 +291,16 @@ class TestCirculationFits:
             upper_f=[(a - timedelta(minutes=1), 130.0)],
         )
         assert both[1].rest_h == pytest.approx(110 / 60)
+        # A run of one sample is not measured, but it ends a rest.
+        blip = [a + timedelta(hours=1)]
+        three = cal.measure_runs(
+            running + blip + later,
+            flow=[(t, 2.0) for t in running + blip + later],
+            return_f=[(t, 115.0) for t in running + blip + later],
+            upper_f=[(a - timedelta(minutes=1), 130.0)],
+        )
+        assert len(three) == 2
+        assert three[1].rest_h == pytest.approx(1.0)
         assert (
             cal.measure_runs(
                 running,

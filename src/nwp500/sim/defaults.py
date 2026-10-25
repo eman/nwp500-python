@@ -58,10 +58,11 @@ NO_VALVE = (0.0, 1.0)
 #: (``calibration.fit_return``) on 123 runs with the compressor off,
 #: 2026-04-04 to 2026-10-24: the return rests 7.84 °F above the heater's
 #: air, and the pipe a run warmed cools back to rest on 0.464 h. The
-#: 19.36 gal is an effective volume: the record's long runs never
-#: brought hot water back (the return still 17 to 38 °F under the tank
-#: after 16 to 20 gal), so a run takes heat as long as it runs, and the
-#: typical 4 min run (5.9 gal) is under it.
+#: 19.36 gal is an effective volume, just under the longest measured
+#: run (19.8 gal), which sets it: the record's long runs never brought
+#: hot water back (the return still 17 to 38 °F under the tank after 16
+#: to 20 gal), so a run takes heat as long as it runs, and the typical
+#: 4 min run (5.9 gal) is under it.
 SITE_CIRCULATION = CirculationParams(
     displaced_gal=19.36,
     flow_gpm=1.397,

@@ -865,7 +865,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        median 1,583 BTU, against 3,223 after 8 h. The record's long
        runs never brought hot water back (the return still 17-38 degF
        under the tank after 16-20 gal), so the volume is effective and
-       above the typical 4 min (5.9 gal) run. The flow is the median
+       above the typical 4 min (5.9 gal) run. The longest measured run
+       (19.8 gal) sets it: ``fit_return`` refuses a set of runs none of
+       which is longer than the volume found. The flow is the median
        over the 14 days before a retrain.
      - folds 14.6-19.5 gal, 7.3-8.2 degF, 0.45-0.51 h
 
