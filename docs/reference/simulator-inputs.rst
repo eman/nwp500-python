@@ -688,14 +688,6 @@ NWP500-65's installation; measure your own where you can.
    * - ``shower_gal``
      - 12.0 gal
      - A shower, when none is given. Assumed, not measured.
-   * - ``top_up_gal``
-     - 10.2 gal
-     - A bath's top-up: hot water run into a filled tub to warm it.
-       Inferred from one household's hot-side meter, not measured as a
-       fill of its own: of six tub fills, three had a draw at the
-       spout's rate 15 to 90 minutes later, of 4.5, 8.5 and 10.2 gal.
-       The largest is kept, as for ``bath_gal``, since a top-up set too
-       small promises water the tank can't give.
    * - ``evidence``
      - none (``site_example_params``: the site's 19)
      - Draws from your own record: ``(upper_f, lower_f, gallons)``, the

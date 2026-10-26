@@ -2,17 +2,6 @@
 Changelog
 =========
 
-Unreleased
-==========
-
-Added
------
-
-- **``ReadinessParams.top_up_gal``**, a bath's top-up (10.2 gal), next
-  to ``bath_gal`` and ``shower_gal``, for a caller that counts how many
-  baths and top-ups the tank's hot water covers. See
-  :doc:`/reference/simulator-inputs`.
-
 Version 9.12.2 (2026-10-25)
 ===========================
 
