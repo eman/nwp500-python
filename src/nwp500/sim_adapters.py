@@ -643,6 +643,7 @@ _COLUMNS = (
     ("energy_to_setpoint_wh", "d"),
     ("heater_air_f", "d"),
     ("heater_cabinet_f", "d"),
+    ("setpoint_f", "d"),
 )
 
 
@@ -670,6 +671,7 @@ def _row(s: DeviceStatus) -> tuple[float | bool, ...]:
         _from_device(DeciCelsius(s.ambient_temperature_raw))
         if s.comp_use is False
         else float("nan"),
+        _from_device(HalfCelsius(s.dhw_temperature_setting_raw)),
     )
 
 
@@ -828,6 +830,8 @@ class ChangeRows:
     energy_to_setpoint_wh: Changes = ()
     #: The heater's own air reading, used only while its compressor runs.
     heater_air_f: Changes = ()
+    #: The DHW setpoint.
+    setpoint_f: Changes = ()
     #: The spans a value was unknown (Home Assistant's ``unavailable``
     #: or ``unknown``): unobserved, like a gap between statuses.
     outages: Sequence[tuple[datetime, datetime]] = ()
@@ -859,6 +863,19 @@ class ChangeRows:
                 if f.name != "outages"
             },
             outages=spans_since(self.outages, start),
+        )
+
+    def until(self, end: datetime) -> ChangeRows:
+        """These changes before ``end``: in each series the rows before
+        it, the outages that start before it, cut to it. The mirror of
+        ``since``: a history split at an instant is the two."""
+        return ChangeRows(
+            **{
+                f.name: changes_until(getattr(self, f.name), end)
+                for f in fields(self)
+                if f.name != "outages"
+            },
+            outages=spans_until(self.outages, end),
         )
 
 
@@ -899,6 +916,20 @@ def join_spans(
         else:
             out.append((a, b))
     return out
+
+
+def changes_until(rows: Changes, end: datetime) -> list[tuple[datetime, Any]]:
+    """``rows`` before ``end``, in time order (UTC)."""
+    end = end.astimezone(UTC)
+    return [(t.astimezone(UTC), v) for t, v in rows if t.astimezone(UTC) < end]
+
+
+def spans_until(
+    spans: Iterable[tuple[datetime, datetime]], end: datetime
+) -> list[tuple[datetime, datetime]]:
+    """``spans`` before ``end``: those that start before it, cut to it."""
+    end = end.astimezone(UTC)
+    return [(a, min(b, end)) for a, b in join_spans(spans) if a < end]
 
 
 def spans_since(
@@ -974,6 +1005,7 @@ def change_history(
                 rows.power_w,
                 rows.energy_to_setpoint_wh,
                 rows.heater_air_f,
+                rows.setpoint_f,
             )
             if series
         ]
@@ -1026,6 +1058,7 @@ def change_history(
         "heater_cabinet_f": np.where(
             compressor, nan, _held_at(rows.heater_air_f, at, nan, float)
         ),
+        "setpoint_f": optional(rows.setpoint_f),
     }
     # ``history``'s columns, in its order, less the values not given.
     data = {k: v for k, v in columns.items() if v is not None}

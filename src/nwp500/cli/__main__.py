@@ -1291,6 +1291,13 @@ async def simulate_record(
     help="A TOML file naming where the air, its humidity, the hot water "
     "demand and the circulation are recorded (Home Assistant)",
 )
+@click.option(
+    "--holdout-from",
+    "holdout_from",
+    metavar="DATE",
+    help="Fit on the history before DATE (ISO 8601, local time without "
+    "an offset) and score the base and the fit on the events from it",
+)
 @click.pass_context
 def simulate_calibrate(
     ctx: click.Context,
@@ -1301,10 +1308,13 @@ def simulate_calibrate(
     humidity: str | None,
     params: str | None,
     sources: str | None,
+    holdout_from: str | None,
 ) -> None:
     """Fit the heater's parameters to its recorded HISTORY.
 
     Prints what each fit found, and why a term kept the base's value.
+    With --holdout-from, the fit sees only the history before it, and
+    the base and the fit are scored on the recorded events after it.
     """
     sim_cli = _simulator()
     from . import calibration as cal_cli
@@ -1320,21 +1330,30 @@ def simulate_calibrate(
             record = asyncio.run(
                 cal_cli.read_record(sim_cli.read_sources(sources), readings)
             )
-        done = cal_cli.calibrate(
-            readings,
-            air=None if air is None else cal_cli.read_readings(air, "air"),
-            ambient=ambient,
-            humidity=None
+        inputs: dict[str, Any] = {
+            "air": None if air is None else cal_cli.read_readings(air, "air"),
+            "ambient": ambient,
+            "humidity": None
             if humidity is None
             else cal_cli.read_readings(humidity, "humidity"),
-            params=None
+            "params": None
             if params is None
             else sim_cli.read_document(params, "parameters"),
-            record=record,
-        )
+            "record": record,
+        }
+        held = None
+        if holdout_from is None:
+            done = cal_cli.calibrate(readings, **inputs)
+        else:
+            held = cal_cli.holdout(
+                readings,
+                cal_cli.parse_instant(holdout_from, "--holdout-from"),
+                **inputs,
+            )
+            done = held.done
     except sim_cli.InputError as e:
         raise click.UsageError(str(e)) from None
-    cal_cli.run(done, output)
+    cal_cli.run(done, output, held=held)
 
 
 if __name__ == "__main__":

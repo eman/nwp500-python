@@ -328,11 +328,17 @@ Recorded history
    :members:
 
 .. automodule:: nwp500.sim_calibrate
-   :members: calibrate, calibrate_changes, Calibrated, report, Term,
+   :members: calibrate, calibrate_changes, Calibrated, prepare,
+      prepare_changes, Prepared, report, Term,
       fit_book, BookTermsFit, MIN_BOOK_PAIRS, MIN_RUN_PAIRS,
       score, Judged, HeldOut, GROUPS, air_unread_note,
       CalibrationInputError, DEFAULT_HUMIDITY_PCT,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
+
+.. automodule:: nwp500.sim_score
+   :members: events, Events, Recovery, Window, DrawEvent, Crossing, score,
+      Score, Stat, compare, Comparison, Change, holdout_start,
+      params_digest, SCHEMA
 
 
 Home Assistant sources

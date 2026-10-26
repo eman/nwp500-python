@@ -15,7 +15,7 @@ import logging
 import math
 import sys
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -23,8 +23,9 @@ from typing import Any, TextIO
 from rich.console import Console
 from rich.table import Table
 
+from nwp500 import sim, status_history
 from nwp500 import sim_calibrate as sc
-from nwp500 import status_history
+from nwp500 import sim_score as ss
 from nwp500.sim.params import params_to_document
 from nwp500.sim_calibrate import Calibrated, Term, report
 
@@ -135,6 +136,104 @@ def calibrate(
     )
 
 
+def parse_instant(text: str, what: str) -> datetime:
+    """An ISO 8601 date or instant; a date, or an instant without its
+    offset, in local time."""
+    try:
+        at = datetime.fromisoformat(text.strip())
+    except ValueError:
+        raise InputError(f"{what} {text!r} is not an ISO 8601 date") from None
+    return at.astimezone() if at.tzinfo is None else at
+
+
+@dataclass(frozen=True)
+class HeldOutScore:
+    """A calibration on the history before ``start``, and the base's
+    and the fit's scores on the events from it (``sim_score``)."""
+
+    start: datetime
+    done: Calibrated
+    base: ss.Score
+    fitted: ss.Score
+
+
+def holdout(
+    readings: Sequence[status_history.TimedStatus],
+    start: datetime,
+    *,
+    air: Sequence[Reading] | None = None,
+    ambient: float | None = None,
+    humidity: Sequence[Reading] | None = None,
+    params: Any = None,
+    record: Any = None,
+) -> HeldOutScore:
+    """``calibrate`` on the statuses before ``start``, then the base and
+    the fit scored on the events from it. Raises ``InputError`` when
+    either side of ``start`` holds no status."""
+    before = [r for r in readings if r[0] < start]
+    if not before or len(before) == len(readings):
+        raise InputError(
+            f"--holdout-from {start.isoformat()} leaves no history on one "
+            "side of it"
+        )
+    done = calibrate(
+        before,
+        air=air,
+        ambient=ambient,
+        humidity=humidity,
+        params=params,
+        record=record,
+    )
+    base = (
+        sim.default_params()
+        if params is None
+        else read_params(params, "--params")
+    )
+    try:
+        ready = sc.prepare(
+            readings, air=air, ambient=ambient, humidity=humidity, record=record
+        )
+    except sc.CalibrationInputError as e:
+        raise InputError(str(e)) from None
+    found = ss.events(ready, since=start)
+    return HeldOutScore(
+        start,
+        done,
+        ss.score(found, base),
+        ss.score(found, done.calibration.params),
+    )
+
+
+def print_score(held: HeldOutScore, console: Console) -> None:
+    """The held-out score as a table on ``console``."""
+    events = held.fitted.events
+    console.print(
+        f"Held out from {held.start.isoformat()}: "
+        f"{len(events['recoveries'])} recoveries, "
+        f"{len(events['windows'])} quiet windows"
+    )
+    table = Table(title="Held-out score (lower is better, but a bias)")
+    for column in ("Metric", "Events", "Base", "Fitted", "Fitted 90 %"):
+        table.add_column(column)
+    for name, fitted in held.fitted.metrics.items():
+        base = held.base.metrics.get(name)
+        table.add_row(
+            name,
+            str(fitted.n),
+            "" if base is None else f"{base.value:.3g}",
+            f"{fitted.value:.3g}",
+            f"{fitted.lo:.3g} to {fitted.hi:.3g}",
+        )
+    console.print(table)
+    failed = sum(held.fitted.failed.values())
+    broken = sum(held.fitted.breaks.values())
+    if failed or broken:
+        console.print(
+            f"Fitted: {failed} events the simulator could not answer, "
+            f"{broken} predictions below the air"
+        )
+
+
 def _kept(t: Term) -> str:
     if t.fitted:
         return f"fitted: {t.note}" if t.note else "fitted"
@@ -181,12 +280,19 @@ def print_report(done: Calibrated, console: Console) -> None:
 
 
 def run(
-    done: Calibrated, output: str | Path | None, out: TextIO | None = None
+    done: Calibrated,
+    output: str | Path | None,
+    out: TextIO | None = None,
+    held: HeldOutScore | None = None,
 ) -> None:
-    """Print the report and write the parameters to ``output``."""
+    """Print the report, and ``held``'s score, and write the parameters
+    to ``output``."""
     for note in done.notes:
         _logger.warning(note)
-    print_report(done, Console(file=out or sys.stdout))
+    console = Console(file=out or sys.stdout)
+    print_report(done, console)
+    if held is not None:
+        print_score(held, console)
     if output is not None:
         text = json.dumps(params_to_document(done.calibration.params), indent=2)
         Path(output).write_text(text + "\n", encoding="utf-8")

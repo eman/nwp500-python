@@ -2,6 +2,37 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+
+- **``nwp500.sim_score``: parameters scored on recorded events they
+  were not fitted on.** It takes the events from the record without a
+  model (recoveries that reached their target, quiet windows, a meter's
+  isolated draws, and draws that took the top below 105 °F), predicts
+  each through the public simulator, and reports each metric's mean
+  with a 90 % interval from a bootstrap of local days. Two parameter
+  sets scored on one history are scored on the same events, so models
+  that share no terms can be compared (``compare``). It does no I/O.
+  See :doc:`/how-to/calibrate-simulator`.
+
+- **``nwp-cli simulate calibrate --holdout-from DATE``** fits on the
+  history before ``DATE`` and prints the base's and the fit's scores on
+  the events after it.
+
+- **``sim_calibrate.prepare`` and ``prepare_changes``**: a history as
+  the fits read it, the frame a scorer reads.
+
+- **The setpoint in a recorded history.** ``sim_adapters.history`` and
+  ``change_history`` carry a ``setpoint_f`` column;
+  ``HeaterEntities.setpoint`` names its entity, and ``ChangeRows`` has
+  a ``setpoint_f`` series.
+
+- **``ChangeRows.until`` and ``HeaterHistory.until``**, the mirror of
+  ``since``: a history split at an instant is the two.
+
 Version 9.12.2 (2026-10-25)
 ===========================
 

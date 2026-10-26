@@ -1886,6 +1886,8 @@ class HeaterEntities:
     energy_to_setpoint: str | None = None
     #: The heater's own air reading.
     ambient: str | None = None
+    #: The DHW setpoint.
+    setpoint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1919,6 +1921,16 @@ class HeaterHistory:
         return HeaterHistory(
             self.rows.since(start),
             [t for t in self.observed if t.astimezone(UTC) >= start],
+            self.notes,
+        )
+
+    def until(self, end: datetime) -> HeaterHistory:
+        """This history before ``end`` (``ChangeRows.until``), the
+        instants heard from before it: the mirror of ``since``."""
+        end = end.astimezone(UTC)
+        return HeaterHistory(
+            self.rows.until(end),
+            [t for t in self.observed if t.astimezone(UTC) < end],
             self.notes,
         )
 
@@ -2016,6 +2028,7 @@ async def read_heater_history(
             ("power_w", e.power, to_w),
             ("energy_to_setpoint_wh", e.energy_to_setpoint, to_wh),
             ("heater_air_f", e.ambient, to_f),
+            ("setpoint_f", e.setpoint, to_f),
         )
         if entity
     }

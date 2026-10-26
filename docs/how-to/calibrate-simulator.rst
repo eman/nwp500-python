@@ -190,6 +190,52 @@ terms are always listed, because they are fitted only from a hot-water
 meter's draws, which the command does not take (see below).
 
 
+Score on held-out days
+----------------------
+
+Each fit's error in the report is on its own evidence, so it cannot say
+whether the parameters as a whole predict the tank better.
+``--holdout-from`` fits on the history before a date and scores the
+base and the fit on the recorded events after it:
+
+.. code-block:: bash
+
+   nwp-cli simulate calibrate history.jsonl --ambient 68 --holdout-from 2026-10-01
+
+The events are taken from the record without any model, so each set of
+parameters is scored on the same events. Each recovery that reached its
+target is walked from its recorded start: ``recovery_minutes_abs`` is
+how far its predicted run is from the recorded one, and
+``recovery_energy_abs_pct`` how far its electricity is from the
+meter's. Each quiet window is coasted from its start:
+``standby_upper_rmse_f`` and ``standby_lower_rmse_f`` are each probe's
+error over it, every 10 minutes. Each metric gives its number of
+events and a 90 % interval from resampling whole days. Hold out at
+least a week, or the intervals are wide.
+
+From Python, ``nwp500.sim_score`` scores any history the fits read
+(``sim_calibrate.prepare`` or ``prepare_changes``), and takes a hot
+water meter's draws for the draw and deliverable-gallon metrics:
+
+.. code-block:: python
+
+   import json
+
+   from nwp500 import sim_calibrate, sim_score
+
+   ready = sim_calibrate.prepare_changes(rows, observed, record=record)
+   start = sim_score.holdout_start(ready.frame.index, tz="America/Los_Angeles")
+   done = sim_calibrate.calibrate_changes(
+       rows.until(start), [t for t in observed if t < start], record=record
+   )
+   found = sim_score.events(ready, draws=draws, flow=flow, since=start)
+   score = sim_score.score(found, done.calibration.params)
+   print(json.dumps(score.document(), indent=2))
+
+``sim_score.compare`` reads two score documents and says, for each
+metric, whether the second's interval clears the first's value.
+
+
 From Python
 ===========
 
