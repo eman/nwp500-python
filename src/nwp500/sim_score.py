@@ -16,9 +16,10 @@ events taken from the record without any model:
   coasting, against both probes every ``OBSERVE_EVERY``;
 - **draws**: each metered draw with nothing else moving or heating
   around it, against both probes for ``DRAW_FOLLOW`` after;
-- **crossings**: each clean metered draw (``sim.calibration.
-  clean_draws``) that took the upper probe below the line, against the
-  gallons it delivered before it did.
+- **deliveries**: each clean metered draw (``sim.calibration.
+  clean_draws``) with the compressor off: one that took the upper
+  probe below the line against the gallons it delivered before it did,
+  one that did not as a floor the prediction should not fall under.
 
 The events are fixed by the record alone, so two parameter sets scored
 on the same history are scored on the same events (``Score.events``,
@@ -75,7 +76,7 @@ RECOVERY_SLACK = timedelta(hours=8)
 #: The latest share of a history's days held out, and the fewest.
 HOLDOUT_FRACTION = 0.20
 MIN_HOLDOUT_DAYS = 3
-#: The line the crossings are read at, °F (``ReadinessParams.line_f``'s
+#: The line a delivery is read at, °F (``ReadinessParams.line_f``'s
 #: default).
 LINE_F = 105.0
 #: A predicted probe this far under the coldest air of a coast that
@@ -138,14 +139,17 @@ class DrawEvent:
 
 
 @dataclass(frozen=True)
-class Crossing:
-    """A clean draw that took the upper probe below the line."""
+class Delivery:
+    """A clean draw with the compressor off, and what it delivered."""
 
     at: datetime
     upper_f: float
     lower_f: float
     setpoint_f: float
-    #: Delivered gallons before the upper probe crossed the line.
+    #: It took the upper probe below the line.
+    crossed: bool
+    #: Delivered gallons before the upper probe crossed the line; with
+    #: ``crossed`` False, the whole draw's: what the tank held at least.
     delivered_gal: float
 
 
@@ -156,7 +160,7 @@ class Events:
     recoveries: tuple[Recovery, ...] = ()
     windows: tuple[Window, ...] = ()
     draws: tuple[DrawEvent, ...] = ()
-    crossings: tuple[Crossing, ...] = ()
+    deliveries: tuple[Delivery, ...] = ()
 
     def keys(self) -> dict[str, list[str]]:
         """Each kind's events by their instants, as a score document
@@ -165,7 +169,7 @@ class Events:
             "recoveries": [_iso(e.start) for e in self.recoveries],
             "windows": [_iso(e.start) for e in self.windows],
             "draws": [_iso(e.at) for e in self.draws],
-            "crossings": [_iso(e.at) for e in self.crossings],
+            "deliveries": [_iso(e.at) for e in self.deliveries],
         }
 
 
@@ -454,29 +458,31 @@ def _draw_events(
     return out
 
 
-def _crossings(
+def _deliveries(
     flow: pd.DataFrame | None,
     setpoint_of: Callable[[datetime], float | None],
     line_f: float,
     since: datetime | None,
     until: datetime | None,
-) -> list[Crossing]:
+) -> list[Delivery]:
     if flow is None or flow.empty:
         return []
-    out: list[Crossing] = []
+    out: list[Delivery] = []
     for d in cal.clean_draws(flow):
+        # The compressor's heat would be credited to the tank, as the
+        # evidence fit leaves it out too.
         if d.hp or not _in_range(d.start, since, until):
             continue
-        if not cal.crossing(d, line_f - 1e-9)[1]:
-            continue
+        gal, crossed = cal.crossing(d, line_f - 1e-9)
         setpoint = setpoint_of(d.start)
         out.append(
-            Crossing(
+            Delivery(
                 at=d.start,
                 upper_f=d.u0,
                 lower_f=d.l0,
                 setpoint_f=d.u0 if setpoint is None else setpoint,
-                delivered_gal=cal.demonstrated(d, line_f),
+                crossed=crossed,
+                delivered_gal=gal,
             )
         )
     return out
@@ -494,7 +500,7 @@ def events(
     """The events ``ready``'s history holds that start in ``[since,
     until)``. ``draws`` are a meter's, ``(instant, delivered gallons)``
     at each draw's onset; ``flow`` is the meter on
-    ``sim.calibration.clean_draws``' grid, for the crossings. Without
+    ``sim.calibration.clean_draws``' grid, for the deliveries. Without
     either, those kinds are empty."""
     frame = ready.frame
     seconds = _seconds(frame)
@@ -507,8 +513,8 @@ def events(
         recoveries=tuple(_recoveries(ready, draws, since, until)),
         windows=tuple(_windows(ready, since, until)),
         draws=tuple(_draw_events(ready, draws, since, until)),
-        crossings=tuple(
-            _crossings(
+        deliveries=tuple(
+            _deliveries(
                 flow,
                 lambda t: _asof(setpoint_v, seconds, t),
                 line_f,
@@ -693,10 +699,12 @@ def _draw_score(
     return True
 
 
-def _crossing_score(
-    e: Crossing, params: HeaterParams, tally: _Tally, day: int
+def _delivery_score(
+    e: Delivery, params: HeaterParams, tally: _Tally, day: int
 ) -> tuple[bool, bool]:
-    """Scored, and whether it promised more than the draw delivered."""
+    """Scored, and whether it promised more than a crossing delivered.
+    A draw that did not cross delivered at least its gallons: only a
+    prediction under them is an error, an under-promise."""
     try:
         got = sim.readiness(
             sim.HeaterState(upper_f=e.upper_f, lower_f=e.lower_f),
@@ -706,6 +714,10 @@ def _crossing_score(
     except SimulationError, ValueError:
         return False, False
     error = got.gal - e.delivered_gal
+    if not e.crossed:
+        tally.add("deliverable_short_gal", max(0.0, -error), day)
+        tally.add("deliverable_under_share", float(error < 0.0), day)
+        return True, False
     tally.add("deliverable_abs_gal", abs(error), day)
     tally.add("deliverable_bias_gal", error, day)
     return True, error > 0.0
@@ -758,7 +770,8 @@ class Score:
     failed: dict[str, int]
     #: Physics broken along the predictions, by law: ``below_air``.
     breaks: dict[str, int]
-    #: Crossings whose prediction promised more than was delivered.
+    #: Crossing deliveries whose prediction promised more than was
+    #: delivered.
     over_promised: int
     params_sha256: str
 
@@ -807,11 +820,14 @@ def score(
     - ``draw_upper_rmse_f``, ``draw_lower_rmse_f``: each probe over the
       hour after a draw;
     - ``deliverable_abs_gal`` and ``_bias_gal``: the gallons promised
-      at a crossing draw's start against those it delivered.
+      at a delivery's start against those it delivered before the top
+      crossed the line; ``deliverable_short_gal``: for one that never
+      crossed, how far the promise fell under what it delivered, and
+      ``deliverable_under_share`` how often it did.
     """
     zone = ZoneInfo(tz)
     tally = _Tally()
-    failed = {"recoveries": 0, "windows": 0, "draws": 0, "crossings": 0}
+    failed = {"recoveries": 0, "windows": 0, "draws": 0, "deliveries": 0}
     breaks = {"below_air": 0}
     over = 0
     for r in found.recoveries:
@@ -825,10 +841,10 @@ def score(
     for d in found.draws:
         if not _draw_score(d, params, inlet_f, tally, _day(d.at, zone)):
             failed["draws"] += 1
-    for c in found.crossings:
-        done, promised = _crossing_score(c, params, tally, _day(c.at, zone))
+    for c in found.deliveries:
+        done, promised = _delivery_score(c, params, tally, _day(c.at, zone))
         if not done:
-            failed["crossings"] += 1
+            failed["deliveries"] += 1
         over += promised
     metrics = {
         name: _stat(values, tally.days[name])

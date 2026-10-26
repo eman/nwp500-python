@@ -336,7 +336,7 @@ Recorded history
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
 
 .. automodule:: nwp500.sim_score
-   :members: events, Events, Recovery, Window, DrawEvent, Crossing, score,
+   :members: events, Events, Recovery, Window, DrawEvent, Delivery, score,
       Score, Stat, compare, Comparison, Change, holdout_start,
       params_digest, SCHEMA
 

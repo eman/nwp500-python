@@ -163,7 +163,7 @@ class TestTheScore:
             "recoveries": 0,
             "windows": 0,
             "draws": 0,
-            "crossings": 0,
+            "deliveries": 0,
         }
 
     def test_another_model_scores_worse(
@@ -199,6 +199,35 @@ class TestTheScore:
         doc = ss.score(ss.events(ready), site).document()
         assert json.loads(json.dumps(doc)) == doc
         assert doc["schema"] == ss.SCHEMA
+
+
+class TestTheDeliveries:
+    def _delivery(self, crossed: bool, gal: float) -> ss.Delivery:
+        return ss.Delivery(T0, 140.0, 138.0, 140.0, crossed, gal)
+
+    def _score(self, e: ss.Delivery, site: sim.HeaterParams) -> ss.Score:
+        return ss.score(ss.Events(deliveries=(e,)), site)
+
+    def test_a_draw_that_never_crossed_is_a_floor(
+        self, site: sim.HeaterParams
+    ) -> None:
+        small = self._score(self._delivery(False, 5.0), site)
+        assert small.metrics["deliverable_short_gal"].value == 0.0
+        assert small.metrics["deliverable_under_share"].value == 0.0
+        assert "deliverable_abs_gal" not in small.metrics
+        large = self._score(self._delivery(False, 500.0), site)
+        assert large.metrics["deliverable_short_gal"].value > 400.0
+        assert large.metrics["deliverable_under_share"].value == 1.0
+        assert large.over_promised == 0
+
+    def test_a_crossing_is_scored_both_ways(
+        self, site: sim.HeaterParams
+    ) -> None:
+        got = self._score(self._delivery(True, 5.0), site)
+        promised = got.metrics["deliverable_bias_gal"].value
+        assert promised > 0.0
+        assert got.metrics["deliverable_abs_gal"].value == promised
+        assert got.over_promised == 1
 
 
 class TestTheInterval:

@@ -11,7 +11,8 @@ Added
 - **``nwp500.sim_score``: parameters scored on recorded events they
   were not fitted on.** It takes the events from the record without a
   model (recoveries that reached their target, quiet windows, a meter's
-  isolated draws, and draws that took the top below 105 °F), predicts
+  isolated draws, and its clean draws with the compressor off, against
+  the gallons each delivered before the top fell below 105 °F), predicts
   each through the public simulator, and reports each metric's mean
   with a 90 % interval from a bootstrap of local days. Two parameter
   sets scored on one history are scored on the same events, so models
