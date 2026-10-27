@@ -470,6 +470,8 @@ class _Element:
     #: the dead time's included: the heat in transit when it stops is
     #: at most its last dead time's worth of them (``coast_f``).
     credited_min: float = 0.0
+    #: Its off point (``controller.ElementRetarget``), once set.
+    off: float | None = None
 
 
 def _at_lower(points: Sequence[Point], lower: float) -> datetime | None:
@@ -737,6 +739,61 @@ class _Engine:
         for p0, p1 in pairwise(points):
             if self._water_ok(p0.lower_f) != self._water_ok(p1.lower_f):
                 return p1.at
+        return None
+
+    def _element_done(
+        self, points: Sequence[Point], *, heat_path: bool = False
+    ) -> datetime | None:
+        """Where the running element's zone, as ``_overlay`` lifts it on
+        ``points``, first reaches the element's off point: before the end
+        its rate alone gives (``_element_end``) where something else lifts
+        the zone too, the compressor on a cycle's served path, a closing
+        gap the lower zone, an inverted tank's mix the upper
+        (``decay.project_decay``). Linear between the points but for a
+        coast's mix, taken at once. None when it does not."""
+        el = self.element
+        if el is None or el.off is None:
+            return None
+        upper = el.zone == "upper"
+        credited = self._withheld_at(points[0].at) is None
+        z = self.upper if upper else self.lower
+        for p0, p1 in pairwise(points):
+            if z >= el.off:
+                return p0.at
+            span = p1.at - p0.at
+            live = (
+                max(0.0, (p1.at - max(p0.at, el.live_at)).total_seconds())
+                / 60.0
+            )
+            gain = el.rate * live if credited else 0.0
+            if upper and heat_path:
+                # The path a floor, the element the faster rise.
+                own = min(self.sp, z + gain)
+                if max(p1.upper_f, own) >= el.off:
+                    fs = [(el.off - z) / gain] if own >= el.off else []
+                    if p1.upper_f >= el.off:
+                        rise = p1.upper_f - p0.upper_f
+                        fs.append(
+                            (el.off - p0.upper_f) / rise if rise > 0 else 0.0
+                        )
+                    return p0.at + span * max(0.0, min(fs))
+                z = max(p1.upper_f, own)
+                continue
+            dz = p1.upper_f - p0.upper_f if upper else p1.lower_f - p0.lower_f
+            if z + dz + gain >= el.off:
+                if (
+                    not heat_path
+                    and p0.lower_f > p0.upper_f
+                    and z + dz < el.off
+                ):
+                    # An inverted tank turns over at once; the coast
+                    # shows the mix only at its step's end, wherever the
+                    # walk cut it.
+                    f = (el.off - z - dz) / gain
+                else:
+                    f = (el.off - z) / (dz + gain)
+                return p0.at + (p1.at - p0.at) * f
+            z = z + dz if z + dz >= self.sp else min(self.sp, z + dz + gain)
         return None
 
     def _dispatch(self, event: ctl.Event) -> None:
@@ -1192,6 +1249,12 @@ class _Engine:
                 ]
             nxt = min([nxt, *later])
             piece = _slice(path, self.t, nxt)
+            done_at = self._element_done(piece, heat_path=True)
+            if done_at is not None and self.t < done_at < nxt:
+                # The running element reaches its off point first: the
+                # walk reads its zone there.
+                nxt = done_at
+                piece = _slice(path, self.t, nxt)
             self._account(piece)
             power = _power(piece)
             if power is not None:
@@ -1370,6 +1433,7 @@ class _Engine:
         runs on to the window's end."""
         el = self.element
         assert el is not None
+        el.off = off
         if self._withheld_at(self.t) is not None:
             el.end = self.until
             return
@@ -1553,19 +1617,30 @@ class _Engine:
             element_at = at = None
             end = min(end, water_at)
             coast = self._coast(end)
+        done_at = self._element_done(coast.points)
+        if done_at is not None and not self.t < done_at < end:
+            done_at = None
         cut = self._upper_cut(
             coast.points,
             end,
             # Only a draw before anything else happens is taken here.
-            min(x for x in (element_at, at, end) if x is not None),
+            min(x for x in (element_at, at, done_at, end) if x is not None),
         )
         if cut is not None and all(
-            x is None or cut <= x for x in (element_at, at)
+            x is None or cut <= x for x in (element_at, at, done_at)
         ):
             # The book takes the zones through a draw before anything
             # else happens: coast to it, and take it at its instant.
             self._coast_to(cut)
             self._coast_draw()
+            return
+        if done_at is not None and all(
+            x is None or done_at < x for x in (element_at, at)
+        ):
+            # The running element reaches its off point first: the walk
+            # reads its zone there.
+            self._coast_to(done_at)
+            self._element_boundary()
             return
         if (
             element_at is not None

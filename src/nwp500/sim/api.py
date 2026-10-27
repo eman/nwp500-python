@@ -114,7 +114,6 @@ from nwp500.sim.schedules import (
 )
 from nwp500.sim.tank_physics import (
     REFINE_TOL_MINUTES,
-    Point,
     TankPhysics,
     ambient_window_mean,
 )
@@ -1129,32 +1128,57 @@ def _scheduled(
     )
 
 
-def _coast_loss(
+def _to_start(
     s: Scenario, params: HeaterParams, start: datetime, air: float
-) -> tuple[float, float]:
-    """What the tank loses coasting from now to ``start``, in the book's
+) -> tuple[float, float, float, float]:
+    """The tank the heater's own start at ``start`` heats from, coasting
+    from now under ``s.loads``, and what the coast loses in the book's
     frame: standby to the air now (the book's own term), the heat
     circulation's runs take over exactly the coast, and the delivered
     gallons drawn on it, which the book takes through the valve and puts
-    back cold."""
+    back cold. A draw at ``start`` itself, the one that trips the
+    trigger, is taken before the recovery: its tank is the one the draw
+    leaves, and its gallons are the coast's.
+
+    Returns ``(upper_f, lower_f, coast_btu, coast_gal)``."""
     now = s.start
-    if start <= now:
-        return 0.0, 0.0
-    hours = (start - now).total_seconds() / 3600.0
-    lost = standby_btu(
-        hours, s.state.upper_f, s.state.lower_f, air, params.book_terms()
-    )
-    to_start = standby(
-        s.state,
-        s.environment,
-        s.loads,
-        params,
-        start=now,
-        until=start,
-        history=s.history,
-    )
-    circulated = (to_start.circulation_heat_wh or 0.0) * BTU_PER_WH
-    return lost + circulated, to_start.draw_volume_gal or 0.0
+    upper, lower = s.state.upper_f, s.state.lower_f
+    lost = gal = 0.0
+    if start > now:
+        hours = (start - now).total_seconds() / 3600.0
+        lost = standby_btu(hours, upper, lower, air, params.book_terms())
+        to_start = standby(
+            s.state,
+            s.environment,
+            s.loads,
+            params,
+            start=now,
+            until=start,
+            history=s.history,
+        )
+        lost += (to_start.circulation_heat_wh or 0.0) * BTU_PER_WH
+        gal = to_start.draw_volume_gal or 0.0
+        if to_start.points:
+            upper, lower = (
+                to_start.points[-1].upper_f,
+                to_start.points[-1].lower_f,
+            )
+    at_start = sorted(d.gallons for d in s.loads.draws if d.at == start)
+    if at_start:
+        physics = _physics(
+            params,
+            s.environment,
+            now,
+            start + TRIGGER_HORIZON,
+            draws_on=True,
+            model=None,
+            defaults=[],
+            circulation=_circulation(s.loads, params),
+        )
+        for g in at_start:
+            upper, lower = physics.draw(start, upper, lower, g)
+        gal += sum(at_start)
+    return upper, lower, lost, gal
 
 
 def next_recovery(
@@ -1178,9 +1202,10 @@ def next_recovery(
     it cannot be computed.
 
     The coast's loss, in the book's frame, is standby to the air now,
-    the heat circulation takes over the coast, and the draws before the
-    start; the recovery's heat into the book is the book's compressor
-    term by the air now."""
+    the heat circulation takes over the coast, and the draws up to the
+    start, one at the start itself included (``_to_start``); the
+    recovery's heat into the book is the book's compressor term by the
+    air now."""
     s = scenario
     mode, disabled = _engine_mode(s.settings.mode)
     if disabled:
@@ -1216,11 +1241,7 @@ def next_recovery(
             if coast.starts_at is None:
                 return Recovery("idle")
             start = max(now, coast.starts_at)
-            state = _coast_state(s.state, now, coast.points, start)
-            if state is None:
-                return Recovery("unavailable")
-            upper, lower = state
-            coast_btu, coast_gal = _coast_loss(
+            upper, lower, coast_btu, coast_gal = _to_start(
                 s.model_copy(update={"loads": loads}), params, start, air
             )
         if mode != "electric" and _out_of_range(
@@ -1281,27 +1302,6 @@ def next_recovery(
         hp_btu_per_h=hp_btu_per_h(air, bp),
         trajectory=tuple(trajectory),
     )
-
-
-def _coast_state(
-    state: HeaterState,
-    now: datetime,
-    points: Sequence[Point],
-    at: datetime,
-) -> tuple[float, float] | None:
-    """The tank at ``at`` along a coast from ``state`` at ``now``,
-    linear between its points."""
-    path = [(now, state.upper_f, state.lower_f)] + [
-        (p.at, p.upper_f, p.lower_f) for p in points
-    ]
-    for (t0, u0, l0), (t1, u1, l1) in itertools.pairwise(path):
-        if t0 <= at <= t1:
-            span = (t1 - t0).total_seconds()
-            f = 0.0 if span <= 0 else (at - t0).total_seconds() / span
-            return u0 + (u1 - u0) * f, l0 + (l1 - l0) * f
-    if at <= path[0][0]:
-        return path[0][1], path[0][2]
-    return None
 
 
 def _tou_capped(

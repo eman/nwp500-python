@@ -90,8 +90,9 @@ class Recovery:
     #: Heat the tank loses before then to standby, in the book's frame;
     #: taken off pro rata over the coast.
     coast_btu: float = 0.0
-    #: The draws before then, delivered gallons, taken the same way: the
-    #: book takes their heat (``book.Booked.drawn``).
+    #: The draws up to then, delivered gallons, the one tripping the
+    #: start included, taken the same way: the book takes their heat
+    #: (``book.Booked.drawn``).
     coast_draw_gal: float = 0.0
     #: The book's compressor heat rate, by the air now. The recovery
     #: adds heat at this rate from its start to its end: the book's own
