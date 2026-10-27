@@ -1,0 +1,261 @@
+"""``sim.heat_pump_fit``: a heat pump's recoveries measured from a
+history, recovered from a tank planted with a known heat, power, start
+hold and stop."""
+
+import math
+from datetime import UTC, datetime, timedelta
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from nwp500.sim import heat_pump_fit as hpf
+from nwp500.sim.calibration import heat_pump_cycles
+from nwp500.sim.params import LossParams, TankParams
+from nwp500.sim.units import WATER_BTU_PER_GAL_F
+
+T0 = datetime(2026, 3, 2, tzinfo=UTC)
+TANK = TankParams()
+LOSS = LossParams(ua_btu_hr_f=4.4)
+MASS = TANK.volume_gal * WATER_BTU_PER_GAL_F
+TARGET = 140.0
+OVERSHOOT = 1.2
+STEP_S = 30.0
+QUANTUM = 0.18
+
+
+def heat(air: float, water: float) -> float:
+    return 4230.0 + 33.0 * (air - 65.0) - 2.0 * (water - 120.0)
+
+
+def power(water: float) -> float:
+    return 406.0 + 2.33 * (water - 120.0)
+
+
+def hold(minutes_off: float) -> float:
+    for edge, value in ((15, 3.0), (60, 4.5), (180, 11.5), (720, 11.4)):
+        if minutes_off < edge:
+            return value
+    return 17.8
+
+
+def _quantised(x: float, rng: np.random.Generator) -> float:
+    return round((x + rng.normal(0.0, 0.03)) / QUANTUM) * QUANTUM
+
+
+def planted(
+    cycles: list[tuple[float, float, float]],
+    *,
+    draw_in: int | None = None,
+    seed: int = 7,
+) -> pd.DataFrame:
+    """A history of ``cycles``, each ``(minutes off before it, the
+    tank's temperature at its start, the air)``: a mixed tank with its
+    probes 0.5 °F either side of its mean, sampled every 30 s with a few
+    seconds' jitter and 0.18 °F steps; each run holding for ``hold``,
+    then heating at ``heat`` less the jacket's loss and drawing
+    ``power``, stopping ``OVERSHOOT`` past the target. ``draw_in``: the
+    cycle a draw flag is set through."""
+    rng = np.random.default_rng(seed)
+    rows: list[dict[str, object]] = []
+    t = T0
+    water = cycles[0][1]
+    for k, (off, start_f, air) in enumerate(cycles):
+        # Off: the tank brought to the next start, the compressor idle.
+        n_off = int(off * 60 / STEP_S)
+        for i in range(n_off):
+            w = water + (start_f - water) * i / max(n_off, 1)
+            rows.append(
+                _row(t, w + 0.25, w - 0.25, False, air, math.nan, False, rng)
+            )
+            t += timedelta(seconds=STEP_S)
+        water = start_f
+        began = t
+        while True:
+            minutes = (t - began).total_seconds() / 60.0
+            if minutes >= hold(off):
+                q = heat(air, water) - 4.4 * (water - air)
+                water += q / MASS * STEP_S / 3600.0
+                lower = water - 0.25
+            else:
+                # The lower probe dips at the start, then holds.
+                lower = water - 0.25 - (QUANTUM if minutes < 1.0 else 0.0)
+            rows.append(
+                _row(
+                    t,
+                    water + 0.25,
+                    lower,
+                    True,
+                    air,
+                    power(water),
+                    k == draw_in,
+                    rng,
+                )
+            )
+            t += timedelta(seconds=STEP_S)
+            if lower >= TARGET + OVERSHOOT:
+                break
+    rows.append(
+        _row(t, water + 0.25, water - 0.25, False, 65.0, math.nan, False, rng)
+    )
+    frame = pd.DataFrame(rows)
+    return frame.set_index("at")
+
+
+def _row(
+    t: datetime,
+    upper: float,
+    lower: float,
+    on: bool,
+    air: float,
+    watts: float,
+    drawing: bool,
+    rng: np.random.Generator,
+) -> dict[str, object]:
+    jitter = timedelta(seconds=float(rng.uniform(-3.0, 3.0)))
+    return {
+        "at": t + jitter,
+        "upper_f": _quantised(upper, rng),
+        "lower_f": _quantised(lower, rng),
+        "compressor_on": on,
+        "element_on": False,
+        "dhw_in_use": drawing,
+        "target_f": TARGET,
+        "excluded": False,
+        "power_w": watts + rng.normal(0.0, 2.0) if on else 0.0,
+        "energy_to_setpoint_wh": math.nan,
+        "air_f": air,
+        "humidity_pct": 50.0,
+    }
+
+
+#: Off times across the bands; starts in the middle of a probe step.
+CYCLES = [
+    (900.0, 110.07, 60.0),
+    (8.0, 138.99, 70.0),
+    (40.0, 136.11, 55.0),
+    (120.0, 130.89, 80.0),
+    (400.0, 120.09, 65.0),
+    (10.0, 139.17, 75.0),
+    (1000.0, 100.17, 58.0),
+    (30.0, 137.97, 62.0),
+]
+
+
+@pytest.fixture(scope="module")
+def frame() -> pd.DataFrame:
+    return hpf.recovery_frame(planted(CYCLES))
+
+
+class TestTheFrame:
+    def test_each_run_on_a_minute_grid(self, frame: pd.DataFrame) -> None:
+        assert frame["cycle"].nunique() == len(CYCLES)
+        steps = frame.groupby("cycle")["minute"].diff().dropna()
+        assert (steps == 1.0).all()
+
+    def test_the_phases_in_order(self, frame: pd.DataFrame) -> None:
+        order = {p: i for i, p in enumerate(hpf.PHASES)}
+        for _, g in frame.groupby("cycle"):
+            ranks = g["phase"].map(order).to_numpy()
+            assert (np.diff(ranks) >= 0).all()
+            assert set(g["phase"]) == set(hpf.PHASES)
+
+    def test_the_tank_is_mixed(self, frame: pd.DataFrame) -> None:
+        assert frame["mixed"].all()
+
+    def test_the_minutes_off(self, frame: pd.DataFrame) -> None:
+        off = frame.drop_duplicates("cycle")["minutes_off"].to_numpy(float)
+        assert math.isnan(off[0])
+        assert off[1:] == pytest.approx([c[0] for c in CYCLES[1:]], abs=0.2)
+
+
+class TestTheHold:
+    def test_each_hold_by_its_minutes_off(self, frame: pd.DataFrame) -> None:
+        holds = hpf.start_holds(frame)
+        want = [hold(off) for off, _, _ in CYCLES]
+        # Read on the minute grid, at the first 0.18 °F step of a slow
+        # climb: up to a few minutes late, never early.
+        late = holds["hold_minutes"].to_numpy() - want
+        assert late.min() >= -0.5
+        assert late.max() <= 3.0
+        assert holds["draw_free"].all()
+
+    def test_a_step_and_back_is_not_the_climb(self) -> None:
+        history = planted(CYCLES[:2])
+        start = heat_pump_cycles(history)[1].start
+        after = history.index > start + timedelta(minutes=1)
+        flip = after & (history.index < start + timedelta(minutes=2))
+        history.loc[flip, "lower_f"] += 2 * QUANTUM
+        holds = hpf.start_holds(hpf.recovery_frame(history))
+        assert holds["hold_minutes"].iloc[1] >= hold(CYCLES[1][0])
+
+    def test_water_at_the_start_is_no_clean_start(self) -> None:
+        history = planted(CYCLES[3:5])
+        start = heat_pump_cycles(history)[1].start
+        near = abs(history.index - start) < timedelta(minutes=2)
+        history.loc[near, "dhw_in_use"] = True
+        holds = hpf.start_holds(hpf.recovery_frame(history))
+        assert holds["start_clean"].tolist() == [True, False]
+
+
+class TestTheRunOn:
+    def test_the_stop_is_the_overshoot(self, frame: pd.DataFrame) -> None:
+        found, fit = hpf.run_ons(frame)
+        assert len(found) == len(CYCLES)
+        assert fit.n == len(CYCLES)
+        assert fit.overshoot_f == pytest.approx(OVERSHOOT, abs=0.2)
+        assert fit.minutes == pytest.approx(10.0, abs=1.5)
+
+    def test_the_rule_that_stopped_it_fits_better(self) -> None:
+        # The air apart, so the run-on's rate is: a stop at an overshoot
+        # is no fixed number of minutes.
+        cycles = [
+            (60.0, 130.05 + i * 0.18, (50.0, 90.0)[i % 2]) for i in range(8)
+        ]
+        _, fit = hpf.run_ons(hpf.recovery_frame(planted(cycles)))
+        assert fit.overshoot_mae_min is not None
+        assert fit.minutes_mae_min is not None
+        assert fit.overshoot_mae_min < fit.minutes_mae_min
+
+    def test_too_few_to_judge(self) -> None:
+        _, fit = hpf.run_ons(hpf.recovery_frame(planted(CYCLES[:2])))
+        assert fit.n == 2
+        assert fit.minutes is not None
+        assert fit.minutes_mae_min is None
+
+
+class TestTheHeat:
+    def test_the_planted_heat_and_power(self, frame: pd.DataFrame) -> None:
+        got = hpf.climb_heat(frame, TANK, LOSS)
+        # The top-offs from near the target climb for under 20 minutes.
+        assert len(got) >= 4
+        for r in got.itertuples():
+            assert r.heat_btu_h == pytest.approx(  # type: ignore[attr-defined]
+                heat(r.air_f, r.water_f),  # type: ignore[attr-defined]
+                rel=0.04,
+            )
+            assert r.power_w == pytest.approx(power(r.water_f), abs=6.0)  # type: ignore[attr-defined]
+            assert r.cop == pytest.approx(  # type: ignore[attr-defined]
+                r.heat_btu_h / (r.power_w * 3.412141633),  # type: ignore[attr-defined]
+            )
+
+    def test_the_air_raises_the_heat(self, frame: pd.DataFrame) -> None:
+        got = hpf.climb_heat(frame, TANK, LOSS)
+        slope = np.polyfit(got["air_f"], got["heat_btu_h"], 1)[0]
+        assert slope == pytest.approx(33.0, abs=10.0)
+
+    def test_a_run_with_a_draw_gives_none(self) -> None:
+        history = planted(CYCLES[3:5], draw_in=0)
+        cycles = heat_pump_cycles(history)
+        assert [c.draw_free for c in cycles] == [False, True]
+        got = hpf.climb_heat(hpf.recovery_frame(history), TANK, LOSS)
+        assert set(got["cycle"]) <= {cycles[1].n}
+
+
+class TestThePower:
+    def test_blocks_at_the_planted_power(self, frame: pd.DataFrame) -> None:
+        got = hpf.power_blocks(frame)
+        assert len(got) > 50
+        water = (got["upper_f"] + got["lower_f"]) / 2.0
+        assert np.abs(got["power_w"] - water.map(power)).max() < 5.0
+        assert set(got["phase"]) <= set(hpf.PHASES)

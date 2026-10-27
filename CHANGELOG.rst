@@ -19,6 +19,17 @@ Added
   that share no terms can be compared (``compare``). It does no I/O.
   See :doc:`/how-to/calibrate-simulator`.
 
+- **``nwp500.sim.heat_pump_fit``: a heat pump's recoveries measured
+  from a history, without a model of the cycle.** ``recovery_frame``
+  puts each recovery (``sim.calibration.heat_pump_cycles``) on a minute
+  grid in three phases: the hold after a start, the climb, and the run
+  past the target. ``start_holds``, ``run_ons`` (with a fixed run-on and
+  a stop at an overshoot judged against each other), ``climb_heat``
+  (the heat a mixed, draw-free climb puts into the tank) and
+  ``power_blocks`` (the metered power in 10-minute blocks) measure
+  from it. The helpers that read a history frame moved to
+  ``sim.history_frame``.
+
 - **``nwp-cli simulate calibrate --holdout-from DATE``** fits on the
   history before ``DATE`` and prints the base's and the fit's scores on
   the events after it.

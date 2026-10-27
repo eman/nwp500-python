@@ -193,7 +193,16 @@ Hot water and the heat book
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       fit_loss, LossFit, loss_windows, standby_ends, standby_error,
       walk_tau, gap_paths, gap_error,
-      with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD
+      with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD,
+      heat_pump_cycles, HeatPumpCycle, water_in_use
+
+.. automodule:: nwp500.sim.heat_pump_fit
+   :members: recovery_frame, start_holds, run_ons, RunOnFit, climb_heat,
+      power_blocks, PHASES, CLIMB_HELD, MIXED_BELOW_F, MIXED_ABOVE_F,
+      MIN_STRETCH_MINUTES, POWER_BLOCK_MINUTES
+
+.. automodule:: nwp500.sim.history_frame
+   :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
 
 .. automodule:: nwp500.sim.profile
    :members: HeaterProfile, heater_profile, check, COMMAND_KEYS

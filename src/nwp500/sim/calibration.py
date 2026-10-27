@@ -60,6 +60,7 @@ from scipy.optimize import (
     minimize_scalar,
 )
 
+from nwp500.sim import history_frame as hf
 from nwp500.sim.book import (
     Booked,
     anchor_held,
@@ -72,6 +73,7 @@ from nwp500.sim.book import Step as BookStep
 from nwp500.sim.circulation import RUN_GAP, cooled_share, merge_runs
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
 from nwp500.sim.heating_trajectory import path_cop
+from nwp500.sim.history_frame import Interval
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (
     INSTALLATION_TERMS,
@@ -91,9 +93,6 @@ from nwp500.sim.physics.draw import delivery_temp_f, draw_energy_btu
 from nwp500.sim.physics.tank import ua_at
 from nwp500.sim.record import Record
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
-
-#: An interval: its start and its end.
-Interval = tuple[datetime, datetime]
 
 # ── standby: quiet windows, the loss law, the gap's time constant ────
 
@@ -143,41 +142,6 @@ _STANDBY_ROUNDS_RTOL = 0.005
 _MAX_STANDBY_ROUNDS = 20
 
 
-def _instants(frame: pd.DataFrame) -> list[datetime]:
-    """The frame's index as instants."""
-    # A history's index holds no NaT: each row is a sample's instant.
-    return [
-        cast(datetime, pd.Timestamp(t).to_pydatetime()) for t in frame.index
-    ]
-
-
-def _on_intervals(when: list[datetime], on: np.ndarray) -> list[Interval]:
-    """The spans a state sampled at ``when`` is on: from a sample that
-    reads on to the next that reads off (to the last sample, if open)."""
-    out: list[Interval] = []
-    start: datetime | None = None
-    for t, v in zip(when, on, strict=True):
-        if v and start is None:
-            start = t
-        elif not v and start is not None:
-            out.append((start, t))
-            start = None
-    if start is not None:
-        out.append((start, when[-1]))
-    return out
-
-
-def _merge(intervals: list[Interval]) -> list[Interval]:
-    """Overlapping intervals merged, sorted."""
-    merged: list[Interval] = []
-    for start, end in sorted(intervals):
-        if merged and start <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-        else:
-            merged.append((start, end))
-    return merged
-
-
 def busy_intervals(
     history: pd.DataFrame, settle_minutes: float = SETTLE_MINUTES
 ) -> list[Interval]:
@@ -189,7 +153,7 @@ def busy_intervals(
     for the other. Where a caller marks ``air_unobserved`` (no reading
     of the air), the tank is not quiet either: a fit there would stand
     on air nobody read."""
-    when = _instants(history)
+    when = hf.instants(history)
     columns = ["compressor_on", "element_on"]
     if "air_unobserved" in history.columns:
         columns.append("air_unobserved")
@@ -201,8 +165,8 @@ def busy_intervals(
     spans: list[Interval] = []
     for column in columns:
         on = history[column].fillna(False).astype(bool).to_numpy()
-        spans += [(a, b + settle) for a, b in _on_intervals(when, on)]
-    return _merge(spans)
+        spans += [(a, b + settle) for a, b in hf.on_intervals(when, on)]
+    return hf.merge(spans)
 
 
 def quiet_windows(
@@ -214,7 +178,7 @@ def quiet_windows(
     the windows of at least ``min_hours``."""
     if history.empty:
         return []
-    when = _instants(history)
+    when = hf.instants(history)
     since, until = when[0], when[-1]
     gap = timedelta(hours=min_hours)
     out: list[Interval] = []
@@ -1025,27 +989,6 @@ SNAPSHOT_EVERY = timedelta(minutes=30)
 SNAPSHOT_MIN_REMAINING = timedelta(minutes=15)
 
 
-def _asof(
-    values: np.ndarray, seconds: np.ndarray, at: datetime
-) -> float | None:
-    """The last finite value at or before ``at`` (``seconds`` its
-    instants, sorted); the first if ``at`` precedes them; None if there
-    is none."""
-    ok = np.isfinite(values)
-    if not ok.any():
-        return None
-    finite, stamps = values[ok], seconds[ok]
-    pos = int(np.searchsorted(stamps, at.timestamp(), side="right")) - 1
-    return float(finite[max(pos, 0)])
-
-
-def _floats(history: pd.DataFrame, name: str) -> np.ndarray:
-    """A column as floats, NaN throughout when the history lacks it."""
-    if name not in history.columns:
-        return np.full(len(history), np.nan)
-    return np.asarray(history[name].to_numpy(dtype=float, na_value=np.nan))
-
-
 def _snapshots(start: datetime, end: datetime) -> list[datetime]:
     """Where a recovery is read from: its start, then every
     ``SNAPSHOT_EVERY`` while at least ``SNAPSHOT_MIN_REMAINING`` of it
@@ -1117,7 +1060,7 @@ def _in_cycle(
     }
 
     def upper_at(t: datetime) -> float | None:
-        return _asof(upper, seconds, t)
+        return hf.asof(upper, seconds, t)
 
     if draws is not None:
         window = [(t, g) for t, g in draws if at <= t <= end]
@@ -1150,31 +1093,108 @@ def _in_cycle(
     return out
 
 
-def _energy_wh(
-    watts: np.ndarray, seconds: np.ndarray, start: datetime, end: datetime
-) -> float | None:
-    """A power series' step integral over ``[start, end]``, Wh, each
-    reading held until the next; with none in force at ``start``, the
-    first after it back-filled to it (the compressor's first report).
-    None with no reading, which is not zero energy."""
-    ok = np.isfinite(watts)
-    w, t = watts[ok], seconds[ok]
-    a, b = start.timestamp(), end.timestamp()
-    if b <= a or not len(w):
-        return None
-    before = t <= a
-    inside = (t > a) & (t < b)
-    if before.any():
-        first = float(w[before][-1])
-        times, values = t[inside], w[inside]
-    elif inside.any():
-        first = float(w[inside][0])
-        times, values = t[inside][1:], w[inside][1:]
-    else:
-        return None
-    edges = np.concatenate(([a], times, [b]))
-    levels = np.concatenate(([first], values))
-    return float(np.sum(levels * np.diff(edges)) / 3600.0)
+@dataclass(frozen=True)
+class HeatPumpCycle:
+    """A compressor run a heat-pump recovery may be read from
+    (``heat_pump_cycles``): the ``n``-th run in the history, ``[start,
+    end)``; the lower probe's stop threshold in force at its start;
+    whether the lower probe reached it; whether no water was in use from
+    ``DRAW_LEAD`` before it to its end; and when the run before it
+    stopped (None for the history's first)."""
+
+    n: int
+    start: datetime
+    end: datetime
+    target_f: float
+    reached: bool
+    draw_free: bool
+    stopped_at: datetime | None
+
+
+def water_in_use(history: pd.DataFrame) -> tuple[list[str], np.ndarray]:
+    """The water-moving columns read (a meter's and the circulation's,
+    else the heater's own flag) and the samples any of them is on."""
+    tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
+    water = np.zeros(len(history), dtype=bool)
+    for column in tier1 or ["dhw_in_use"]:
+        if column in history.columns:
+            water |= history[column].fillna(False).astype(bool).to_numpy()
+    return tier1, water
+
+
+def heat_pump_cycles(history: pd.DataFrame) -> list[HeatPumpCycle]:
+    """The history's compressor runs with no element, no hybrid mode, no
+    anti-legionella cycle and no error from ``PRE_RECOVERY_LOOKBACK``
+    before them to their end, not cut short (``INTERRUPTED_WH``), and
+    with a sample inside them: the recoveries ``snapshots`` reads and
+    ``sim.heat_pump_fit`` measures. A run's target is the stop threshold
+    (``target_f``) in force at its start, else
+    ``UNRECORDED_TARGET_F``."""
+    if history.empty:
+        return []
+    when = hf.instants(history)
+    index = pd.DatetimeIndex(history.index)
+    seconds = np.array([t.timestamp() for t in when])
+    lower_f = hf.floats(history, "lower_f")
+    target_f = hf.floats(history, "target_f")
+    energy_wh = hf.floats(history, "energy_to_setpoint_wh")
+    on = history["compressor_on"].fillna(False).astype(bool).to_numpy()
+    element = history["element_on"].fillna(False).astype(bool).to_numpy()
+    excluded = (
+        history["excluded"].fillna(False).astype(bool).to_numpy()
+        if "excluded" in history.columns
+        else np.zeros(len(history), dtype=bool)
+    )
+    tier1, water = water_in_use(history)
+    # A meter's or the circulation's flag marks a sample's interval, to
+    # the next sample (``sim_adapters.history``): the sample before a
+    # lead's first can hold water moving inside it.
+    interval_water = water if tier1 else np.zeros(len(history), dtype=bool)
+    runs = hf.on_intervals(when, on)
+    out: list[HeatPumpCycle] = []
+    for n, (start, end) in enumerate(runs):
+        span = (index >= start - PRE_RECOVERY_LOOKBACK) & (index <= end)
+        if element[span].any() or excluded[span].any():
+            continue
+        target = hf.asof(target_f, seconds, start)
+        if target is None:
+            # The stop threshold not recorded: the device's usual one, as
+            # the model's fit took it.
+            target = UNRECORDED_TARGET_F
+        before, after = INTERRUPTED_WINDOW
+        at_end = energy_wh[(index >= end + before) & (index <= end + after)]
+        at_end = at_end[np.isfinite(at_end)]
+        if len(at_end) and at_end[-1] > INTERRUPTED_WH:
+            continue
+        inside = (index >= start) & (index <= end)
+        reached = bool(np.any(lower_f[inside] >= target - REACHED_TOLERANCE_F))
+        if not ((index >= start) & (index < end)).any():
+            continue
+        # A source flag on the sample at ``end`` is the interval after
+        # the recovery; the heater's own flag is read at its instant.
+        lead = (index >= start - DRAW_LEAD) & (
+            (index < end) if tier1 else (index <= end)
+        )
+        draw_free = not water[lead].any()
+        first = int(np.argmax(lead)) if lead.any() else len(lead)
+        if (
+            0 < first < len(lead)
+            and bool(index[first] > start - DRAW_LEAD)
+            and bool(interval_water[first - 1])
+        ):
+            draw_free = False
+        out.append(
+            HeatPumpCycle(
+                n,
+                start,
+                end,
+                target,
+                reached,
+                draw_free,
+                runs[n - 1][1] if n else None,
+            )
+        )
+    return out
 
 
 def snapshots(
@@ -1216,69 +1236,25 @@ def snapshots(
     """
     if history.empty:
         return pd.DataFrame(columns=list(_SNAPSHOT_COLUMNS))
-    when = _instants(history)
+    when = hf.instants(history)
     index = pd.DatetimeIndex(history.index)
     seconds = np.array([t.timestamp() for t in when])
-    lower_f, upper_f = _floats(history, "lower_f"), _floats(history, "upper_f")
-    target_f, air_f = _floats(history, "target_f"), _floats(history, air)
-    humidity_pct = _floats(history, "humidity_pct")
-    energy_wh = _floats(history, "energy_to_setpoint_wh")
-    power_w = _floats(history, "power_w")
-    on = history["compressor_on"].fillna(False).astype(bool).to_numpy()
-    element = history["element_on"].fillna(False).astype(bool).to_numpy()
-    excluded = (
-        history["excluded"].fillna(False).astype(bool).to_numpy()
-        if "excluded" in history.columns
-        else np.zeros(len(history), dtype=bool)
-    )
-    tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
-    water = np.zeros(len(history), dtype=bool)
-    for column in tier1 or ["dhw_in_use"]:
-        if column in history.columns:
-            water |= history[column].fillna(False).astype(bool).to_numpy()
-    # A meter's or the circulation's flag marks a sample's interval, to the next
-    # sample (``sim_adapters.history``): the sample before a lead's first
-    # can hold water moving inside it.
-    interval_water = water if tier1 else np.zeros(len(history), dtype=bool)
+    lower_f = hf.floats(history, "lower_f")
+    upper_f = hf.floats(history, "upper_f")
+    air_f = hf.floats(history, air)
+    humidity_pct = hf.floats(history, "humidity_pct")
+    power_w = hf.floats(history, "power_w")
     rows: list[dict[str, object]] = []
-    for n, (start, end) in enumerate(_on_intervals(when, on)):
-        span = (index >= start - PRE_RECOVERY_LOOKBACK) & (index <= end)
-        if element[span].any() or excluded[span].any():
-            continue
-        target = _asof(target_f, seconds, start)
-        if target is None:
-            # The stop threshold not recorded: the device's usual one, as
-            # the model's fit took it.
-            target = UNRECORDED_TARGET_F
-        before, after = INTERRUPTED_WINDOW
-        at_end = energy_wh[(index >= end + before) & (index <= end + after)]
-        at_end = at_end[np.isfinite(at_end)]
-        if len(at_end) and at_end[-1] > INTERRUPTED_WH:
-            continue
-        inside = (index >= start) & (index <= end)
-        reached = bool(np.any(lower_f[inside] >= target - REACHED_TOLERANCE_F))
+    for c in heat_pump_cycles(history):
+        n, start, end, target = c.n, c.start, c.end, c.target_f
+        reached, draw_free = c.reached, c.draw_free
         cycle = (index >= start) & (index < end)
-        if not cycle.any():
-            continue
         c_seconds, c_air = seconds[cycle], air_f[cycle]
-        lower_end = _asof(lower_f[cycle], c_seconds, end)
-        upper_end = _asof(upper_f[cycle], c_seconds, end)
-        # A source flag on the sample at ``end`` is the interval after
-        # the recovery; the heater's own flag is read at its instant.
-        lead = (index >= start - DRAW_LEAD) & (
-            (index < end) if tier1 else (index <= end)
-        )
-        draw_free = not water[lead].any()
-        first = int(np.argmax(lead)) if lead.any() else len(lead)
-        if (
-            0 < first < len(lead)
-            and bool(index[first] > start - DRAW_LEAD)
-            and bool(interval_water[first - 1])
-        ):
-            draw_free = False
+        lower_end = hf.asof(lower_f[cycle], c_seconds, end)
+        upper_end = hf.asof(upper_f[cycle], c_seconds, end)
         for at in _snapshots(start, end):
-            lower = _asof(lower_f[cycle], c_seconds, at)
-            upper = _asof(upper_f[cycle], c_seconds, at)
+            lower = hf.asof(lower_f[cycle], c_seconds, at)
+            upper = hf.asof(upper_f[cycle], c_seconds, at)
             if lower is None or upper is None or target - lower <= 0.0:
                 continue
             minutes = (end - at).total_seconds() / 60.0
@@ -1295,11 +1271,11 @@ def snapshots(
             air_mean = (
                 float(np.mean(tail))
                 if len(tail)
-                else _asof(c_air, c_seconds, at)
+                else hf.asof(c_air, c_seconds, at)
             )
             if air_mean is None:
                 continue
-            humidity = _asof(humidity_pct[cycle], c_seconds, at)
+            humidity = hf.asof(humidity_pct[cycle], c_seconds, at)
             rows.append(
                 {
                     "cycle": n,
@@ -1316,7 +1292,7 @@ def snapshots(
                     # model's fit read it, not as an assumed 50 %.
                     "h_amb_start": math.nan if humidity is None else humidity,
                     "reached": reached,
-                    "metered_input_wh": _energy_wh(
+                    "metered_input_wh": hf.energy_wh(
                         power_w[cycle], c_seconds, at, end
                     ),
                     "t_lower_end": lower_end,
@@ -1952,7 +1928,7 @@ def clean_draws(
     lo = frame["lower_f"].to_numpy(dtype=float)
     comp = frame["compressor_on"].fillna(False).astype(bool).to_numpy()
     elem = frame["element_on"].fillna(False).astype(bool).to_numpy()
-    when = _instants(frame)
+    when = hf.instants(frame)
     wet = np.where(flow > draw_gpm)[0]
     if not len(wet):
         return []
@@ -3814,11 +3790,11 @@ def circulation_windows(
     zone. Standby is the loss law's (``params.loss``) at the mean over
     the air; with no loss law fitted there are no windows. ``flow_at``
     gives each window's runs the flow they ran at (``flow_lookup``)."""
-    when = _instants(history)
+    when = hf.instants(history)
     seconds = np.array([t.timestamp() for t in when])
-    upper, lower = _floats(history, "upper_f"), _floats(history, "lower_f")
-    air = _floats(history, "air_f")
-    compressor = _on_intervals(
+    upper, lower = hf.floats(history, "upper_f"), hf.floats(history, "lower_f")
+    air = hf.floats(history, "air_f")
+    compressor = hf.on_intervals(
         when, history["compressor_on"].fillna(False).astype(bool).to_numpy()
     )
     loss, d = params.loss, params.draw

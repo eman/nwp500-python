@@ -30,6 +30,7 @@ from nwp500.sim import (
     site_example_params,
 )
 from nwp500.sim import calibration as cal
+from nwp500.sim import history_frame as hf
 from nwp500.sim.params import (
     CompressorParams,
     HeaterParams,
@@ -587,13 +588,13 @@ class TestPower:
         w = np.array([400.0, 500.0, 300.0])
         end = T0 + timedelta(minutes=30)
         # 10 min at 400, 10 at 500, 10 at 300.
-        assert cal._energy_wh(w, s, T0, end) == pytest.approx(200.0)
+        assert hf.energy_wh(w, s, T0, end) == pytest.approx(200.0)
         # No reading before the start: the first is back-filled to it.
         late = T0 - timedelta(minutes=5)
-        assert cal._energy_wh(w, s, late, end) == pytest.approx(
+        assert hf.energy_wh(w, s, late, end) == pytest.approx(
             400 * 15 / 60 + 500 * 10 / 60 + 300 * 10 / 60
         )
-        assert cal._energy_wh(np.array([]), np.array([]), T0, end) is None
+        assert hf.energy_wh(np.array([]), np.array([]), T0, end) is None
 
     def test_the_power_scale_is_a_ratio_of_sums(self) -> None:
         params = self._fitted()
