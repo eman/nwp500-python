@@ -608,7 +608,8 @@ class TestWhatTheResultSays:
             state=HeaterState(
                 upper_f=110.0, lower_f=100.0, compressor_running=True
             ),
-            environment=Environment(ambient_f=40.0),
+            # Inside the heat pump's range (41 °F and up).
+            environment=Environment(ambient_f=45.0),
         )
         with pytest.raises(SimulationError, match="1800-min bound"):
             simulate(s, weak)

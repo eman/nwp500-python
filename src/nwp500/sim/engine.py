@@ -566,6 +566,19 @@ class _Engine:
             element=heater.element,
             start_hold=start_hold,
         )
+        #: Where the air at the heater is outside the heat pump's
+        #: operating range (``ControllerParams.hp_air_range_f``), from
+        #: the physics' air; none from a physics that cannot say.
+        outside = getattr(physics, "air_outside", None)
+        self.air_out: list[Window] = (
+            []
+            if outside is None
+            else outside(start, until, *self.params.hp_air_range_f)
+        )
+        available = self._available(start)
+        #: The tank was below the heat pump's water range with no element
+        #: since to heat it past: one heating it runs to its off point.
+        self._cold = lower_f < self.params.hp_water_range_f[0]
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -573,7 +586,15 @@ class _Engine:
             running=running,
             stopped_at=stopped_at,
             params=self.params,
+            hp_available=available,
         )
+        self.reasons: set[str] = set()
+        if (
+            not available
+            and heater.mode in ctl.COMPRESSOR_MODES
+            and not (heater.heating_disabled or heater.powered_off)
+        ):
+            self.reasons.add(ctl.HEAT_PUMP_UNAVAILABLE)
         #: The setpoint and the mode in force as the path records them,
         #: moved by the controller's actions as they are carried out.
         self.sp = setpoint_f
@@ -613,7 +634,6 @@ class _Engine:
             )
         ]
         self.heating: list[HeatingInterval] = []
-        self.reasons: set[str] = set()
         self.cycle: _Cycle | None = None
         #: Instants the path must carry an element at, exactly (the
         #: forecast's draw windows): not the feature's events, only stops.
@@ -667,6 +687,57 @@ class _Engine:
 
     def _tank(self) -> Tank:
         return Tank(self.upper, self.lower)
+
+    def _water_ok(self, lower: float) -> bool:
+        low, high = self.params.hp_water_range_f
+        return low <= lower < high
+
+    def _available(self, at: datetime) -> bool:
+        """Whether the heat pump is inside its operating range at ``at``
+        with the lower zone as it is now."""
+        if any(a <= at < b for a, b in self.air_out):
+            return False
+        return self._water_ok(self.lower)
+
+    def _check_availability(self) -> bool:
+        """Tell the controller when the heat pump has left or re-entered
+        its operating range (``controller.HeatPumpAvailability``);
+        whether it has left it here."""
+        available = self._available(self.t)
+        if self.lower < self.params.hp_water_range_f[0]:
+            self._cold = True
+        elif self.element is None or self.state.hp_available:
+            self._cold = False
+        if (
+            available
+            and not self.state.hp_available
+            and self._cold
+            and self.element is not None
+        ):
+            # The water came up past the range's bottom under an element:
+            # it runs to its off point first, whatever the air did.
+            available = False
+        if available != self.state.hp_available:
+            self._dispatch(
+                ctl.HeatPumpAvailability(
+                    at=self.t, tank=self._tank(), available=available
+                )
+            )
+            return not available
+        return False
+
+    def _water_crossing(self, points: Sequence[Point]) -> datetime | None:
+        """The first point of a coast past a bound of the heat pump's
+        water range, where its availability changes (at most a coast
+        step after the crossing, and on its far side); None when the
+        coast crosses none, or an element runs (its rise is laid over
+        the coast, and its end is a boundary)."""
+        if self.element is not None:
+            return None
+        for p0, p1 in pairwise(points):
+            if self._water_ok(p0.lower_f) != self._water_ok(p1.lower_f):
+                return p1.at
+        return None
 
     def _dispatch(self, event: ctl.Event) -> None:
         """Hand ``event`` to the firmware (``controller.transition``) and
@@ -962,7 +1033,12 @@ class _Engine:
             cycle.hold_minutes = max(0.0, cycle.hold_total - gone)
         target = cycle.setpoint_f
         empty = Heat([Point(self.t, self.upper, self.lower, 0.0)], 1.0)
-        full = self._placed(cycle, target + self.params.hp_stop_overshoot_f)
+        # The heat pump stops at the top of its water range.
+        stop = min(
+            target + self.params.hp_stop_overshoot_f,
+            self.params.hp_water_range_f[1],
+        )
+        full = self._placed(cycle, stop)
         if full is None:
             cycle.heat, cycle.capped = empty, False
             return
@@ -1084,6 +1160,10 @@ class _Engine:
                     )
                 moved = self._follow_ledger(upper, lower)
                 self._step_point()
+                # A draw can take the lower zone out of the heat pump's
+                # range, which stops it.
+                if self._check_availability():
+                    continue
                 # A zone the book took down is off the recovery's path,
                 # which holds the upper zone where it began: predicted
                 # afresh from here.
@@ -1120,11 +1200,17 @@ class _Engine:
             self.t = nxt
             self._element_boundary()
             if nxt >= finish:
-                self._dispatch(
-                    ctl.RecoveryDone(
-                        at=nxt, tank=self._tank(), capped=cycle.capped
-                    )
+                # Stopped short of its target at the top of its range:
+                # the elements finish it.
+                short = self.lower < cycle.setpoint_f and not self._water_ok(
+                    self.lower
                 )
+                if not (short and self._check_availability()):
+                    self._dispatch(
+                        ctl.RecoveryDone(
+                            at=nxt, tank=self._tank(), capped=cycle.capped
+                        )
+                    )
 
     def _pause(self, stop: datetime) -> None:
         """Coast over a withheld window with the compressor charged at
@@ -1272,6 +1358,9 @@ class _Engine:
         """At every boundary the running element's zone is read: at its
         off point it stops, otherwise it runs on (``_element_end``)."""
         if self.element is not None:
+            # An element ending as the heat pump returns hands over to it.
+            self._check_availability()
+        if self.element is not None:
             self._dispatch(ctl.ElementCheck(at=self.t, tank=self._tank()))
 
     def _element_end(self, off: float) -> None:
@@ -1323,6 +1412,7 @@ class _Engine:
                 tank=self._tank(),
                 running=self.running,
                 running_hold=self.running_hold,
+                element_on=self.element_running,
             )
         )
         # The start's own instant is ordered as any later one's
@@ -1344,8 +1434,10 @@ class _Engine:
         steps = 0
         while self.t < self.until:
             steps += 1
-            if steps > _MAX_STEPS:
+            # Each edge of the air's range is a step or two of its own.
+            if steps > _MAX_STEPS + 4 * len(self.air_out):
                 raise SimulationError("the walk did not advance")
+            self._check_availability()
             self._element_trigger()
             nxt = min([*self._upcoming(), self.until])
             if self.cycle is not None:
@@ -1387,6 +1479,8 @@ class _Engine:
                 upcoming.update((w0, w1))
         if self.raw:
             upcoming.add(self.raw[0].at)
+        for a, b in self.air_out:
+            upcoming.update((a, b))
         return {t for t in upcoming if t > self.t}
 
     def _trigger_ahead(self, coast: Coast) -> ctl.Ahead | None:
@@ -1450,6 +1544,15 @@ class _Engine:
             else:
                 at = own.starts_at
         element_at = upper_on_crossing(self.state, self.settings, coast.points)
+        water_at = self._water_crossing(coast.points)
+        if water_at is not None and all(
+            x is None or water_at < x for x in (element_at, at)
+        ):
+            # The heat pump's availability changes before anything else
+            # happens: the walk takes it up there.
+            element_at = at = None
+            end = min(end, water_at)
+            coast = self._coast(end)
         cut = self._upper_cut(
             coast.points,
             end,
@@ -1475,6 +1578,18 @@ class _Engine:
         if at is not None and at < end:
             assert own is not None
             self._coast_to(at)
+            if not self.state.hp_available and any(
+                d[0] <= at for d in self.draws
+            ):
+                # The elements answer from the tank a draw landing here
+                # leaves (``controller.electric_entry``), which may be
+                # back in the heat pump's range.
+                self._coast_draw()
+                self._check_availability()
+                if self.state.hp_available:
+                    # Back in range: the trigger is the heat pump's, with
+                    # its lockout, found afresh from here.
+                    return
             self._dispatch(
                 ctl.HeaterTrigger(at=at, tank=self._tank(), trigger=own.trigger)
             )
@@ -1498,6 +1613,9 @@ class _Engine:
             return None
         element_at = upper_on_crossing(self.state, self.settings, coast.points)
         if element_at is not None and element_at < limit:
+            return None
+        water_at = self._water_crossing(coast.points)
+        if water_at is not None and water_at < limit:
             return None
         if self._upper_cut(coast.points, limit) is not None:
             return None
@@ -1780,6 +1898,10 @@ class _Engine:
         self.t = at
 
     def _at_event(self, at: datetime) -> None:
+        # The heat pump's range first: whatever lands at the instant it
+        # leaves or re-enters it is answered by the heater as it is now.
+        if at < self.until:
+            self._check_availability()
         pending = self.state.compressor.pending
         if pending is not None and pending.at == at and at < self.until:
             self._dispatch(ctl.StartDue(at=at, tank=self._tank()))

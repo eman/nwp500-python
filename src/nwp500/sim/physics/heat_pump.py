@@ -92,6 +92,18 @@ def start_hold_min(c: CompressorParams, minutes_off: float | None) -> float:
     ]
 
 
+#: The reason a recovery carries whose air is outside the heat map's
+#: fitted span (``CompressorParams.heat_domain_air_f``): its heat is the
+#: span's edge's, not a reading's.
+HEAT_MAP_OUT_OF_DOMAIN = "heat_map_out_of_domain"
+
+
+def heat_air_outside(c: CompressorParams, air_f: float) -> bool:
+    """Whether ``air_f`` is outside the heat map's fitted air span."""
+    low, high = c.heat_domain_air_f
+    return not low <= air_f <= high
+
+
 def carnot_cop(air_f: float, water_f: float) -> float:
     """The ideal heat pump's COP lifting heat from ``air_f`` to
     ``water_f``: infinite with the water no warmer than the air."""

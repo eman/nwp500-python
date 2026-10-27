@@ -966,6 +966,13 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        0.1 degC probe step past it, as a recovery reaching its setpoint
        ends with the probe 0.5-2 degF over it. Both stop at the
        threshold in the simulator.
+   * - ``controller.hp_air_range_f``, ``controller.hp_water_range_f``
+     - 41-113 degF, 50-149 degF
+     - The heat pump's operating range, from the user's manual
+       (3.13.1, Heat Pump Operation Prevention): outside it the heat
+       pump does not run and the elements heat the tank (3.13.4). The
+       water is read at the lower zone. Not measured: the record's air
+       ran 45.9-89.3 degF, and no takeover by the elements is on it.
 
 **Fitted at one installation** (``unfitted`` in ``default_params``)
 
@@ -1121,6 +1128,24 @@ The ones about inputs and parameters:
    * - ``recorded_write_not_modelled``
      - A recorded write into Vacation or Power Off was left out of a
        replay, its setpoint too.
+   * - ``heat_pump_unavailable``
+     - The heat pump was outside its operating range
+       (``controller.hp_air_range_f``, ``hp_water_range_f``) in the
+       walk, or is at the answer's start, in a mode that runs it; or
+       the answer's stop (its target and run-on) is over its top, which the
+       elements finish. A
+       ``forecast`` or ``active_cycle`` answer is still the heat pump's,
+       which the heater will not run; ``next_recovery`` is
+       ``unavailable``, and ``time_to_ready`` projects every mode as
+       Electric (Heat Pump mode from the heater's own trigger).
+   * - ``envelope_fallback_unverified``
+     - The elements heated in the heat pump's place, outside its range,
+       by Electric's rule (the upper element, then the lower): the
+       manual's rule, not seen on the record.
+   * - ``heat_map_out_of_domain``
+     - A recovery's air is outside the span the heat pump's heat was
+       fitted on (``compressor.heat_domain_air_f``), so its heat is the
+       span's edge's.
 
 The ones about the heater's own rules, each resting on the device runs
 :doc:`/explanation/what-starts-a-recovery`,

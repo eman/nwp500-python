@@ -72,7 +72,8 @@ class Recovery:
     """The heat-pump recovery from the tank now (``next_recovery``).
 
     ``points`` are ``(at, t_upper_f, t_lower_f)``; empty unless
-    ``outcome`` is ``ok``. ``input_wh`` is the heat pump's electrical
+    ``outcome`` is ``ok``, or, with ``hp_unavailable``, the tank at the
+    heater's own start alone. ``input_wh`` is the heat pump's electrical
     input over the interval ending at each point, where known.
     ``tou_capped`` says the recovery was projected only to the TOU
     window's reduced target, because the device heats no further until
@@ -101,6 +102,9 @@ class Recovery:
     #: (``heating_trajectory.HeatingPoint``): a projection's heating
     #: curve.
     trajectory: Sequence[Any] = ()
+    #: The heat pump is outside its operating range (``unavailable``):
+    #: every mode heats with the elements, as Electric does.
+    hp_unavailable: bool = False
 
 
 def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:
@@ -247,7 +251,7 @@ def assess(
     if not ready:
         if recovery.outcome == "not_scheduled":
             reasons.append("heating_not_scheduled")
-        elif recovery.outcome == "unavailable":
+        elif recovery.outcome == "unavailable" and not recovery.hp_unavailable:
             reasons.append("time_to_ready_unavailable")
         elif recovery.outcome == "idle":
             reasons.append("heating_not_triggered")
@@ -431,6 +435,7 @@ def _mode_state(
     ep: ElementParams,
     recovery: Recovery | None = None,
     top: float | None = None,
+    delay: float = 0.0,
 ) -> tuple[float, float, float, Added] | None:
     """Tank state, input energy (Wh) and what has been added to the
     booked state ``t`` minutes into ``mode``.
@@ -449,6 +454,8 @@ def _mode_state(
     None when the mode cannot be projected here.
     """
     coast = _coast_share(t, recovery) if recovery is not None else NOTHING_ADDED
+    # Heating starts ``delay`` minutes in; the coast runs until then.
+    t = max(0.0, t - delay)
     if mode == "heat_pump":
         if hp is None:
             return None
@@ -531,12 +538,31 @@ def _by_mode(
         upper_min = None
         top: float | None = None
         end = horizon
-        if mode != "heat_pump" and setpoint is not None:
-            device: ElementMode = DEVICE_MODE[mode]  # type: ignore[assignment]
+        # Outside the heat pump's range every mode heats as Electric: a
+        # write to an element mode at once, Heat Pump from the heater's
+        # own start.
+        heats: HeaterMode = "electric" if recovery.hp_unavailable else mode
+        delay = (
+            recovery.start_minute
+            if recovery.hp_unavailable and mode == "heat_pump"
+            else 0.0
+        )
+        # Heat Pump mode heats from the tank its coast leaves.
+        start = (
+            replace(
+                tank,
+                upper_f=recovery.points[0][1],
+                lower_f=recovery.points[0][2],
+            )
+            if delay > 0.0 and recovery.points
+            else tank
+        )
+        if heats != "heat_pump" and setpoint is not None:
+            device: ElementMode = DEVICE_MODE[heats]  # type: ignore[assignment]
             rec = mode_recovery(
                 device,
-                tank.upper_f,
-                tank.lower_f,
+                start.upper_f,
+                start.lower_f,
                 setpoint,
                 params=ep,
             )
@@ -547,8 +573,8 @@ def _by_mode(
             top = rec.upper_end_f
             # The element model's own caveats.
             row["reasons"] = list(rec.confidence_reasons)
-            if mode == "electric":
-                end = rec.full_minutes or 0.0
+            if heats == "electric":
+                end = delay + (rec.full_minutes or 0.0)
             else:
                 end = max(horizon, rec.upper_end_minutes or 0.0)
         # The grid, and always the projection's own end: a recovery that
@@ -557,7 +583,16 @@ def _by_mode(
         steps = int(end // _GRID_MIN) + 1
         for t in [k * _GRID_MIN for k in range(steps)] + [end]:
             state = _mode_state(
-                mode, t, tank, hp, setpoint, upper_min, ep, recovery, top
+                heats,
+                t,
+                start,
+                hp,
+                setpoint,
+                upper_min,
+                ep,
+                recovery,
+                top,
+                delay,
             )
             if state is None:
                 break

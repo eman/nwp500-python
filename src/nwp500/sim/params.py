@@ -510,6 +510,12 @@ class DrawParams:
         return False
 
 
+_ENVELOPE = (
+    "the user's manual (3.13.1 Heat Pump Operation Prevention); the "
+    "elements' takeover outside it (3.13.4) is not seen on the record"
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ControllerParams:
     """The firmware's rules' numbers: when the compressor starts and
@@ -648,10 +654,27 @@ class ControllerParams:
     #: out of its own median, the stop it places is 2.4 min off against
     #: 3.3 for a fixed run-on (``heat_pump_fit.run_ons``).
     hp_stop_overshoot_f: float = field(default=0.9, metadata=_p(FITTED, "°F"))
+    #: The heat pump runs only with the air around the heater and the
+    #: water in the tank inside these, °F (low, high: the low included,
+    #: the high not); outside them it does not run and the elements heat
+    #: the tank (the user's manual, §3.13.1 and §3.13.4). The water is
+    #: read at the lower zone, the one the condenser heats. Not seen on
+    #: the record: its air ran 45.9-89.3 °F.
+    hp_air_range_f: tuple[float, float] = field(
+        default=(41.0, 113.0), metadata=_p(DEFAULT, "°F", note=_ENVELOPE)
+    )
+    hp_water_range_f: tuple[float, float] = field(
+        default=(50.0, 149.0), metadata=_p(DEFAULT, "°F", note=_ENVELOPE)
+    )
 
     def __post_init__(self) -> None:
         if self.hp_stop_overshoot_f < 0.0:
             raise ValueError("hp_stop_overshoot_f is negative")
+        for name in ("hp_air_range_f", "hp_water_range_f"):
+            low, high = getattr(self, name)
+            object.__setattr__(self, name, (float(low), float(high)))
+            if not low < high:
+                raise ValueError(f"{name} is not (low, high)")
 
     @property
     def write_start_lag(self) -> timedelta:

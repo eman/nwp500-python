@@ -32,6 +32,7 @@ from nwp500.sim.circulation import (
     CirculationDraws,
     CirculationLoss,
 )
+from nwp500.sim.controller import HEAT_PUMP_UNAVAILABLE
 from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
@@ -85,7 +86,12 @@ from nwp500.sim.physics.element import (
     HeaterMode,
     mode_plan,
 )
-from nwp500.sim.physics.heat_pump import power_w, start_hold_min
+from nwp500.sim.physics.heat_pump import (
+    HEAT_MAP_OUT_OF_DOMAIN,
+    heat_air_outside,
+    power_w,
+    start_hold_min,
+)
 from nwp500.sim.ready import (
     Readiness,
     Recovery,
@@ -146,6 +152,17 @@ TRIGGER_HORIZON = timedelta(hours=24)
 _RECOVERY_ROOM = timedelta(hours=31)
 
 
+def _air_readings(environment: Environment) -> pd.DataFrame | None:
+    """The air readings given, as a frame; None for one value."""
+    a = environment.ambient_f
+    if not isinstance(a, tuple):
+        return None
+    return pd.DataFrame(
+        {"ambient_f": [v for _, v in a]},
+        index=pd.DatetimeIndex([t for t, _ in a]),
+    )
+
+
 def _ambient_frame(
     environment: Environment, start: datetime, until: datetime
 ) -> pd.DataFrame:
@@ -154,16 +171,13 @@ def _ambient_frame(
     readings interpolated onto it and held past their ends."""
     t0 = pd.Timestamp(start - AMBIENT_BEFORE).floor(AMBIENT_STEP)
     stamps = pd.date_range(t0, until + AMBIENT_AFTER, freq=AMBIENT_STEP)
-    a = environment.ambient_f
-    if isinstance(a, tuple):
-        sampler = AmbientSampler(
-            pd.DataFrame(
-                {"ambient_f": [v for _, v in a]},
-                index=pd.DatetimeIndex([t for t, _ in a]),
-            )
-        )
+    readings = _air_readings(environment)
+    if readings is not None:
+        sampler = AmbientSampler(readings)
         values = [sampler.at(t.to_pydatetime()) for t in stamps]
     else:
+        a = environment.ambient_f
+        assert not isinstance(a, tuple)
         values = [float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F] * len(
             stamps
         )
@@ -301,6 +315,9 @@ def _physics(
         physics_usable=physics_usable,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
+        # Where the air leaves the heat pump's range, on the readings
+        # themselves, not the grid.
+        air_readings=_air_readings(environment),
     )
 
 
@@ -710,6 +727,43 @@ UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
 )
 
 
+def _out_of_range(
+    params: HeaterParams, airs: Sequence[float], lower_f: float
+) -> bool:
+    """Whether the heat pump is outside its operating range at any of
+    ``airs`` with the lower zone at ``lower_f``
+    (``ControllerParams.hp_air_range_f``, ``hp_water_range_f``)."""
+    a_lo, a_hi = params.controller.hp_air_range_f
+    w_lo, w_hi = params.controller.hp_water_range_f
+    return any(not a_lo <= a < a_hi for a in airs) or not (
+        w_lo <= lower_f < w_hi
+    )
+
+
+def _range_reasons(
+    params: HeaterParams,
+    airs: Sequence[float],
+    lower_f: float,
+    stop_f: float,
+) -> list[str]:
+    """What a heat-pump answer at ``airs`` and ``lower_f`` says of the
+    heat pump's range: ``heat_pump_unavailable`` outside its operating
+    range, where the heater heats with its elements and no heat-pump
+    recovery runs, or with the recovery's stop (``stop_f``, its target
+    and run-on) over its top, which the elements finish;
+    ``heat_map_out_of_domain`` with the air outside the span its heat
+    was fitted on."""
+    out: list[str] = []
+    if (
+        _out_of_range(params, airs, lower_f)
+        or stop_f > params.controller.hp_water_range_f[1]
+    ):
+        out.append(HEAT_PUMP_UNAVAILABLE)
+    if any(heat_air_outside(params.compressor, a) for a in airs):
+        out.append(HEAT_MAP_OUT_OF_DOMAIN)
+    return out
+
+
 def _unfitted(params: HeaterParams, *terms: str) -> list[str]:
     """The reasons for those of ``terms`` the parameters did not fit."""
     return [UNFITTED_REASONS[t] for t in params.unfitted if t in terms]
@@ -1046,15 +1100,11 @@ def _instant(at: datetime) -> datetime:
 def _ambient_at(environment: Environment, at: datetime) -> float:
     """The air at the heater at ``at``, °F, from ``environment``."""
     a = environment.ambient_f
-    if not isinstance(a, tuple):
+    readings = _air_readings(environment)
+    if readings is None:
+        assert not isinstance(a, tuple)
         return float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F
-    sampler = AmbientSampler(
-        pd.DataFrame(
-            {"ambient_f": [v for _, v in a]},
-            index=pd.DatetimeIndex([t for t, _ in a]),
-        )
-    )
-    return sampler.at(at)
+    return AmbientSampler(readings).at(at)
 
 
 def _scheduled(
@@ -1132,7 +1182,7 @@ def next_recovery(
     start; the recovery's heat into the book is the book's compressor
     term by the air now."""
     s = scenario
-    _, disabled = _engine_mode(s.settings.mode)
+    mode, disabled = _engine_mode(s.settings.mode)
     if disabled:
         return Recovery("not_scheduled")
     now = s.start
@@ -1172,6 +1222,19 @@ def next_recovery(
             upper, lower = state
             coast_btu, coast_gal = _coast_loss(
                 s.model_copy(update={"loads": loads}), params, start, air
+            )
+        if mode != "electric" and _out_of_range(
+            params, [_ambient_at(s.environment, start)], lower
+        ):
+            # No heat-pump recovery runs: the elements heat the tank,
+            # from the heater's own start.
+            return Recovery(
+                "unavailable",
+                [(start, upper, lower)],
+                start_minute=(start - now).total_seconds() / 60.0,
+                coast_btu=coast_btu,
+                coast_draw_gal=coast_gal,
+                hp_unavailable=True,
             )
         starting = HeaterState(
             upper_f=upper,
@@ -1486,6 +1549,19 @@ def time_to_ready(
             *answer["reasons"],
             *_unfitted(params, "book", "readiness"),
             *_ambient_reasons(s.environment),
+            *(
+                [HEAT_PUMP_UNAVAILABLE]
+                if nxt.hp_unavailable
+                # A heat-pump recovery past the range's top, which the
+                # elements finish (a capped one stops short of it).
+                or (
+                    nxt.outcome == "ok"
+                    and bool(nxt.points)
+                    and nxt.points[-1][2]
+                    > params.controller.hp_water_range_f[1]
+                )
+                else []
+            ),
         ]
     )
     if nxt.outcome == "ok":
@@ -1830,6 +1906,15 @@ def forecast(
             _unique(
                 [
                     *served.reasons,
+                    *_range_reasons(
+                        params,
+                        [
+                            served.context.t_amb_start,
+                            served.context.t_amb_mean,
+                        ],
+                        lower_s,
+                        stop,
+                    ),
                     *_unfitted(params, "compressor", "power", "standby"),
                     *(_unfitted(params, "draw") if loads.draws else []),
                     *_ambient_reasons(environment),
@@ -1935,6 +2020,7 @@ def active_cycle(
             _unique(
                 [
                     *reasons,
+                    *_range_reasons(params, [air], state.lower_f, stop),
                     *_unfitted(params, "compressor", "standby"),
                     *_ambient_reasons(environment),
                 ]
