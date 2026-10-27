@@ -309,10 +309,13 @@ def _judge(
     *,
     refit_exists: bool = True,
     needed: int = 0,
+    n_all: int = 0,
 ) -> Judged:
     """Which of base and refit ``group`` keeps: the refit only when it
     scores better on the ``n_held`` latest ``what`` held out of it. No
-    refit (fewer than ``needed`` ``what`` to make one) keeps the base."""
+    refit (fewer than ``needed`` ``what`` to make one) keeps the base.
+    ``n_all``: every ``what`` there was, which says why none was held
+    out when there were enough (they were one compressor run's)."""
     if not refit_exists:
         return Judged(
             group,
@@ -323,15 +326,14 @@ def _judge(
             f"kept the base: too few {what} to refit on ({needed} needed)",
         )
     if not n_held:
-        return Judged(
-            group,
-            "base",
-            None,
-            None,
-            0,
-            f"kept the base: under {cal.MIN_RECOVERIES_FOR_SPLIT} {what} "
-            "to judge a refit by",
+        why = (
+            f"kept the base: its {n_all} {what} are one compressor run's, "
+            "none to hold out"
+            if n_all >= cal.MIN_RECOVERIES_FOR_SPLIT
+            else f"kept the base: under {cal.MIN_RECOVERIES_FOR_SPLIT} "
+            f"{what} to judge a refit by"
         )
+        return Judged(group, "base", None, None, 0, why)
     if refit is None or (base is not None and base <= refit):
         scores = (
             f"{base:.3g} against the refit's {refit:.3g}"
@@ -590,6 +592,7 @@ def _keep_better_heat_pump(
         error: Callable[[CompressorParams], float | None],
         candidate: CompressorParams,
         needed: int,
+        n_all: int,
     ) -> bool:
         """Whether ``group``'s refit plane is taken."""
         if fitted is None:
@@ -621,7 +624,9 @@ def _keep_better_heat_pump(
         if term in unfitted:
             unfitted.discard(term)
             return True
-        j = _judge(group, what, n_held, error(base), error(candidate))
+        j = _judge(
+            group, what, n_held, error(base), error(candidate), n_all=n_all
+        )
         judged.append(j)
         return j.kept == "refit"
 
@@ -634,6 +639,7 @@ def _keep_better_heat_pump(
         lambda c: hpf.heat_map_error(held_heat, c),
         hpf.with_planes(base, refit.heat, None),
         hpf.MIN_HEAT_STRETCHES,
+        len(found.heat),
     )
     heated = hpf.with_planes(base, refit.heat if take_heat else None, None)
     take_power = plane(
@@ -645,6 +651,7 @@ def _keep_better_heat_pump(
         lambda c: hpf.power_map_error(held_power, c),
         hpf.with_planes(heated, None, refit.power),
         hpf.MIN_POWER_BLOCKS,
+        len(found.power),
     )
     compressor = hpf.with_planes(
         heated, None, refit.power if take_power else None

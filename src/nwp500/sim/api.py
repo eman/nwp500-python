@@ -1118,8 +1118,11 @@ def next_recovery(
     (``standby``), under the scenario's draws (none when the draw terms
     are not calibrated), to the heater's own trigger within
     ``TRIGGER_HORIZON`` (``idle`` without one), and the recovery runs
-    from the tank there (``forecast``: to the heater's stop threshold),
-    with the TOU cap judged where it ends (``_tou_capped``).
+    from the tank there (``forecast``: to the heater's stop threshold
+    and on past it by the run-on), with the TOU cap judged where it ends
+    (``_tou_capped``). A running compressor whose lower zone is already
+    at the threshold has nothing left here (``forecast`` asks when the
+    tank is ready); ``active_cycle`` gives its run-on.
     ``recovery`` serves its duration (``extensions.RecoveryModel``).
     ``not_scheduled`` while heating is disabled; ``unavailable`` when
     it cannot be computed.

@@ -1247,9 +1247,14 @@ class TestKeepBetterTheHeatPump:
         fit, held = sc._split_frame(rows, True)
         assert len(held) == 10 and set(held["cycle"]) == {6, 7}
         assert set(fit["cycle"]).isdisjoint(held["cycle"])
-        # One run alone is never held out whole.
+        # One run alone is never held out whole, and says so.
         one = pd.DataFrame({"cycle": [3] * 40})
         assert sc._split_frame(one, True)[1].empty
+        j = sc._judge("heat_map", "recovery climbs", 0, 1.0, 2.0, n_all=40)
+        assert j.why == (
+            "kept the base: its 40 recovery climbs are one compressor "
+            "run's, none to hold out"
+        )
 
     def test_each_plane_is_checked_with_the_other_it_is_applied_with(
         self,
