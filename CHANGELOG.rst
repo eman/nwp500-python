@@ -13,16 +13,18 @@ Added
   (``ControllerParams.hp_air_range_f``, ``hp_water_range_f``, from the
   user's manual). Outside them a running compressor stops and the
   elements heat the tank by Electric's rule; back inside, a recovery the
-  elements were carrying returns to the heat pump. A recovery stops at
-  149 °F, and the elements finish a setpoint above it. ``forecast``,
-  ``active_cycle`` and ``time_to_ready`` say ``heat_pump_unavailable``;
-  ``next_recovery`` is ``unavailable`` (``Recovery.hp_unavailable``), and
-  ``time_to_ready`` projects every mode as Electric. A walk that relied
-  on the elements' takeover says ``envelope_fallback_unverified``, since
-  none is on the record. A recovery with its air outside the span its
-  heat was fitted on says ``heat_map_out_of_domain``.
-  ``AmbientSampler.outside`` finds the air's spans outside a range, and
-  the air the walk reads keeps every reading's own instant. See
+  elements were carrying returns to the heat pump when it has room to
+  heat. A recovery stops at 149 °F, and the elements finish a setpoint
+  above it. ``forecast``, ``active_cycle`` and ``time_to_ready`` say
+  ``heat_pump_unavailable``; ``next_recovery`` is ``unavailable``
+  (``Recovery.hp_unavailable``), and ``time_to_ready`` projects every
+  mode as Electric, Heat Pump mode from the heater's own trigger. A walk
+  that relied on the elements' takeover says
+  ``envelope_fallback_unverified``, since none is on the record. A
+  recovery with its air outside the span its heat was fitted on says
+  ``heat_map_out_of_domain``. ``AmbientSampler.outside`` finds the air's
+  spans outside a range, on the readings given
+  (``TankPhysics(air_readings=...)``). See
   :doc:`/explanation/simulator-methodology`.
 
 - **``nwp500.sim_score``: parameters scored on recorded events they

@@ -434,6 +434,7 @@ def _mode_state(
     ep: ElementParams,
     recovery: Recovery | None = None,
     top: float | None = None,
+    delay: float = 0.0,
 ) -> tuple[float, float, float, Added] | None:
     """Tank state, input energy (Wh) and what has been added to the
     booked state ``t`` minutes into ``mode``.
@@ -452,6 +453,8 @@ def _mode_state(
     None when the mode cannot be projected here.
     """
     coast = _coast_share(t, recovery) if recovery is not None else NOTHING_ADDED
+    # Heating starts ``delay`` minutes in; the coast runs until then.
+    t = max(0.0, t - delay)
     if mode == "heat_pump":
         if hp is None:
             return None
@@ -534,8 +537,15 @@ def _by_mode(
         upper_min = None
         top: float | None = None
         end = horizon
-        # Outside the heat pump's range every mode heats as Electric.
+        # Outside the heat pump's range every mode heats as Electric: a
+        # write to an element mode at once, Heat Pump from the heater's
+        # own start.
         heats: HeaterMode = "electric" if recovery.hp_unavailable else mode
+        delay = (
+            recovery.start_minute
+            if recovery.hp_unavailable and mode == "heat_pump"
+            else 0.0
+        )
         if heats != "heat_pump" and setpoint is not None:
             device: ElementMode = DEVICE_MODE[heats]  # type: ignore[assignment]
             rec = mode_recovery(
@@ -553,7 +563,7 @@ def _by_mode(
             # The element model's own caveats.
             row["reasons"] = list(rec.confidence_reasons)
             if heats == "electric":
-                end = rec.full_minutes or 0.0
+                end = delay + (rec.full_minutes or 0.0)
             else:
                 end = max(horizon, rec.upper_end_minutes or 0.0)
         # The grid, and always the projection's own end: a recovery that
@@ -562,7 +572,16 @@ def _by_mode(
         steps = int(end // _GRID_MIN) + 1
         for t in [k * _GRID_MIN for k in range(steps)] + [end]:
             state = _mode_state(
-                heats, t, tank, hp, setpoint, upper_min, ep, recovery, top
+                heats,
+                t,
+                tank,
+                hp,
+                setpoint,
+                upper_min,
+                ep,
+                recovery,
+                top,
+                delay,
             )
             if state is None:
                 break

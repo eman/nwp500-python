@@ -256,6 +256,7 @@ class TankPhysics:
         physics_usable: bool | None = None,
         recovery_model: RecoveryModel | None = None,
         low_confidence_floor: float = 0.0,
+        air_readings: pd.DataFrame | None = None,
     ) -> None:
         self.params = params
         #: The inlet a draw is priced at; None given: the parameters'
@@ -273,6 +274,11 @@ class TankPhysics:
         self.low_confidence_floor = low_confidence_floor
         self.series = t_amb_series
         self.ambient = AmbientSampler(t_amb_series)
+        #: The readings the air comes from, for where it leaves the
+        #: heat pump's range (``air_outside``); None: the series.
+        self.air_readings = (
+            None if air_readings is None else AmbientSampler(air_readings)
+        )
         self.humidity = humidity
         self.draws_on = draws_on
         #: Recoveries served whose integration hit its bound.
@@ -491,8 +497,11 @@ class TankPhysics:
     ) -> list[tuple[datetime, datetime]]:
         """The spans of ``[start, end)`` with the air at the heater below
         ``low`` or at ``high`` and above (``AmbientSampler.outside``):
-        where the heat pump is outside its operating range."""
-        return self.ambient.outside(start, end, low, high)
+        where the heat pump is outside its operating range. On the
+        readings the air comes from when given, so a dip shorter than the
+        series' grid is seen."""
+        air = self.ambient if self.air_readings is None else self.air_readings
+        return air.outside(start, end, low, high)
 
     def draw(
         self, at: datetime, upper_f: float, lower_f: float, gal: float

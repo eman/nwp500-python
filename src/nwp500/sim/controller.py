@@ -840,6 +840,14 @@ def _start_compressor(
     if not s.state.hp_available:
         _fallback(s, start)
         return
+    e = s.state.element
+    if e.running and (
+        s.mode not in ELEMENT_MODES
+        or (e.zone == "lower" and s.mode != ELECTRIC)
+    ):
+        # An element heating in the heat pump's place, which this mode
+        # would not run: the heat pump takes the recovery back.
+        _stop_element(s, "mode")
     c = s.state.compressor
     if hold is None:
         hold = 0.0
@@ -990,6 +998,10 @@ def _start_element(
     known, and is taken to be past it, with a whole dead time's heat in
     transit, when it is not. A zone already at its off point stops it at
     once (``_check_element``)."""
+    if not s.state.hp_available and s.mode != ELECTRIC:
+        # Electric's rule in the heat pump's place (``heats_as``).
+        s.note(HEAT_PUMP_UNAVAILABLE)
+        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
     ep = s.settings.element
     dead = ep.upper_dead_time_min if zone == "upper" else 0.0
     on_edge = start.at
@@ -1312,8 +1324,6 @@ def _element_was_on(s: _Step, ev: ElementWasOn) -> None:
     if s.disabled or s.heats_as not in ELEMENT_MODES or s.state.element.running:
         return
     zone: Zone = "upper" if s.upper < s.sp - ELEMENT_DONE_F else "lower"
-    if not s.state.hp_available and s.mode != ELECTRIC:
-        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
     _start_element(
         s, Start(s.at, "running", source="element"), zone, since=ev.since
     )
@@ -1531,8 +1541,6 @@ def _fallback(s: _Step, start: Start) -> None:
     if start.cause == "running":
         start = Start(s.at, "heater", trigger="heat_pump_unavailable")
     _element_entry(s, replace(start, source="element"))
-    if s.state.element.running:
-        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
 
 
 def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
@@ -1543,15 +1551,16 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
     Electric's off point. Back in it with an element still heating, the
     recovery returns to the heat pump (3.13.4: "until the problematic
     heat source returns to normal") when the compressor starts as it
-    does out of Electric (``_mode_write_starts``): it starts at once,
-    and the element its mode would not run stops (Electric's lower
-    element; in Heat Pump mode, either). Without one heating, nothing
-    starts: the heater's own triggers decide. The record shows none of
-    it."""
+    does out of Electric (``_mode_write_starts``) with room to heat
+    before its top: it starts at once, and the element its mode would
+    not run stops (``_start_compressor``). With less left, the elements
+    finish the recovery as Electric, and the heat pump is back once
+    they stop. Without one heating, nothing starts: the heater's own
+    triggers decide. The record shows none of it."""
     if ev.available == s.state.hp_available:
         return
-    s.state = replace(s.state, hp_available=ev.available)
     if not ev.available:
+        s.state = replace(s.state, hp_available=False)
         if s.state.compressor.running:
             _stop_compressor(s, "envelope")
             _fallback(s, Start(s.at, "heater", trigger="heat_pump_unavailable"))
@@ -1561,24 +1570,25 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
             _check_element(s)
         return
     e = s.state.element
-    if (
-        not e.running
-        or s.disabled
-        or s.mode not in COMPRESSOR_MODES
-        or s.state.compressor.running
-        or s.state.compressor.pending is not None
+    eligible = (
+        e.running
+        and not s.disabled
+        and s.mode in COMPRESSOR_MODES
+        and not s.state.compressor.running
+        and s.state.compressor.pending is None
+    )
+    if eligible and not (
+        _mode_write_starts(s, s.mode, ELECTRIC)
+        and s.lower
+        <= s.params.hp_water_range_f[1] - s.params.mode_write_lower_starts_f
     ):
+        # Too little left for the heat pump: the elements finish it.
+        return
+    s.state = replace(s.state, hp_available=True)
+    if not eligible:
         if e.running:
             _check_element(s)
         return
-    if not _mode_write_starts(s, s.mode, ELECTRIC):
-        # Too little left for the heat pump: the element finishes it.
-        _check_element(s)
-        return
-    if s.mode not in ELEMENT_MODES or e.zone == "lower":
-        _stop_element(s, "mode")
-    else:
-        _check_element(s)
     s.note(ENVELOPE_FALLBACK_UNVERIFIED)
     start = Start(
         not_before(s.state, s.params, s.at),
@@ -1588,6 +1598,8 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
     if start.at <= s.at:
         _start_compressor(s, start)
     else:
+        # The element heats on until it starts (``_start_compressor``).
+        _check_element(s)
         s.pend(start)
 
 

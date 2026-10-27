@@ -330,3 +330,184 @@ class TestTheAnswers:
         by_mode = {m.mode: m.ready_in_minutes for m in ready.bath.by_mode}
         assert by_mode["electric"] is not None
         assert set(by_mode.values()) == {by_mode["electric"]}
+
+
+class TestAtTheEdges:
+    """What lands at, or across, an edge of the range."""
+
+    @pytest.mark.parametrize("mode", [1, 3, 4])
+    def test_a_pending_start_takes_the_recovery_back(self, mode: int) -> None:
+        # A setpoint write pends a start; the air returns before it.
+        back = at(0) + timedelta(minutes=10, seconds=15)
+        air = ((at(0), 30.0), (back, 30.0), (back + timedelta(seconds=2), 50.0))
+        r = _run(
+            air,
+            upper=139.8,
+            lower=95.0,
+            mode=mode,
+            hours=3,
+            commands=sim.Commands(
+                writes=(
+                    sim.Write(
+                        at=at(0) + timedelta(minutes=10), setpoint_f=145.0
+                    ),
+                )
+            ),
+        )
+        lower = [h for h in r.heating if h.zone == "lower"]
+        hp = [h for h in r.heating if h.source == "compressor"]
+        assert lower and hp
+        assert all(e.end <= c.start.at for e in lower for c in hp)
+
+    def test_the_air_leaving_as_the_lockout_ends(self) -> None:
+        # The air leaves at the instant the lockout ends: the elements
+        # take the start, with no compressor run of no length.
+        out = at(0) + timedelta(minutes=4, seconds=30)
+        back = out + timedelta(minutes=2)
+        air = (
+            (at(0), 50.0),
+            (out, 41.0),
+            (out + timedelta(seconds=1), 35.0),
+            (back - timedelta(seconds=1), 35.0),
+            (back, 41.0),
+            (back + timedelta(seconds=1), 50.0),
+        )
+        r = _run(
+            air,
+            upper=120.0,
+            lower=95.0,
+            hours=3,
+            history=sim.History(compressor_stopped_at=at(-1 / 60)),
+        )
+        assert all(h.end > h.start.at for h in r.heating)
+        assert r.heating[0].source == "element"
+        assert r.heating[1].source == "compressor"
+        assert r.heating[1].start.at == back
+
+    def test_a_draw_at_the_trigger_is_read_first(self) -> None:
+        # The draw leaves the upper zone short: Electric's rule starts
+        # the upper element first.
+        r = _run(
+            30.0,
+            upper=140.6,
+            lower=140.0,
+            hours=3,
+            loads=sim.Loads(
+                draws=(sim.Draw(at=at(1) + timedelta(minutes=3), gallons=40.0),)
+            ),
+        )
+        assert [h.zone for h in r.heating[:2]] == ["upper", "lower"]
+
+    @pytest.mark.parametrize(
+        ("mode", "write"),
+        [(2, sim.Write(at=at(1), mode=1)), (1, sim.Write(at=at(1), mode=3))],
+    )
+    def test_a_write_out_of_range_says_so(
+        self, mode: int, write: sim.Write
+    ) -> None:
+        r = _run(
+            30.0,
+            upper=139.5,
+            lower=139.5,
+            mode=mode,
+            hours=3,
+            commands=sim.Commands(writes=(write,)),
+        )
+        assert r.heating and r.heating[0].source == "element"
+        assert ctl.ENVELOPE_FALLBACK_UNVERIFIED in r.reasons
+
+    def test_a_draw_from_the_top_hands_back(self) -> None:
+        # Over 149 °F the elements heat; a draw takes the tank back into
+        # range with plenty to do, and the heat pump does it.
+        r = _run(
+            65.0,
+            upper=149.9,
+            lower=149.3,
+            setpoint=149.9,
+            on=149.5,
+            hours=3,
+            loads=sim.Loads(
+                draws=(
+                    sim.Draw(at=at(0) + timedelta(seconds=20), gallons=30.0),
+                )
+            ),
+        )
+        assert [h.source for h in r.heating] == ["compressor"]
+        assert all(h.end > h.start.at for h in r.heating)
+
+    def test_a_step_at_one_instant(self) -> None:
+        step = at(0.5)
+        air = ((at(0), 50.0), (step, 50.0), (step, 30.0), (at(2), 30.0))
+        r = _run(air, upper=120.0, lower=100.0, hours=3)
+        first = r.heating[0]
+        assert (first.source, first.stop) == ("compressor", "envelope")
+        assert first.end == step
+
+    def test_more_readings_on_the_same_line_change_nothing(self) -> None:
+        def line(t: datetime) -> float:
+            return 62.0 + 26.0 * (t - T0).total_seconds() / (4 * 3600)
+
+        two = ((at(0), 62.0), (at(4), 88.0))
+        dense = tuple(
+            sorted(
+                {
+                    *two,
+                    *(
+                        (
+                            at(0) + timedelta(seconds=10 * k),
+                            line(at(0) + timedelta(seconds=10 * k)),
+                        )
+                        for k in range(1, 120)
+                    ),
+                }
+            )
+        )
+        a, b = (
+            _run(air, upper=130.0, lower=110.0, on=125.0, hours=5)
+            for air in (two, dense)
+        )
+        assert [(h.end, h.input_wh) for h in a.heating] == [
+            (h.end, h.input_wh) for h in b.heating
+        ]
+
+
+class TestTheAnswersAtTheEdges:
+    SETTINGS = sim.Settings(
+        setpoint_f=140.0, hp_lower_off_f=140.0, hp_lower_on_f=95.0
+    )
+
+    def test_the_heat_pump_mode_waits_for_its_trigger(self) -> None:
+        s = sim.Scenario(
+            start=T0,
+            horizon=timedelta(hours=12),
+            tz="UTC",
+            state=sim.HeaterState(upper_f=112.0, lower_f=100.0),
+            settings=self.SETTINGS,
+            history=sim.History(compressor_stopped_at=at(-3)),
+            environment=sim.Environment(ambient_f=30.0),
+        )
+        params = sim.site_example_params()
+        nxt = sim.next_recovery(s, params)
+        assert nxt.hp_unavailable and nxt.start_minute > 60.0
+        ready = sim.time_to_ready(s, params, bath_gal=30.0)
+        by_mode = {m.mode: m.ready_in_minutes for m in ready.bath.by_mode}
+        assert by_mode["heat_pump"] is not None
+        assert by_mode["electric"] is not None
+        # The elements in Heat Pump mode start at the heater's trigger;
+        # a write to an element mode starts them now.
+        assert by_mode["heat_pump"] >= nxt.start_minute
+        assert by_mode["electric"] < nxt.start_minute
+
+    def test_a_target_over_the_top(self) -> None:
+        a = sim.active_cycle(
+            sim.HeaterState(
+                upper_f=125.0, lower_f=120.0, compressor_running=True
+            ),
+            sim.Settings(
+                setpoint_f=149.9, hp_lower_off_f=149.9, hp_lower_on_f=105.0
+            ),
+            sim.Environment(ambient_f=65.0),
+            sim.site_example_params(),
+            at=T0,
+        )
+        assert ctl.HEAT_PUMP_UNAVAILABLE in a.reasons

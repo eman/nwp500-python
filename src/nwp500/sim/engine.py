@@ -576,8 +576,12 @@ class _Engine:
             else outside(start, until, *self.params.hp_air_range_f)
         )
         available = self._available(start)
-        #: The air inside the heat pump's range at the last check.
-        self._air_in = not any(a <= start < b for a, b in self.air_out)
+        #: At the last check the heat pump was out of range by a tank
+        #: below its water range alone.
+        self._cold = (
+            not any(a <= start < b for a, b in self.air_out)
+            and lower_f < self.params.hp_water_range_f[0]
+        )
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -703,17 +707,20 @@ class _Engine:
         its operating range (``controller.HeatPumpAvailability``);
         whether it has left it here."""
         available = self._available(self.t)
-        air_in = not any(a <= self.t < b for a, b in self.air_out)
         if (
             available
             and not self.state.hp_available
+            and self._cold
             and self.element is not None
-            and self._air_in
         ):
-            # The water came back into range under an element: it runs
-            # to its off point first.
+            # The water came up past the range's bottom under an element:
+            # it runs to its off point first.
             available = False
-        self._air_in = air_in
+        else:
+            self._cold = (
+                not any(a <= self.t < b for a, b in self.air_out)
+                and self.lower < self.params.hp_water_range_f[0]
+            )
         if available != self.state.hp_available:
             self._dispatch(
                 ctl.HeatPumpAvailability(
@@ -1355,6 +1362,9 @@ class _Engine:
         """At every boundary the running element's zone is read: at its
         off point it stops, otherwise it runs on (``_element_end``)."""
         if self.element is not None:
+            # An element ending as the heat pump returns hands over to it.
+            self._check_availability()
+        if self.element is not None:
             self._dispatch(ctl.ElementCheck(at=self.t, tank=self._tank()))
 
     def _element_end(self, off: float) -> None:
@@ -1428,7 +1438,8 @@ class _Engine:
         steps = 0
         while self.t < self.until:
             steps += 1
-            if steps > _MAX_STEPS:
+            # Each edge of the air's range is a step or two of its own.
+            if steps > _MAX_STEPS + 4 * len(self.air_out):
                 raise SimulationError("the walk did not advance")
             self._check_availability()
             self._element_trigger()
@@ -1571,6 +1582,14 @@ class _Engine:
         if at is not None and at < end:
             assert own is not None
             self._coast_to(at)
+            if not self.state.hp_available and any(
+                d[0] <= at for d in self.draws
+            ):
+                # The elements answer from the tank a draw landing here
+                # leaves (``controller.electric_entry``), which may be
+                # back in the heat pump's range.
+                self._coast_draw()
+                self._check_availability()
             self._dispatch(
                 ctl.HeaterTrigger(at=at, tank=self._tank(), trigger=own.trigger)
             )
@@ -1879,6 +1898,10 @@ class _Engine:
         self.t = at
 
     def _at_event(self, at: datetime) -> None:
+        # The heat pump's range first: whatever lands at the instant it
+        # leaves or re-enters it is answered by the heater as it is now.
+        if at < self.until:
+            self._check_availability()
         pending = self.state.compressor.pending
         if pending is not None and pending.at == at and at < self.until:
             self._dispatch(ctl.StartDue(at=at, tank=self._tank()))
