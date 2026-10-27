@@ -189,70 +189,43 @@ recovery uses its mean over the recovery's span (below).
 A heat-pump recovery
 ====================
 
-**The cycle.** The heat pump is modelled as an R-134a vapour
-compression cycle, integrated on the lower zone in 10-second steps:
-
-1. The evaporator sits below the intake air by a measured approach,
-   moving 0.6 degF per degF of air (the coil's own reading on the
-   record).
-2. The refrigerant's saturation pressure, vapour density and
-   enthalpies at the evaporator and the condenser come from a table of
-   CoolProp's equation of state, every 5 degF.
-3. The condenser sits a fixed approach above the lower zone.
-4. The compressor moves ``compressor_constant`` cubic feet of vapour a
-   second, less what the clearance volume costs at the pressure ratio;
-   that times the vapour's density is the refrigerant's mass flow.
-5. Polytropic compression gives the work per pound; the heat into the
-   tank is the mass flow times the enthalpy the condenser rejects, plus
-   the latent heat of the humid air's water condensing on the coil when
-   the coil is below the air's dew point.
-6. The standby loss and the bottom loss are taken off, and the lower
-   zone rises by the net heat over the zone's mass.
-
-In symbols, with :math:`K` the compressor constant, :math:`n` the
-polytropic exponent, :math:`c` the clearance ratio, :math:`a` the
-evaporator's approach at 65 degF air and :math:`s` its slope:
+**The map.** The heat pump is modelled by what it does, not by its
+refrigerant: the heat it puts into the tank :math:`\dot Q_h` and the
+electricity it draws :math:`P`, each a plane in the air at the heater
+:math:`T_a` and the lower tank's water :math:`T_L`, quoted at 65 degF
+air and 120 degF water (``physics.heat_pump``):
 
 .. math::
 
-   T_e = T_a - a - (1 - s)(T_a - 65), \qquad
-   T_c = T_L + \Delta T_{\text{cond}}, \qquad
-   r_p = \frac{P_{\text{sat}}(T_c)}{P_{\text{sat}}(T_e)}
+   \dot Q_h = Q_0 + q_a\,(T_a - 65) + q_w\,(T_L - 120), \qquad
+   P = P_0 + p_a\,(T_a - 65) + p_w\,(T_L - 120)
+
+Both are read with the air and the water held to the map's domain
+(48 to 89 degF air, 70 to 150 degF water: what the record covers), so a
+forecast outside it takes the nearest edge rather than extrapolating.
+The COP is :math:`\dot Q_h / 3.412 P`, and the heat taken from the air
+is :math:`\dot Q_h - 3.412 P`: what the condenser gives is what the
+evaporator takes plus the electricity, by construction. A fitted map
+must claim nowhere over its domain a COP above 0.6 of Carnot's between
+the air and the water, heat given to the air, or under 50 W; one that
+does is not applied.
+
+**The climb.** The lower zone is integrated in 10-second steps, heated
+by the map at the air and the lower zone, less the standby loss and the
+bottom loss:
 
 .. math::
 
-   \eta_v = 1 - c\left(r_p^{1/n} - 1\right), \qquad
-   \dot m = K\,\rho_g(T_e)\,\eta_v, \qquad
-   w = \frac{144}{778.16}\,\frac{n}{n-1}\,
-   \frac{P_{\text{sat}}(T_e)}{\rho_g(T_e)}
-   \left(r_p^{(n-1)/n} - 1\right)
-
-.. math::
-
-   \dot Q_h = \dot m \left(h_g(T_e) + w - h_f(T_c)\right)
-   + \dot Q_{\text{lat}}
-
-.. math::
-
-   m_z \frac{dT_L}{dt} = \dot Q_h
-   - \frac{UA(\Delta T)\,\Delta T
-   + Q_b\left(1 - e^{-g/g_b}\right)}{3600}, \qquad
+   m_z \frac{dT_L}{dt} = \frac{\dot Q_h(T_a, T_L)
+   - UA(\Delta T)\,\Delta T
+   - Q_b\left(1 - e^{-g/g_b}\right)}{3600}, \qquad
    m_z = \begin{cases} m/2 & g > 0 \\ m & g = 0 \end{cases}
 
-Pressures are in psia and the gas density in lb/ft³, so
-:math:`144/778.16` turns the work into BTU/lb; the heat flows are per
-second, and the losses, quoted per hour, are divided by 3600.
-While :math:`g > 0` the gap closes by what the lower zone gains, so the
-upper zone holds. :math:`\dot Q_{\text{lat}}` is the latent heat of
-the fan's air cooled to the coil, nonzero only when :math:`T_e` is
-below the air's dew point.
-
-It stops when the lower zone reaches the target (``hp_lower_off``), or
-after 30 hours, reported as truncated. ``compressor_constant`` is the
-one term fitted on durations. The evaporator's approach and slope are
-the coil's own reading; the condenser approach, the clearance, the
-exponent and the fan's airflow are engineering values the record cannot
-separate from it (:doc:`/reference/simulator-inputs`).
+with the heat flows per hour. A step in which the gap closes takes the
+lower zone's mass up to the closure and the whole tank's after it. The
+electricity is :math:`\int P\,dt` over the same steps. The climb stops
+when the lower zone reaches the target (``hp_lower_off``) plus the
+run-on below, or after 30 hours, reported as truncated.
 
 **Two zones in a recovery.** The condenser coil wraps the lower part of
 the tank. While there is a gap, the heat goes into the lower zone's
@@ -267,29 +240,27 @@ mean air over the first answer's span, and keeps the second.
 duration moves 2 minutes or less.
 
 **The start's hold.** After a start the compressor runs some minutes
-before the lower zone climbs. A caller with a ``RecoveryModel`` can pass
-``start_hold``, that hold by how long the compressor was off: the model
-is asked with it, serves a duration that includes it, and the path
-stays flat for it. With the physics alone there is no hold, since the
-fitted durations already include it.
+before the lower zone climbs, while the refrigerant circuit and the
+condenser warm. The hold is ``CompressorParams.start_hold_min``, a
+value for each band of time the compressor was off (under 15, 60, 180
+and 720 minutes, and beyond): 0, 5, 10, 18 and 22 minutes on the
+record (:doc:`recovery-speed`). The tank holds as it started through
+it, drawing the map's power there, and the climb follows. A caller may
+pass its own ``start_hold`` by time off, or ``running_hold`` for a
+compressor already running.
 
-**Power and efficiency.** The cycle's own compression work
-:math:`W = \int \dot m\, w\, dt`, times a fitted ``power_scale``, is
-the electricity. When a ``RecoveryModel`` serves a different duration,
-the work is stretched to the served climb at the same power, and a
-start's hold draws the path's starting power, so a recovery that takes
-longer uses more energy. The efficiency is fitted apart from it, on the heat
-stored :math:`Q` (the tank's mass times the rise of its mean, net of
-the standby loss) over the same unscaled work:
+**The run-on.** The heat pump does not stop the moment the lower zone
+reaches its target: on the record it stops a median 0.9 degF past it
+(``ControllerParams.hp_stop_overshoot_f``). The climb is integrated to
+the target plus that overshoot. The upper zone's cap in a TOU window
+is still judged at the target.
 
-.. math::
-
-   \text{COP} = s_{\text{cop}}\, \frac{Q}{W}\,
-   e^{-\gamma\,(\bar T - T_a - 62)}
-
-with ``cop_scale`` :math:`s_{\text{cop}}` and the lift term
-:math:`\gamma` fitted. Start-up energy is recorded once per start.
-:doc:`recovery-speed` has the measurements.
+**Power and efficiency.** The electricity is the map's, so a COP is the
+map's heat over its electricity over the same climb; neither is scaled.
+When a ``RecoveryModel`` serves a different duration, the climb's
+electricity is stretched to the served climb at the same power, so a
+recovery that takes longer uses more energy. :doc:`recovery-speed` has
+the measurements.
 
 **A learned duration.** A ``RecoveryModel`` (``sim.extensions``) may
 replace the physics' duration with one learned from a heater's own
@@ -514,18 +485,27 @@ of 2 degF or more, by a bounded search. The bottom loss opens the gaps
 the constant closes, so the two fits alternate until the constant moves
 0.5 % or less.
 
-**The compressor.** Recoveries that reached their target, with no
-element in them. A recovery whose energy-to-setpoint count is still
-above 500 Wh at its end was cut short and is left out. ``compressor_constant`` is the value whose
-predicted durations best match the recorded ones (a bounded search on
-the squared error). A fit pinned on a bound is reported, not applied.
+**The heat pump** (``sim.heat_pump_fit``). Each compressor run is put
+on a one-minute grid and split into its hold, its climb and its
+run-on, and four measures are read from the draw-free ones:
 
-**Power and efficiency.** On the compressor cycles' metered energy:
-``power_scale`` is the ratio of metered to modelled energy; ``cop_scale``
-and the start-up energy come from a weighted linear fit; the lift term
-from a grid search. The efficiency uses only cycles with no water in
-use around them. ``sim.calibration.calibrate``, given a meter's draws
-and the circulation runs, prices that heat instead.
+- **the heat**, on stretches of 20 minutes or more of a climb with the
+  tank mixed (the probes within 5 degF below or 1 degF above each
+  other), as the tank's mass times the mean's rise plus the standby
+  and bottom loss. The heat's plane is a least-squares fit weighted by
+  each stretch's minutes, with 10 stretches or more;
+- **the power**, on 10-minute blocks of a climb's metered power,
+  stratified or not, at the air and the lower probe: a least-squares
+  plane with 30 blocks or more;
+- **the hold**, on clean starts (no water moving and the lower probe
+  at rest before them): the minutes until the lower probe stays 5
+  minutes above its reading from before the start. Each band's hold is
+  the median of 3 starts or more in it, the base's otherwise;
+- **the run-on**: the median of the lower probe's overshoot past the
+  target at the stop, with 5 runs or more.
+
+The planes are applied only when together they claim nothing no heat
+pump does (*The map*, above).
 
 **The installation's terms.** ``sim_calibrate.fit_book`` fits the heat
 book's terms on pairs of anchors (the heat booked between two full-tank moments against the
@@ -534,15 +514,13 @@ tell apart from the others stays at the base. The circulation's terms,
 the draw response and the readiness evidence have fits of their own
 (:doc:`/how-to/simulate-heater`).
 
-**Held out, in time order.** The compressor fit holds out the latest
-fifth of its recoveries (with 10 or more) and reports the error there
-as well as on what it was fitted on. The heat book's fit needs 10
+**Held out, in time order.** The heat book's fit needs 10
 pairs, holds out the latest fifth, and replaces the base only when it
 books those no worse. With ``keep_better``, the standby loss, the gap's
-constant, the compressor, the power scale and the efficiency are each
-refitted on their earlier four fifths, and a refit replaces the base's
-value only where it scores better on the latest fifth; with fewer than
-10 items the base is kept. A group the base lists as unfitted takes its
+constant, the heat's map, the power's map, the start's hold and the
+run-on are each refitted on their earlier four fifths, and a refit
+replaces the base's value only where it scores better on the latest
+fifth; with fewer than 10 items the base is kept. A group the base lists as unfitted takes its
 refit without that comparison, fitted on all its data.
 
 **Provenance.** Every parameter records whether it was ``measured`` on
@@ -625,12 +603,12 @@ The heater's readings
    * - The elements' running flags and the heat source
      - Whether an element is running and since when. A recovery with an
        element in it, or in the 10 minutes before it, is left out of the
-       compressor fit.
+       heat pump's fit.
    * - The heater's air reading
      - While the compressor runs, the air drawn over the coil. The heat
        book and the Home Assistant air fit use it from 5 minutes into a
-       run, once it has settled; the compressor fit takes its mean over
-       the run. From August to October it read within about 0.35 degF
+       run, once it has settled; the heat pump's fit reads it minute by
+       minute. From August to October it read within about 0.35 degF
        of a sensor beside the heater, up to about 2 degF warm from May
        to July. While it is idle, the
        cabinet's own warmth: about 6 degF warm, so 6.2 degF
@@ -639,13 +617,9 @@ The heater's readings
        unknown, it is not corrected. Without an air sensor, the standby
        fit uses the idle reading corrected the same way, and the
        recoveries the running one.
-   * - The evaporator coil's reading
-     - In ``active_cycle``, the running cycle's evaporator in place of
-       the model's own estimate. The measured approach (19.56 degF at
-       65 degF air) came from it.
    * - The heater's power reading
-     - The metered energy of each compressor cycle, which the power and
-       efficiency fits are made on.
+     - The metered power through each compressor run, which the power's
+       map is fitted on.
    * - The energy-to-setpoint count
      - In a record, a recovery whose count is still above 500 Wh at its
        end was cut short and is left out. In ``forecast``, a zero count
@@ -660,13 +634,14 @@ The heater's readings
    * - The mode, TOU switch and status flags
      - The mode in force and the TOU switch. A hybrid operating mode,
        an anti-legionella cycle or an error code keeps a recovery out of
-       the compressor and power fits. The "hot water in use" flag is the quiet test
+       the heat pump's fit. The "hot water in use" flag is the quiet test
        where no meter is given; it also fires on circulation.
 
 Readings the simulator does not use: the inlet temperature field (it
 reads 0, so the inlet is an input), the flow rate fields (the
 cumulative one reads 0 after a year in service), the discharge and
-suction temperatures, the fan speed, the expansion valve, the outdoor
+suction temperatures, the evaporator coil's reading, the fan speed, the
+expansion valve, the outdoor
 temperature field and the recirculation fields
 (:doc:`unknown-values`).
 
@@ -685,9 +660,9 @@ An installation's sensors
        Assistant, its readings count only over the span they cover. Without it: the heater's
        own reading as above, or 65 degF with ``ambient_defaulted``.
    * - Humidity of that air
-     - The coil's latent load, through the air's dew point. Without it:
-       50 %, named in ``defaults_used``. On the record it moves a
-       recovery's duration by a mean 1.2 min.
+     - Passed to a ``RecoveryModel``; the map does not use it, since on
+       the record it moved a recovery's heat by no more than the
+       probes resolve. Without it: 50 %, named in ``defaults_used``.
    * - A probe on the cold supply
      - Two uses. A recorded draw debits the heat book at the inlet
        reading of its own step. The mains, which turns the book's heat

@@ -57,9 +57,9 @@ def test_an_unknown_size_is_refused() -> None:
 
 def test_the_constants_say_where_they_came_from() -> None:
     p = default_params()
-    assert provenance_of(p.compressor, "compressor_constant") == FITTED
+    assert provenance_of(p.compressor, "heat_btu_h") == FITTED
     assert provenance_of(p.controller, "restart_lockout_s") == MEASURED
-    assert provenance_of(p.compressor, "polytropic_exp") == DEFAULT
+    assert provenance_of(p.compressor, "heat_btu_h_per_air_water_f") == DEFAULT
     assert p.controller.restart_lockout_s == 330.0
     assert p.controller.tou_cap_f == 3.6
 
@@ -67,11 +67,11 @@ def test_the_constants_say_where_they_came_from() -> None:
 def test_the_65_is_ready_to_simulate() -> None:
     p = default_params()
     assert p.tank.stratification_gap_tau_h is not None
-    assert p.compressor.compressor_constant > 0.0
+    assert p.compressor.heat_btu_h > 0.0 and p.compressor.power_w > 0.0
     assert p.loss.ua_btu_hr_f is not None
 
 
-#: A document a retrain wrote from a fitted model (heater-params/1),
+#: A document a retrain wrote from a fitted model (heater-params/2),
 #: byte for byte as it was written.
 FITTED_DOC = (
     Path(__file__).with_name("fixtures") / "sim" / "heater_params_fitted.json"
@@ -86,6 +86,9 @@ def test_a_fitted_document_reads_to_its_values_bit_for_bit() -> None:
             continue
         for name, value in values.items():
             got = getattr(getattr(p, part), name)
+            # A document holds a tuple as a list.
+            if isinstance(got, tuple):
+                got = list(got)  # pyright: ignore[reportUnknownArgumentType]
             assert got == value and repr(got) == repr(value), (part, name)
     assert unknown_fields(doc) == []
 
@@ -201,6 +204,6 @@ def test_each_parameter_says_what_it_describes(
 def test_the_fitted_frames_are_noted() -> None:
     p = default_params()
     assert "where the heater stands" in (note_of(p.loss, "ua_btu_hr_f") or "")
-    assert "recoveries" in (note_of(p.compressor, "compressor_constant") or "")
+    assert "climbs" in (note_of(p.compressor, "heat_btu_h") or "")
     assert "mixing valve" in (note_of(p.draw, "observability") or "")
     assert note_of(p.tank, "volume_gal") is None

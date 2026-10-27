@@ -759,13 +759,11 @@ recovery from there, and moves the start until the two agree:
 tank is already there; or ``not_scheduled`` in Vacation or Power Off.
 The target is the heater's own stop threshold
 (``hp_lower_off_temp_setting``); pass ``target_lower_f=`` for a
-partial charge. With a fitted COP, ``f.trajectory`` carries the
-electricity, the heat stored and the COP along the way, and
-``f.startup_energy_wh`` the cost of the compressor's start.
+partial charge. ``f.trajectory`` carries the electricity, the heat
+stored and the COP along the way, the start's hold included.
 
 While the compressor runs, ``sim.active_cycle`` says what is left of
-the recovery under way. Pass ``evaporator_f=sa.evaporator_f(status)``
-so its physics estimate uses the coil's live reading.
+the recovery under way.
 
 
 Check a shower or a bath

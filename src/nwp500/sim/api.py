@@ -56,7 +56,6 @@ from nwp500.sim.engine import (
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.extensions import HeatLedger, RecoveryModel
 from nwp500.sim.heat_pump_recovery import (
-    PHYSICS_TRUNCATED,
     PhysicsRecovery,
     RecoveryContext,
     physics_recovery,
@@ -79,13 +78,14 @@ from nwp500.sim.inputs import (
     Settings,
 )
 from nwp500.sim.params import TAU_GAP_PRIOR_H, HeaterParams
-from nwp500.sim.physics.compressor import MAX_MINUTES, predict_physics_detailed
+from nwp500.sim.physics.compressor import MAX_MINUTES
 from nwp500.sim.physics.element import (
     DEVICE_MODE,
     ElementMode,
     HeaterMode,
     mode_plan,
 )
+from nwp500.sim.physics.heat_pump import power_w, start_hold_min
 from nwp500.sim.ready import (
     Readiness,
     Recovery,
@@ -420,7 +420,8 @@ def simulate(
 
     - ``start_hold``: how long a compressor start holds before the lower
       zone climbs, minutes, by the minutes since the compressor last
-      stopped (None when not known); None holds none;
+      stopped (None when not known); None, the parameters' own
+      (``physics.heat_pump.start_hold_min``);
     - ``running_hold``: what is left at the start of a running
       compressor's own start's hold, minutes; ignored when it is not
       running;
@@ -432,12 +433,12 @@ def simulate(
       draw and inlet reasons (``draw_uncalibrated``,
       ``inlet_temp_modelled``);
     - ``physics_usable``: whether the physics duration may be served;
-      None, when the compressor is calibrated (a positive constant).
+      None, yes.
 
-    With no model, or one that declines, the served duration adds no
-    start hold and the lead draws are not read. The holds still mark
-    where the lower zone starts to climb, which placing a recovery again
-    after a draw counts from.
+    With no model, or one that declines, the served duration is the
+    start's hold and the physics' climb, and the lead draws are not
+    read. The holds also mark where the lower zone starts to climb,
+    which placing a recovery again after a draw counts from.
 
     ``book`` is the tank's booked heat at the start (``sim.book``): from
     the caller's own record, or ``book.full_tank_book`` when they know
@@ -582,12 +583,6 @@ def simulate(
         # A window's edges, so its onset and its end are read exactly
         # rather than across the coast's 10-minute grid.
         marks=[at for w in s.loads.windows for at in (w.start, w.end)],
-        # A start-up's energy is the COP fit's: without one, none.
-        startup_wh=(
-            params.power.startup_wh
-            if params.power.cop_scale is not None
-            else None
-        ),
         element_running=s.state.element_running,
         element_running_since=s.state.element_running_since,
         raw_writes=raw,
@@ -596,7 +591,11 @@ def simulate(
         ledger=ledger,
         controller=params.controller,
         withheld_windows=sorted(withheld_windows),
-        start_hold=start_hold,
+        start_hold=(
+            start_hold
+            if start_hold is not None
+            else lambda off: start_hold_min(params.compressor, off)
+        ),
         running_hold=running_hold,
         lead_draws=[(d.at, d.gallons) for d in lead_draws],
     )
@@ -1212,7 +1211,6 @@ def next_recovery(
         coast_draw_gal=coast_gal,
         hp_btu_per_h=hp_btu_per_h(air, bp),
         trajectory=tuple(trajectory),
-        startup_energy_wh=answer.startup_energy_wh,
     )
 
 
@@ -1664,7 +1662,6 @@ def forecast(
             trajectory=(
                 HeatingPoint(origin, state.upper_f, state.lower_f, 0.0, 0.0),
             ),
-            startup_energy_wh=None,
             reasons=tuple(_ambient_reasons(environment)),
             defaults_used=tuple(defaults),
         )
@@ -1692,6 +1689,19 @@ def forecast(
         last = coast.points[-1]
         return last.upper_f, last.lower_f, coast.ambient_mean_f
 
+    def hold_at(when: datetime) -> float:
+        """The hold of a start at ``when``: none for the compressor
+        running now, else by the minutes since it last stopped."""
+        if state.compressor_running and when <= origin:
+            return 0.0
+        stopped = history.compressor_stopped_at
+        return start_hold_min(
+            params.compressor,
+            None
+            if stopped is None
+            else (when - _instant(stopped)).total_seconds() / 60.0,
+        )
+
     def predict(when: datetime, heat_minutes: float) -> Any:
         upper, lower, coast_air = coast_to(when)
         amb = physics.ambient.at(when)
@@ -1709,14 +1719,13 @@ def forecast(
             t_amb_start=amb,
             t_amb_mean=t_amb_mean,
             h_amb_start=environment.humidity,
-            start_hold_minutes=0.0,
+            start_hold_minutes=hold_at(when),
             draw_load=0.0,
             physics=physics_recovery(
                 t_start_lower=lower,
                 t_start_upper=upper,
                 target_f=goal,
                 t_amb_mean=t_amb_mean,
-                h_amb_start=environment.humidity,
                 compressor=params.compressor,
                 loss=params.loss,
                 usable=physics.physics_usable,
@@ -1764,7 +1773,6 @@ def forecast(
         scheduled_start = scheduled_ready = None
         shortfall = None
         feasible = False
-    power = params.power
     trajectory: tuple[HeatingPoint, ...] | None = None
     if scheduled_start is not None and served.path is not None:
         trajectory = tuple(
@@ -1774,23 +1782,13 @@ def forecast(
                 start_at=scheduled_start,
                 t_upper_start=upper_s,
                 t_lower_start=lower_s,
-                two_zone=params.compressor.two_zone,
-                power_scale=power.power_scale,
-                cop_scale=power.cop_scale,
-                cop_lift_coeff=power.cop_lift_coeff,
-                cop_lift_ref_f=power.cop_lift_ref_f,
-                t_amb=served.context.t_amb_mean,
                 hold_minutes=served.start_hold_minutes,
+                start_power_w=power_w(
+                    params.compressor, served.context.t_amb_start, lower_s
+                ),
                 tank=params.tank,
             )
         )
-    startup: float | None = None
-    if trajectory is not None and power.cop_scale is not None:
-        startup = power.startup_wh
-        if scheduled_start is not None and (
-            scheduled_start <= origin and state.compressor_running
-        ):
-            startup = 0.0
     return Forecast(
         status=status,
         start_at=scheduled_start,
@@ -1807,7 +1805,6 @@ def forecast(
         energy_to_setpoint_wh=energy,
         tou_capped=tou_capped,
         trajectory=trajectory,
-        startup_energy_wh=startup,
         reasons=tuple(
             _unique(
                 [
@@ -1834,19 +1831,15 @@ def active_cycle(
     params: HeaterParams,
     *,
     at: datetime,
-    evaporator_f: float | None = None,
     model: RecoveryModel | None = None,
 ) -> ActiveCycle:
     """What is left of the recovery the compressor is running at
     ``at``: the lower zone from where it is to its target
     (``Settings.hp_lower_off_f``, else the setpoint), at the air now,
-    served by ``model`` when given. Beside it, the integrator's own
-    remaining time, with ``evaporator_f`` (the coil's live reading,
-    ``sim_adapters.evaporator_f``) in place of its approach estimate:
-    the coil is cooled by the running refrigerant, so it is the
-    operating point. A truncated integration says
-    ``physics_truncated``. A lower zone already at its target has
-    nothing left: 0 minutes, ready now."""
+    served by ``model`` when given, the start's hold taken as over.
+    Beside it, the integrator's own remaining climb. A truncated
+    integration says ``physics_truncated``. A lower zone already at its
+    target has nothing left: 0 minutes, ready now."""
     at = _instant(at)
     if not state.compressor_running:
         return ActiveCycle(status="not_heating")
@@ -1859,8 +1852,6 @@ def active_cycle(
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
     air = _ambient_at(environment, at)
-    # As the core's: a positive compressor constant is calibrated.
-    usable = params.compressor.compressor_constant > 0.0
     if state.lower_f >= goal:
         # The cycle is at its end: the lower zone has reached the target
         # and the compressor is about to stop. Nothing is left, as the
@@ -1869,7 +1860,7 @@ def active_cycle(
             status="heating",
             ready_at=at,
             remaining_minutes=0.0,
-            physics_remaining_minutes=0.0 if usable else None,
+            physics_remaining_minutes=0.0,
             lower_f=state.lower_f,
             target_f=goal,
             confidence=1.0,
@@ -1890,10 +1881,8 @@ def active_cycle(
             t_start_upper=state.upper_f,
             target_f=goal,
             t_amb_mean=air,
-            h_amb_start=environment.humidity,
             compressor=params.compressor,
             loss=params.loss,
-            usable=usable,
             tank=params.tank,
         ),
     )
@@ -1901,32 +1890,12 @@ def active_cycle(
     if served is None:
         raise _refusal(ctx.physics)
     reasons = list(served.reasons)
-    physics_minutes: float | None = None
-    if usable:
-        try:
-            result = predict_physics_detailed(
-                t_start_lower=state.lower_f,
-                hp_lower_off=goal,
-                t_amb_mean=air,
-                compressor_constant=params.compressor.compressor_constant,
-                evap_approach_f=params.compressor.evap_approach_f,
-                compressor=params.compressor,
-                loss=params.loss,
-                h_amb_start=environment.humidity,
-                t_evap_override=evaporator_f,
-                ua_btu_hr_f=params.loss.ua_btu_hr_f,
-                ua_exponent=params.loss.ua_exponent,
-                ua_ref_delta_t=params.loss.ua_ref_delta_t_f,
-                stratification_gap=state.upper_f - state.lower_f,
-                two_zone=params.compressor.two_zone,
-                tank=params.tank,
-            )
-            if not math.isnan(result.minutes):
-                physics_minutes = result.minutes
-            if not result.converged:
-                reasons.append(PHYSICS_TRUNCATED)
-        except Exception:
-            physics_minutes = None
+    physics = ctx.physics
+    physics_minutes = (
+        physics.minutes
+        if physics.failed is None and not math.isnan(physics.minutes)
+        else None
+    )
     return ActiveCycle(
         status="heating",
         ready_at=at + timedelta(minutes=served.minutes),

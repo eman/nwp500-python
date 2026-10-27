@@ -47,6 +47,7 @@ from nwp500.sim.heat_pump_recovery import (
     RecoveryContext,
 )
 from nwp500.sim.params import HeaterParams
+from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import TankPhysics
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
@@ -137,6 +138,9 @@ def _by_hand(
         "heater",
         Heater(hp_lower_on_f=105.0, element=params.element),
     )
+    kw.setdefault(
+        "start_hold", lambda off: start_hold_min(params.compressor, off)
+    )
     return walk(
         start=s.start,
         upper_f=s.state.upper_f,
@@ -146,7 +150,6 @@ def _by_hand(
         setpoint_f=s.settings.setpoint_f,
         heater=heater,
         physics=physics,
-        startup_wh=params.power.startup_wh,
         stopped_at=s.history.compressor_stopped_at,
         heated_at=s.history.heated_at,
         controller=params.controller,
@@ -440,7 +443,10 @@ class TestAModelsInputs:
         got, want, model = self._both(params, s)
         assert got == want
         assert model.asked
-        assert all(c.start_hold_minutes == 0.0 for c in model.asked)
+        # Stopped two hours before: the parameters' hold.
+        assert model.asked[0].start_hold_minutes == start_hold_min(
+            params.compressor, 120.0
+        )
         assert all(c.draw_load == 0.0 for c in model.asked)
 
     def test_the_start_hold(self, params: HeaterParams) -> None:
@@ -473,20 +479,27 @@ class TestAModelsInputs:
         simulate(s, params, recovery=alone, lead_draws=LEAD)
         assert alone.asked[0].draw_load == model.asked[0].draw_load
 
-    def test_with_no_model_the_holds_change_nothing(
+    def test_with_no_model_the_physics_follows_the_hold(
         self, params: HeaterParams
     ) -> None:
+        """The physics climbs after the hold, so a longer one ends the
+        recovery that much later."""
         s = _scenario(state=COLD)
-        plain = simulate(s, params).simulation
-        assert simulate(s, params, start_hold=_hold).simulation == plain
+        plain = simulate(s, params).simulation.heating[0]
+        held = simulate(s, params, start_hold=_hold).simulation.heating[0]
+        extra = _hold(120.0) - start_hold_min(params.compressor, 120.0)
+        assert held.end - plain.end == pytest.approx(
+            timedelta(minutes=extra), abs=timedelta(seconds=1)
+        )
         running = _scenario(
             state=HeaterState(
                 upper_f=128.0, lower_f=100.0, compressor_running=True
             )
         )
-        assert (
-            simulate(running, params, running_hold=15.0).simulation
-            == simulate(running, params).simulation
+        late = simulate(running, params, running_hold=15.0).simulation
+        now = simulate(running, params).simulation
+        assert late.heating[0].end - now.heating[0].end == pytest.approx(
+            timedelta(minutes=15), abs=timedelta(seconds=1)
         )
 
     def test_physics_not_usable(self, params: HeaterParams) -> None:
@@ -584,7 +597,12 @@ class TestWhatTheResultSays:
     ) -> None:
         weak = replace(
             params,
-            compressor=replace(params.compressor, compressor_constant=0.003),
+            compressor=replace(
+                params.compressor,
+                heat_btu_h=600.0,
+                heat_btu_h_per_air_f=0.0,
+                heat_btu_h_per_water_f=0.0,
+            ),
         )
         s = _scenario(
             state=HeaterState(

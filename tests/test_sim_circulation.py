@@ -52,6 +52,7 @@ from nwp500.sim.params import (
     params_from_document,
     params_to_document,
 )
+from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.schedules import weekly_runs
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
@@ -339,8 +340,8 @@ class TestThroughTheAPI:
             setpoint_f=140.9,
             heater=Heater(hp_lower_on_f=105.0, element=params.element),
             physics=physics,
-            startup_wh=params.power.startup_wh,
             stopped_at=at(-1.0),
+            start_hold=lambda off: start_hold_min(params.compressor, off),
             controller=params.controller,
         )
         assert simulate(s, params).simulation == by_hand

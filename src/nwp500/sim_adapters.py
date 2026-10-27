@@ -532,16 +532,6 @@ def circulation(
     )
 
 
-def evaporator_f(status: DeviceStatus) -> float | None:
-    """The evaporator coil's live reading, °F, for
-    ``sim.active_cycle``: only while the compressor runs, when the
-    running refrigerant cools it to the operating point; None
-    otherwise."""
-    if not status.comp_use:
-        return None
-    return _from_device(DeciCelsius(status.evaporator_temperature_raw))
-
-
 def location_air_reading(status: DeviceStatus) -> float | None:
     """The air where the heater stands, from its own sensor, in the
     preferred unit: only while the compressor runs, when the evaporator

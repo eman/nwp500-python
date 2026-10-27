@@ -31,7 +31,6 @@ from nwp500.sim.params import (
     ElementParams,
     HeaterParams,
     LossParams,
-    PowerParams,
     TankParams,
 )
 
@@ -95,23 +94,22 @@ def _nwp500_65() -> HeaterParams:
             bottom_loss_btu_hr=90.83634299259268,
             bottom_gate_f=1.8315130798400514,
         ),
+        # The performance map, hold and run-on fitted on its record,
+        # 2025-12-28 to 2026-10-26, against the loss above
+        # (``heat_pump_fit.fit_heat_pump``).
         compressor=CompressorParams(
-            compressor_constant=0.016044331314777758,
-            # The coil's reading, 6.7 + 0.596 x air, at 65 °F air.
-            evap_approach_f=19.56,
-            evap_air_slope=0.596,
-            two_zone=True,
-            cond_approach_f=10.0,
-            clearance_ratio=0.05,
-            polytropic_exp=1.17,
-            fan_airflow_cfm=229.0,
-        ),
-        power=PowerParams(
-            power_scale=1.6398153371062745,
-            cop_scale=0.6876494994589271,
-            startup_wh=160.29537801006768,
-            cop_lift_coeff=0.002,
-            cop_lift_ref_f=62.0,
+            heat_btu_h=4499.436604500702,
+            heat_btu_h_per_air_f=55.49795247502065,
+            heat_btu_h_per_water_f=-15.948333659761246,
+            heat_btu_h_per_air_water_f=0.0,
+            power_w=401.7270566837221,
+            power_w_per_air_f=0.21405638109110056,
+            power_w_per_water_f=2.8460496649489793,
+            power_w_per_air_water_f=0.0,
+            domain_air_f=(48.0, 89.0),
+            domain_water_f=(70.0, 150.0),
+            start_hold_after_min=(15.0, 60.0, 180.0, 720.0),
+            start_hold_min=(0.0, 5.0, 10.0, 18.0, 22.0),
         ),
         element=ElementParams(
             element_w=5148.0,
@@ -150,6 +148,7 @@ def _nwp500_65() -> HeaterParams:
             mode_write_lower_starts_f=3.6,
             energy_saver_write_seen_f=1.44,
             tou_cap_f=3.6,
+            hp_stop_overshoot_f=0.9,
         ),
     )
 
@@ -194,9 +193,10 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
     (``SITE_VALVE``) and circulation (``SITE_CIRCULATION``) included: a
     snapshot of its fit of 2026-10-11, the standby loss and the zone
-    gap's time constant refitted on 2026-10-24. Several of its values move with
-    every refit there (the circulation's displaced volume and flow, the
-    compressor and power fits), so read it as an example, not as that
+    gap's time constant refitted on 2026-10-24 and the heat pump's
+    performance map fitted on 2026-10-26. Several of its values move
+    with every refit there (the circulation's displaced volume and flow,
+    the heat pump's map), so read it as an example, not as that
     installation's current state. The 50 and 80 gal models scale by
     rated storage (``RATED_GAL``) its tank volume (the tank's, and the
     heat book's count of it) and the book's empty point

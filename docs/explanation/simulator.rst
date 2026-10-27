@@ -67,12 +67,15 @@ A "what if" is a copy of the scenario with one part changed:
 The model
 =========
 
-**The compressor.** A vapour-compression model of the R-134a cycle:
-saturation properties from CoolProp's equation of state, an evaporator
-approach to the intake air as the coil reads it, a condenser approach to the tank, polytropic
-compression with clearance, the fan's airflow, and the latent load of
-humid air. It is integrated in 10-second steps until the lower
-thermistor reaches its target.
+**The heat pump.** A performance map fitted on the heater's own
+recoveries: the heat into the tank and the electricity drawn, each a
+plane in the air at the heater and the lower tank's water, held to the
+range the record covers. What the condenser gives is what the air gives
+plus the electricity, and a fit that claims more than a real heat pump
+could is not applied. A start holds for a time set by how long the
+compressor was off (0 to 22 minutes on the record), drawing power while
+the tank holds; the climb is integrated in 10-second steps until the
+lower thermistor is a fitted run-on (0.9 degF) past its target.
 
 **The tank, in two zones.** The condenser coil wraps the lower part of
 the tank, so while the tank is stratified a recovery warms the lower
@@ -325,43 +328,38 @@ with, beside ``recovery=``:
    compressor is calibrated. A model may still answer from the
    integrator's minutes when it isn't.
 
-With no model, or one that declines, the served duration adds no start
-hold and the lead draws are not read. The holds still mark where the
-lower zone starts to climb: a recovery placed again after a draw inside
-its hold counts from there.
+With no model, or one that declines, the served duration is the hold
+(the parameters' by time off, unless ``start_hold`` or ``running_hold``
+is given) plus the physics' climb, and the lead draws are not read. A
+recovery placed again after a draw inside its hold counts from where
+the hold ends.
 
 
 Accuracy
 ========
 
-Measured on one NWP500-65. The recovery-duration figures are those of
-the fit the default parameters come from (2026-10-24): fitted on 142
-recoveries from 2026-02-18 to 09-01, and held out on the 35 that
-followed.
+Measured on one NWP500-65. The recovery figures are the held-out
+scoreboard's (``sim_score``): parameters calibrated on the record from
+2026-04-16 to 2026-09-18, and scored on the 27 recoveries from then to
+2026-10-26, with 90 % day-block bootstrap intervals.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error 25.3 min on the fitted recoveries, and 33.7 min held out in
-  time order. Scored by the time a recovery had left (28 recoveries
-  over 45 days to 2026-09-06, an earlier fit): with under 30 min left,
-  4.4 min; with over 180 min left, 55.9 min, a mean 44 min short.
-  Under about 60-90 min left, physics alone is the better estimate
-  of the two. Most of the held-out error is water moving during the
-  recovery, which the duration fit does not see and a walk takes
-  apart: at the current fit (2026-10-24) the 35 latest recoveries came
-  out a mean 25 min short, and the 20 of them with under 2 gal of hot
-  water drawn and under 5 minutes of circulation inside them 0.1 min
-  short. Over 119 recoveries each hot gallon drawn inside one added
-  about 4.7 min to it and each minute of circulation about 1.3 min;
+  error 7.5 min (4.8-10.5) on the 11 with no water moving, a mean
+  0.5 min short; 41.5 min (19.5-71.6) on the 16 with draws or
+  circulation inside them, a mean 31 min short, since the duration does
+  not see the water a walk takes apart. Under the earlier refrigerant
+  model, on the same recoveries: 13.6 and 44.4 min. Over 119
+  recoveries each hot gallon drawn inside one added about 4.7 min to it
+  and each minute of circulation about 1.3 min;
+- a recovery's electricity, from the map, against the heater's metered
+  energy on the 11 metered recoveries: mean absolute error 7.1 %
+  (4.6-9.9), a mean 1.7 % low; 12.8 % and 8.7 % low under the earlier
+  model;
 - replaying recorded writes, with a recovery model trained on the
-  heater's record:
+  heater's record, under the earlier refrigerant model:
   recorded starts reproduced over six days held out, 31 of 40; daily
   energy, with start-up charged once, 3.6 % low in sample and 4.4 %
   low held out (2.0 % low and 2.2 % high with the start hold);
-- a recovery's electricity, priced from the fitted power and efficiency
-  and checked against an energy meter on later cycles than it was
-  fitted on (188 of 235 cycles, 2026-09-18): median error 4.8 % per
-  recovery, 90th percentile 13 %, against 10.9 % and 26 % for a
-  constant efficiency;
 - replaying the recorded draws from each draw's start (1,312 draw
   events from 2026-02-25), with the upper probe crossing the line
   standing in for the tap running cold: recorded depletions caught, 5 of

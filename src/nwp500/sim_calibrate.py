@@ -36,7 +36,7 @@ This module needs the ``sim`` extra.
 
 import itertools
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from dataclasses import fields as dataclass_fields
 from datetime import UTC, datetime, timedelta
@@ -49,11 +49,13 @@ from nwp500 import sim
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
+from nwp500.sim import heat_pump_fit as hpf
 from nwp500.sim.book import FlowVolume
 from nwp500.sim.params import (
     UNFITTED_TERMS,
     BookParams,
     CirculationParams,
+    CompressorParams,
     HeaterParams,
     LossParams,
     TankParams,
@@ -170,7 +172,7 @@ class Calibrated:
 
 #: The groups of terms ``keep_better`` judges, each kept or replaced
 #: whole: the terms one fit fits together.
-GROUPS = ("standby", "gap_tau", "compressor", "power_scale", "cop")
+GROUPS = ("standby", "gap_tau", "heat_map", "power_map", "start_hold", "run_on")
 
 
 @dataclass(frozen=True)
@@ -191,15 +193,12 @@ class Judged:
 class HeldOut:
     """The latest of each group's evidence, held out of its refit: the
     quiet windows the loss is fitted on (``sim.calibration.
-    loss_windows``), the windows that open a gap, the reached
-    recoveries, and the snapshot rows of the cycles the power scale's
-    and the COP's fits could use."""
+    loss_windows``), the windows that open a gap, and the heat pump's
+    climbs, blocks, starts and run-ons (``heat_pump_fit.Evidence``)."""
 
     windows: tuple[cal.StandbyWindow, ...]
     gap_windows: tuple[cal.StandbyWindow, ...]
-    recoveries: pd.DataFrame
-    power_cycles: pd.DataFrame
-    cop_cycles: pd.DataFrame
+    heat_pump: hpf.Evidence
     #: The gap's constant the standby loss was fitted and judged on,
     #: hours: the one the gap's judgement kept.
     standby_tau_h: float | None = None
@@ -250,64 +249,6 @@ def _gap_windows(
     ]
 
 
-def _recovery_error(
-    recoveries: pd.DataFrame, params: HeaterParams
-) -> float | None:
-    """The mean absolute error of ``params``' recovery durations, in
-    minutes, as ``fit_compressor`` scores its held-out recoveries."""
-    if recoveries.empty:
-        return None
-    predicted = cal.recovery_minutes(
-        recoveries,
-        params.compressor.compressor_constant,
-        params.compressor.evap_approach_f,
-        compressor=params.compressor,
-        loss=params.loss,
-        tank=params.tank,
-        two_zone=params.compressor.two_zone,
-        gaps="stratification_gap" in recoveries.columns
-        and bool(recoveries["stratification_gap"].notna().all()),
-    )
-    if not np.isfinite(predicted).all():
-        return None
-    actual = np.asarray(recoveries["duration_minutes"], dtype=float)
-    return float(np.mean(np.abs(predicted - actual)))
-
-
-def _n_cycles(cycles: pd.DataFrame) -> int:
-    """How many cycles ``cycles``' snapshot rows hold."""
-    return len(set(cycles["cycle"])) if len(cycles) else 0
-
-
-def _power_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
-    """The power scale's mean relative error in each cycle's metered
-    energy. None unless ``params`` model every cycle: a score over the
-    ones it can would drop the hard ones."""
-    scale = params.power.power_scale
-    rows = cal.power_cycles(cycles, params)
-    if scale is None or not rows or len(rows) < _n_cycles(cycles):
-        return None
-    return float(np.mean([abs(m - scale * e) / m for _, m, e in rows]))
-
-
-def _cop_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
-    """The COP terms' squared error in each cycle's metered energy,
-    weighted ``1 / metered``, as ``solve_cop_fit`` fits them. None
-    unless ``params`` model every cycle, as for ``_power_error``."""
-    p = params.power
-    rows = cal.cop_cycles(cycles, params)
-    if p.cop_scale is None or not rows or len(rows) < _n_cycles(cycles):
-        return None
-    errors = []
-    for c in rows:
-        cop = c.modelled_cop * np.exp(
-            -p.cop_lift_coeff * (c.lift_f - p.cop_lift_ref_f)
-        )
-        predicted = p.startup_wh + c.heat_wh / (p.cop_scale * cop)
-        errors.append((predicted - c.metered_wh) ** 2 / c.metered_wh)
-    return float(np.mean(errors))
-
-
 def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
     """Each group's error for ``params`` on the evidence ``done`` held
     out of its refits (``keep_better``), by ``GROUPS``; None where none
@@ -318,10 +259,12 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
       fall, °F/h, walked on ``HeldOut.standby_tau_h``;
     - ``gap_tau``: the gap's mean squared error, °F², relaxing on the
       constant and opened by ``params``' bottom loss;
-    - ``compressor``: the recovery durations' mean absolute error, min;
-    - ``power_scale``: the mean relative error in metered energy;
-    - ``cop``: the squared error in metered energy weighted
-      ``1 / metered``.
+    - ``heat_map``: the heat's RMS error on the mixed climbs, weighted by
+      their minutes, BTU/h (``heat_pump_fit.heat_map_error``);
+    - ``power_map``: the power's RMS error on the climbs' metered
+      blocks, W;
+    - ``start_hold``: the hold's mean absolute error at the starts, min;
+    - ``run_on``: the overshoot's mean absolute error at the stops, °F.
 
     Raises ``CalibrationInputError`` for a ``done`` not made with
     ``keep_better``."""
@@ -344,9 +287,16 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
             params.tank,
             params.tank.stratification_gap_tau_h,
         ),
-        "compressor": _recovery_error(held.recoveries, params),
-        "power_scale": _power_error(held.power_cycles, params),
-        "cop": _cop_error(held.cop_cycles, params),
+        "heat_map": hpf.heat_map_error(held.heat_pump.heat, params.compressor),
+        "power_map": hpf.power_map_error(
+            held.heat_pump.power, params.compressor
+        ),
+        "start_hold": hpf.start_hold_error(
+            held.heat_pump.holds, params.compressor
+        ),
+        "run_on": hpf.overshoot_error(
+            held.heat_pump.runs, params.controller.hp_stop_overshoot_f
+        ),
     }
 
 
@@ -358,7 +308,7 @@ def _judge(
     refit: float | None,
     *,
     refit_exists: bool = True,
-    needed: int = cal.MIN_POWER_EVENTS,
+    needed: int = 0,
 ) -> Judged:
     """Which of base and refit ``group`` keeps: the refit only when it
     scores better on the ``n_held`` latest ``what`` held out of it. No
@@ -552,132 +502,13 @@ def _keep_better(
         tau_gap_hours=tau,
         n_gap_windows=n_gap,
     )
-    rows = cal.snapshots(frame, air=recovery_air)
     found = cal.recoveries(frame, air=recovery_air)
-    reached = found.loc[found["reached"].astype(bool)] if len(found) else found
-    compressor = cal.fit_compressor(
-        reached, params.compressor, params.loss, tank=params.tank
+    params, pump, held_pump = _keep_better_heat_pump(
+        hpf.evidence(frame, params.tank, params.loss, air=recovery_air),
+        params,
+        unfitted,
+        judged,
     )
-    _, held_recoveries = cal.split_recoveries(reached)
-    if compressor is None and "compressor" not in unfitted:
-        judged.append(
-            _judge(
-                "compressor",
-                "reached recoveries",
-                0,
-                None,
-                None,
-                refit_exists=False,
-                needed=cal.MIN_RECOVERIES,
-            )
-        )
-    elif "compressor" in unfitted:
-        if compressor is not None and not compressor.hit_bounds:
-            params = cal.with_compressor(params, compressor)
-            unfitted.discard("compressor")
-    elif compressor is not None:
-        if compressor.hit_bounds:
-            judged.append(
-                Judged(
-                    "compressor",
-                    "base",
-                    _recovery_error(held_recoveries, params),
-                    compressor.heldout_mae_minutes,
-                    compressor.n_heldout,
-                    "kept the base: the refit is pinned on a bound",
-                )
-            )
-        else:
-            j = _judge(
-                "compressor",
-                "reached recoveries",
-                compressor.n_heldout,
-                _recovery_error(held_recoveries, params),
-                compressor.heldout_mae_minutes,
-            )
-            judged.append(j)
-            if j.kept == "refit":
-                params = cal.with_compressor(params, compressor)
-    power = None
-    held_power = held_cop = rows.iloc[0:0]
-
-    def split_on(
-        starts: Iterable[datetime | None],
-    ) -> tuple[pd.DataFrame, pd.DataFrame, int]:
-        """``rows`` without and with the latest of the cycles starting at
-        ``starts`` (a fit's usable ones), and how many those are."""
-        ordered = sorted(t for t in starts if t is not None)
-        n = _split(len(ordered))
-        held_at = rows["start_time"].isin(ordered[len(ordered) - n :])
-        return rows.loc[~held_at], rows.loc[held_at], n
-
-    if "compressor" not in unfitted and "power" in unfitted:
-        power = cal.fit_power(rows, params)
-        if power.power_scale is not None and power.cop_scale is not None:
-            unfitted.discard("power")
-        params = cal.with_power(params, power)
-    elif "compressor" not in unfitted and len(rows):
-        # Each fit's own usable cycles, in time order: the latest held
-        # out of it.
-        train_power, held_power, n_power_held = split_on(
-            t for t, _, _ in cal.power_cycles(rows, params)
-        )
-        train_cop, held_cop, n_cop_held = split_on(
-            c.start for c in cal.cop_cycles(rows, params)
-        )
-        scale, n_power = cal.fit_power_scale(train_power, params)
-        cop, n_cop = cal.fit_cop_scale(train_cop, params)
-        power = cal.PowerFit(
-            power_scale=scale,
-            n_power=n_power,
-            cop_scale=None if cop is None else cop[0],
-            startup_wh=None if cop is None else cop[1],
-            cop_lift_coeff=None if cop is None else cop[2],
-            n_cop=n_cop,
-        )
-        refit = cal.with_power(params, power)
-        j = _judge(
-            "power_scale",
-            "cycles",
-            n_power_held,
-            _power_error(held_power, params),
-            _power_error(held_power, refit),
-            refit_exists=scale is not None,
-        )
-        judged.append(j)
-        if j.kept == "refit":
-            params = replace(
-                params,
-                power=replace(params.power, power_scale=scale),
-            )
-        j = _judge(
-            "cop",
-            "cycles",
-            n_cop_held,
-            _cop_error(held_cop, params),
-            _cop_error(held_cop, refit),
-            refit_exists=cop is not None,
-        )
-        judged.append(j)
-        if j.kept == "refit":
-            params = replace(
-                params,
-                power=replace(
-                    refit.power, power_scale=params.power.power_scale
-                ),
-            )
-    elif "power" not in unfitted:
-        # No refit to judge: no compressor to fit it over, or no cycles.
-        why = (
-            "kept the base: the compressor is not fitted"
-            if "compressor" in unfitted
-            else f"kept the base: too few cycles to refit on "
-            f"({cal.MIN_POWER_EVENTS} needed)"
-        )
-        judged.extend(
-            Judged(group, "base", None, None, 0, why)
-            for group in ("power_scale", "cop")
-        )
     params = replace(
         params,
         unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),
@@ -685,14 +516,185 @@ def _keep_better(
     held = HeldOut(
         held_windows,
         held_gaps,
-        held_recoveries,
-        held_power,
-        held_cop,
+        held_pump,
         standby_tau_h=walk_tau,
     )
     return (
-        cal.Calibration(params, fitted_standby, compressor, power, found),
+        cal.Calibration(params, fitted_standby, pump, found),
         tuple(judged),
+        held,
+    )
+
+
+def _split_frame(
+    rows: pd.DataFrame, hold_out: bool
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """``rows`` (in time order) without and with their latest
+    (``_split``), or all of them and none when not ``hold_out``."""
+    n = _split(len(rows)) if hold_out else 0
+    return rows.iloc[: len(rows) - n], rows.iloc[len(rows) - n :]
+
+
+def _keep_better_heat_pump(
+    found: hpf.Evidence,
+    params: HeaterParams,
+    unfitted: set[str],
+    judged: list[Judged],
+) -> tuple[HeaterParams, hpf.HeatPumpFit, hpf.Evidence]:
+    """The heat pump's groups (``heat_map``, ``power_map``,
+    ``start_hold``, ``run_on``), each refitted on all but its latest
+    evidence and kept only where it scores better there. The maps are
+    judged one at a time, and a refit whose planes claim what no heat
+    pump does is not applied (``heat_pump_fit.violations``). The groups
+    of a term ``params`` lists as unfitted (``compressor`` for the heat,
+    the hold and the run-on, ``power`` for the power) take their refit
+    unjudged, on all their evidence. Returns the parameters, the refit,
+    and the evidence held out; ``unfitted`` and ``judged`` are updated
+    in place."""
+    open_heat = "compressor" in unfitted
+    open_power = "power" in unfitted
+    heat, held_heat = _split_frame(found.heat, not open_heat)
+    power, held_power = _split_frame(found.power, not open_power)
+    holds, held_holds = _split_frame(found.holds, not open_heat)
+    runs, held_runs = _split_frame(found.runs, not open_heat)
+    held = hpf.Evidence(held_heat, held_power, held_holds, held_runs)
+    base = params.compressor
+    refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, holds, runs), base)
+    claims = (
+        f"kept the base: the refit claims what no heat pump does "
+        f"({', '.join(refit.violations)})"
+    )
+
+    def plane(
+        group: str,
+        what: str,
+        term: str,
+        fitted: hpf.Plane | None,
+        n_held: int,
+        error: Callable[[CompressorParams], float | None],
+        candidate: CompressorParams,
+        needed: int,
+    ) -> bool:
+        """Whether ``group``'s refit plane is taken."""
+        if fitted is None:
+            if term not in unfitted:
+                judged.append(
+                    _judge(
+                        group,
+                        what,
+                        n_held,
+                        error(base),
+                        None,
+                        refit_exists=False,
+                        needed=needed,
+                    )
+                )
+            return False
+        if refit.violations:
+            if term not in unfitted:
+                judged.append(
+                    Judged(group, "base", error(base), None, n_held, claims)
+                )
+            return False
+        if term in unfitted:
+            unfitted.discard(term)
+            return True
+        j = _judge(group, what, n_held, error(base), error(candidate))
+        judged.append(j)
+        return j.kept == "refit"
+
+    take_heat = plane(
+        "heat_map",
+        "recovery climbs",
+        "compressor",
+        refit.heat,
+        len(held_heat),
+        lambda c: hpf.heat_map_error(held_heat, c),
+        hpf.with_planes(base, refit.heat, None),
+        hpf.MIN_HEAT_STRETCHES,
+    )
+    take_power = plane(
+        "power_map",
+        "metered climb blocks",
+        "power",
+        refit.power,
+        len(held_power),
+        lambda c: hpf.power_map_error(held_power, c),
+        hpf.with_planes(base, None, refit.power),
+        hpf.MIN_POWER_BLOCKS,
+    )
+    compressor = hpf.with_planes(
+        base,
+        refit.heat if take_heat else None,
+        refit.power if take_power else None,
+    )
+    controller = params.controller
+    if refit.start_hold_min is None:
+        if not open_heat:
+            judged.append(
+                _judge(
+                    "start_hold",
+                    "starts",
+                    len(held_holds),
+                    hpf.start_hold_error(held_holds, base),
+                    None,
+                    refit_exists=False,
+                    needed=hpf.MIN_BAND_STARTS,
+                )
+            )
+    else:
+        with_hold = replace(compressor, start_hold_min=refit.start_hold_min)
+        j = (
+            None
+            if open_heat
+            else _judge(
+                "start_hold",
+                "starts",
+                len(held_holds),
+                hpf.start_hold_error(held_holds, base),
+                hpf.start_hold_error(held_holds, with_hold),
+            )
+        )
+        if j is not None:
+            judged.append(j)
+        if j is None or j.kept == "refit":
+            compressor = with_hold
+    if refit.overshoot_f is None:
+        if not open_heat:
+            judged.append(
+                _judge(
+                    "run_on",
+                    "run-ons",
+                    len(held_runs),
+                    hpf.overshoot_error(
+                        held_runs, controller.hp_stop_overshoot_f
+                    ),
+                    None,
+                    refit_exists=False,
+                    needed=hpf.MIN_RUN_ONS,
+                )
+            )
+    else:
+        j = (
+            None
+            if open_heat
+            else _judge(
+                "run_on",
+                "run-ons",
+                len(held_runs),
+                hpf.overshoot_error(held_runs, controller.hp_stop_overshoot_f),
+                hpf.overshoot_error(held_runs, refit.overshoot_f),
+            )
+        )
+        if j is not None:
+            judged.append(j)
+        if j is None or j.kept == "refit":
+            controller = replace(
+                controller, hp_stop_overshoot_f=refit.overshoot_f
+            )
+    return (
+        replace(params, compressor=compressor, controller=controller),
+        refit,
         held,
     )
 
@@ -1147,30 +1149,43 @@ _GROUP_TERMS = {
         "Bottom loss gate (°F)",
     ),
     "gap_tau": ("Zone gap time constant (h)",),
-    "compressor": ("Compressor constant",),
-    "power_scale": ("Input power scale",),
-    "cop": (
-        "COP scale",
-        "Start-up energy (Wh)",
-        "COP lift coefficient (1/°F)",
+    "heat_map": (
+        "Heat at 65 °F air, 120 °F water (BTU/h)",
+        "Heat per °F of air (BTU/h)",
+        "Heat per °F of water (BTU/h)",
     ),
+    "power_map": (
+        "Power at 65 °F air, 120 °F water (W)",
+        "Power per °F of air (W)",
+        "Power per °F of water (W)",
+    ),
+    "start_hold": ("Start hold by time off (min)",),
+    "run_on": ("Run-on overshoot (°F)",),
 }
 
 
-def _values(params: HeaterParams) -> dict[str, float | None]:
-    """The value each judged term holds in ``params``, by report name."""
-    loss, power = params.loss, params.power
+def _holds(values: Sequence[float]) -> str:
+    return "/".join(f"{v:g}" for v in values)
+
+
+def _values(params: HeaterParams) -> dict[str, str]:
+    """The value each judged term holds in ``params``, by report name,
+    as the report shows it."""
+    loss, c = params.loss, params.compressor
     values = (
-        loss.ua_btu_hr_f,
-        loss.ua_exponent,
-        loss.bottom_loss_btu_hr,
-        loss.bottom_gate_f,
-        params.tank.stratification_gap_tau_h,
-        params.compressor.compressor_constant,
-        power.power_scale,
-        power.cop_scale,
-        power.startup_wh,
-        power.cop_lift_coeff,
+        _num(loss.ua_btu_hr_f),
+        _num(loss.ua_exponent),
+        _num(loss.bottom_loss_btu_hr),
+        _num(loss.bottom_gate_f),
+        _num(params.tank.stratification_gap_tau_h),
+        _num(c.heat_btu_h, 4),
+        _num(c.heat_btu_h_per_air_f),
+        _num(c.heat_btu_h_per_water_f),
+        _num(c.power_w),
+        _num(c.power_w_per_air_f),
+        _num(c.power_w_per_water_f),
+        _holds(c.start_hold_min),
+        _num(params.controller.hp_stop_overshoot_f),
     )
     names = [n for group in _GROUP_TERMS.values() for n in group]
     return dict(zip(names, values, strict=True))
@@ -1190,7 +1205,7 @@ def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
                 # gives both scores.
                 out[name] = replace(
                     t,
-                    value=_num(values[name]),
+                    value=values[name],
                     error="-",
                     fitted=False,
                     why=j.why,
@@ -1298,87 +1313,108 @@ def report(done: Calibrated) -> list[Term]:
             f"{cal.MIN_GAP_FIT_WINDOWS} needed",
         ),
     ]
-    found = c.recoveries
-    reached = len(found.loc[found["reached"].astype(bool)]) if len(found) else 0
-    comp = c.compressor
-    if comp is None:
-        comp_why = (
-            f"{reached} recoveries reached their target; "
-            f"{cal.MIN_RECOVERIES} needed"
-        )
-        if done.n_runs_without_air:
-            # The runs left out are the cause, not the heater.
-            comp_why = f"{air_unread_note(done)}; {comp_why}"
-    elif comp.hit_bounds:
-        comp_why = "the fit is pinned on a bound: not applied"
-    else:
-        comp_why = ""
-    comp_error = "-"
-    if comp is not None:
-        comp_error = f"{comp.mae_minutes:.1f} min mae"
-        if comp.heldout_mae_minutes is not None:
-            comp_error += (
-                f", {comp.heldout_mae_minutes:.1f} on {comp.n_heldout} held out"
-            )
-    comp_samples = (
-        f"{comp.n_fitted} recoveries" if comp else f"{reached} recoveries"
+    pump = c.heat_pump
+    cp = c.params.compressor
+    claims = (
+        "the fit claims what no heat pump does "
+        f"({', '.join(pump.violations)}): not applied"
+        if pump.violations
+        else ""
     )
+    air_why = air_unread_note(done) if done.n_runs_without_air else ""
+
+    def needs(n: int, what: str, needed: int) -> str:
+        why = f"{n} {what}; {needed} needed"
+        return f"{air_why}; {why}" if air_why else why
+
+    heat_why = claims or (
+        ""
+        if pump.heat is not None
+        else needs(
+            pump.n_heat,
+            "draw-free climbs with the tank mixed",
+            hpf.MIN_HEAT_STRETCHES,
+        )
+    )
+    power_why = claims or (
+        ""
+        if pump.power is not None
+        else needs(pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS)
+    )
+    heat_error = (
+        "-" if pump.heat_error is None else f"{pump.heat_error:.0f} BTU/h rms"
+    )
+    power_error = (
+        "-" if pump.power_error is None else f"{pump.power_error:.1f} W rms"
+    )
+    heat_ok = pump.heat is not None and not pump.violations
+    power_ok = pump.power is not None and not pump.violations
     terms += [
         Term(
-            "Compressor constant",
-            _num(comp.compressor_constant if comp else None),
-            comp_samples,
-            comp_error,
-            comp is not None and not comp.hit_bounds,
-            comp_why,
-        ),
-        # Measured on the coil and held: no fit moves it.
-        Term(
-            "Evaporator approach (°F)",
-            _num(c.params.compressor.evap_approach_f),
-            "-",
-            "-",
-            False,
-            "measured on the coil: held",
-        ),
+            name,
+            _num(value, digits),
+            f"{pump.n_heat} climbs",
+            heat_error if i == 0 else "-",
+            heat_ok,
+            heat_why,
+        )
+        for i, (name, value, digits) in enumerate(
+            zip(
+                _GROUP_TERMS["heat_map"],
+                (
+                    cp.heat_btu_h,
+                    cp.heat_btu_h_per_air_f,
+                    cp.heat_btu_h_per_water_f,
+                ),
+                (4, 3, 3),
+                strict=True,
+            )
+        )
     ]
-    p = c.power
-    # Power is fitted over the compressor the parameters hold: with
-    # ``keep_better``, a base's when this refit has none.
-    no_power = p is None and comp_why and "the compressor is not fitted"
-    few = f"too few cycles ({cal.MIN_POWER_EVENTS} needed)"
     terms += [
         Term(
-            "Input power scale",
-            _num(p.power_scale if p else None),
-            f"{p.n_power} cycles" if p else "-",
+            name,
+            _num(value),
+            f"{pump.n_power} blocks",
+            power_error if i == 0 else "-",
+            power_ok,
+            power_why,
+        )
+        for i, (name, value) in enumerate(
+            zip(
+                _GROUP_TERMS["power_map"],
+                (cp.power_w, cp.power_w_per_air_f, cp.power_w_per_water_f),
+                strict=True,
+            )
+        )
+    ]
+    terms += [
+        Term(
+            "Start hold by time off (min)",
+            _holds(cp.start_hold_min),
+            f"{pump.n_holds} starts",
             "-",
-            p is not None and p.power_scale is not None,
-            no_power or ("" if p and p.power_scale is not None else few),
+            pump.start_hold_min is not None,
+            ""
+            if pump.start_hold_min is not None
+            else needs(
+                pump.n_holds,
+                "starts with no water in use",
+                hpf.MIN_BAND_STARTS,
+            ),
+            note="under "
+            + ", ".join(f"{m:g}" for m in cp.start_hold_after_min)
+            + " min off, and beyond",
         ),
         Term(
-            "COP scale",
-            _num(p.cop_scale if p else None),
-            f"{p.n_cop} cycles" if p else "-",
+            "Run-on overshoot (°F)",
+            _num(c.params.controller.hp_stop_overshoot_f),
+            f"{pump.n_runs} run-ons",
             "-",
-            p is not None and p.cop_scale is not None,
-            no_power or ("" if p and p.cop_scale is not None else few),
-        ),
-        Term(
-            "Start-up energy (Wh)",
-            _num(p.startup_wh if p else None),
-            f"{p.n_cop} cycles" if p else "-",
-            "-",
-            p is not None and p.startup_wh is not None,
-            no_power or ("" if p and p.startup_wh is not None else few),
-        ),
-        Term(
-            "COP lift coefficient (1/°F)",
-            _num(p.cop_lift_coeff if p else None),
-            f"{p.n_cop} cycles" if p else "-",
-            "-",
-            p is not None and p.cop_lift_coeff is not None,
-            no_power or ("" if p and p.cop_lift_coeff is not None else few),
+            pump.overshoot_f is not None,
+            ""
+            if pump.overshoot_f is not None
+            else needs(pump.n_runs, "draw-free run-ons", hpf.MIN_RUN_ONS),
         ),
     ]
     return _judged(terms, done) if done.judged else terms
