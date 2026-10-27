@@ -54,6 +54,9 @@ MINUTE = timedelta(minutes=1)
 REPLAY = timedelta(hours=24)
 #: How often ``replay`` corrects the layers to the probes.
 ASSIMILATE_EVERY = timedelta(minutes=10)
+#: How far before a record's part its element runs are kept: an
+#: element's heat lags it by its dead time, under this.
+_LAG_REACH = timedelta(hours=1)
 
 #: The terms ``fit`` fits: (the params group, the field, its lower and
 #: upper bounds, its typical step). The probe heights are shares of the
@@ -74,10 +77,11 @@ TERMS: tuple[tuple[str, str, float, float, float], ...] = (
 
 @dataclass(frozen=True, eq=False)
 class TankRecord:
-    """A history on a one-minute grid from ``start``: the probes and the
-    air as of each minute (NaN unknown), the runs of the compressor, the
-    elements and the circulation, and the draws, ``(onset, delivered
-    gallons)``. Its arrays are read-only."""
+    """A history on a one-minute grid from ``start``: the probes as of
+    each minute (NaN unknown), the air (known throughout:
+    ``tank_record`` holds it through its gaps), the runs of the
+    compressor, the elements and the circulation, and the draws,
+    ``(onset, delivered gallons)``. Its arrays are read-only."""
 
     start: datetime
     upper_f: np.ndarray = field(repr=False)
@@ -98,6 +102,8 @@ class TankRecord:
                 raise ValueError(f"{name} is not the record's length")
             a.setflags(write=False)
             object.__setattr__(self, name, a)
+        if not np.isfinite(self.air_f).all():
+            raise ValueError("the record's air is known throughout")
 
     def __len__(self) -> int:
         return len(self.upper_f)
@@ -115,33 +121,41 @@ class TankRecord:
         return float(self.air_f[i])
 
     def before(self, at: datetime, span: timedelta = REPLAY) -> TankRecord:
-        """The part of the record ``replay`` reads for ``at``: from
-        ``span`` before it, on the clock's grid, to it, with the runs
-        reaching into it and the compressor's run before those (its
-        time off sets the next one's hold). Small enough to hand to
-        another process."""
+        """The part of the record ``replay`` reads for ``at``, which
+        replays there as the whole does: from ``span`` before it, on
+        the clock's grid, to it, reaching back to the start of a
+        circulation run under way then and of an element run whose
+        lagged heat is, with the compressor's and the circulation's run
+        before those (their time off sets the next one's hold and
+        cooled return). Small enough to hand to another process."""
         step = ASSIMILATE_EVERY // MINUTE
         i = max(0, self.minute(at - span))
         i -= (i - self.minute(datetime(1970, 1, 1, tzinfo=UTC))) % step
         i = max(0, i)
         j = min(len(self), max(i, self.minute(at) + 1))
+        reach = i - _LAG_REACH // MINUTE
+        first = i
+        for of, frm in ((self.element, reach), (self.circulating, i)):
+            for k in _overlapping(of, frm, j):
+                first = min(first, of[k][0])
+        first = max(0, first)
 
-        def runs(of: tuple[Run, ...]) -> tuple[Run, ...]:
-            k = _overlapping(of, i, j)
-            first = max(0, k.start - 1) if of is self.compressor else k.start
-            return tuple((a - i, b - i) for a, b in of[first : k.stop])
+        def runs(of: tuple[Run, ...], frm: int, prior: bool) -> tuple[Run, ...]:
+            k = _overlapping(of, frm, j)
+            lo = max(0, k.start - 1) if prior else k.start
+            return tuple((a - first, b - first) for a, b in of[lo : k.stop])
 
-        a, b = self.instant(i), self.instant(j)
+        a, b = self.instant(first), self.instant(j)
         lo = bisect_left(self.draws, (a, -math.inf))
         hi = bisect_left(self.draws, (b, -math.inf))
         return TankRecord(
             start=a,
-            upper_f=self.upper_f[i:j],
-            lower_f=self.lower_f[i:j],
-            air_f=self.air_f[i:j],
-            compressor=runs(self.compressor),
-            element=runs(self.element),
-            circulating=runs(self.circulating),
+            upper_f=self.upper_f[first:j],
+            lower_f=self.lower_f[first:j],
+            air_f=self.air_f[first:j],
+            compressor=runs(self.compressor, i, True),
+            element=runs(self.element, reach, False),
+            circulating=runs(self.circulating, i, True),
             draws=self.draws[lo:hi],
         )
 
@@ -246,7 +260,7 @@ def _flows(
         cooled = c.displaced_gal * cooled_share(rest, c.return_cool_tau_h)
         turn = record.instant(a) + timedelta(minutes=cooled / c.flow_gpm)
         lo, hi = record.instant(max(a, i)), record.instant(min(b, j))
-        air = float(record.air_f[max(a, 0)])
+        air = float(record.air_f[a])
         if lo < min(turn, hi):
             out.append(
                 st.Flowing(
@@ -290,7 +304,7 @@ def _span(
         if runs
         else None
     )
-    lag = timedelta(minutes=params.element.upper_dead_time_min)
+    lag = min(timedelta(minutes=params.element.upper_dead_time_min), _LAG_REACH)
     reach = math.ceil(lag / MINUTE)
     elements = tuple(
         st.Element(
@@ -513,8 +527,8 @@ def with_terms(params: HeaterParams, values: Sequence[float]) -> HeaterParams:
 class TankFit:
     """``fit``'s result: the parameters with the terms fitted, each
     term's value (``TERMS``' names), those the fit left on a bound, the
-    probes' RMSE over the events at the start and at the end, and the
-    trials it took."""
+    probes' RMSE at the start and at the end (``fit``'s: each event
+    weighing alike, °F), and the trials it took."""
 
     params: HeaterParams
     terms: dict[str, float]
@@ -524,14 +538,13 @@ class TankFit:
     evaluations: int
 
 
-def _residuals(
-    params: HeaterParams, record: TankRecord | None, coast: Coast
-) -> list[float]:
-    # ``record`` is the coast's own part (``TankRecord.before``).
-    du, dl = errors(params, record, coast)
-    # Each event weighs alike, however long it was observed.
-    w = 1.0 / math.sqrt(len(du))
-    return [w * v for v in (*du, *dl)]
+def _robust(error: float) -> float:
+    """``error`` through the soft-L1 loss at 1 °F, as a residual: its
+    square is ``2 (sqrt(1 + e²) - 1)``, quadratic small and linear
+    large."""
+    return math.copysign(
+        math.sqrt(2.0 * (math.sqrt(1.0 + error * error) - 1.0)), error
+    )
 
 
 def fit(
@@ -544,8 +557,11 @@ def fit(
 ) -> TankFit:
     """``TERMS`` fitted on ``coasts`` from ``params``' values: a robust
     (soft-L1, 1 °F) least squares of each probe's error at each
-    observation, the events started from the ``record``'s replay
-    (``start_state``). ``map_(function, a, b)`` maps over the events."""
+    observation, each event weighing alike however long it was
+    observed, the events started from the ``record``'s replay
+    (``start_state``). ``map_(function, a, b, c)`` maps over the
+    events. Its RMSE is the root mean square, over the events and the
+    two probes, of each probe's RMSE over the event, °F."""
     if not coasts:
         raise ValueError("no events to fit on")
     lo = np.array([t[2] for t in TERMS])
@@ -555,18 +571,30 @@ def fit(
     n = len(coasts)
     parts = [None if record is None else record.before(c.start) for c in coasts]
 
-    def residuals(x: np.ndarray) -> np.ndarray:
+    def trial(x: np.ndarray) -> list[tuple[tuple[float, ...], ...]]:
         p = with_terms(params, x.tolist())
-        out = map_(_residuals, [p] * n, parts, coasts)
-        return np.array([v for r in out for v in r])
+        return list(map_(errors, [p] * n, parts, coasts))
 
-    first = residuals(x0)
+    def residuals(x: np.ndarray) -> np.ndarray:
+        out: list[float] = []
+        for du, dl in trial(x):
+            w = 1.0 / math.sqrt(len(du))
+            out.extend(w * _robust(e) for e in (*du, *dl))
+        return np.array(out)
+
+    def event_rmse(x: np.ndarray) -> float:
+        squares = [
+            (math.fsum(e * e for e in du) + math.fsum(e * e for e in dl))
+            / (2 * len(du))
+            for du, dl in trial(x)
+        ]
+        return math.sqrt(math.fsum(squares) / len(squares))
+
+    before = event_rmse(x0)
     done = least_squares(
         residuals,
         x0,
         bounds=(lo, hi),
-        loss="soft_l1",
-        f_scale=1.0,
         x_scale=scale,
         diff_step=2e-2,
         max_nfev=max_evaluations,
@@ -579,7 +607,7 @@ def fit(
         params=with_terms(params, x.tolist()),
         terms=dict(zip(names, x.tolist(), strict=True)),
         on_bound=tuple(k for k, e in zip(names, edge, strict=True) if e),
-        rmse_before=float(np.sqrt(np.mean(np.square(first)))),
-        rmse_after=float(np.sqrt(np.mean(np.square(done.fun)))),
+        rmse_before=before,
+        rmse_after=event_rmse(x),
         evaluations=int(done.nfev),
     )

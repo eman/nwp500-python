@@ -1047,15 +1047,17 @@ class Comparison:
     changes: tuple[Change, ...]
 
 
-def _failures(doc: Mapping[str, Any]) -> dict[str, list[str]]:
-    """A document's unanswered events, the kinds with any."""
+def _failures(doc: Mapping[str, Any], kinds: set[str]) -> dict[str, list[str]]:
+    """A document's unanswered events of ``kinds``, those with any."""
     named = cast(Mapping[str, list[str]], doc.get("failed_events") or {})
-    return {k: v for k, v in named.items() if v}
+    return {k: v for k, v in named.items() if v and k in kinds}
 
 
 def compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> Comparison:
     """Two score documents (``Score.document``) compared metric by
-    metric. Raises ``ValueError`` for a document of another schema."""
+    metric, on the kinds of event both carry (``score_layers`` scores
+    only the windows and the draws). Raises ``ValueError`` for a
+    document of another schema."""
     for doc in (before, after):
         if doc.get("schema") != SCHEMA:
             raise ValueError(f"not a {SCHEMA} document")
@@ -1081,8 +1083,11 @@ def compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> Comparison:
                 clear,
             )
         )
+    ea = cast(Mapping[str, list[str]], before.get("events") or {})
+    eb = cast(Mapping[str, list[str]], after.get("events") or {})
+    kinds = set(ea) & set(eb)
     return Comparison(
-        same_events=before.get("events") == after.get("events")
-        and _failures(before) == _failures(after),
+        same_events=all(ea[k] == eb[k] for k in kinds)
+        and _failures(before, kinds) == _failures(after, kinds),
         changes=tuple(rows),
     )

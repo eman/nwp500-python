@@ -21,9 +21,9 @@ Added
 
   On the held-out days, both models given the heater's mixing valve and
   circulation, the fitted layered tank tracks a coast's upper probe to
-  0.259 °F (the two-zone model 0.299) and its lower to 0.521 °F
+  0.189 °F (the two-zone model 0.299) and its lower to 0.519 °F
   (0.630), each interval clear of the two-zone value, and the probes
-  after a draw to 0.305 and 2.247 °F (0.281 and 2.161, inside the
+  after a draw to 0.310 and 2.379 °F (0.281 and 2.161, inside the
   intervals). Nothing in the simulator runs it yet.
 
 - **The layered tank's probes and ends.** Each probe reads the layers

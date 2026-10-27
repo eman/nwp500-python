@@ -187,6 +187,52 @@ class TestTheRecord:
             assert len(part) <= tf.REPLAY / tf.MINUTE + 20
             assert tf.errors(TRUE, part, c) == tf.errors(TRUE, record, c)
 
+    @pytest.mark.parametrize("seed", range(6))
+    def test_a_part_replays_as_the_whole_across_runs(self, seed: int) -> None:
+        """Circulation and element runs straddling a part's start, and
+        the runs before them, replay in the part as in the whole."""
+        rng = np.random.default_rng(seed)
+        n = 1800
+        t = np.arange(n)
+        upper = 138.0 - 0.004 * t + rng.normal(0.0, 0.05, n)
+        lower = upper - 6.0 + rng.normal(0.0, 0.05, n)
+
+        def runs(count: int, longest: int) -> tuple[tf.Run, ...]:
+            starts = np.sort(rng.choice(np.arange(10, n - 60), count, False))
+            out: list[tf.Run] = []
+            for a in starts.tolist():
+                if out and a <= out[-1][1]:
+                    continue
+                out.append((a, a + int(rng.integers(2, longest))))
+            return tuple(out)
+
+        record = tf.TankRecord(
+            start=T0,
+            upper_f=upper,
+            lower_f=lower,
+            air_f=np.full(n, AIR),
+            compressor=runs(4, 120),
+            element=runs(8, 15),
+            circulating=runs(20, 25),
+            draws=tuple(
+                (T0 + timedelta(minutes=float(m)), 3.0)
+                for m in sorted(rng.choice(np.arange(n), 10, False).tolist())
+            ),
+        )
+        lay = S.layout(TRUE)
+        for m in rng.integers(1500, n, 8).tolist():
+            at = T0 + timedelta(minutes=m, seconds=int(rng.integers(0, 60)))
+            whole = tf.replay(lay, TRUE, record, at)
+            part = tf.replay(lay, TRUE, record.before(at), at)
+            assert whole is not None and part is not None
+            assert part.layers_f == whole.layers_f
+
+    def test_unknown_air_is_refused(self, record) -> None:
+        air = np.array(record.air_f)
+        air[100] = math.nan
+        with pytest.raises(ValueError):
+            replace(record, air_f=air)
+
     def test_a_frame_without_the_air_is_refused(self, history) -> None:
         frame, draws, _ = history
         with pytest.raises(ValueError):
@@ -293,7 +339,16 @@ class TestTheFit:
         start = replace(
             default_params(), circulation=site_example_params().circulation
         )
-        got = tf.fit(start, record, _coasts(path), max_evaluations=60)
+        coasts = _coasts(path)
+        got = tf.fit(start, record, coasts, max_evaluations=60)
+        # Each probe's RMSE over each event, °F, the events alike.
+        squares = []
+        for c in coasts:
+            du, dl = tf.errors(start, record, c)
+            squares.append((tf.rmse(du) ** 2 + tf.rmse(dl) ** 2) / 2)
+        assert got.rmse_before == pytest.approx(
+            math.sqrt(sum(squares) / len(squares))
+        )
         assert got.rmse_after < 0.25 * got.rmse_before
         assert got.rmse_after < 0.3
         assert got.params == tf.with_terms(start, tuple(got.terms.values()))
@@ -360,3 +415,8 @@ class TestTheScore:
         changes = {c.metric: c for c in ss.compare(a, b).changes}
         assert changes["draw_lower_rmse_f"].delta is not None
         assert ss.compare(a, b).same_events
+        # Beside the simulator's own score on the same events.
+        simulated = ss.score(found, TRUE).document()
+        got = ss.compare(simulated, a)
+        assert got.same_events
+        assert {c.metric for c in got.changes} >= set(a["metrics"])
