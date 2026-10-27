@@ -537,14 +537,16 @@ def _split_frame(
     if "cycle" not in rows.columns:
         return rows.iloc[: len(rows) - n], rows.iloc[len(rows) - n :]
     runs = list(dict.fromkeys(rows["cycle"]))
-    per_run = rows["cycle"].value_counts()
+    per_run: dict[object, int] = {
+        run: int(k) for run, k in rows["cycle"].value_counts().items()
+    }
     late: list[object] = []
     count = 0
     for run in reversed(runs[1:]):
         if count >= n:
             break
         late.append(run)
-        count += int(per_run[run])
+        count += per_run[run]
     held = rows["cycle"].isin(late)
     return rows.loc[~held], rows.loc[held]
 
