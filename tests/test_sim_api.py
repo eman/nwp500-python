@@ -34,6 +34,7 @@ from nwp500.sim import (
     standby,
 )
 from nwp500.sim.api import LOW_CONFIDENCE_FLOOR
+from nwp500.sim.book import Booked
 from nwp500.sim.engine import (
     Entry,
     Heater,
@@ -807,3 +808,103 @@ class TestRecoveryAndStandby:
         assert quiet.points[0].at == T0 and quiet.points[-1].at == at(6.0)
         assert quiet.points[-1].upper_f < 140.0
         assert drawn.points[-1].lower_f < quiet.points[-1].lower_f
+
+
+class TestAnElementStopsAtItsOffPoint:
+    """An element stops where its zone reaches its off point, though
+    something else lifts the zone too: it is not charged at the
+    setpoint for the rest of its rise at its own rate."""
+
+    def test_with_the_compressor_lifting_the_lower_zone(
+        self, params: HeaterParams
+    ) -> None:
+        r = simulate(
+            _scenario(
+                horizon=timedelta(hours=2),
+                state=HeaterState(
+                    upper_f=129.0, lower_f=52.0, element_running=True
+                ),
+                settings=Settings(
+                    setpoint_f=122.0, mode=4, hp_lower_on_f=105.0
+                ),
+            ),
+            params,
+        )
+        (el,) = [h for h in r.heating if h.source == "element"]
+        assert el.zone == "lower"
+        assert "compressor" in {h.source for h in r.heating}
+        at_end = [p for p in r.points if p.at == el.end]
+        assert at_end and at_end[-1].lower_f == pytest.approx(122.0, abs=0.06)
+        assert all(p.lower_f < 121.9 for p in r.points if p.at < el.end)
+
+    @pytest.mark.parametrize("mode", [3, 4])
+    def test_with_a_book_and_a_draw_after_its_off_point(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """A book walks to the next draw in one coast (``_nothing_before``),
+        which stops at the element's off point as any coast does."""
+
+        def run(book: Booked | None, draws: tuple[Draw, ...]) -> Any:
+            return simulate(
+                _scenario(
+                    horizon=timedelta(hours=1),
+                    state=HeaterState(
+                        upper_f=110.0, lower_f=135.0, element_running=True
+                    ),
+                    settings=Settings(
+                        setpoint_f=140.0, mode=mode, hp_lower_on_f=105.0
+                    ),
+                    environment=Environment(ambient_f=70.0, humidity=48.0),
+                    loads=Loads(draws=draws),
+                ),
+                params,
+                book=book,
+            )
+
+        late = (Draw(at=at(0.2), gallons=0.5),)
+        ends = [
+            next(h.end for h in r.heating if h.source == "element")
+            for r in (
+                run(None, ()),
+                run(Booked(30000.0, 1.0, 60.0), late),
+            )
+        ]
+        assert ends[0] < at(0.2)
+        assert abs((ends[1] - ends[0]).total_seconds()) < 1.0
+
+    @pytest.mark.parametrize("mode", [3, 4])
+    def test_an_inverted_tank_mixes_wherever_the_walk_is_cut(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """A walk starting with the lower zone above the upper mixes it
+        at once: the element on then stops where the mixed zone reaches
+        its off point, a write mid-run or not."""
+
+        def run(writes: tuple[Write, ...]) -> Any:
+            return simulate(
+                _scenario(
+                    horizon=timedelta(hours=1),
+                    state=HeaterState(
+                        upper_f=110.0, lower_f=135.0, element_running=True
+                    ),
+                    settings=Settings(
+                        setpoint_f=140.0, mode=mode, hp_lower_on_f=105.0
+                    ),
+                    environment=Environment(ambient_f=70.0, humidity=48.0),
+                    commands=Commands(writes=writes),
+                ),
+                params,
+            )
+
+        plain = run(())
+        written = run((Write(at=at(2 / 60), setpoint_f=140.0),))
+        ends = [
+            [h.end for h in r.heating if h.source == "element"]
+            for r in (plain, written)
+        ]
+        assert len(ends[0]) == 1
+        assert abs((ends[0][0] - ends[1][0]).total_seconds()) < 1.0
+        # It is not charged with its zone already at its off point.
+        end = ends[0][0]
+        assert end - T0 < timedelta(minutes=10)
+        assert all(p.upper_f < 139.0 for p in plain.points if p.at < end)

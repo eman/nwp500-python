@@ -184,11 +184,34 @@ class TestNextRecovery:
             for i in range(8)
         )
         r = next_recovery(_scenario(loads=Loads(draws=draws)), params)
-        start = T0 + timedelta(minutes=r.start_minute)
-        before = sum(d.gallons for d in draws if d.at < start)
-        # The shower itself takes the lower zone to the trigger.
+        start = r.points[0][0]
+        # The shower itself takes the lower zone to the trigger: the
+        # draw that trips it is the coast's too.
+        assert any(d.at == start for d in draws)
+        before = sum(d.gallons for d in draws if d.at <= start)
         assert 0.0 < before < 12.8
         assert r.coast_draw_gal == pytest.approx(before)
+
+    def test_a_draw_on_the_trigger_is_the_coasts(
+        self, params: HeaterParams
+    ) -> None:
+        """The draw that trips the trigger is taken before the recovery
+        starts: its tank and its gallons, a second either side alike."""
+        got = []
+        for shift in (-1, 0, 1):
+            when = at(0.5) + timedelta(seconds=shift)
+            r = next_recovery(
+                _scenario(loads=Loads(draws=(Draw(at=when, gallons=20.0),))),
+                params,
+            )
+            assert r.outcome == "ok"
+            assert r.points[0][0] == when
+            assert r.coast_draw_gal == pytest.approx(20.0)
+            got.append(r.points[0][1:])
+        for upper, lower in got[1:]:
+            assert upper == pytest.approx(got[0][0], abs=0.01)
+            assert lower == pytest.approx(got[0][1], abs=0.01)
+        assert got[1][1] < 105.0
 
     def test_circulation_on_the_coast_is_its_loss(
         self, params: HeaterParams

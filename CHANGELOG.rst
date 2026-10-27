@@ -113,6 +113,27 @@ Changed
   the map's power over the hold and the climb; the COP is the map's heat
   over it.
 
+Fixed
+-----
+
+- **An element stops where its zone reaches its off point.** Its end
+  was set from its fitted rate alone, so where something else lifted the
+  zone too, it ran on at the setpoint, charged and lifting nothing. With
+  the compressor running, High Demand's lower element ran 7 min at
+  122 °F. An inverted tank, its lower zone above the upper, mixes in the
+  coast's first step: the upper element, on at 110 °F over a 135 °F
+  lower zone, ran 6 min at the setpoint, and a write or a boundary
+  mid-run moved its end. The walk now stops it where the zone reaches
+  its off point, taking an inverted tank's mix at once, with a book
+  attached as without.
+
+- **``next_recovery`` takes the draw that trips the trigger.** A draw
+  at the heater's own start was left out of both the tank the recovery
+  starts from and ``coast_draw_gal``; one a second earlier was smeared
+  across its coast step. The tank is now the one the draw leaves, from
+  a coast run exactly to the start, and the draw's gallons are the
+  coast's. ``recovery_as_of`` takes them off a copy kept past its start.
+
 Removed
 -------
 
