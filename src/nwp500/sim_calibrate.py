@@ -838,16 +838,7 @@ def calibrate_changes(
     ``calibrate``.
     """
     base, more = _begin(air, ambient, params)
-    heard = sorted(observed)
-    # The gaps are the silences between the instants heard from: a
-    # change inside one says nothing of the time around it.
-    gap = max_gap(heard)
-    dark = silences(heard, gap)
-    frame = sa.change_history(
-        replace(rows, outages=(*rows.outages, *dark)), heard
-    )
-    if frame.empty:
-        raise CalibrationInputError("the history holds no observed instants")
+    frame, gaps = _change_frame(rows, observed)
     return _fit(
         frame,
         base,
@@ -856,7 +847,7 @@ def calibrate_changes(
         ambient,
         humidity,
         record,
-        gaps=(gap, len(dark)),
+        gaps=gaps,
         keep_better=keep_better,
     )
 
@@ -897,6 +888,78 @@ def _air_from_cabinet(
     return n, len(quiet), kept / hours if hours else 0.0
 
 
+@dataclass(frozen=True)
+class Prepared:
+    """A history as the fits take it: ``history``'s or
+    ``change_history``'s frame with the air, the humidity, the record's
+    spans and the gaps added (``sim_adapters.add_inputs``)."""
+
+    frame: pd.DataFrame
+    #: How the air was given (``Calibrated.air``).
+    air: str | None
+    #: The frame's column a recovery reads its air from.
+    recovery_air: str
+    #: Readings further apart than this are unobserved, and how many
+    #: such spans the history has.
+    max_gap: timedelta
+    n_gaps: int
+    notes: tuple[str, ...]
+
+
+def prepare(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    *,
+    air: Sequence[Reading] | None = None,
+    ambient: float | None = None,
+    humidity: Sequence[Reading] | None = None,
+    record: RecordInputs | None = None,
+) -> Prepared:
+    """``readings`` as ``calibrate`` fits them: the frame a scorer reads
+    the same history from (``sim_score``). Raises
+    ``CalibrationInputError`` as ``calibrate`` does."""
+    if air is not None and ambient is not None:
+        raise CalibrationInputError("give air or ambient, not both")
+    frame = sa.history(readings)
+    if frame.empty:
+        raise CalibrationInputError("the history holds no statuses")
+    return _prepare(frame, [], air, ambient, humidity, record)
+
+
+def prepare_changes(
+    rows: sa.ChangeRows,
+    observed: Iterable[datetime],
+    *,
+    air: Sequence[Reading] | None = None,
+    ambient: float | None = None,
+    humidity: Sequence[Reading] | None = None,
+    record: RecordInputs | None = None,
+) -> Prepared:
+    """``prepare`` on a heater's values' changes, as
+    ``calibrate_changes`` takes them."""
+    if air is not None and ambient is not None:
+        raise CalibrationInputError("give air or ambient, not both")
+    frame, gaps = _change_frame(rows, observed)
+    return _prepare(frame, [], air, ambient, humidity, record, gaps)
+
+
+def _change_frame(
+    rows: sa.ChangeRows, observed: Iterable[datetime]
+) -> tuple[pd.DataFrame, tuple[timedelta, int]]:
+    """``change_history``'s frame, with the silences between the
+    instants heard from as outages, and the gaps they make."""
+    heard = sorted(observed)
+    # The gaps are the silences between the instants heard from: a
+    # change inside one says nothing of the time around it.
+    gap = max_gap(heard)
+    dark = silences(heard, gap)
+    frame = sa.change_history(
+        replace(rows, outages=(*rows.outages, *dark)), heard
+    )
+    if frame.empty:
+        raise CalibrationInputError("the history holds no observed instants")
+    return frame, (gap, len(dark))
+
+
 def _fit(
     frame: pd.DataFrame,
     base: HeaterParams,
@@ -909,9 +972,52 @@ def _fit(
     keep_better: bool = False,
 ) -> Calibrated:
     """The fits on ``frame`` (``history``'s or ``change_history``'s),
-    with the air, the humidity, the record's spans and the gaps added:
-    ``gaps``' longest spacing taken as observed and how many spans are
-    longer, else the frame's own."""
+    prepared (``_prepare``)."""
+    ready = _prepare(frame, notes, air, ambient, humidity, record, gaps)
+    frame, how, recovery_air = ready.frame, ready.air, ready.recovery_air
+    gap, n_gaps = ready.max_gap, ready.n_gaps
+    # On the cabinet's air, whose warmth rises with the tank's, the law's
+    # shape bends: its level only, on the base's exponent.
+    exponent = base.loss.ua_exponent if how == "heater" else None
+    n_runs, unread = _runs_without_air(frame, recovery_air)
+    judged: tuple[Judged, ...] = ()
+    held: HeldOut | None = None
+    if keep_better:
+        fitted, judged, held = _keep_better(frame, base, recovery_air, exponent)
+    else:
+        fitted = cal.calibrate(
+            frame, base, recovery_air=recovery_air, ua_exponent=exponent
+        )
+    done = Calibrated(
+        fitted,
+        how,
+        len(frame),
+        gap,
+        n_gaps,
+        ready.notes,
+        n_runs=n_runs,
+        n_runs_without_air=unread,
+        judged=judged,
+        held=held,
+    )
+    if unread:
+        done = replace(done, notes=(*done.notes, air_unread_note(done)))
+    return done
+
+
+def _prepare(
+    frame: pd.DataFrame,
+    notes: list[str],
+    air: Sequence[Reading] | None,
+    ambient: float | None,
+    humidity: Sequence[Reading] | None,
+    record: RecordInputs | None,
+    gaps: tuple[timedelta, int] | None = None,
+) -> Prepared:
+    """``frame`` with the air, the humidity, the record's spans and the
+    gaps added: ``gaps``' longest spacing taken as observed and how many
+    spans are longer, else the frame's own."""
+    notes = list(notes)
     index = cast("pd.DatetimeIndex", frame.index)
     # Timestamps, which are datetimes.
     first, last = cast(datetime, index[0]), cast(datetime, index[-1])
@@ -1007,33 +1113,7 @@ def _fit(
                 f"on the base's exponent ({n} of {of} quiet windows, "
                 f"{share:.0%} of their hours, have it throughout)"
             )
-    # On the cabinet's air, whose warmth rises with the tank's, the law's
-    # shape bends: its level only, on the base's exponent.
-    exponent = base.loss.ua_exponent if how == "heater" else None
-    n_runs, unread = _runs_without_air(frame, recovery_air)
-    judged: tuple[Judged, ...] = ()
-    held: HeldOut | None = None
-    if keep_better:
-        fitted, judged, held = _keep_better(frame, base, recovery_air, exponent)
-    else:
-        fitted = cal.calibrate(
-            frame, base, recovery_air=recovery_air, ua_exponent=exponent
-        )
-    done = Calibrated(
-        fitted,
-        how,
-        len(frame),
-        gap,
-        n_gaps,
-        tuple(notes),
-        n_runs=n_runs,
-        n_runs_without_air=unread,
-        judged=judged,
-        held=held,
-    )
-    if unread:
-        done = replace(done, notes=(*done.notes, air_unread_note(done)))
-    return done
+    return Prepared(frame, how, recovery_air, gap, n_gaps, tuple(notes))
 
 
 # ── the report ──────────────────────────────────────────────────────

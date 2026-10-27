@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from nwp500 import sim_adapters as sa
@@ -950,6 +951,25 @@ class TestAHistoryKeptCurrent:
         assert sa.changes_since(rows, T0 + timedelta(minutes=3)) == rows
         assert sa.changes_since(rows, T0 + timedelta(minutes=6)) == rows[1:]
 
+    def test_until_keeps_the_rows_before(self) -> None:
+        rows = [(T0, 1.0), (T0 + timedelta(minutes=5), 2.0)]
+        assert sa.changes_until(rows, T0 + timedelta(minutes=5)) == rows[:1]
+        assert sa.changes_until(rows, T0) == []
+
+    def test_a_history_split_is_its_two_halves(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        cut = T0 - timedelta(hours=10)
+        before, after = rows.until(cut), rows.since(cut)
+        whole = sa.change_history(rows, observed)
+        first = sa.change_history(before, [t for t in observed if t < cut])
+        later = sa.change_history(after, [t for t in observed if t >= cut])
+        assert first.index.max() < cut <= later.index.min()
+        rejoined = pd.concat([first, later])
+        assert rejoined.index.equals(whole.index)
+        assert rejoined["upper_f"].equals(whole["upper_f"])
+
     def test_outages_join_and_cut(self) -> None:
         a = [(T0, T0 + timedelta(minutes=10))]
         b = [(T0 + timedelta(minutes=10), T0 + timedelta(minutes=20))]
@@ -958,6 +978,10 @@ class TestAHistoryKeptCurrent:
         assert sa.spans_since(joined, T0 + timedelta(minutes=15)) == [
             (T0 + timedelta(minutes=15), T0 + timedelta(minutes=20))
         ]
+        assert sa.spans_until(joined, T0 + timedelta(minutes=15)) == [
+            (T0, T0 + timedelta(minutes=15))
+        ]
+        assert sa.spans_until(joined, T0) == []
         assert sa.spans_since(joined, T0 + timedelta(minutes=25)) == []
 
 

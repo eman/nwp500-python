@@ -1870,6 +1870,10 @@ class TestHistoryKeptCurrent:
         assert list(trimmed.rows.upper_f) == [(t[2], 130.0)]
         assert list(trimmed.rows.lower_f) == [(t[1], 139.0)]
         assert trimmed.observed == t[2:]
+        head = got.until(t[2])
+        assert list(head.rows.upper_f) == [(t[0], 140.0), (t[1], 140.0)]
+        assert list(head.rows.lower_f) == [(t[0], 139.0), (t[1], 139.0)]
+        assert head.observed == t[:2]
 
 
 def _heater_series() -> tuple[list[Row], list[Row]]:

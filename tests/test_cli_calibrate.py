@@ -213,3 +213,61 @@ class TestTheCommand:
         assert "the cabinet's less its warmth" in text
         assert "gaps of over" not in text
         assert "Unfitted: compressor, power, gap_tau" in text
+
+
+class TestHoldout:
+    @pytest.fixture
+    def days(self, tmp_path: Path, device_status_dict: dict[str, Any]) -> str:
+        """Five quiet days: the tank coasting from 130 °F."""
+        lines = quiet_lines(device_status_dict, hours=5 * 24)
+        path = tmp_path / "days.jsonl"
+        path.write_text("\n".join(lines) + "\n")
+        return str(path)
+
+    def test_the_fit_sees_the_days_before_only(self, days: str) -> None:
+        start = T0 + timedelta(days=3)
+        held = cal_cli.holdout(cal_cli.read_history(days), start, ambient=AIR_F)
+        assert held.done.n_statuses == 3 * 720
+        assert held.fitted.events["windows"]
+        assert all(
+            datetime.fromisoformat(w) >= start
+            for w in held.fitted.events["windows"]
+        )
+        assert held.base.events == held.fitted.events
+
+    def test_the_fit_scores_better_than_the_defaults(self, days: str) -> None:
+        held = cal_cli.holdout(
+            cal_cli.read_history(days), T0 + timedelta(days=3), ambient=AIR_F
+        )
+        name = "standby_fall_abs_f_h"
+        assert held.fitted.metrics[name].value < held.base.metrics[name].value
+
+    def test_nothing_on_one_side_is_refused(self, days: str) -> None:
+        with pytest.raises(InputError, match="one side"):
+            cal_cli.holdout(cal_cli.read_history(days), T0, ambient=AIR_F)
+
+    def test_the_command_prints_the_score(self, days: str) -> None:
+        result = CliRunner().invoke(
+            cli_main.cli,
+            [
+                "simulate",
+                "calibrate",
+                days,
+                "--ambient",
+                str(AIR_F),
+                "--holdout-from",
+                (T0 + timedelta(days=3)).isoformat(),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Held-out score" in result.stdout
+        assert "standby_upper_rmse_f" in result.stdout
+
+    def test_a_date_is_local_midnight(self) -> None:
+        at = cal_cli.parse_instant("2026-01-07", "--holdout-from")
+        assert at.tzinfo is not None
+        assert (at.hour, at.minute) == (0, 0)
+
+    def test_not_a_date(self) -> None:
+        with pytest.raises(InputError, match="ISO 8601"):
+            cal_cli.parse_instant("next week", "--holdout-from")

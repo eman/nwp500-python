@@ -91,6 +91,11 @@ def changes_of(
         power_w=series(lambda s: float(s.current_inst_power)),
         energy_to_setpoint_wh=series(lambda s: float(s.energy_to_setpoint)),
         heater_air_f=series(f(lambda s: s.ambient_temperature_raw)),
+        setpoint_f=series(
+            lambda s: sa._from_device(
+                sa.HalfCelsius(s.dhw_temperature_setting_raw)  # type: ignore[attr-defined]
+            )
+        ),
     )
 
 
