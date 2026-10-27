@@ -47,7 +47,7 @@ under-read the two of them where it held any back (2026-03-31, after a
 bath and a heat-pump recovery, and 04-14, after a six-minute upper
 element run over a cold bottom) by 9.3 gal on average.
 
-**Its walk along a simulation** (``walk_booked``, ``BookedHeatLedger``).
+**Its walk along a simulation** (``walk_booked``).
 The book's start is the caller's: from their own record, or
 ``full_tank_book`` when they know the tank is full: quiet since a
 recovery ended, or the compressor running with the probes within the
@@ -59,37 +59,11 @@ standby. It re-anchors on a full tank at the end of a recovery the
 heater ended itself (its target, or the TOU cap), or quiet after one
 with the zones within the band, or with the zones within the band as
 the compressor runs alone, past the hold and nothing drawn at that
-instant. The engine runs this walk at each draw (``BookedHeatLedger``, the
-core's ``HeatLedger``), and a draw that spends the booked heat past the
-zone's empty point takes the upper zone down.
+instant.
 
-**The upper zone through a draw** (``zone_after_draw_f``). The
-calibrated draw (``sim.decay.draw_step``) moves the upper zone a
-fraction of a degree, as the probe moves on an ordinary draw, and as
-little when the cold front reaches the probe, where it falls tens of
-degrees: through a 54 gal bath it left the zone at 139.6 °F against the
-probe's 104. So at each draw the zone is taken no warmer than the line
-plus ``fall_f_per_gal`` per delivered gallon the booked heat gives
-before ``zone_empty_btu``, and less per gallon past it, no colder than
-the lower zone. ``zone_empty_btu`` is 3,533 BTU below the empty point:
-the median of the same crossings' booked heat when the book held back
-the heat in a draw's cold water. The served point calls them early by
-design, and a zone taken down there misplaced most draws that came near
-it without crossing.
-
-**It falls before that point too** (``zone_mixed_f``). The probe
-declines from early in a long draw, the water above the rising front
-mixing, and faster the less booked heat is left: over the record's draws
-of 15 gal or more, 0.08 °F per delivered gallon with more than 30 gal
-left before the zone's point, 0.2 at 20-30, 0.6 at 10-15, 1.3 at 5-10.
-So a draw also takes the zone no warmer than where it found it less the
-integral of ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)`` over its
-gallons; the colder of that and the line stands.
-
-**The lower zone through a draw** is the calibrated draw's
-(``sim.decay.draw_step``), with a book as without one: the lower probe
-falls on every draw at once, and neither rebounds nor keeps falling
-after it. The book has no say over it.
+The simulator reads the walk for what a path delivers
+(``delivery.delivery_along``) and its draw windows; the tank's own
+probes through a draw are the layered tank's (``physics.stratified``).
 """
 
 from __future__ import annotations
@@ -98,21 +72,13 @@ import itertools
 import math
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from statistics import median
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol
 
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
-from nwp500.sim.extensions import (
-    AfterDraw,
-    DrawsAhead,
-    DrawTaken,
-    LedgerZones,
-    UpperAhead,
-)
 from nwp500.sim.params import BookParams, CirculationParams
-from nwp500.sim.tank_physics import point_at
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 #: BTU per Wh, at the rounding the book was fitted with.
@@ -573,16 +539,11 @@ def deliverable_from_heat(
     return max(0.0, (heat_btu - p.empty_btu) / per_gal)
 
 
-# ── What the engine asks of it at a draw ────────────────────────────
+# ── The line ─────────────────────────────────────────────────────────
 
 #: The line, delivered water below which is not hot, °F: the default of
 #: ``ReadinessParams.line_f``, which a caller passes as ``line_f``.
 DEPLETION_THRESHOLD_F = 105.0
-#: How fast the delivered water falls per delivered gallon once it has
-#: crossed the line: the default of ``ReadinessParams.fall_f_per_gal``.
-FALL_F_PER_GAL = 2.0
-#: Below this a booked zone is the draw's own: the book moves it no less.
-_ZONE_MOVED_F = 0.01
 
 
 def tank_max_btu(
@@ -612,8 +573,7 @@ def probe_line_gal(
     crosses the line: negative once a draw has gone past it, by the
     gallons it went. The heat is read no higher than ``tank_max_btu``;
     ``-inf`` when a gallon would take no heat (a tank at the inlet).
-    ``empty_btu`` is the book's empty point unless given (the zone's,
-    ``zone_after_draw_f``)."""
+    ``empty_btu`` is the book's empty point unless given."""
     ep = ep or BookParams()
     per_gal = WATER_BTU_PER_GAL_F * (delivery_f(upper_f, ep) - inlet_f)
     if per_gal <= 0.0 or not math.isfinite(heat_btu):
@@ -621,117 +581,6 @@ def probe_line_gal(
     heat = min(heat_btu, tank_max_btu(upper_f, lower_f, ep))
     empty = ep.empty_btu if empty_btu is None else empty_btu
     return (heat - empty) / per_gal
-
-
-def zone_after_draw_f(
-    booked: Booked,
-    upper_f: float,
-    lower_f: float,
-    fall_f_per_gal: float = FALL_F_PER_GAL,
-    ep: BookParams | None = None,
-    *,
-    line_f: float = DEPLETION_THRESHOLD_F,
-) -> float:
-    """The upper zone just after a draw, from the booked state after it
-    (module docstring, *The upper zone through a draw*): the line plus
-    ``fall_f_per_gal`` per delivered gallon the booked heat still gives
-    before the zone's empty point (``zone_empty_btu``), less per gallon
-    drawn past it; no warmer than ``upper_f``, the draw's own response,
-    and no colder than ``lower_f``."""
-    ep = ep or BookParams()
-    left = probe_line_gal(
-        booked.heat_btu,
-        upper_f,
-        lower_f,
-        booked.inlet_f,
-        ep,
-        empty_btu=ep.zone_empty_btu,
-    )
-    if not math.isfinite(left):
-        return upper_f
-    line = line_f + fall_f_per_gal * left
-    return min(upper_f, max(lower_f, line))
-
-
-def _mix_potential(left: float, ep: BookParams) -> float:
-    """The integral of ``zone_mixed_f``'s rate over booked gallons left:
-    its rate is ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)`` above
-    the zone's empty point and ``zone_mix_f_per_gal`` past it."""
-    s, lam = ep.zone_mix_f_per_gal, ep.zone_mix_gal
-    if left >= 0.0:
-        return -s * lam * math.exp(-left / lam)
-    return -s * lam + s * left
-
-
-def zone_mixed_f(
-    booked: Booked,
-    gal: float,
-    upper_before_f: float,
-    upper_f: float,
-    lower_f: float,
-    ep: BookParams | None = None,
-) -> float:
-    """The upper zone just after ``gal`` delivered gallons drawn from
-    ``upper_before_f`` (module docstring, *The upper zone through a
-    draw*): the water above the rising front mixes, so the zone falls
-    by the rate's integral over the gallons, the booked state after the
-    draw ``booked`` giving the gallons left before ``zone_empty_btu``
-    at ``upper_f``, the draw's own response, and ``lower_f``. No warmer
-    than ``upper_f``, no colder than ``lower_f``; ``upper_f`` when the
-    book cannot say (a tank at the inlet)."""
-    ep = ep or BookParams()
-    if gal <= 0.0 or ep.zone_mix_f_per_gal <= 0.0 or ep.zone_mix_gal <= 0.0:
-        return upper_f
-    left = probe_line_gal(
-        booked.heat_btu,
-        upper_f,
-        lower_f,
-        booked.inlet_f,
-        ep,
-        empty_btu=ep.zone_empty_btu,
-    )
-    if not math.isfinite(left):
-        return upper_f
-    drop = _mix_potential(left + gal, ep) - _mix_potential(left, ep)
-    return min(upper_f, max(lower_f, upper_before_f - drop))
-
-
-def zone_cannot_move(
-    booked: Booked,
-    gal: float,
-    lost_btu: float,
-    upper_lo_f: float,
-    upper_hi_f: float,
-    fall_f_per_gal: float = FALL_F_PER_GAL,
-    ep: BookParams | None = None,
-    *,
-    line_f: float = DEPLETION_THRESHOLD_F,
-) -> bool:
-    """Whether no draw can move the upper zone (``zone_after_draw_f``)
-    from ``booked`` through ``gal`` more delivered gallons and at most
-    ``lost_btu`` of standby, with the zone anywhere in
-    ``[upper_lo_f, upper_hi_f]``; True only when that is certain.
-
-    A floor under the heat: draws priced at the hottest zone; heat
-    going in only raises it. The tank's ceiling (``tank_max_btu``) is
-    taken at the zone. A re-anchor is no floor: the caller rules one
-    out. For the engine to skip walking the book where it is far from
-    the zone's empty point; it never decides a move."""
-    ep = ep or BookParams()
-    inlet = booked.inlet_f
-    hot = max(0.0, delivery_f(upper_hi_f, ep) - inlet)
-    floor = booked.heat_btu - gal * WATER_BTU_PER_GAL_F * hot - lost_btu
-    u = upper_lo_f
-    while True:
-        per_gal = WATER_BTU_PER_GAL_F * (delivery_f(u, ep) - inlet)
-        if per_gal > 0.0:
-            ceiling = tank_max_btu(u, u, ep)
-            left = (min(floor, ceiling) - ep.zone_empty_btu) / per_gal
-            if line_f + fall_f_per_gal * left < u:
-                return False
-        if u >= upper_hi_f:
-            return True
-        u = min(upper_hi_f, u + 0.25)
 
 
 # ── Its walk along a simulation ─────────────────────────────────────
@@ -764,23 +613,6 @@ class SpanLoss(Protocol):
 
 
 @dataclass(frozen=True)
-class WalkCarry:
-    """Where a walk stood on reaching an instant, before its rules there
-    ran: enough to resume it from that instant and get what the whole
-    walk gets from there on (``walk_booked``'s ``carry``). Only an
-    instant whose past cannot change is a place to resume from: the
-    engine's own clock, with the path before it written."""
-
-    at: datetime
-    state: Booked
-    clean: bool
-    #: Heat in over the span that ended at ``at``.
-    heated: bool
-    #: The compressor running alone over that span, undisturbed.
-    compressing: bool = False
-
-
-@dataclass(frozen=True)
 class BookedPath:
     """The booked state at each element of a simulation's path, in its
     order, and at each instant the walk stopped at."""
@@ -791,9 +623,6 @@ class BookedPath:
     instants: list[datetime]
     #: At each of ``instants``, before anything drawn there.
     befores: list[Booked]
-    #: Where the walk stood at ``walk_booked``'s ``keep``: None without
-    #: one, or when ``keep`` is not one of its instants.
-    carry: WalkCarry | None = None
 
     def before(self, at: datetime) -> Booked:
         """The state at ``at``, before anything drawn at that instant.
@@ -811,8 +640,6 @@ def walk_booked(
     ambient_at: Callable[[datetime], float],
     p: BookParams | None = None,
     *,
-    carry: WalkCarry | None = None,
-    keep: datetime | None = None,
     withheld: Sequence[Run] = (),
     extra: SpanLoss | None = None,
 ) -> BookedPath:
@@ -823,13 +650,6 @@ def walk_booked(
     elements' go in, and standby (at the simulated zones' mean, to the
     ambient) comes out of the drawable heat.
 
-    ``carry`` resumes a walk where an earlier one stood (``WalkCarry``):
-    ``points`` then begin at ``carry.at`` and ``start`` is not read, and
-    from there on the answer is the whole walk's, element for element.
-    ``keep``, one of the walk's instants, is where to stand for the next
-    resume (``BookedPath.carry``). The engine resumes at each draw from
-    its own clock, so a day's walk is walked once, not once a draw.
-
     ``withheld`` are the windows over which a recovery is credited no
     heat (the engine's ``withheld_windows``): the compressor or
     element runs there and adds nothing to the book, as it adds nothing
@@ -839,9 +659,6 @@ def walk_booked(
     span, and a span it disturbs is not quiet.
     """
     p = p or BookParams()
-    if carry is not None:
-        start = carry.state
-        points = [pt for pt in points if pt.at >= carry.at]
     t0, t1 = points[0].at, points[-1].at
     times = [pt.at for pt in points]
 
@@ -933,7 +750,6 @@ def walk_booked(
     state = start
     before: list[Booked] = []
     after: dict[datetime, Booked] = {}
-    kept: WalkCarry | None = None
     # The book's anchor rule on the simulated
     # tank: quiet since a heating ended, and full. A recovery the heater
     # stopped itself, at its target or the TOU cap, is full by the
@@ -942,27 +758,11 @@ def walk_booked(
     # within the book's band. So is an instant the compressor has run
     # alone up to, past the book's hold (``Booked.hold_s``), nothing
     # drawn there.
-    clean = False if carry is None else carry.clean
-
-    def heated_before(k: int) -> bool:
-        """Heat in over the span ending at instant ``k``: the carry's at
-        a resumed walk's first instant, none at a fresh walk's."""
-        if k > 0:
-            return heats[k - 1]
-        return carry is not None and carry.heated
-
-    def alone_before(k: int) -> bool:
-        """The compressor alone over the span ending at instant ``k``,
-        as ``heated_before`` reads it."""
-        if k > 0:
-            return alone[k - 1]
-        return carry is not None and carry.compressing
-
+    clean = False
     for k, at in enumerate(instants):
-        prev_heat = heated_before(k)
-        prev_alone = alone_before(k)
-        if at == keep:
-            kept = WalkCarry(at, state, clean, prev_heat, prev_alone)
+        # Heat in, and the compressor alone, over the span ending here.
+        prev_heat = k > 0 and heats[k - 1]
+        prev_alone = k > 0 and alone[k - 1]
         busy_next = k < len(spans) and (heats[k] or extras[k][1])
         disturbed = by_instant.get(at, 0.0) > 0.0 or busy_next
         if prev_heat and not (k < len(spans) and heats[k]):
@@ -1008,7 +808,7 @@ def walk_booked(
     for i, pt in enumerate(points):
         repeated = i + 1 < len(points) and points[i + 1].at == pt.at
         states.append(before[index[pt.at]] if repeated else after[pt.at])
-    return BookedPath(states, instants, before, kept)
+    return BookedPath(states, instants, before)
 
 
 #: The coldest ambient a standby bound assumes, °F.
@@ -1052,190 +852,7 @@ def _anchored(
     )
 
 
-# ── The core's HeatLedger ───────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class BookedHeatLedger:
-    """The book as the core's ``HeatLedger``: ``start`` walked along the
-    engine's path with the book's own terms (``walk_booked``), and read
-    at each draw for the zones it leaves. It holds nothing between
-    calls: its walk's ``WalkCarry`` is the engine's ``Stand``.
-
-    Built per simulation: the book at the walk's start, the ambient the
-    compressor and standby run to, the line and the fall rate the upper
-    zone is taken down on (``ReadinessParams.line_f``,
-    ``fall_f_per_gal``), the windows over which heat is credited none,
-    and a client's own loss (``SpanLoss``), if any."""
-
-    start: Booked
-    ambient_at: Callable[[datetime], float]
-    p: BookParams = field(default_factory=BookParams)
-    withheld: Sequence[Run] = ()
-    line_f: float = DEPLETION_THRESHOLD_F
-    fall_f_per_gal: float = FALL_F_PER_GAL
-    extra: SpanLoss | None = None
-
-    @property
-    def zones(self) -> LedgerZones:
-        """Whether every draw may mix the upper zone down."""
-        return LedgerZones(
-            mixes=self.p.zone_mix_f_per_gal > 0.0 and self.p.zone_mix_gal > 0.0,
-        )
-
-    def walk(
-        self,
-        points: Sequence[PathPoint],
-        heating: Sequence[HeatingInterval],
-        draws: Sequence[Draw],
-        carry: WalkCarry | None = None,
-        keep: datetime | None = None,
-    ) -> BookedPath:
-        """``start`` walked along ``points`` (``walk_booked``): resumed
-        from ``carry``, standing at ``keep`` for the next."""
-        return walk_booked(
-            self.start,
-            points,
-            heating,
-            draws,
-            self.ambient_at,
-            self.p,
-            carry=carry,
-            keep=keep,
-            withheld=self.withheld,
-            extra=self.extra,
-        )
-
-    def loss_bound(
-        self, start: datetime, end: datetime, upper_f: float
-    ) -> float:
-        """The most the walk can charge over ``[start, end]``
-        (``loss_ceiling_btu``)."""
-        return loss_ceiling_btu(start, end, upper_f, self.p, extra=self.extra)
-
-    def after_draw(self, q: DrawTaken) -> AfterDraw:
-        """The book walked along the path to the draws at ``q.at``, as
-        the walk after the simulation walks it, unless a bound shows the
-        upper zone cannot move (``_zone_far``; with mixing, none does).
-        The upper zone goes down to the colder of ``zone_after_draw_f``
-        and ``zone_mixed_f`` (the mixing above the front, from
-        ``q.upper_f``) of the booked state after them when that is below
-        the draws' own response, over the lower zone's own response."""
-        carry = cast("WalkCarry | None", q.stand)
-        if self._zone_far(carry, q):
-            return AfterDraw()
-        walked = self.walk(q.path, q.intervals, q.draws, carry, q.at)
-        stand = walked.carry
-        after = walked.states[-1]
-        lower = q.drawn_lower_f
-        line = zone_after_draw_f(
-            after,
-            q.drawn_upper_f,
-            lower,
-            self.fall_f_per_gal,
-            self.p,
-            line_f=self.line_f,
-        )
-        zone = min(
-            line,
-            zone_mixed_f(
-                after, q.gallons, q.upper_f, q.drawn_upper_f, lower, self.p
-            ),
-        )
-        if zone >= q.drawn_upper_f - _ZONE_MOVED_F:
-            return AfterDraw(stand=stand)
-        return AfterDraw(zone, stand)
-
-    def upper_moves_at(self, q: DrawsAhead) -> UpperAhead:
-        """The book walked along the path ahead (to the first onset only
-        with ``q.head``, the rest then decided by ``zone_cannot_move``
-        where it can be), and each onset's draw read against it as
-        ``after_draw`` reads one: the first whose zone goes below the
-        draw's own response on the coast."""
-        stand = cast("WalkCarry | None", q.stand)
-
-        def walk(
-            path: Sequence[PathPoint], draws: Sequence[Draw]
-        ) -> BookedPath:
-            nonlocal stand
-            walked = self.walk(path, q.intervals, draws, stand, q.at)
-            if walked.carry is not None:
-                stand = walked.carry
-            return walked
-
-        gal: dict[datetime, float] = {}
-        for at, g in q.pending:
-            gal[at] = gal.get(at, 0.0) + g
-        onsets = q.onsets
-        first = onsets[0]
-        if q.head is not None:
-            walked = walk(
-                q.head, [*q.taken, *(d for d in q.pending if d[0] <= first)]
-            )
-        else:
-            walked = walk(q.path, [*q.taken, *q.pending])
-        whole = q.head is None
-        after: Booked | None = None
-        for i, at in enumerate(onsets):
-            if i == 1 and not whole:
-                assert after is not None and q.bound is not None
-                if zone_cannot_move(
-                    after,
-                    sum(gal[x] for x in onsets[1:]),
-                    q.bound.lost_btu,
-                    q.bound.upper_lo_f,
-                    q.bound.upper_hi_f,
-                    self.fall_f_per_gal,
-                    self.p,
-                    line_f=self.line_f,
-                ):
-                    return UpperAhead(None, stand)
-                walked = walk(q.path, [*q.taken, *q.pending])
-                whole = True
-            here = point_at(q.points, at)
-            upper, lower = q.respond(at, here.upper_f, here.lower_f, gal[at])
-            after = walked.before(at).drawn(gal[at], here.upper_f, self.p)
-            zone = min(
-                zone_after_draw_f(
-                    after,
-                    upper,
-                    lower,
-                    self.fall_f_per_gal,
-                    self.p,
-                    line_f=self.line_f,
-                ),
-                zone_mixed_f(
-                    after, gal[at], here.upper_f, upper, lower, self.p
-                ),
-            )
-            if zone < upper - _ZONE_MOVED_F:
-                return UpperAhead(at, stand)
-        return UpperAhead(None, stand)
-
-    def _zone_far(self, carry: WalkCarry | None, q: DrawTaken) -> bool:
-        """Whether, by a bound and without walking, the draws just taken
-        cannot move the upper zone (``zone_cannot_move``): from where the
-        walk last stood, through every draw since, with the engine's
-        ``loss_bound`` and any heat in ignored. Not across a re-anchor,
-        which is no floor: none can have happened since that stand when
-        nothing has stopped heating since (the engine's to rule out:
-        ``q.bound`` None) and nothing is heating now, since the
-        compressor re-anchors as it runs."""
-        bound = q.bound
-        if carry is None or bound is None or carry.clean:
-            return False
-        if bound.running_since or carry.heated:
-            return False
-        return zone_cannot_move(
-            carry.state,
-            q.drawn_gal,
-            bound.lost_btu,
-            bound.upper_lo_f,
-            bound.upper_hi_f,
-            self.fall_f_per_gal,
-            self.p,
-            line_f=self.line_f,
-        )
+# ── A full tank ──────────────────────────────────────────────────────
 
 
 def full_tank_book(

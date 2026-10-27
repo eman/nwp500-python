@@ -1,10 +1,10 @@
 """Hot water at the tap through the API: the heat book in a simulation,
 the delivery along it, draw windows, and ``readiness``.
 
-``simulate`` with a book is held to the engine called by hand with the
-book's ledger, as ``test_sim_api`` holds it without one; the functions
-it calls are held to their source in ``test_sim_readiness`` and
-``test_sim_book``.
+``simulate`` with a book is held to the engine called by hand, the book
+read along its path, as ``test_sim_api`` holds it without one; the
+functions it calls are held to their source in ``test_sim_readiness``
+and ``test_sim_book``.
 """
 
 import json
@@ -32,16 +32,15 @@ from nwp500.sim import (
     site_example_params,
 )
 from nwp500.sim.book import (
-    BookedHeatLedger,
     deliverable_from_heat,
     full_tank,
 )
+from nwp500.sim.circulation import Circulation
 from nwp500.sim.codec import (
     result_to_document,
     scenario_from_document,
     scenario_to_document,
 )
-from nwp500.sim.decay import Draw as DecayDraw
 from nwp500.sim.delivery import (
     EXAMPLE_EVIDENCE,
     booked_deliverable,
@@ -53,6 +52,7 @@ from nwp500.sim.delivery import (
 from nwp500.sim.engine import Heater
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.params import (
+    CirculationParams,
     HeaterParams,
     ReadinessParams,
     params_from_document,
@@ -60,7 +60,7 @@ from nwp500.sim.params import (
     unknown_fields,
 )
 from nwp500.sim.physics.heat_pump import start_hold_min
-from nwp500.sim.tank_physics import TankPhysics, TankState, TwoZone
+from nwp500.sim.tank_physics import TankPhysics, TankState
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
@@ -102,7 +102,7 @@ def _scenario(**kw: Any) -> Scenario:
         "tz": "UTC",
         "state": HeaterState(upper_f=FULL[0], lower_f=FULL[1]),
         "settings": Settings(setpoint_f=140.9, hp_lower_on_f=105.0),
-        "history": History(compressor_stopped_at=at(-1.0), heated_at=at(-1.0)),
+        "history": History(compressor_stopped_at=at(-1.0)),
         "environment": Environment(ambient_f=68.0, humidity=48.0),
         "loads": Loads(draws=BIG, windows=(BIG_WINDOW,)),
     }
@@ -110,18 +110,12 @@ def _scenario(**kw: Any) -> Scenario:
     return Scenario(**base)
 
 
-def _by_hand(params: HeaterParams, s: Scenario, book: Any) -> Any:
-    """The engine called directly, with the book's ledger and the
-    windows' edges marked, on a flat ambient."""
+def _by_hand(params: HeaterParams, s: Scenario) -> Any:
+    """The engine called directly, with the windows' edges marked, on a
+    flat ambient."""
     stamps = pd.date_range(at(-2), s.until + timedelta(hours=24), freq="1h")
     frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
-    physics = TankPhysics(
-        params,
-        frame,
-        s.environment.humidity,
-        draws_on=True,
-        tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
-    )
+    physics = TankPhysics(params, frame, s.environment.humidity, draws_on=True)
     return walk(
         start=s.start,
         upper_f=s.state.upper_f,
@@ -134,31 +128,19 @@ def _by_hand(params: HeaterParams, s: Scenario, book: Any) -> Any:
         draws=[(d.at, d.gallons) for d in s.loads.draws],
         marks=[x for w in s.loads.windows for x in (w.start, w.end)],
         stopped_at=s.history.compressor_stopped_at,
-        heated_at=s.history.heated_at,
         start_hold=lambda off: start_hold_min(params.compressor, off),
         controller=params.controller,
-        ledger=BookedHeatLedger(book, physics.ambient.at, params.book_terms()),
     )
 
 
 class TestTheBookInASimulation:
-    def test_simulate_with_a_book_is_the_engine_with_its_ledger(
+    def test_simulate_with_a_book_is_the_engine_alone(
         self, params: HeaterParams
     ) -> None:
+        """The book reads the walk; it does not move the tank."""
         s = _scenario()
         book = full_tank_book(*FULL, params.book)
-        assert simulate(s, params, book=book).simulation == _by_hand(
-            params, s, book
-        )
-
-    def test_the_book_takes_the_upper_zone_down_through_a_big_draw(
-        self, params: HeaterParams
-    ) -> None:
-        s = _scenario()
-        with_book = simulate(s, params, book=full_tank_book(*FULL, params.book))
-        without = simulate(s, params)
-        assert min(p.upper_f for p in with_book.points) < 105.0
-        assert min(p.upper_f for p in without.points) > 130.0
+        assert simulate(s, params, book=book).simulation == _by_hand(params, s)
 
     def test_energy_saver_starts_on_a_draw_with_a_book(
         self, params: HeaterParams
@@ -170,9 +152,7 @@ class TestTheBookInASimulation:
         held: dict[str, Any] = {
             "state": HeaterState(upper_f=126.0, lower_f=87.0),
             "settings": Settings(setpoint_f=107.6, hp_lower_on_f=104.9, mode=3),
-            "history": History(
-                compressor_stopped_at=at(-8.0), heated_at=at(-8.0)
-            ),
+            "history": History(compressor_stopped_at=at(-8.0)),
         }
         s = _scenario(
             **held, loads=Loads(draws=(Draw(at=at(1.0), gallons=5.0),))
@@ -195,22 +175,15 @@ class TestTheBookInASimulation:
         second = at(1.0) + timedelta(minutes=1)
 
         class SecondLeavesItWarm(TankPhysics):
-            def draw(
-                self, at: datetime, state: TankState, gal: float
-            ) -> TwoZone:
+            def draw(self, at: datetime, state: TankState, gal: float) -> Any:
                 got = super().draw(at, state, gal)
-                return replace(got, lower_f=106.0) if at == second else got
+                if at != second:
+                    return got
+                return self.estimate(self.observe(got)[0], 106.0)
 
         stamps = pd.date_range(at(-2), at(30), freq="1h")
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
-        physics = SecondLeavesItWarm(
-            params,
-            frame,
-            48.0,
-            draws_on=True,
-            tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
-        )
-        book = full_tank_book(126.0, 87.0, params.book)
+        physics = SecondLeavesItWarm(params, frame, 48.0, draws_on=True)
         sim = walk(
             start=stop + timedelta(minutes=1),
             upper_f=126.0,
@@ -224,11 +197,7 @@ class TestTheBookInASimulation:
             physics=physics,
             draws=[(at(1.0), 5.0), (second, 1.0)],
             stopped_at=stop,
-            heated_at=at(-8.0),
             controller=params.controller,
-            ledger=BookedHeatLedger(
-                book, physics.ambient.at, params.book_terms()
-            ),
         )
         lockout = timedelta(seconds=params.controller.restart_lockout_s)
         assert sim.heating and sim.heating[0].start.at == stop + lockout
@@ -242,21 +211,12 @@ class TestTheBookInASimulation:
         ends."""
         stop = at(1.0) - timedelta(minutes=2)
         draw = at(1.0) + timedelta(minutes=3)
-        runs = [
-            DecayDraw(
-                at=at(1.0),
-                gallons=2.0,
-                inflow_f=70.0,
-                until=at(1.0) + timedelta(minutes=2),
-                gpm=1.0,
-            )
-        ]
+        run = (at(1.0), at(1.0) + timedelta(minutes=2))
 
         class DrawLeavesItWarm(TankPhysics):
-            def draw(
-                self, at: datetime, state: TankState, gal: float
-            ) -> TwoZone:
-                return replace(super().draw(at, state, gal), lower_f=106.0)
+            def draw(self, at: datetime, state: TankState, gal: float) -> Any:
+                got = super().draw(at, state, gal)
+                return self.estimate(self.observe(got)[0], 106.0)
 
         stamps = pd.date_range(at(-2), at(30), freq="1h")
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
@@ -265,12 +225,16 @@ class TestTheBookInASimulation:
             frame,
             48.0,
             draws_on=True,
-            tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
-            flowing_draws=lambda a, b: [
-                r for r in runs if r.at < b and (r.until or r.at) > a
-            ],
+            circulation=Circulation((run,)),
+            # Two gallons of the pipe's water back at 70 °F.
+            circulation_terms=CirculationParams(
+                displaced_gal=2.0,
+                flow_gpm=1.0,
+                return_rest_offset_f=2.0,
+                return_cool_tau_h=0.0,
+                loss_btu_per_gal=0.0,
+            ),
         )
-        book = full_tank_book(126.0, 87.0, params.book)
         sim = walk(
             start=stop + timedelta(minutes=1),
             upper_f=126.0,
@@ -284,11 +248,7 @@ class TestTheBookInASimulation:
             physics=physics,
             draws=[(draw, 1.0)],
             stopped_at=stop,
-            heated_at=at(-8.0),
             controller=params.controller,
-            ledger=BookedHeatLedger(
-                book, physics.ambient.at, params.book_terms()
-            ),
         )
         lockout = timedelta(seconds=params.controller.restart_lockout_s)
         assert sim.heating and sim.heating[0].start.at == stop + lockout

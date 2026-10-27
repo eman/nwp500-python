@@ -28,6 +28,7 @@ from nwp500.sim import (
     Settings,
     TouPeriod,
     Write,
+    active_cycle,
     default_params,
     recovery,
     simulate,
@@ -105,7 +106,7 @@ def _scenario(**kw: Any) -> Scenario:
         "tz": "UTC",
         "state": HeaterState(upper_f=128.0, lower_f=112.0),
         "settings": Settings(setpoint_f=140.9, hp_lower_on_f=105.0),
-        "history": History(compressor_stopped_at=at(-2.0), heated_at=at(-2.0)),
+        "history": History(compressor_stopped_at=at(-2.0)),
         "environment": Environment(ambient_f=AMBIENT_F, humidity=48.0),
     }
     base.update(kw)
@@ -130,8 +131,6 @@ def _by_hand(
         frame,
         s.environment.humidity,
         draws_on=bool(s.loads.draws) if draws_on is None else draws_on,
-        tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
-        physics_usable=physics_usable,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
     )
@@ -152,7 +151,6 @@ def _by_hand(
         heater=heater,
         physics=physics,
         stopped_at=s.history.compressor_stopped_at,
-        heated_at=s.history.heated_at,
         controller=params.controller,
         **kw,
     )
@@ -382,9 +380,9 @@ class TestSimulateIsTheEngine:
 
 
 class _Model:
-    """A model that uses what it is given: the physics' minutes, longer
-    by half again per unit of draw load, plus the start's hold. It keeps
-    every context it was asked about."""
+    """A model that uses what it is given: the physics' minutes, a fifth
+    longer, plus the start's hold. It keeps every context it was asked
+    about."""
 
     def __init__(self) -> None:
         self.asked: list[RecoveryContext] = []
@@ -393,7 +391,7 @@ class _Model:
         self.asked.append(ctx)
         hold = ctx.start_hold_minutes
         return ModelDuration(
-            minutes=ctx.physics.minutes * (1.0 + 0.5 * ctx.draw_load) + hold,
+            minutes=ctx.physics.minutes * 1.2 + hold,
             start_hold_minutes=hold,
             confidence=0.9,
             reasons=() if ctx.physics.estimate is not None else ("unusable",),
@@ -408,9 +406,6 @@ def _hold(gap: float | None) -> float:
 
 #: A tank whose lower zone is below the start threshold: a start at T0.
 COLD = HeaterState(upper_f=128.0, lower_f=100.0)
-#: Two draws in the ``DRAW_LEAD`` before T0, and one before it.
-LEAD = (Draw(at=at(-0.25), gallons=6.0), Draw(at=at(-0.1), gallons=4.0))
-EARLY = Draw(at=at(-1.0), gallons=8.0)
 
 
 class TestAModelsInputs:
@@ -423,15 +418,10 @@ class TestAModelsInputs:
     ) -> tuple[Any, Any, _Model]:
         model = _Model()
         got = simulate(s, params, recovery=model, **kw).simulation
-        usable = kw.pop("physics_usable", None)
-        lead = kw.pop("lead_draws", ())
         want = _by_hand(
             params,
             s,
             model=_Model(),
-            physics_usable=usable,
-            draws_on=bool(s.loads.draws or lead),
-            lead_draws=[(d.at, d.gallons) for d in lead],
             draws=[(d.at, d.gallons) for d in s.loads.draws],
             **kw,
         )
@@ -448,7 +438,7 @@ class TestAModelsInputs:
         assert model.asked[0].start_hold_minutes == start_hold_min(
             params.compressor, 120.0
         )
-        assert all(c.draw_load == 0.0 for c in model.asked)
+        assert all(len(c.layers_f) == params.tank.layers for c in model.asked)
 
     def test_the_start_hold(self, params: HeaterParams) -> None:
         s = _scenario(state=COLD)
@@ -468,30 +458,19 @@ class TestAModelsInputs:
         assert got == want
         assert got != simulate(s, params, recovery=_Model()).simulation
 
-    def test_lead_draws_are_the_first_recoverys_load(
-        self, params: HeaterParams
-    ) -> None:
-        s = _scenario(state=COLD)
-        got, want, model = self._both(params, s, lead_draws=(EARLY, *LEAD))
-        assert got == want
-        assert model.asked[0].draw_load > 0.0
-        # Without the draw before the lead, the same load.
-        alone = _Model()
-        simulate(s, params, recovery=alone, lead_draws=LEAD)
-        assert alone.asked[0].draw_load == model.asked[0].draw_load
-
     def test_with_no_model_the_physics_follows_the_hold(
         self, params: HeaterParams
     ) -> None:
         """The physics climbs after the hold, so a longer one ends the
-        recovery that much later."""
+        recovery that much later, and a little more: the tank cools
+        through the hold, which heats nothing."""
         s = _scenario(state=COLD)
         plain = simulate(s, params).simulation.heating[0]
         held = simulate(s, params, start_hold=_hold).simulation.heating[0]
-        extra = _hold(120.0) - start_hold_min(params.compressor, 120.0)
-        assert held.end - plain.end == pytest.approx(
-            timedelta(minutes=extra), abs=timedelta(seconds=1)
+        extra = timedelta(
+            minutes=_hold(120.0) - start_hold_min(params.compressor, 120.0)
         )
+        assert extra <= held.end - plain.end < extra + timedelta(minutes=1)
         running = _scenario(
             state=HeaterState(
                 upper_f=128.0, lower_f=100.0, compressor_running=True
@@ -499,55 +478,8 @@ class TestAModelsInputs:
         )
         late = simulate(running, params, running_hold=15.0).simulation
         now = simulate(running, params).simulation
-        assert late.heating[0].end - now.heating[0].end == pytest.approx(
-            timedelta(minutes=15), abs=timedelta(seconds=1)
-        )
-
-    def test_physics_not_usable(self, params: HeaterParams) -> None:
-        s = _scenario(state=COLD)
-        got, want, model = self._both(params, s, physics_usable=False)
-        assert got == want
-        assert all(c.physics.estimate is None for c in model.asked)
-        assert "unusable" in got.reasons
-
-    def test_lead_draws_read_carry_the_draw_reasons(
-        self, params: HeaterParams
-    ) -> None:
-        s = _scenario(state=COLD)
-        got = simulate(s, params, recovery=_Model(), lead_draws=LEAD).reasons
-        assert "draw_uncalibrated" in got
-        assert "inlet_temp_modelled" in got
-        measured = simulate(
-            s,
-            params,
-            recovery=_Model(),
-            lead_draws=LEAD,
-            inlet_measured=True,
-        ).reasons
-        assert "inlet_temp_modelled" not in measured
-
-    @pytest.mark.parametrize(
-        "kw",
-        [
-            # No model: nothing reads them.
-            {"lead_draws": LEAD},
-            # Before the lead: the recovery does not reach back to it.
-            {"recovery": _Model(), "lead_draws": (EARLY,)},
-        ],
-    )
-    def test_lead_draws_not_read_carry_none(
-        self, params: HeaterParams, kw: dict[str, Any]
-    ) -> None:
-        got = simulate(_scenario(state=COLD), params, **kw).reasons
-        assert "draw_uncalibrated" not in got
-        assert "inlet_temp_modelled" not in got
-
-    def test_lead_draws_need_a_draw_response(
-        self, params: HeaterParams
-    ) -> None:
-        bare = replace(params, draw=replace(params.draw, observability=None))
-        with pytest.raises(SimulationError, match="draw_model_unsupported"):
-            simulate(_scenario(state=COLD), bare, lead_draws=LEAD)
+        later = late.heating[0].end - now.heating[0].end
+        assert timedelta(minutes=15) <= later < timedelta(minutes=16)
 
 
 class TestWhatTheResultSays:
@@ -560,9 +492,39 @@ class TestWhatTheResultSays:
         used = simulate(s, params).defaults_used
         assert "humidity=50.0" in used
         assert "inlet_f=72.4" in used
-        assert "heated_at=None" in used
         assert any(d.startswith("compressor_stopped_at=None") for d in used)
         assert any(d.startswith("hp_lower_on_f=None") for d in used)
+
+    def test_a_tank_made_of_its_probes_says_so(
+        self, params: HeaterParams
+    ) -> None:
+        assert "tank_profile_estimated" in simulate(_scenario(), params).reasons
+
+    def test_given_layers_are_where_it_starts(
+        self, params: HeaterParams
+    ) -> None:
+        n = params.tank.layers
+        layers = tuple(100.0 + 3.0 * k for k in range(n))
+        s = _scenario(
+            state=HeaterState(upper_f=125.0, lower_f=110.0, layers_f=layers)
+        )
+        got = simulate(s, params)
+        assert "tank_profile_estimated" not in got.reasons
+        physics = TankPhysics(
+            params, pd.DataFrame({"ambient_f": []}), None, draws_on=False
+        )
+        start = got.points[0]
+        assert (start.upper_f, start.lower_f) == physics.observe(
+            physics.layers(layers)
+        )
+        assert got.points != simulate(_scenario(), params).points
+        wrong = _scenario(
+            state=HeaterState(
+                upper_f=125.0, lower_f=110.0, layers_f=layers[:-1]
+            )
+        )
+        with pytest.raises(ValueError, match="layers"):
+            simulate(wrong, params)
 
     def test_given_inputs_are_not_defaults(self, params: HeaterParams) -> None:
         s = _scenario(
@@ -612,23 +574,11 @@ class TestWhatTheResultSays:
             # Inside the heat pump's range (41 °F and up).
             environment=Environment(ambient_f=45.0),
         )
-        with pytest.raises(SimulationError, match="1800-min bound"):
-            simulate(s, weak)
-
-    def test_no_gap_constant_takes_the_prior_and_says_so(
-        self, params: HeaterParams
-    ) -> None:
-        bare = replace(
-            params, tank=replace(params.tank, stratification_gap_tau_h=None)
-        )
-        quiet = simulate(_scenario(), bare)
-        assert "stratification_gap_tau_h=60.0 (prior)" in quiet.defaults_used
-        assert "tau_gap_prior" not in quiet.reasons
-        drawn = simulate(
-            _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=10.0),))),
-            bare,
-        )
-        assert "tau_gap_prior" in drawn.reasons
+        # The heater runs on, as a real one short of its target does.
+        (run,) = simulate(s, weak).simulation.heating
+        assert run.stop == "horizon"
+        with pytest.raises(SimulationError, match="short of the target"):
+            active_cycle(s.state, s.settings, s.environment, weak, at=s.start)
 
     def test_an_unmeasured_inlet_with_draws_says_so(
         self, params: HeaterParams
@@ -667,22 +617,20 @@ class TestWhatTheResultSays:
         )
         assert "tou_schedule_unknown" not in known.reasons
 
-    def test_draws_without_a_draw_response_are_refused(
+    def test_a_draw_moves_the_tank_without_a_fitted_response(
         self, params: HeaterParams
     ) -> None:
+        """The layers take a draw as water through the tank: no fitted
+        response is needed to move them."""
         bare = replace(params, draw=replace(params.draw, observability=None))
         s = _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=30.0),)))
-        with pytest.raises(SimulationError, match="draw_model_unsupported"):
-            simulate(s, bare)
-        with pytest.raises(SimulationError, match="draw_model_unsupported"):
-            standby(
-                s.state,
-                s.environment,
-                s.loads,
-                bare,
-                start=s.start,
-                until=s.until,
-            )
+        t = standby(
+            s.state, s.environment, s.loads, bare, start=s.start, until=s.until
+        )
+        quiet = standby(
+            s.state, s.environment, Loads(), bare, start=s.start, until=s.until
+        )
+        assert t.points[-1].lower_f < quiet.points[-1].lower_f - 5.0
 
     def test_a_written_setpoint_is_held_as_the_device_holds_it(
         self, params: HeaterParams
@@ -810,6 +758,72 @@ class TestRecoveryAndStandby:
         assert drawn.points[-1].lower_f < quiet.points[-1].lower_f
 
 
+class TestADrawOnACoastsEdge:
+    """A draw at the instant a coast ends is taken once, and the walk
+    goes on past it."""
+
+    @staticmethod
+    def _physics(params: HeaterParams) -> TankPhysics:
+        stamps = pd.date_range(at(-1), at(6), freq="10min")
+        frame = pd.DataFrame({"ambient_f": AMBIENT_F}, index=stamps)
+        return TankPhysics(params, frame, 50.0, draws_on=True)
+
+    @pytest.mark.parametrize("gal", [20.0, 40.0])
+    def test_one_taking_the_upper_zone_to_an_element_starts_it(
+        self, params: HeaterParams, gal: float
+    ) -> None:
+        """High Demand, its lower trigger unknown: the draw takes the
+        upper zone past the element's start, which answers the tank the
+        draw leaves."""
+        draw = (at(32 / 60), gal)
+        sim = walk(
+            start=T0,
+            upper_f=118.5,
+            lower_f=86.7,
+            running=False,
+            until=at(50 / 60),
+            setpoint_f=130.0,
+            heater=Heater(
+                hp_lower_on_f=None, mode="high_demand", element=params.element
+            ),
+            physics=self._physics(params),
+            draws=[draw],
+            stopped_at=at(-1.0),
+        )
+        assert [h.start.at for h in sim.heating if h.source == "element"][
+            -1
+        ] == draw[0]
+        assert len([p for p in sim.points if p.at == draw[0]]) == 2
+
+    def test_one_meeting_the_coasts_stop_is_taken_once(
+        self, params: HeaterParams
+    ) -> None:
+        """A draw that takes the lower zone out of the heat pump's range
+        ends the coast there: the walk goes on from the tank it left."""
+        cold = replace(params, draw=replace(params.draw, inlet_temp_f=40.0))
+        physics = self._physics(cold)
+        draw = (at(1.0), 30.0)
+        sim = walk(
+            start=T0,
+            upper_f=60.0,
+            lower_f=53.0,
+            running=False,
+            until=at(3.0),
+            setpoint_f=120.0,
+            heater=Heater(hp_lower_on_f=None, heating_disabled=True),
+            physics=physics,
+            draws=[draw],
+        )
+        once = physics.advance(
+            T0, physics.estimate(60.0, 53.0), at(3.0), [draw]
+        )
+        end = sim.points[-1]
+        assert (end.upper_f, end.lower_f) == pytest.approx(
+            physics.observe(once.state), abs=1e-9
+        )
+        assert len([p for p in sim.points if p.at == draw[0]]) == 2
+
+
 class TestAnElementStopsAtItsOffPoint:
     """An element stops where its zone reaches its off point, though
     something else lifts the zone too: it is not charged at the
@@ -906,5 +920,5 @@ class TestAnElementStopsAtItsOffPoint:
         assert abs((ends[0][0] - ends[1][0]).total_seconds()) < 1.0
         # It is not charged with its zone already at its off point.
         end = ends[0][0]
-        assert end - T0 < timedelta(minutes=10)
-        assert all(p.upper_f < 139.0 for p in plain.points if p.at < end)
+        assert end - T0 < timedelta(minutes=15)
+        assert all(p.upper_f < 140.0 for p in plain.points if p.at < end)

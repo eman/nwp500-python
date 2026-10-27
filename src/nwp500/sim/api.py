@@ -13,6 +13,7 @@ import dataclasses
 import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Literal
@@ -22,14 +23,13 @@ import pandas as pd
 
 from nwp500.sim.book import (
     Booked,
-    BookedHeatLedger,
     hp_btu_per_h,
     standby_btu,
+    walk_booked,
 )
 from nwp500.sim.circulation import (
     RUN_GAP,
     Circulation,
-    CirculationDraws,
     CirculationLoss,
 )
 from nwp500.sim.controller import HEAT_PUMP_UNAVAILABLE
@@ -44,25 +44,17 @@ from nwp500.sim.delivery import (
     draw_windows,
 )
 from nwp500.sim.engine import (
-    DRAW_LEAD,
     HEATER_SETPOINT_MAX_F,
     HEATER_SETPOINT_MIN_F,
     Entry,
     Heater,
-    HeatingInterval,
     RawWrite,
     SimulationError,
     quantise,
 )
 from nwp500.sim.engine import simulate as walk
-from nwp500.sim.extensions import HeatLedger, RecoveryModel
-from nwp500.sim.heat_pump_recovery import (
-    PhysicsRecovery,
-    RecoveryContext,
-    physics_recovery,
-)
-from nwp500.sim.heat_pump_recovery import recovery as serve_recovery
-from nwp500.sim.heating_trajectory import HeatingPoint, build_heating_trajectory
+from nwp500.sim.extensions import RecoveryModel
+from nwp500.sim.heating_trajectory import HeatingPoint
 from nwp500.sim.inputs import (
     ELECTRIC,
     ENERGY_SAVER,
@@ -78,8 +70,7 @@ from nwp500.sim.inputs import (
     Schedules,
     Settings,
 )
-from nwp500.sim.params import TAU_GAP_PRIOR_H, HeaterParams
-from nwp500.sim.physics.compressor import MAX_MINUTES
+from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.element import (
     DEVICE_MODE,
     ElementMode,
@@ -89,7 +80,6 @@ from nwp500.sim.physics.element import (
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
     heat_air_outside,
-    power_w,
     start_hold_min,
 )
 from nwp500.sim.ready import (
@@ -113,9 +103,9 @@ from nwp500.sim.schedules import (
     tou_windows,
 )
 from nwp500.sim.tank_physics import (
-    REFINE_TOL_MINUTES,
+    RECOVERY_BOUND,
+    Recovered,
     TankPhysics,
-    ambient_window_mean,
 )
 from nwp500.sim.tou_triggers import (
     LOWER_TRIGGER_HELD,
@@ -258,9 +248,9 @@ LOW_CONFIDENCE_FLOOR = 0.6
 #: start was never searched (the TOU-opening start still was), so an
 #: answer may miss a start the heater makes.
 HP_LOWER_ON_UNKNOWN = "hp_lower_on_unknown"
-#: Draws opened a gap that closes on that prior, not a fitted constant:
-#: under no draws it only shapes how an existing gap closes.
-TAU_GAP_PRIOR = "tau_gap_prior"
+#: The tank's layers were made of its two probes, not walked from its
+#: history (``TankPhysics.estimate``).
+TANK_PROFILE_ESTIMATED = "tank_profile_estimated"
 
 
 def _physics(
@@ -273,51 +263,41 @@ def _physics(
     model: RecoveryModel | None,
     defaults: list[str],
     circulation: Circulation | None = None,
-    physics_usable: bool | None = None,
 ) -> TankPhysics:
-    tau = params.tank.stratification_gap_tau_h
-    if tau is None:
-        tau = TAU_GAP_PRIOR_H
-        defaults.append(f"stratification_gap_tau_h={tau} (prior)")
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
     if environment.inlet_f is None:
         defaults.append(f"inlet_f={params.draw.inlet_temp_f}")
-    frame = _ambient_frame(environment, start, until)
-    flowing: CirculationDraws | None = None
-    if circulation is not None:
+    if (
+        circulation is not None
+        and (params.circulation or SITE_CIRCULATION) == SITE_CIRCULATION
+    ):
         # Without terms of its own, the runs take one installation's.
-        terms = params.circulation or SITE_CIRCULATION
-        if terms == SITE_CIRCULATION:
-            defaults.append(
-                "circulation=one installation's (CirculationParams)"
-            )
-        air_at = AmbientSampler(frame).at
-        offset = terms.return_rest_offset_f
-        flowing = CirculationDraws(
-            circulation,
-            terms.displaced_gal,
-            terms.flow_gpm,
-            # The return rests at the air where the heater stands, plus
-            # the installation's offset.
-            lambda t: air_at(t) + offset,
-            cool_tau_h=terms.return_cool_tau_h,
-        )
+        defaults.append("circulation=one installation's (CirculationParams)")
     return TankPhysics(
         params,
-        frame,
+        _ambient_frame(environment, start, until),
         environment.humidity,
         draws_on=draws_on,
-        flowing_draws=flowing,
-        tau_gap_hours=tau,
+        circulation=circulation,
+        circulation_terms=SITE_CIRCULATION,
         draw_inlet_temp_f=environment.inlet_f,
-        physics_usable=physics_usable,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
         # Where the air leaves the heat pump's range, on the readings
         # themselves, not the grid.
         air_readings=_air_readings(environment),
     )
+
+
+def _tank(physics: TankPhysics, state: HeaterState) -> tuple[Any, list[str]]:
+    """The tank at the start: its layers as given, or the physics' of
+    the probes, which says ``tank_profile_estimated``."""
+    if state.layers_f is not None:
+        return physics.layers(state.layers_f), []
+    return physics.estimate(state.upper_f, state.lower_f), [
+        TANK_PROFILE_ESTIMATED
+    ]
 
 
 def _engine_mode(mode: int) -> tuple[HeaterMode, bool]:
@@ -335,8 +315,6 @@ def _history_defaults(
             "compressor_stopped_at=None (no lockout at the start, and the "
             "longest start hold)"
         )
-    if history.heated_at is None:
-        defaults.append("heated_at=None")
     if state.element_running and state.element_running_since is None:
         defaults.append("element_running_since=None")
 
@@ -422,53 +400,36 @@ def simulate(
     *,
     recovery: RecoveryModel | None = None,
     book: Booked | None = None,
-    ledger: HeatLedger | None = None,
     tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
     withheld_windows: Sequence[tuple[datetime, datetime]] = (),
     inlet_measured: bool = False,
     start_hold: Callable[[float | None], float] | None = None,
     running_hold: float = 0.0,
-    lead_draws: Sequence[Draw] = (),
-    physics_usable: bool | None = None,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
-    ``recovery`` replaces the physics duration of each heat-pump
-    recovery with its own (``extensions.RecoveryModel``). The four
-    inputs after it are what such a model was trained with:
+    The tank starts as the physics makes it of the probes
+    (``TankPhysics.estimate``; ``tank_profile_estimated``).
 
-    - ``start_hold``: how long a compressor start holds before the lower
-      zone climbs, minutes, by the minutes since the compressor last
-      stopped (None when not known); None, the parameters' own
+    ``recovery`` paces each heat-pump recovery by its own duration
+    (``extensions.RecoveryModel``, served as a scale on the heat pump's
+    heat, ``heat_pump_recovery.rate_scale``). The two inputs after it
+    are what such a model was trained with:
+
+    - ``start_hold``: how long a compressor start holds before it
+      heats, minutes, by the minutes since the compressor last stopped
+      (None when not known); None, the parameters' own
       (``physics.heat_pump.start_hold_min``);
     - ``running_hold``: what is left at the start of a running
       compressor's own start's hold, minutes; ignored when it is not
-      running;
-    - ``lead_draws``: draws recorded before the start, which a
-      draw-free model reads as the first recovery's ``draw_load`` when
-      it begins within ``engine.DRAW_LEAD`` of them. Like the
-      scenario's draws, they need a fitted draw response
-      (``draw_model_unsupported``), and those the model reads carry the
-      draw and inlet reasons (``draw_uncalibrated``,
-      ``inlet_temp_modelled``);
-    - ``physics_usable``: whether the physics duration may be served;
-      None, yes.
-
-    With no model, or one that declines, the served duration is the
-    start's hold and the physics' climb, and the lead draws are not
-    read. The holds also mark where the lower zone starts to climb,
-    which placing a recovery again after a draw counts from.
+      running.
 
     ``book`` is the tank's booked heat at the start (``sim.book``): from
     the caller's own record, or ``book.full_tank_book`` when they know
-    the tank has been quiet since a recovery ended. With it, the walk
-    carries the book (``book.BookedHeatLedger``): a draw that spends the
-    booked heat takes the upper zone below its calibrated response, and
-    the delivery and the draw windows read the book. The lower zone
-    takes each draw's calibrated response either way. Without it the
-    upper zone does too, the delivery is the upper zone's, and
-    ``reasons`` says ``no_heat_book``. ``ledger`` is any other
-    ``extensions.HeatLedger`` in its place.
+    the tank has been quiet since a recovery ended. With it, the
+    delivery and the draw windows read the book walked along the path
+    (``book.walk_booked``); without it, the delivery is the upper
+    probe's, and ``reasons`` says ``no_heat_book``.
 
     ``inlet_measured``: the scenario's inlet (``Environment.inlet_f``) is
     the mains as measured (``cold_supply``); without it, a scenario with
@@ -484,19 +445,14 @@ def simulate(
     over a recovery running now). With TOU on and no periods to lay out,
     ``reasons`` says ``tou_schedule_unknown`` and no window is kept.
 
-    Raises ``engine.SimulationError`` when the walk cannot be completed,
-    and for draws, the scenario's or ``lead_draws``, on parameters with
-    no fitted draw response (``draw_model_unsupported``).
+    Raises ``engine.SimulationError`` when the walk cannot be completed.
     """
     s = scenario
     _check_setpoints(s)
-    _check_draws(params, [*s.loads.draws, *lead_draws])
     book = _at_the_inlet(book, s.environment)
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
-    if s.loads.draws and _gap_prior(params):
-        reasons.append(TAU_GAP_PRIOR)
     if s.loads.draws and not inlet_measured:
         # Each draw's cold water is priced at an inlet nobody measured
         # at the mains (``cold_supply``).
@@ -509,13 +465,10 @@ def simulate(
         s.environment,
         s.start,
         s.until,
-        # Recorded draws before the start move the tank as the
-        # scenario's own do: the model's load is what they took off it.
-        draws_on=bool(s.loads.draws or lead_draws),
+        draws_on=bool(s.loads.draws),
         model=recovery,
         defaults=defaults,
         circulation=circulation,
-        physics_usable=physics_usable,
     )
     tou_on = (
         s.commands.tou_enabled
@@ -548,40 +501,16 @@ def simulate(
     _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
-    if ledger is None and book is not None:
-        # As the walk's runs take them (``_physics``).
-        terms = params.circulation or SITE_CIRCULATION
-        ledger = BookedHeatLedger(
-            book,
-            physics.ambient.at,
-            params.book_terms(),
-            line_f=params.readiness.line_f,
-            fall_f_per_gal=params.readiness.fall_f_per_gal,
-            withheld=sorted(withheld_windows),
-            extra=(
-                CirculationLoss(
-                    # The runs as given: a gap merged into a run
-                    # circulates nothing.
-                    [(r.start, r.end) for r in s.loads.circulation or ()],
-                    terms.flow_gpm,
-                    terms.loss_btu_per_gal,
-                    circuit_gal=terms.book_circuit_gal,
-                    # The tank's upper zone over the projection, as the
-                    # heater holds it.
-                    upper_f=s.settings.setpoint_f,
-                    air_at=physics.ambient.at,
-                    gap=circulation.gap,
-                )
-                if circulation is not None
-                else None
-            ),
-        )
-    if ledger is None:
+    if book is None:
         reasons.append("no_heat_book")
-    elif book is not None and book.aged(params.book_terms()):
+    elif book.aged(params.book_terms()):
         reasons.append("heat_book_aged")
     draws = [(d.at, d.gallons) for d in s.loads.draws]
+    tank, estimated = _tank(physics, s.state)
+    reasons += estimated
     sim = walk(
+        # Made of the probes, the engine makes it, and keeps them as read.
+        state=None if estimated else tank,
         start=s.start,
         upper_f=s.state.upper_f,
         lower_f=s.state.lower_f,
@@ -606,8 +535,6 @@ def simulate(
         element_running_since=s.state.element_running_since,
         raw_writes=raw,
         stopped_at=s.history.compressor_stopped_at,
-        heated_at=s.history.heated_at,
-        ledger=ledger,
         controller=params.controller,
         withheld_windows=sorted(withheld_windows),
         start_hold=(
@@ -616,22 +543,39 @@ def simulate(
             else lambda off: start_hold_min(params.compressor, off)
         ),
         running_hold=running_hold,
-        lead_draws=[(d.at, d.gallons) for d in lead_draws],
     )
-    walked = (
-        ledger.walk(sim.points, sim.heating, draws)
-        if isinstance(ledger, BookedHeatLedger)
-        else None
-    )
+    walked = None
+    if book is not None:
+        terms = params.circulation or SITE_CIRCULATION
+        walked = walk_booked(
+            book,
+            sim.points,
+            sim.heating,
+            draws,
+            physics.ambient.at,
+            params.book_terms(),
+            withheld=sorted(withheld_windows),
+            extra=(
+                CirculationLoss(
+                    # The runs as given: a gap merged into a run
+                    # circulates nothing.
+                    [(r.start, r.end) for r in s.loads.circulation or ()],
+                    terms.flow_gpm,
+                    terms.loss_btu_per_gal,
+                    circuit_gal=terms.book_circuit_gal,
+                    # The tank's upper zone over the projection, as the
+                    # heater holds it.
+                    upper_f=s.settings.setpoint_f,
+                    air_at=physics.ambient.at,
+                    gap=circulation.gap,
+                )
+                if circulation is not None
+                else None
+            ),
+        )
     delivery = delivery_along(
         sim.points, draws, walked, params.readiness, params.book_terms()
     )
-    # Lead draws the model read are priced as the scenario's own are.
-    lead_read = recovery is not None and _lead_read(
-        sim.heating, lead_draws, s.start
-    )
-    if lead_read and not s.loads.draws and not inlet_measured:
-        reasons.append("inlet_temp_modelled")
     out_of_domain_at: datetime | None = None
     if draws:
         any_out, out_of_domain_at = draw_domain_judgement(
@@ -642,13 +586,10 @@ def simulate(
         if any_out:
             reasons.append("draw_out_of_domain")
     reasons += _unfitted(params, "standby")
-    if s.loads.draws or lead_read:
+    if s.loads.draws:
         reasons += _unfitted(params, "draw")
     if s.loads.windows:
         reasons += _unfitted(params, "book", "readiness")
-    if physics.failed_recoveries:
-        # The integrator raised on a recovery the walk then went without.
-        reasons.append("physics_failed")
     if any(h.source == "compressor" for h in sim.heating):
         reasons += _unfitted(params, "compressor", "power")
     reasons += _ambient_reasons(s.environment)
@@ -768,52 +709,26 @@ def _unfitted(params: HeaterParams, *terms: str) -> list[str]:
     return [UNFITTED_REASONS[t] for t in params.unfitted if t in terms]
 
 
-def _lead_read(
-    heating: Sequence[HeatingInterval],
-    lead_draws: Sequence[Draw],
-    start: datetime,
-) -> bool:
-    """Whether the walk's first heat-pump recovery read any of
-    ``lead_draws`` as its draw load: one before ``start`` and within
-    ``DRAW_LEAD`` of the recovery's start (``engine._lead_load``)."""
-    first = next(
-        (h.start.at for h in heating if h.source == "compressor"), None
+def _on_clock(
+    trajectory: tuple[HeatingPoint, ...], ready_at: datetime
+) -> tuple[HeatingPoint, ...]:
+    """``trajectory``'s instants stretched from its start so it ends at
+    ``ready_at``."""
+    start, end = trajectory[0].at, trajectory[-1].at
+    if end <= start or end == ready_at:
+        return trajectory
+    f = (ready_at - start) / (end - start)
+    return tuple(replace(p, at=start + (p.at - start) * f) for p in trajectory)
+
+
+def _refusal(served: Recovered) -> SimulationError:
+    """Why a recovery could not be served: the heat pump short of the
+    target after ``RECOVERY_BOUND`` (a weak fit, or very cold air)."""
+    hours = RECOVERY_BOUND.total_seconds() / 3600.0
+    return SimulationError(
+        "the recovery could not be computed: the heat pump falls short "
+        f"of the target after {hours:.0f} h"
     )
-    return first is not None and any(
-        first - DRAW_LEAD <= d.at < start for d in lead_draws
-    )
-
-
-def _gap_prior(params: HeaterParams) -> bool:
-    """Whether the gap constant is a prior, not this heater's fit."""
-    return (
-        params.tank.stratification_gap_tau_h is None
-        or "gap_tau" in params.unfitted
-    )
-
-
-def _refusal(physics: PhysicsRecovery) -> SimulationError:
-    """Why a recovery could not be served: the integration hitting its
-    bound (a weak fit, or very cold air) is told apart from no usable
-    physics at all."""
-    if physics.truncated:
-        return SimulationError(
-            "the recovery could not be computed: the physics integration "
-            f"hit its {MAX_MINUTES:.0f}-min bound short of the target"
-        )
-    return SimulationError("the recovery could not be computed")
-
-
-def _check_draws(params: HeaterParams, draws: Sequence[Draw]) -> None:
-    """Refuse draws the parameters cannot move the tank for: without a
-    draw calibration (``DrawParams.observability``) a draw would
-    leave the tank as it was, an answer that looks like one."""
-    if draws and params.draw.observability is None:
-        raise SimulationError(
-            "draw_model_unsupported: draws were given, and the "
-            "parameters have no fitted draw response "
-            "(DrawParams.observability)"
-        )
 
 
 def _largest_draw(draws: Sequence[Draw]) -> float:
@@ -909,16 +824,12 @@ def standby(
     opening, with the lower trigger held as the heater holds it), and
     how far above ``hp_lower_on`` the coast leaves the lower zone.
     ``schedules`` brings the TOU windows, their local times in ``tz``.
-    Draws with no fitted draw response raise ``engine.SimulationError``
-    (``draw_model_unsupported``)."""
+    """
     start, until = _instant(start), _instant(until)
     if until <= start:
         raise ValueError("until must be after start")
-    _check_draws(params, [d for d in loads.draws if start <= d.at < until])
-    history = history if history is not None else History()
     defaults: list[str] = []
-    if history.heated_at is None:
-        defaults.append("heated_at=None")
+    circulation = _circulation(loads, params)
     physics = _physics(
         params,
         environment,
@@ -927,17 +838,11 @@ def standby(
         draws_on=bool(loads.draws),
         model=None,
         defaults=defaults,
-        circulation=_circulation(loads, params),
+        circulation=circulation,
     )
     draws = [(d.at, d.gallons) for d in loads.draws if start <= d.at < until]
-    coast = physics.coast(
-        start,
-        physics.estimate(state.upper_f, state.lower_f),
-        until,
-        draws,
-        heated_at=history.heated_at,
-    )
-    reasons: list[str] = []
+    first, reasons = _tank(physics, state)
+    coast = physics.advance(start, first, until, draws)
     out_of_domain_at: datetime | None = None
     if draws:
         any_out, out_of_domain_at = draw_domain_judgement(
@@ -948,8 +853,6 @@ def standby(
         )
         if any_out:
             reasons.append("draw_out_of_domain")
-        if _gap_prior(params):
-            reasons.append(TAU_GAP_PRIOR)
     starts_at = trigger = None
     held = False
     margin: float | None = None
@@ -996,8 +899,7 @@ def standby(
         reasons += _unfitted(params, "draw")
     if _circulation_unknown(params, loads, until):
         reasons.append(CIRCULATION_UNKNOWN)
-    flowing = physics.flowing_draws
-    circulating = isinstance(flowing, CirculationDraws)
+    runs = None if circulation is None else circulation.over(start, until)
     return Trace(
         points=tuple(coast.points),
         defaults_used=tuple(defaults),
@@ -1010,10 +912,15 @@ def standby(
         draw_volume_gal=coast.draw_volume_gal if draws else None,
         draw_heat_wh=coast.draw_heat_btu / BTU_PER_WH if draws else None,
         circulation_minutes=(
-            flowing.minutes if isinstance(flowing, CirculationDraws) else None
+            None
+            if circulation is None
+            else sum(
+                (min(b, until) - max(a, start)).total_seconds() / 60.0
+                for a, b in runs or ()
+            )
         ),
         circulation_heat_wh=(
-            coast.flowing_heat_btu / BTU_PER_WH if circulating else None
+            None if circulation is None else coast.flowing_heat_btu / BTU_PER_WH
         ),
         ambient_mean_f=coast.ambient_mean_f,
         hours=(until - start).total_seconds() / 3600.0,
@@ -1590,6 +1497,9 @@ def time_to_ready(
 FORECAST_HORIZON = timedelta(hours=168)
 #: The fixed point's passes, start against the coast to it.
 _FORECAST_PASSES = 3
+#: A forecast's refinement stops when its duration moves no more than
+#: this, minutes.
+_REFINE_MINUTES = 2.0
 #: The device's minimum setpoint (40.5 °C): its upper start threshold
 #: rests here except while a TOU window raises it to about the setpoint.
 DEVICE_REFERENCE_F = 104.9
@@ -1768,17 +1678,11 @@ def forecast(
     if history.compressor_stopped_at is None and not state.compressor_running:
         defaults.append("compressor_stopped_at=None (the longest start hold)")
 
-    def coast_to(when: datetime) -> tuple[float, float, float | None]:
-        """The tank coasted to ``when``, and the mean air over it."""
-        coast = physics.coast(
-            origin,
-            physics.estimate(state.upper_f, state.lower_f),
-            when,
-            [],
-            heated_at=history.heated_at,
-        )
-        last = coast.points[-1]
-        return last.upper_f, last.lower_f, coast.ambient_mean_f
+    first, estimated = _tank(physics, state)
+
+    def coast_to(when: datetime) -> Any:
+        """The tank coasted to ``when``."""
+        return physics.advance(origin, first, when).state
 
     def hold_at(when: datetime) -> float:
         """The hold of a start at ``when``: none for the compressor
@@ -1799,52 +1703,24 @@ def forecast(
             else (when - _instant(stopped)).total_seconds() / 60.0,
         )
 
-    def predict(when: datetime, heat_minutes: float) -> Any:
-        upper, lower, coast_air = coast_to(when)
-        amb = physics.ambient.at(when)
-        mean = ambient_window_mean(
-            physics.series, when, when + timedelta(minutes=heat_minutes)
-        )
-        # No air sample inside the recovery's window (the first pass's
-        # is an instant): the coast's mean, as the forecast's was.
-        fallback = coast_air if coast_air is not None else amb
-        t_amb_mean = mean if mean is not None else fallback
-        ctx = RecoveryContext(
-            t_start_lower=lower,
-            t_start_upper=upper,
-            target_f=stop,
-            t_amb_start=amb,
-            t_amb_mean=t_amb_mean,
-            h_amb_start=environment.humidity,
-            start_hold_minutes=hold_at(when),
-            draw_load=0.0,
-            physics=physics_recovery(
-                t_start_lower=lower,
-                t_start_upper=upper,
-                target_f=stop,
-                t_amb_mean=t_amb_mean,
-                compressor=params.compressor,
-                loss=params.loss,
-                usable=physics.physics_usable,
-                record_path=True,
-                tank=params.tank,
-            ),
-        )
-        return serve_recovery(ctx, model=model), (upper, lower), ctx.physics
+    def predict(when: datetime) -> tuple[Recovered, Any]:
+        tank = coast_to(when)
+        return physics.recover(
+            when, tank, stop, hold_minutes=hold_at(when)
+        ), tank
 
-    served, tank, integrated = predict(target, 0.0)
-    if served is None:
-        raise _refusal(integrated)
-    decayed_to = target
+    served, tank = predict(target)
+    if not served.reached:
+        raise _refusal(served)
     for _ in range(_FORECAST_PASSES):
         when = max(compute_start_time(target, served.minutes), origin)
         if when >= target:
             break
-        refined, refined_tank, _ = predict(when, served.minutes)
-        if refined is None:
+        refined, refined_tank = predict(when)
+        if not refined.reached:
             break
-        converged = abs(refined.minutes - served.minutes) <= REFINE_TOL_MINUTES
-        served, tank, decayed_to = refined, refined_tank, when
+        converged = abs(refined.minutes - served.minutes) <= _REFINE_MINUTES
+        served, tank = refined, refined_tank
         if converged:
             break
     start_at = compute_start_time(target, served.minutes)
@@ -1855,9 +1731,8 @@ def forecast(
         shortfall = (origin - start_at).total_seconds() / 60.0
         start_at = origin
         ready_at = origin + timedelta(minutes=served.minutes)
-    if decayed_to != start_at:
-        tank = coast_to(start_at)[:2]
-    upper_s, lower_s = tank
+    tank = coast_to(start_at)
+    upper_s, lower_s = physics.observe(tank)
     status = "partial_charge" if partial else "ok"
     if not feasible:
         status = "infeasible"
@@ -1871,20 +1746,18 @@ def forecast(
         shortfall = None
         feasible = False
     trajectory: tuple[HeatingPoint, ...] | None = None
-    if scheduled_start is not None and served.path is not None:
-        trajectory = tuple(
-            build_heating_trajectory(
-                served.path,
-                served_minutes=served.minutes,
-                start_at=scheduled_start,
-                t_upper_start=upper_s,
-                t_lower_start=lower_s,
-                hold_minutes=served.start_hold_minutes,
-                start_power_w=power_w(
-                    params.compressor, served.context.t_amb_start, lower_s
-                ),
-                tank=params.tank,
-            )
+    if scheduled_start is not None and scheduled_ready is not None:
+        # The recovery from where the tank is at its start, on the
+        # served clock: its duration is within the refinement's
+        # tolerance of the one served.
+        trajectory = _on_clock(
+            physics.recover(
+                scheduled_start,
+                tank,
+                stop,
+                hold_minutes=hold_at(scheduled_start),
+            ).trajectory,
+            scheduled_ready,
         )
     return Forecast(
         status=status,
@@ -1905,13 +1778,11 @@ def forecast(
         reasons=tuple(
             _unique(
                 [
+                    *estimated,
                     *served.reasons,
                     *_range_reasons(
                         params,
-                        [
-                            served.context.t_amb_start,
-                            served.context.t_amb_mean,
-                        ],
+                        [served.ambient_start_f, served.ambient_mean_f],
                         lower_s,
                         stop,
                     ),
@@ -1945,8 +1816,9 @@ def active_cycle(
     heater stops past it (``ControllerParams.hp_stop_overshoot_f``), at
     the air now,
     served by ``model`` when given, the start's hold taken as over.
-    Beside it, the integrator's own remaining climb. A truncated
-    integration says ``physics_truncated``. ``ready_at`` is when the
+    Beside it, the integrator's own remaining climb. A climb short of
+    its target after ``tank_physics.RECOVERY_BOUND`` is refused
+    (``SimulationError``). ``ready_at`` is when the
     compressor stops: a lower zone at its target has the run-on left,
     and one past it by the run-on has nothing left (0 minutes, ready
     now). ``forecast`` asks a different question, when the tank reaches
@@ -1978,36 +1850,23 @@ def active_cycle(
             confidence=1.0,
             defaults_used=tuple(defaults),
         )
-    ctx = RecoveryContext(
-        t_start_lower=state.lower_f,
-        t_start_upper=state.upper_f,
-        target_f=stop,
-        t_amb_start=air,
-        # The cycle is under way: the air now stands for its mean.
-        t_amb_mean=air,
-        h_amb_start=environment.humidity,
-        start_hold_minutes=0.0,
-        draw_load=0.0,
-        physics=physics_recovery(
-            t_start_lower=state.lower_f,
-            t_start_upper=state.upper_f,
-            target_f=stop,
-            t_amb_mean=air,
-            compressor=params.compressor,
-            loss=params.loss,
-            tank=params.tank,
-        ),
+    physics = _physics(
+        params,
+        environment,
+        at,
+        at + RECOVERY_BOUND,
+        draws_on=False,
+        model=model,
+        # Its defaults are said above: the air and the humidity.
+        defaults=[],
     )
-    served = serve_recovery(ctx, model=model)
-    if served is None:
-        raise _refusal(ctx.physics)
-    reasons = list(served.reasons)
-    physics = ctx.physics
-    physics_minutes = (
-        physics.minutes
-        if physics.failed is None and not math.isnan(physics.minutes)
-        else None
-    )
+    # The cycle is under way: its hold is over.
+    tank, estimated = _tank(physics, state)
+    served = physics.recover(at, tank, stop)
+    if not served.reached:
+        raise _refusal(served)
+    reasons = [*estimated, *served.reasons]
+    physics_minutes = served.physics.estimate
     return ActiveCycle(
         status="heating",
         ready_at=at + timedelta(minutes=served.minutes),

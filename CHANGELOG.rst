@@ -8,6 +8,23 @@ Unreleased
 Added
 -----
 
+- **A tank's layers as where a simulation starts**
+  (``HeaterState.layers_f``, as many as ``TankParams.layers``, the
+  bottom first). Two probes do not say how the water between and below
+  them is layered: without the layers, the simulator makes them of the
+  probes and says ``tank_profile_estimated``. ``tank_fit.start_state``
+  gives them from a recorded history, and ``sim_score.score(...,
+  record=...)`` starts each event from them.
+
+- **Where the condenser heats, fitted.** ``tank_fit.CONDENSER_TERMS``
+  (``TankParams.condenser_span``'s low end and width) is fitted on
+  recoveries (``sim_score.layer_recoveries``: the compressor from its
+  start, its hold by time off, and the circulation through it) together
+  with the tank's other terms on the quiet windows and draws
+  (``sim_score.fit_layers``). Fitted apart, the span that times the
+  recoveries left the bottom of the tank each window starts from wrong:
+  held out, a coast's lower probe went from 0.52 to 0.86 °F.
+
 - **The layered tank fitted to a history (``nwp500.sim.tank_fit``).**
   Two probes do not say where the water below the lower one is, so
   each event starts from the layers the history before it leaves
@@ -24,7 +41,7 @@ Added
   0.189 °F (the two-zone model 0.299) and its lower to 0.519 °F
   (0.630), each interval clear of the two-zone value, and the probes
   after a draw to 0.310 and 2.379 °F (0.281 and 2.161, inside the
-  intervals). Nothing in the simulator runs it yet.
+  intervals).
 
 - **The layered tank's probes and ends.** Each probe reads the layers
   around its height, weighted by distance over its spread
@@ -59,8 +76,7 @@ Added
   ``TankParams`` fields (``layers``, the probes' and elements'
   heights, ``condenser_span``, ``inlet_mix_gal``,
   ``conductance_btu_hr_f``) and ``LossParams.ua_bottom_btu_hr_f``,
-  priors for now; nothing reads them yet, and the held-out scores are
-  unchanged.
+  priors until fitted (``tank_fit``).
 
 - **The heat pump's operating range.** It runs only with the air at
   41-113 °F and the tank's lower zone at 50-149 °F
@@ -124,14 +140,59 @@ Added
 Changed
 -------
 
+- **The simulator walks the layered tank** (breaking).
+  ``tank_physics.TankPhysics`` is the stratified tank
+  (``physics.stratified``) its parameters lay out, and the engine walks
+  it through everything at once: ``Physics.advance`` takes the tank from
+  one instant to another with what is running (``Running``: the
+  compressor from its start, heating after its hold; the elements, their
+  heat on its way for their dead time after they stop; credited none of
+  it inside a withheld draw window), taking each draw at its instant and
+  the circulation's runs as water through the tank, and stops where the
+  engine asks. A recovery runs until the lower probe reaches its stop;
+  the engine no longer places a recovery's integrated climb on a draw's
+  response. Elements put their electricity into the water: the two
+  zones had credited them 1.81 and 1.24 times it. A draw takes its
+  water's heat, and 100 gal in an hour now empties the top.
+
+  A ``RecoveryModel``'s duration is served as the pace of the heat
+  pump's heat for that recovery (``heat_pump_recovery.rate_scale``,
+  corrected once on a walk at that pace), so its path is the layers'
+  at the model's speed. ``RecoveryContext`` carries the layers
+  (``layers_f``) and has no ``draw_load``; ``PhysicsRecovery`` has no
+  ``path``. ``TankPhysics.recovery`` is the physics' climb,
+  ``recover`` the served one with its trajectory
+  (``heating_trajectory.from_walk``), ``scale`` the pace alone and
+  ``layers`` a state of given layers. ``forecast`` and ``active_cycle``
+  walk the layers too; a recovery short of its target after
+  ``RECOVERY_BOUND`` (16 h) is refused, and ``simulate`` runs a heater
+  that cannot reach its target on, as a real one does.
+
+  Held out from 2026-09-18 on one NWP500-65, through ``simulate`` and
+  ``standby``, each event started from the layers its history left and
+  the layered terms fitted on the days before: a draw-free recovery's
+  duration is out a mean 12.3 min (7.6-17.3; the two zones 7.9), a mean
+  7.2 min long, its electricity 5.8 % (7.2 %), one with draws in it
+  47.0 min (43.6); a coast's upper probe 0.261 °F (0.299) and its lower
+  0.552 °F (0.630); the probes after a draw 0.289 and 2.078 °F (0.281
+  and 2.161). Started from the two probes alone, a draw-free recovery is
+  out 15 min.
+
+  The golden walks moved: a coast holds its upper probe longer, so the
+  TOU opening's start comes later; an element runs until its own heat
+  brings its zone to the off point, longer than the two zones'
+  credited heat did, and Electric's elements run upper then lower; a
+  shower's draws take the lower probe further, so a start inside the
+  TOU window waits for its close, and a 26 gal draw at a window's close
+  starts a recovery.
+
 - **The engine carries the tank as its physics' state** (breaking for
   a custom ``Physics``). ``Physics`` gains ``estimate`` (the state two
   probe readings stand for) and ``observe`` (the probes on a state),
-  and its ``coast``, ``heat`` and ``draw`` take and give a state
+  and its ``advance`` and ``draw`` take and give a state
   (``TankState``) in place of the two zones' temperatures; each
   ``Point`` carries the state it reached. The engine reads the tank
-  only through ``observe``. ``TankPhysics``' state is ``TwoZone``, the
-  two zones as before, so every simulation is unchanged.
+  only through ``observe``.
 - **The heat pump is a performance map** (breaking). The heat into the
   tank and the electricity drawn are each a plane in the air at the
   heater and the lower tank's water (``CompressorParams.heat_btu_h``,
@@ -199,6 +260,22 @@ Fixed
 Removed
 -------
 
+- ``simulate``'s ``ledger``, ``lead_draws`` and ``physics_usable``;
+  ``History.heated_at``; the reason ``tau_gap_prior``; and the refusal
+  of draws on parameters with no fitted draw response
+  (``draw_model_unsupported``): the layers take any draw.
+- ``extensions.HeatLedger`` and its value types (``Stand``,
+  ``LedgerZones``, ``ZoneBound``, ``DrawTaken``, ``AfterDraw``,
+  ``DrawsAhead``, ``UpperAhead``); ``book.BookedHeatLedger``,
+  ``zone_after_draw_f``, ``zone_mixed_f``, ``zone_cannot_move`` and
+  ``FALL_F_PER_GAL``; ``walk_booked``'s ``carry`` and ``keep``,
+  ``WalkCarry`` and ``BookedPath.carry``.
+- ``engine.DRAW_LEAD``; ``TankPhysics``' ``coast``, ``heat``,
+  ``TwoZone``, ``Coast``, ``Heat``, ``FlowingDraws``, ``tau_gap_hours``
+  and ``physics_usable``; ``REFINE_TOL_MINUTES``;
+  ``heat_pump_recovery.physics_recovery``, ``recovery`` and
+  ``Recovery``; ``heating_trajectory.build_heating_trajectory``;
+  ``circulation.CirculationDraws`` and ``run_draws``.
 - ``PowerParams`` and ``HeaterParams.power`` (``power_scale``,
   ``cop_scale``, ``startup_wh``, ``cop_lift_coeff``);
   ``Forecast.startup_energy_wh`` and ``Recovery.startup_energy_wh``;

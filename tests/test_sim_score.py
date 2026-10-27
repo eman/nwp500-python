@@ -11,6 +11,8 @@ import pytest
 
 from nwp500 import sim
 from nwp500 import sim_score as ss
+from nwp500.sim import tank_fit
+from nwp500.sim.physics import stratified
 from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim_calibrate import Prepared
 
@@ -179,6 +181,25 @@ class TestTheEvents:
 
 
 class TestTheScore:
+    def test_with_the_record_each_event_starts_from_its_replay(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        found = ss.events(ready)
+        record = tank_fit.tank_record(ready.frame, [])
+        replayed = ss.score(found, site, record=record)
+        assert replayed.failed == ss.score(found, site).failed
+        assert replayed.metrics != ss.score(found, site).metrics
+        w = found.windows[0]
+        lay = stratified.layout(site)
+        state = ss._state(site, record, w.start, w.upper_f, w.lower_f)  # pyright: ignore[reportPrivateUsage]
+        assert (
+            state.layers_f
+            == tank_fit.start_state(
+                lay, site, record, w.start, w.upper_f, w.lower_f
+            ).layers_f
+        )
+
     def test_a_model_scores_near_zero_on_its_own_walk(
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
     ) -> None:
@@ -189,7 +210,10 @@ class TestTheScore:
         assert m["recovery_minutes_abs.draw_free"].n == 1
         assert m["recovery_energy_abs_pct"].value < 1.0
         assert m["standby_upper_rmse_f"].value < 0.05
-        assert m["standby_lower_rmse_f"].value < 0.05
+        # A window starts from the layers its probes stand for, not the
+        # ones the walk left there: the lower probe drifts apart by a
+        # tenth of a degree.
+        assert m["standby_lower_rmse_f"].value < 0.15
         assert got.failed == {
             "recoveries": 0,
             "windows": 0,

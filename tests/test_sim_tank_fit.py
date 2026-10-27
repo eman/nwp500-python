@@ -370,6 +370,66 @@ class TestTheFit:
             tf.fit(TRUE, record, [])
 
 
+def _climb(path) -> tf.Coast:
+    """The compressor's run, as a recovery event."""
+    lay = S.layout(TRUE)
+    ((a, b),) = COMPRESSOR
+    state = min(path, key=lambda p: abs(p[0] - _at(a)))[1]
+    u, lo = S.observe(lay, state)
+    hold = timedelta(minutes=TRUE.compressor.start_hold_min[-1])
+    return tf.Coast(
+        start=_at(a),
+        end=_at(b),
+        upper_f=u,
+        lower_f=lo,
+        air=((_at(a), AIR),),
+        observed=_observed(path, a, b),
+        compressor=(_at(a), _at(a) + hold, _at(b)),
+    )
+
+
+class TestTheCondenser:
+    def test_its_terms_round_trip(self) -> None:
+        low, high = TRUE.tank.condenser_span
+        values = tf.term_values(TRUE, tf.CONDENSER_TERMS)
+        assert values == pytest.approx((low, high - low))
+        moved = tf.with_terms(TRUE, (0.1, 0.6), tf.CONDENSER_TERMS)
+        assert moved.tank.condenser_span == pytest.approx((0.1, 0.7))
+        assert tf.term_values(moved) == tf.term_values(TRUE)
+
+    def test_every_point_inside_its_bounds_is_a_span(self) -> None:
+        """The fit may step anywhere inside the terms' bounds."""
+        for low in (0.0, 0.5):
+            for width in (0.1, 1.0):
+                lay = S.layout(
+                    tf.with_terms(TRUE, (low, width), tf.CONDENSER_TERMS)
+                )
+                assert 0.0 <= lay.condenser_span[0] < lay.condenser_span[1]
+                assert lay.condenser_span[1] <= 1.0
+
+    def test_a_recovery_is_tracked_by_the_tank_that_heated(
+        self, history, record
+    ) -> None:
+        _, _, path = history
+        du, dl = tf.errors(TRUE, record, _climb(path))
+        assert tf.rmse(du) < 0.1 and tf.rmse(dl) < 0.1
+
+    def test_it_finds_where_the_condenser_heats(self, history, record) -> None:
+        _, _, path = history
+        start = tf.with_terms(TRUE, (0.2, 0.7), tf.CONDENSER_TERMS)
+        got = tf.fit(
+            start,
+            record,
+            [_climb(path)],
+            terms=tf.CONDENSER_TERMS,
+            max_evaluations=40,
+        )
+        assert got.rmse_after < 0.25 * got.rmse_before
+        low, high = got.params.tank.condenser_span
+        assert low == pytest.approx(TRUE.tank.condenser_span[0], abs=0.05)
+        assert high == pytest.approx(TRUE.tank.condenser_span[1], abs=0.08)
+
+
 class TestTheScore:
     def _events(self, path) -> ss.Events:
         coasts = _coasts(path)

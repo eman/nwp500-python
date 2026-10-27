@@ -611,7 +611,8 @@ class TestARecoveryModel:
         )
         r = next_recovery(s, params, recovery=_Fixed(90.0))
         end = r.points[-1][0]
-        assert (end - T0).total_seconds() / 60.0 == pytest.approx(90.0)
+        # The model paces the heat pump, to within a step's cut.
+        assert (end - T0).total_seconds() / 60.0 == pytest.approx(90.0, abs=0.5)
 
     def test_time_to_ready_follows_it(self, params: HeaterParams) -> None:
         s = _scenario(

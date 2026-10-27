@@ -2,6 +2,7 @@
 the energy and the second law, the probes read what an estimate was
 built from, and a walk is the same however it is cut."""
 
+import dataclasses
 import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -523,6 +524,50 @@ class TestTheWalk:
         )
         assert _monotone(w.state)
 
+    def test_its_steps_are_its_books(self) -> None:
+        w = _day(S.estimate(L, 125.0, 100.0))
+        assert len(w.steps) == len(w.path) - 1
+        total = sum(w.steps, S.Books())
+        for f in dataclasses.fields(S.Books):
+            assert getattr(total, f.name) == pytest.approx(
+                getattr(w.books, f.name), abs=1e-6
+            )
+
+    def test_uncredited_heat_is_charged_and_not_given(self) -> None:
+        start = S.estimate(L, 125.0, 100.0)
+        heating = _heating(T0)
+        withheld = _day(
+            start, heating=dataclasses.replace(heating, credited=False)
+        )
+        none = _day(start, heating=S.Heating())
+        # Alike but for the grid: a walk steps finer while something
+        # runs.
+        assert withheld.state.layers_f == pytest.approx(
+            none.state.layers_f, abs=0.2
+        )
+        assert withheld.books.compressor_btu == 0.0
+        assert withheld.books.element_btu == 0.0
+        assert withheld.books.compressor_wh > 0.0
+        assert withheld.books.element_wh == pytest.approx(
+            P.element.element_w * 12 / 60
+        )
+
+    def test_a_compressors_heat_scales(self) -> None:
+        start = S.estimate(L, 125.0, 100.0)
+        c = _heating(T0).compressor
+        assert c is not None
+        one = _day(start, heating=S.Heating(compressor=c), draws=(), flowing=())
+        half = _day(
+            start,
+            heating=S.Heating(compressor=dataclasses.replace(c, scale=0.5)),
+            draws=(),
+            flowing=(),
+        )
+        assert half.books.compressor_wh == pytest.approx(
+            one.books.compressor_wh, rel=0.05
+        )
+        assert half.books.compressor_btu < 0.6 * one.books.compressor_btu
+
     def test_an_elements_heat_is_its_electricity(self) -> None:
         w = _day(S.estimate(L, 125.0, 100.0), draws=(), flowing=())
         assert w.books.element_wh == pytest.approx(
@@ -637,3 +682,41 @@ class TestTheWalk:
                 T0.replace(tzinfo=None) + timedelta(hours=1),
                 air_f=_air,
             )
+
+
+class TestTheWalksWater:
+    def test_water_back_from_the_top_takes_no_heat(self) -> None:
+        """A run's own water leaves the top and comes straight back:
+        it stirs the tank and takes nothing from it."""
+        state = S.mix(S.estimate(L, 135.0, 110.0))
+        end = T0 + timedelta(minutes=20)
+        w = S.walk(
+            L,
+            state,
+            T0,
+            end,
+            air_f=_air,
+            flowing=[S.Flowing(start=T0, end=end, gpm=2.0, inflow_f=None)],
+        )
+        assert w.books.flowing_btu == pytest.approx(0.0, abs=1e-6)
+        assert S.observe(L, w.state)[1] > S.observe(L, state)[1]
+        assert S.energy_btu(L, w.state) == pytest.approx(
+            S.energy_btu(L, state) - w.books.loss_btu, abs=1e-6
+        )
+
+    def test_its_drops_are_the_tank_either_side_of_a_draw(self) -> None:
+        state = S.TankState.uniform(12, 140.0)
+        at = T0 + timedelta(minutes=13)
+        w = S.walk(
+            L,
+            state,
+            T0,
+            T0 + timedelta(hours=1),
+            air_f=_air,
+            draws=[S.Delivered(at=at, gal=20.0, inflow_f=55.0)],
+        )
+        ((t, before, after),) = w.drops
+        assert t == at
+        assert (at, before) in w.path
+        assert S.energy_btu(L, after) < S.energy_btu(L, before)
+        assert S.observe(L, after)[1] < S.observe(L, before)[1]

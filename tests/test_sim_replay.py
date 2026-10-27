@@ -85,30 +85,17 @@ class TestTheStateThen:
                 tz="UTC",
             )
 
-    def test_the_compressors_stop_and_the_last_heating(
-        self, record: Any
-    ) -> None:
+    def test_the_compressors_stop(self, record: Any) -> None:
         record.set(60, compUse=ON)
         record.set(120, compUse=OFF)
         s = _replay(record, 150).scenario
         assert not s.state.compressor_running
         assert s.history.compressor_stopped_at == at(120)
-        assert s.history.heated_at == at(120)
 
-    def test_an_element_run_after_it_is_the_last_heating(
-        self, record: Any
-    ) -> None:
-        record.set(60, compUse=ON)
-        record.set(120, compUse=OFF)
-        record.set(130, heatUpperUse=ON)
-        record.set(140, heatUpperUse=OFF)
-        assert _replay(record, 150).scenario.history.heated_at == at(140)
-
-    def test_running_heats_now_and_says_since_when(self, record: Any) -> None:
+    def test_running_says_since_when(self, record: Any) -> None:
         record.set(60, compUse=ON, heatUpperUse=ON)
         s = _replay(record, 92).scenario
         assert s.state.compressor_running
-        assert s.history.heated_at == at(92)
         assert s.history.compressor_stopped_at is None
         assert s.state.element_running_since == at(60)
 

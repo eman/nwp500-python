@@ -12,10 +12,8 @@ recovery's end, mode writes held in a window and an element mode
 dropped at one, the elements, the restart lockout and a start's hold.
 The engine finds the next event, moves the tank to it with the physics,
 hands it to ``controller.transition`` and carries out the actions it
-returns. What it keeps is the walk: where to
-stop, the physics between stops, how far a recovery and an element lift
-the tank, the withheld draw windows, the draws, and the booked heat
-(below).
+returns. What it keeps is the walk: where to stop, the physics between
+stops, the withheld draw windows and the draws.
 
 The heater takes ``entries``, each a minute, a mode and a setpoint, and
 when it was written: it fires each in its minute, at the minute's start,
@@ -27,35 +25,23 @@ per segment of an intent, at its start minute, as given). A plan's
 ``tou`` command sets the switch at its adoption, the walk's start: the
 caller passes the windows it leaves (none for ``tou`` off).
 
-The physics is injected (``Physics``) so the walk can be tested on its
-own; the caller supplies the core's calibrated coast and recovery
-(``sim.tank_physics.TankPhysics``). The
-engine owns the draws: it hands each coast the ones whose onsets it
-spans and splits a recovery at the others, so every draw is taken
-exactly once whichever kind of segment it falls in. The element is the
-engine's own arithmetic (constant rates, from ``ElementParams``), laid
-over whichever segment it runs in.
+**The tank is the physics' state.** The physics is injected
+(``Physics``) so the walk can be tested on its own; the caller supplies
+the core's calibrated tank (``sim.tank_physics.TankPhysics``). The
+engine carries the tank as the physics gives it and reads only its
+probes. Every segment walks it forward from where it is, under what
+runs then: the compressor (from its start, heating after its hold, its
+heat scaled by a recovery model's answer), an element (its heat a dead
+time behind it, so it still heats that long after it stops), and
+neither's heat inside a withheld draw window, where both are charged.
+A recovery is that walk until the lower probe reaches its stop, an
+element's until its zone reaches its off point: nothing is predicted
+and placed, so a draw, a pause or an element in a recovery moves the
+tank it acts on.
 
-**The booked heat at a draw (2026-10-03).** A draw's calibrated
-response barely moves the upper zone, as the probe barely moves on an
-ordinary draw; when the cold front reaches the probe it falls tens of
-degrees, and nothing reading the zone (the triggers) saw it. With
-a ``ledger`` (``sim.extensions.HeatLedger``: the tank's heat by
-bookkeeping, walked along the path so far), each draw also asks it
-(``after_draw``): where the booked heat the draw leaves is near or past
-the zone's empty point, the zone goes down to the ledger's. A coast
-stops at such a draw to take it at its instant, so the step is a point
-on the path; a recovery it lands in is predicted afresh from the zone it
-leaves. Without a ledger, every draw is its own response, as before.
-*(Later that day: before the point the zone also mixes down, faster the
-less booked heat is left; so every draw with a ledger that mixes
-(``LedgerZones.mixes``) may move it, and no bound skips the walk.)*
-
-**The lower zone at a draw.** Every draw takes the lower zone by its
-calibrated response at its onset, with a ledger or without one: the
-lower probe falls on every draw at once, by about the response, and
-neither rebounds nor keeps falling after it. The ledger has no say over
-the lower zone.
+The engine owns the draws: it hands each coast the ones whose onsets it
+spans and takes the others at their instants inside a recovery, so
+every draw is taken exactly once whichever kind of segment it falls in.
 
 **Raw writes (calibration only).** ``raw_writes`` replays recorded
 setpoint and mode writes as they were made, at their instants and values,
@@ -68,7 +54,6 @@ reconciliation against the record tests.
 from __future__ import annotations
 
 import math
-from bisect import bisect_left
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -77,6 +62,7 @@ from typing import Literal
 
 from nwp500.sim import controller as ctl
 from nwp500.sim.controller import (
+    ELEMENT_DONE_F,
     HEAT_PUMP,
     TOU_CAP_PROJECTED,
     ModeEnd,
@@ -91,26 +77,18 @@ from nwp500.sim.controller import (
     wake_times,
     window_at,
 )
-from nwp500.sim.decay import Impulse
-from nwp500.sim.extensions import (
-    DrawsAhead,
-    DrawTaken,
-    HeatLedger,
-    Stand,
-    ZoneBound,
-)
 from nwp500.sim.params import ControllerParams, ElementParams
-from nwp500.sim.physics.compressor import MAX_MINUTES
-from nwp500.sim.physics.element import ElementMode, HeaterMode
-from nwp500.sim.physics.element import coast_f as earned_coast_f
+from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import (
-    Coast,
+    CompressorRun,
     Delivered,
-    Heat,
+    ElementRun,
     Physics,
     Point,
+    Running,
+    Stop,
+    Stretch,
     TankState,
-    point_at,
 )
 from nwp500.sim.tou_triggers import Window
 
@@ -130,12 +108,8 @@ HEATER_SETPOINT_MAX_F = 149.9
 _INSTANT = timedelta(microseconds=1)
 #: An entry's minute: the span it fires in.
 _ENTRY_MINUTE = timedelta(minutes=1)
-#: Draws this long before a recovery's start are the recovery model's
-#: ``draw_load``: its lead window for draws.
-DRAW_LEAD = timedelta(minutes=30)
-#: The deficit ``draw_load`` is divided by is floored here, °F, as the
-#: recovery model's fit does.
-_MIN_LOAD_DEFICIT_F = 1.0
+#: How far ahead a recovery is walked to judge the TOU cap on it.
+_RECOVERY_AHEAD = timedelta(hours=16)
 #: A walk that has not reached the horizon after this many steps is a
 #: bug, not a long simulation (a week of 10-minute events is ~1,000).
 _MAX_STEPS = 20_000
@@ -206,8 +180,8 @@ class Heater:
 
 # ── Physics, injected ───────────────────────────────────────────────
 
-# ``Point``, ``Coast``, ``Heat`` and the ``Physics`` protocol are the
-# core's (``sim.tank_physics``), imported above: the caller supplies
+# ``Point``, ``Stretch``, ``Running`` and the ``Physics`` protocol are
+# the core's (``sim.tank_physics``), imported above: the caller supplies
 # the core's ``TankPhysics``.
 
 
@@ -337,7 +311,7 @@ class Simulation:
 
 
 class SimulationError(Exception):
-    """A recovery the physics could not give."""
+    """A walk the engine could not finish."""
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -357,48 +331,6 @@ def quantise(f: float, resolution_c: float = SETPOINT_RESOLUTION_C) -> float:
     return round(math.floor(c + 0.5) * resolution_c * 1.8 + 32.0, 2)
 
 
-def _slice(points: Sequence[Point], a: datetime, b: datetime) -> list[Point]:
-    """The path from ``a`` to ``b``: the state at ``a`` (no energy), the
-    elements between, and the state at ``b``. An interval cut by ``a``
-    or ``b`` keeps only its share of energy, in proportion to time, so
-    consecutive slices never count an interval twice."""
-    out = [replace(point_at(points, a), input_wh=0.0)]
-    for p0, p1 in pairwise(points):
-        lo, hi = max(p0.at, a), min(p1.at, b)
-        if hi <= lo:
-            continue
-        span = (p1.at - p0.at).total_seconds()
-        share = (hi - lo).total_seconds() / span
-        state = p1 if hi == p1.at else point_at(points, hi)
-        out.append(
-            Point(
-                hi,
-                state.upper_f,
-                state.lower_f,
-                None if p1.input_wh is None else p1.input_wh * share,
-            )
-        )
-    return out
-
-
-def _energy(points: Sequence[Point]) -> float | None:
-    total = 0.0
-    for p in points[1:]:
-        if p.input_wh is None:
-            return None
-        total += p.input_wh
-    return total
-
-
-def _power(points: Sequence[Point]) -> float | None:
-    """Mean electrical power over a path's last interval, W."""
-    for p0, p1 in zip(points[-2::-1], points[::-1], strict=False):
-        hours = (p1.at - p0.at).total_seconds() / 3600.0
-        if hours > 0:
-            return None if p1.input_wh is None else p1.input_wh / hours
-    return None
-
-
 def floor_minute(at: datetime) -> datetime:
     """``at`` truncated to its minute: a reservation entry's minute."""
     return at.replace(second=0, microsecond=0)
@@ -409,89 +341,38 @@ def floor_minute(at: datetime) -> datetime:
 
 @dataclass
 class _Cycle:
-    """The recovery running now.
-
-    Its recovery is predicted **once**, from where the cycle began (the
-    origin), to each target it is asked for. A draw, a pause or a write
-    that moves the tank does not re-predict: the tank is placed back on
-    that one served path at the instant its lower zone matches, and the
-    path continues from there. Re-predicting from mid-recovery states
-    stretched a 130-minute recovery to 155 minutes when split every ten
-    minutes, because the recovery model is fitted on whole cycles. Only
-    a tank colder than the origin needs a new origin.
-    """
+    """The recovery running now: the compressor on from ``start``,
+    heating from ``heats_at`` (its start's hold over), its heat scaled
+    by ``scale``, to where it stops: the lower probe at ``stop_level``
+    or, the TOU cap stopping it as a window opens, ``stop_at``. Both are
+    judged again (``_position``) wherever the tank or the setpoint
+    moves."""
 
     start: Start
     #: The setpoint whose recovery this is.
     setpoint_f: float
-    origin: tuple[datetime, TankState]
-    #: The origin's served path to each target asked for, unshifted.
-    bases: dict[float, Heat]
-    #: The path from now to where this recovery ends.
-    heat: Heat
+    heats_at: datetime
+    stop_level: float
     capped: bool
+    stop_at: datetime | None = None
+    scale: float = 1.0
     input_wh: float | None = 0.0
     confidence: float = 1.0
-    #: Paused over a withheld draw window until this instant.
-    paused_until: datetime | None = None
-    #: Running power, for charging a pause, W.
-    power_w: float | None = None
     #: Its entry in ``heating``.
     interval: HeatingInterval | None = None
-    #: The hold its start began with, and what was left of
-    #: it at the origin: a recovery predicted afresh after a draw keeps
-    #: only the rest of it.
-    hold_total: float = 0.0
-    hold_minutes: float = 0.0
-    #: The recovery model's ``draw_load`` for the draws recorded before
-    #: the start, while the origin is the recorded tank; 0.0 once
-    #: it is predicted afresh, or for a recovery the walk started.
-    lead_load: float = 0.0
 
 
 @dataclass
 class _Element:
-    """An element running now: the engine's arithmetic at the fitted
-    rate, laid over whichever segment it runs in."""
+    """An element running now, on from ``on_at`` (its on-edge), its
+    heat reaching the water from ``live_at``, to its off point
+    (``controller.ElementRetarget``) once set."""
 
     zone: Literal["upper", "lower"]
     interval: HeatingInterval
-    #: °F per minute in its zone.
-    rate: float
-    #: When it reaches its off point at that rate (the setpoint, or
-    #: Energy Saver's upper element's short of it), from the tank now;
-    #: recomputed at every boundary, as draws and writes move it.
-    end: datetime
-    #: When its zone starts to rise: its on-edge plus the dead time
-    #: for an upper element (``ElementParams.upper_dead_time_min``);
-    #: it is charged from the on-edge. The on-edge itself for the lower
-    #: element.
+    on_at: datetime
     live_at: datetime
-    #: Minutes it has run outside a withheld window, from its on-edge,
-    #: the dead time's included: the heat in transit when it stops is
-    #: at most its last dead time's worth of them (``coast_f``).
-    credited_min: float = 0.0
-    #: Its off point (``controller.ElementRetarget``), once set.
     off: float | None = None
-
-
-def _at_lower(points: Sequence[Point], lower: float) -> datetime | None:
-    """The instant on ``points`` at which the lower zone rises past
-    ``lower``: where the path leaves it, not where it first reaches it.
-    On a path that holds a temperature for a while (a recovery model
-    whose path begins with dead time) the two differ, and placing a tank at
-    the first would replay the hold at every draw. None when the path
-    never rises past it."""
-    found: datetime | None = None
-    for p0, p1 in pairwise(points):
-        if p0.lower_f <= lower < p1.lower_f:
-            f = (lower - p0.lower_f) / (p1.lower_f - p0.lower_f)
-            found = p0.at + (p1.at - p0.at) * f
-    return found
-
-
-def _shift(points: Sequence[Point], by: timedelta) -> list[Point]:
-    return [replace(p, at=p.at + by) for p in points]
 
 
 class _Engine:
@@ -514,41 +395,26 @@ class _Engine:
         element_running_since: datetime | None = None,
         raw_writes: Sequence[RawWrite] = (),
         stopped_at: datetime | None = None,
-        heated_at: datetime | None = None,
         start_hold: Callable[[float | None], float] | None = None,
         running_hold: float = 0.0,
-        lead_draws: Sequence[Draw] = (),
-        ledger: HeatLedger | None = None,
         controller: ControllerParams | None = None,
+        state: TankState | None = None,
     ) -> None:
         self.t = start
-        #: The booked heat along the path so far, which takes the upper
-        #: zone through a draw that spends it (``_follow_ledger``); None,
-        #: the draw's own response alone.
-        self.ledger = ledger
-        #: Where the ledger's walk stood at the clock when last walked:
-        #: each walk resumes there, so a day is walked once.
-        self.ledger_carry: Stand | None = None
-        #: Whether a draw's upper zone mixes down above the front: then
-        #: no bound shows a draw cannot move it, since the draw's own
-        #: response is not bounded below.
-        self._mixing = ledger is not None and ledger.zones.mixes
-        #: The drop of the draws ``_coast_draw`` last took at their
-        #: instant: the coast after them starts below it, so the trigger
-        #: search there is handed it (Energy Saver's release).
-        self._drop: Impulse | None = None
-        #: Every draw taken so far, onset order: what the ledger prices.
-        self.taken: list[Draw] = []
-        #: Draws recorded before the start, for the first recovery if it
-        #: begins within ``DRAW_LEAD`` of them: the recovery model's
-        #: input, since the recorded tank is what its training rows read.
-        self.recorded_lead: list[Draw] = [d for d in lead_draws if d[0] < start]
         #: The rest of a running compressor's hold at the start, minutes.
         self.running_hold = running_hold if running else 0.0
         #: The tank, as the physics carries it (``_set``), and its
         #: probes, which everything else reads.
-        self.tank_state: TankState = physics.estimate(upper_f, lower_f)
-        self.probes = physics.observe(self.tank_state)
+        self.tank_state: TankState = (
+            physics.estimate(upper_f, lower_f) if state is None else state
+        )
+        # The probes as read: the state made of them observes them to
+        # within rounding.
+        self.probes = (
+            (upper_f, lower_f)
+            if state is None
+            else physics.observe(self.tank_state)
+        )
         self.running = running
         self.element_running = element_running
         self.element_running_since = element_running_since
@@ -580,10 +446,11 @@ class _Engine:
             if outside is None
             else outside(start, until, *self.params.hp_air_range_f)
         )
+        self.physics = physics
         available = self._available(start)
         #: The tank was below the heat pump's water range with no element
         #: since to heat it past: one heating it runs to its off point.
-        self._cold = lower_f < self.params.hp_water_range_f[0]
+        self._cold = self.probes[1] < self.params.hp_water_range_f[0]
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -607,22 +474,9 @@ class _Engine:
         self.mode_writes: list[ModeWrite] = []
         self.modes: list[ModeInterval] = [ModeInterval(start, until, self.mode)]
         self.element: _Element | None = None
-        #: An element has heated the upper zone in the running compressor
-        #: cycle: its gain is kept against the cycle's own path.
-        self.hold_upper = False
-        #: °F the upper zone still coasts up, uncharged, at
-        #: ``coast_rate`` after an element that switches off short of the
-        #: setpoint has stopped at its off point (Energy Saver's upper
-        #: element): at most the off deficit, 1.62 °F, and at most what
-        #: the run itself put in (``sim.physics.element.coast_f``). Inside a
-        #: withheld draw window it runs out uncredited, as the element's
-        #: and the compressor's heat does there.
-        self.coast_f = 0.0
-        self.coast_rate = 0.0
-        #: When that coast is done: a boundary, so the path has a point
-        #: where the zone reaches the setpoint.
-        self.coast_end: datetime | None = None
-        self.physics = physics
+        #: Elements that have stopped, whose heat is still on its way to
+        #: the water (``ElementParams.upper_dead_time_min``).
+        self.cooling: list[ElementRun] = []
         #: Draws not yet taken, onset order. Each is removed as a coast
         #: or a recovery takes it.
         self.draws = sorted(d for d in draws if start <= d[0] < until)
@@ -630,8 +484,8 @@ class _Engine:
         self.path: list[PathPoint] = [
             PathPoint(
                 start,
-                upper_f,
-                lower_f,
+                self.upper,
+                self.lower,
                 setpoint_f,
                 running,
                 0.0,
@@ -650,16 +504,6 @@ class _Engine:
             (w for w in raw_writes if start <= w.at < until),
             key=lambda w: w.at,
         )
-        #: When the tank last heated, by the compressor or an element,
-        #: which a run's standby pool counts from: the given
-        #: instant, else the compressor's last stop in force at the
-        #: start, then the simulation's own stops of either.
-        self.last_heated: datetime | None = (
-            heated_at
-            if heated_at is not None
-            else self.state.compressor.last_stop
-        )
-
         #: Each compressor recovery's arrival at its target (``reached``),
         #: and each mode the heater dropped (``drops``).
         self.reached: list[tuple[datetime, float]] = []
@@ -714,18 +558,74 @@ class _Engine:
             else self.physics.estimate(point.upper_f, point.lower_f)
         )
 
-    def _respond(
-        self, at: datetime, upper_f: float, lower_f: float, gal: float
-    ) -> tuple[float, float]:
-        """The probes just after a draw of ``gal`` at ``at`` from a tank
-        reading ``upper_f`` and ``lower_f``: the ledger's draw response
-        (``DrawsAhead.respond``)."""
-        state = self.physics.estimate(upper_f, lower_f)
-        return self.physics.observe(self.physics.draw(at, state, gal))
+    def _running(self, at: datetime) -> Running:
+        """What heats the tank from ``at``: the recovery's compressor,
+        the element, and the elements whose heat is still on its way;
+        credited none of it inside a withheld draw window."""
+        cycle = self.cycle
+        el = self.element
+        return Running(
+            compressor=None
+            if cycle is None
+            else CompressorRun(
+                on_at=cycle.start.at,
+                heats_at=cycle.heats_at,
+                scale=cycle.scale,
+            ),
+            elements=(
+                *(e for e in self.cooling if self._heats_until(e) > at),
+                *(
+                    ()
+                    if el is None
+                    else (ElementRun(zone=el.zone, on_at=el.on_at),)
+                ),
+            ),
+            credited=self._withheld_at(at) is None,
+        )
 
-    def _origin_lower(self, cycle: _Cycle) -> float:
-        """The lower probe where ``cycle``'s recovery began."""
-        return self.physics.observe(cycle.origin[1])[1]
+    def _heats_until(self, e: ElementRun) -> datetime:
+        """When a stopped element's last heat reaches the water."""
+        assert e.off_at is not None
+        return e.off_at + self._lag(e.zone)
+
+    def _advance(
+        self,
+        end: datetime,
+        draws: Sequence[Draw] = (),
+        stop: Stop | None = None,
+    ) -> Stretch:
+        """The tank walked from now to ``end`` under what runs now."""
+        self.cooling = [
+            e for e in self.cooling if self._heats_until(e) > self.t
+        ]
+        return self.physics.advance(
+            self.t,
+            self.tank_state,
+            end,
+            draws,
+            running=self._running(self.t),
+            stop=stop,
+        )
+
+    def _ahead(self, end: datetime, stop: Stop) -> Stretch:
+        """The tank walked from now toward ``end`` under what runs now,
+        credited or not on each side of the withheld windows' edges, to
+        where ``stop`` holds. Nothing is drawn: a look ahead, not the
+        walk."""
+        edges = sorted(
+            {x for w in self.withheld for x in w if self.t < x < end}
+        )
+        t, state = self.t, self.tank_state
+        points: list[Point] = []
+        for b in (*edges, end):
+            part = self.physics.advance(
+                t, state, b, running=self._running(t), stop=stop
+            )
+            points += part.points[1:] if points else part.points
+            if part.stopped:
+                return Stretch(points, stopped=True)
+            t, state = part.end, part.state
+        return Stretch(points)
 
     # ── the controller ──
 
@@ -770,73 +670,35 @@ class _Engine:
             return not available
         return False
 
-    def _water_crossing(self, points: Sequence[Point]) -> datetime | None:
-        """The first point of a coast past a bound of the heat pump's
-        water range, where its availability changes (at most a coast
-        step after the crossing, and on its far side); None when the
-        coast crosses none, or an element runs (its rise is laid over
-        the coast, and its end is a boundary)."""
-        if self.element is not None:
-            return None
-        for p0, p1 in pairwise(points):
-            if self._water_ok(p0.lower_f) != self._water_ok(p1.lower_f):
-                return p1.at
-        return None
-
-    def _element_done(
-        self, points: Sequence[Point], *, heat_path: bool = False
-    ) -> datetime | None:
-        """Where the running element's zone, as ``_overlay`` lifts it on
-        ``points``, first reaches the element's off point: before the end
-        its rate alone gives (``_element_end``) where something else lifts
-        the zone too, the compressor on a cycle's served path, a closing
-        gap the lower zone, an inverted tank's mix the upper
-        (``decay.project_decay``). Linear between the points but for a
-        coast's mix, taken at once. None when it does not."""
+    def _element_done(self, upper: float, lower: float) -> bool:
+        """Whether the running element's zone is at its off point."""
         el = self.element
         if el is None or el.off is None:
-            return None
-        upper = el.zone == "upper"
-        credited = self._withheld_at(points[0].at) is None
-        z = self.upper if upper else self.lower
-        for p0, p1 in pairwise(points):
-            if z >= el.off:
-                return p0.at
-            span = p1.at - p0.at
-            live = (
-                max(0.0, (p1.at - max(p0.at, el.live_at)).total_seconds())
-                / 60.0
-            )
-            gain = el.rate * live if credited else 0.0
-            if upper and heat_path:
-                # The path a floor, the element the faster rise.
-                own = min(self.sp, z + gain)
-                if max(p1.upper_f, own) >= el.off:
-                    fs = [(el.off - z) / gain] if own >= el.off else []
-                    if p1.upper_f >= el.off:
-                        rise = p1.upper_f - p0.upper_f
-                        fs.append(
-                            (el.off - p0.upper_f) / rise if rise > 0 else 0.0
-                        )
-                    return p0.at + span * max(0.0, min(fs))
-                z = max(p1.upper_f, own)
-                continue
-            dz = p1.upper_f - p0.upper_f if upper else p1.lower_f - p0.lower_f
-            if z + dz + gain >= el.off:
-                if (
-                    not heat_path
-                    and p0.lower_f > p0.upper_f
-                    and z + dz < el.off
-                ):
-                    # An inverted tank turns over at once; the coast
-                    # shows the mix only at its step's end, wherever the
-                    # walk cut it.
-                    f = (el.off - z - dz) / gain
-                else:
-                    f = (el.off - z) / (dz + gain)
-                return p0.at + (p1.at - p0.at) * f
-            z = z + dz if z + dz >= self.sp else min(self.sp, z + dz + gain)
-        return None
+            return False
+        z = upper if el.zone == "upper" else lower
+        return z >= el.off - ELEMENT_DONE_F
+
+    def _stop(self) -> Stop:
+        """Where a walk from now stops for the walk to look: the
+        recovery at its stop level, the element at its off point, or,
+        with nothing heating, the lower probe crossing an edge of the
+        heat pump's water range, where its availability changes."""
+        cycle = self.cycle
+        level = None if cycle is None else cycle.stop_level
+        water = (
+            None
+            if cycle is not None or self.element is not None
+            else self._water_ok(self.lower)
+        )
+
+        def stop(upper: float, lower: float) -> bool:
+            if level is not None and lower >= level:
+                return True
+            if self._element_done(upper, lower):
+                return True
+            return water is not None and self._water_ok(lower) != water
+
+        return stop
 
     def _dispatch(self, event: ctl.Event) -> None:
         """Hand ``event`` to the firmware (``controller.transition``) and
@@ -862,12 +724,12 @@ class _Engine:
                 self._finish(at, reason)
             case ctl.Retarget():
                 self._position()
-            case ctl.StartElement(start, zone, live_at, credited):
-                self._begin_element(start, zone, live_at, credited)
+            case ctl.StartElement(start, zone, live_at, _):
+                self._begin_element(start, zone, live_at)
             case ctl.ElementRetarget(off):
                 self._element_end(off)
-            case ctl.StopElement(at, reason, coast_mode):
-                self._stop_element(at, reason, coast_mode)
+            case ctl.StopElement(at, reason, _):
+                self._stop_element(at, reason)
             case ctl.ModeSet(at, mode, ended_by):
                 self._set_mode(at, mode, ended_by)
             case ctl.RecordModeWrite(at, mode, owner, serves):
@@ -893,19 +755,14 @@ class _Engine:
 
     # ── path ──
 
-    def _append(
-        self,
-        points: Sequence[Point],
-        heating: bool,
-        *,
-        heat_path: bool = False,
-    ) -> None:
-        """Extend the path with ``points``: a coast's, or with
-        ``heat_path`` the running cycle's served recovery."""
-        if self.element is not None or self.hold_upper or self.coast_f:
-            points = self._overlay(points, heat_path=heat_path)
-        for p in points:
-            if p.at <= self.path[-1].at:
+    def _append(self, points: Sequence[Point], heating: bool) -> None:
+        """Extend the path with a walk's ``points``, charge their
+        electricity (the compressor's to the recovery, the elements' to
+        the one running), and take the tank where they end."""
+        for k, p in enumerate(points):
+            # The walk's start is where the path stands; two elements at
+            # one instant later on are a draw's step, before and after.
+            if p.at < self.path[-1].at or (k == 0 and p.at == self.path[-1].at):
                 continue
             self.path.append(
                 PathPoint(
@@ -919,236 +776,71 @@ class _Engine:
                     self.mode,
                 )
             )
-        self._adopt(points[-1])
-
-    def _overlay(
-        self, points: Sequence[Point], *, heat_path: bool
-    ) -> list[Point]:
-        """``points`` with the running element laid over them.
-
-        The element lifts its zone at its fitted rate toward the setpoint
-        and draws its fitted power (``ElementParams``), and the segment is
-        cut at its end, so it runs over the whole of any segment it is in.
-        An upper element draws from its on-edge and lifts nothing for its
-        dead time (``upper_dead_time_min``), whose end is a boundary.
-        It ends at its off point; where that is short of the setpoint
-        (Energy Saver's upper element) the zone then coasts on at the
-        element's rate with no input, by no more than the off deficit
-        and the heat in transit (``coast_f``), and none of it inside a
-        withheld window.
-        On a cycle's served path the path is a floor for the upper zone,
-        the element the faster rise, the higher of the two holding;
-        in a coast (a pause's included) the element's gain rides on the
-        coast's losses and draws. Once an element has run in a cycle, its
-        gain is kept to the cycle's end: held against the path, and
-        carried through a coast's losses. Inside a withheld
-        draw window the element is charged and credited no heat,
-        as the compressor is.
-        """
-        el = self.element
-        credited = self._withheld_at(points[0].at) is None
-        u, lo = self.upper, self.lower
-        out = [replace(points[0], upper_f=u, lower_f=lo, element_wh=0.0)]
-        for p0, p1 in pairwise(points):
-            minutes = (p1.at - p0.at).total_seconds() / 60.0
-            du = p1.upper_f - p0.upper_f
-            dl = p1.lower_f - p0.lower_f
-            wh = 0.0
-            if el is None:
-                u = max(p1.upper_f, u) if heat_path else u + du
-                lo = p1.lower_f
-                if self.coast_f > 0.0:
-                    g = min(self.coast_f, self.coast_rate * minutes)
-                    self.coast_f = (
-                        0.0 if g >= self.coast_f else (self.coast_f - g)
-                    )
-                    if credited:
-                        u = max(u, min(self.sp, u + g))
-            else:
-                wh = self.ep.element_w * minutes / 60.0
-                # Charged from the on-edge; its zone rises only after
-                # the dead time.
-                live = (
-                    max(0.0, (p1.at - max(p0.at, el.live_at)).total_seconds())
-                    / 60.0
-                )
-                gain = el.rate * live if credited else 0.0
-                el.credited_min += minutes if credited else 0.0
-                if el.zone == "lower":
-                    u = u + du
-                    lo = (
-                        lo + dl
-                        if lo + dl >= self.sp
-                        else min(self.sp, lo + dl + gain)
-                    )
-                elif heat_path:
-                    u = max(
-                        p1.upper_f,
-                        u if u >= self.sp else min(self.sp, u + gain),
-                    )
-                    lo = p1.lower_f
-                else:
-                    u = (
-                        u + du
-                        if u + du >= self.sp
-                        else min(self.sp, u + du + gain)
-                    )
-                    lo = p1.lower_f
-            out.append(Point(p1.at, u, lo, p1.input_wh, wh))
-        if el is not None:
-            el.interval.input_wh = (el.interval.input_wh or 0.0) + sum(
-                p.element_wh for p in out
+        cycle = self.cycle
+        if cycle is not None and cycle.input_wh is not None:
+            wh = [p.input_wh for p in points[1:]]
+            cycle.input_wh = (
+                None
+                if any(x is None for x in wh)
+                else cycle.input_wh + sum(x for x in wh if x is not None)
             )
-        return out
+        if self.element is not None:
+            el = self.element.interval
+            el.input_wh = (el.input_wh or 0.0) + sum(
+                p.element_wh for p in points[1:]
+            )
+        self._adopt(points[-1])
 
     def _take_draws(self, start: datetime, end: datetime) -> list[Draw]:
         """Remove and return the draws with onsets in ``[start, end)``."""
         taken = [d for d in self.draws if start <= d[0] < end]
         self.draws = [d for d in self.draws if not start <= d[0] < end]
-        self.taken.extend(taken)
         return taken
-
-    def _coast(self, end: datetime) -> Coast:
-        return self._physics_coast(end, self._peek_draws(end))
-
-    def _physics_coast(self, end: datetime, draws: list[Draw]) -> Coast:
-        """The calibrated coast from now to ``end`` over ``draws``."""
-        return self.physics.coast(
-            self.t,
-            self.tank_state,
-            end,
-            draws,
-            heated_at=self._heated_at(),
-        )
-
-    def _heated_at(self) -> datetime | None:
-        """When the tank last heated, which a run's standby pool counts
-        from: now while the compressor or an element runs, whose
-        pool is empty as the live read has it, else the end of the last
-        heating by either, as the pool was fitted."""
-        if self.cycle is not None or self.element is not None:
-            return self.t
-        return self.last_heated
 
     def _peek_draws(self, end: datetime) -> list[Draw]:
         return [d for d in self.draws if self.t <= d[0] < end]
 
+    def _lag(self, zone: Literal["upper", "lower"]) -> timedelta:
+        """How long an element's heat takes to reach the water."""
+        return timedelta(
+            minutes=self.ep.upper_dead_time_min if zone == "upper" else 0.0
+        )
+
     # ── heating ──
 
-    def _base(self, cycle: _Cycle, target: float) -> Heat:
-        """The origin's served path to ``target``, predicted once."""
-        if target not in cycle.bases:
-            t0, state = cycle.origin
-            kw: dict[str, float] = {}
-            if cycle.hold_minutes > 0.0:
-                kw["hold_minutes"] = cycle.hold_minutes
-            if cycle.lead_load > 0.0:
-                kw["draw_load"] = cycle.lead_load
-            truncated = getattr(self.physics, "truncated_recoveries", 0)
-            heat = self.physics.heat(t0, state, target, **kw)
-            if heat is None:
-                if getattr(self.physics, "truncated_recoveries", 0) > truncated:
-                    # A weak fit or very cold air, not missing physics.
-                    raise SimulationError(
-                        "recovery unavailable: the physics integration hit "
-                        f"its {MAX_MINUTES:.0f}-min bound short of the target"
-                    )
-                raise SimulationError("recovery unavailable")
-            self._note(heat)
-            cycle.confidence = min(cycle.confidence, heat.confidence)
-            cycle.bases[target] = heat
-        return cycle.bases[target]
+    def _withheld_at(self, at: datetime) -> Window | None:
+        return window_at(at, self.withheld)
 
-    def _placed(self, cycle: _Cycle, target: float) -> list[Point] | None:
-        """The origin's path to ``target``, moved in time so the tank now
-        sits on it, from now to its end; None when the tank is already at
-        the target."""
-        base = self._base(cycle, target)
-        if self.lower >= base.points[-1].lower_f:
-            return None
-        # At the origin itself the path starts where it starts; placing
-        # it by temperature there would skip a hold at its start.
-        into = self.t - cycle.origin[0]
-        if self.t == cycle.origin[0]:
-            at: datetime | None = base.points[0].at
-        elif (
-            into < timedelta(minutes=cycle.hold_minutes)
-            and self.lower <= self._origin_lower(cycle) + 1e-9
-        ):
-            # Still in the start's hold, where the path is flat: placed
-            # by the clock, or a write would skip the rest of it.
-            at = base.points[0].at + into
-        else:
-            at = _at_lower(base.points, self.lower)
-        if at is None:  # colder than the origin: ``_position`` renews it
-            at = base.points[0].at
-        shifted = _shift(base.points, self.t - at)
-        placed = _slice(shifted, self.t, shifted[-1].at)
-        # It starts from the tank as it is, which a draw or a pause may
-        # have left a little off the path's upper zone.
-        placed[0] = Point(
-            self.t, self.upper, self.lower, 0.0, state=self.tank_state
-        )
-        return placed
-
-    def _lead_load(self) -> float:
-        """The recovery model's ``draw_load`` for the draws recorded in
-        the ``DRAW_LEAD`` before now, for a recovery beginning now: their
-        registered heat over the deficit's, as the model was fitted. They
-        are consumed by the first recovery."""
-        lead = [
-            d for d in self.recorded_lead if self.t - DRAW_LEAD <= d[0] < self.t
-        ]
-        self.recorded_lead = []
-        if not lead:
-            return 0.0
-        drop = 0.0
-        for at, gal in lead:
-            up, lo = self.physics.observe(
-                self.physics.draw(at, self.tank_state, gal)
-            )
-            drop += (self.upper + self.lower - up - lo) / 2.0
-        return drop / max(self.sp - self.lower, _MIN_LOAD_DEFICIT_F)
-
-    def _position(self, *, renew: bool = False) -> None:
-        """Place the running recovery on its path from the tank now, with
-        the TOU cap applied where the device applies it
-        (``controller.judge_cap``).
+    def _position(self) -> None:
+        """Where the running recovery stops, from the tank now: the
+        lower probe ``hp_stop_overshoot_f`` over its target, at most at
+        the top of the heat pump's water range, unless the TOU cap stops
+        it first (``controller.judge_cap``), judged on the walk to that
+        stop from here.
 
         A recovery stops at the first instant it is inside a window with
-        the lower zone at the cap's level (the target less ``tou_cap_f``).
-        The level's timing is the path to that level from the origin: a
-        capped recovery is predicted as a recovery to the level. One the
-        cap does not stop runs on past its target to
-        ``hp_stop_overshoot_f`` over it. ``renew`` predicts it afresh
-        from the tank now, as a colder tank does.
+        the lower probe at the cap's level (the target less
+        ``tou_cap_f``). Reaching the level before the window opens, it
+        runs on toward its stop and stops as the window opens; reaching
+        it inside the window, it stops there (``controller.cap_outcome``).
         """
         cycle = self.cycle
         assert cycle is not None
-        if renew or self.lower < self._origin_lower(cycle) - 1e-9:
-            # Colder than where the cycle began: no point of its path
-            # matches, so the recovery is predicted afresh from here.
-            cycle.origin = (self.t, self.tank_state)
-            cycle.bases = {}
-            cycle.lead_load = 0.0
-            gone = (self.t - cycle.start.at).total_seconds() / 60.0
-            cycle.hold_minutes = max(0.0, cycle.hold_total - gone)
         target = cycle.setpoint_f
-        empty = Heat(
-            [Point(self.t, self.upper, self.lower, 0.0, state=self.tank_state)],
-            1.0,
-        )
-        # The heat pump stops at the top of its water range.
-        stop = min(
+        level = min(
             target + self.params.hp_stop_overshoot_f,
             self.params.hp_water_range_f[1],
         )
-        full = self._placed(cycle, stop)
-        if full is None:
-            cycle.heat, cycle.capped = empty, False
+        cycle.stop_level, cycle.stop_at, cycle.capped = level, None, False
+        if self.lower >= level:
+            cycle.stop_at = self.t
             return
+        ahead = self.t + _RECOVERY_AHEAD
+        if not any(w0 < ahead and self.t < w1 for w0, w1 in self.windows):
+            return
+        full = self._ahead(ahead, lambda _, lower: lower >= level)
         cap = judge_cap(
-            full,
+            full.points,
             at=self.t,
             lower_f=self.lower,
             target_f=target,
@@ -1156,60 +848,47 @@ class _Engine:
             params=self.params,
         )
         if cap.kind == "none":
-            cycle.heat, cycle.capped = Heat(full, cycle.confidence), False
             return
         window = cap.window
         assert window is not None
         if cap.kind == "at_level":
             # Already at the level inside the window: it does not heat.
-            # Before the opening it heats off-peak until then (below).
-            cycle.heat, cycle.capped = empty, True
-            return
-        capped = self._placed(cycle, cap.level)
-        outcome = ctl.cap_outcome(
-            None if capped is None else capped[-1].at, window
-        )
-        if outcome == "until_open":
-            cycle.heat = Heat(_slice(full, self.t, window[0]), cycle.confidence)
-            cycle.capped = True
-        elif outcome == "to_level":
-            assert capped is not None
-            cycle.heat, cycle.capped = Heat(capped, cycle.confidence), True
+            cycle.stop_at, cycle.capped = self.t, True
         else:
-            cycle.heat, cycle.capped = Heat(full, cycle.confidence), False
+            reaches: datetime | None = None
+            if self.lower < cap.level:
+                walked = self._ahead(ahead, lambda _, lower: lower >= cap.level)
+                reaches = walked.end if walked.stopped else ahead
+            outcome = ctl.cap_outcome(reaches, window)
+            if outcome == "until_open":
+                cycle.stop_at, cycle.capped = window[0], True
+            elif outcome == "to_level":
+                cycle.stop_level, cycle.capped = cap.level, True
         if cycle.capped:
             self.reasons.add(TOU_CAP_PROJECTED)
 
-    def _note(self, heat: Heat) -> None:
-        self.reasons.update(heat.reasons)
-        if heat.linear:
-            self.reasons.add("recovery_path_linear")
-
     def _begin(self, start: Start, *, hold: float) -> None:
-        """The compressor starts (``controller.StartCompressor``): its
-        recovery, from the tank now, holding ``hold`` minutes before it
-        climbs."""
+        """The compressor starts (``controller.StartCompressor``),
+        heating after ``hold`` minutes, at the pace a recovery model
+        gives it (``TankPhysics.scale``)."""
+        level = min(
+            self.sp + self.params.hp_stop_overshoot_f,
+            self.params.hp_water_range_f[1],
+        )
+        scale, confidence = 1.0, 1.0
+        scaled = getattr(self.physics, "scale", None)
+        if scaled is not None:
+            got = scaled(self.t, self.tank_state, level, hold_minutes=hold)
+            scale, confidence = got.scale, got.confidence
+            self.reasons.update(got.reasons)
         self.cycle = _Cycle(
             start=start,
             setpoint_f=self.sp,
-            origin=(self.t, self.tank_state),
-            bases={},
-            heat=Heat(
-                [
-                    Point(
-                        self.t,
-                        self.upper,
-                        self.lower,
-                        0.0,
-                        state=self.tank_state,
-                    )
-                ],
-                1.0,
-            ),
+            heats_at=self.t + timedelta(minutes=hold),
+            stop_level=level,
             capped=False,
-            hold_total=hold,
-            hold_minutes=hold,
-            lead_load=self._lead_load(),
+            scale=scale,
+            confidence=confidence,
         )
         self._position()
         cycle = self.cycle
@@ -1245,120 +924,56 @@ class _Engine:
         if at_target:
             self.reached.append((at, cycle.setpoint_f))
         self.cycle = None
-        self.last_heated = at
-        self.hold_upper = False
-
-    def _account(self, points: Sequence[Point]) -> None:
-        cycle = self.cycle
-        assert cycle is not None
-        wh = _energy(points)
-        cycle.input_wh = (
-            None
-            if wh is None or cycle.input_wh is None
-            else cycle.input_wh + wh
-        )
-
-    def _withheld_at(self, at: datetime) -> Window | None:
-        return window_at(at, self.withheld)
 
     def _heat_until(self, end: datetime) -> None:
-        """Run the cycle to ``end`` or to its own finish."""
+        """Run the cycle to ``end`` or to its own finish: the tank
+        walked under the compressor to the cycle's stop, cut at each
+        draw (taken at its instant, and the stop judged again from the
+        tank it leaves) and at each withheld window's edges."""
         while self.cycle is not None and self.t < end:
             cycle = self.cycle
-            # A draw at this very instant: the coast before took the
-            # ones before it, and this segment starts here.
             now = self._take_draws(self.t, self.t + _INSTANT)
             if now:
-                upper, lower = self.upper, self.lower
                 for _, gal in now:
                     self._set(self.physics.draw(self.t, self.tank_state, gal))
-                moved = self._follow_ledger(upper, lower)
                 self._step_point()
                 # A draw can take the lower zone out of the heat pump's
                 # range, which stops it.
                 if self._check_availability():
                     continue
-                # A zone the book took down is off the recovery's path,
-                # which holds the upper zone where it began: predicted
-                # afresh from here.
-                self._position(renew=moved)
+                self._position()
                 self._element_trigger()
                 continue
-            if cycle.paused_until is None:
-                w = self._withheld_at(self.t)
-                if w is not None:
-                    if cycle.power_w is None:
-                        cycle.power_w = _power(cycle.heat.points[:2])
-                    cycle.paused_until = min(w[1], self.until)
-            if cycle.paused_until is not None:
-                self._pause(min(end, cycle.paused_until))
+            if cycle.stop_at is not None and cycle.stop_at <= self.t:
+                self._recovery_done()
                 continue
-            path = cycle.heat.points
-            finish = path[-1].at
-            nxt = min(end, finish)
+            nxt = end if cycle.stop_at is None else min(end, cycle.stop_at)
             later = [d[0] for d in self.draws if self.t < d[0] < nxt]
-            later += [w[0] for w in self.withheld if self.t < w[0] < nxt]
-            if self.element is not None:
-                later += [
-                    x
-                    for x in (self.element.end, self.element.live_at)
-                    if self.t < x < nxt
-                ]
+            later += [x for w in self.withheld for x in w if self.t < x < nxt]
             nxt = min([nxt, *later])
-            piece = _slice(path, self.t, nxt)
-            done_at = self._element_done(piece, heat_path=True)
-            if done_at is not None and self.t < done_at < nxt:
-                # The running element reaches its off point first: the
-                # walk reads its zone there.
-                nxt = done_at
-                piece = _slice(path, self.t, nxt)
-            self._account(piece)
-            power = _power(piece)
-            if power is not None:
-                cycle.power_w = power
-            self._append(piece, heating=True, heat_path=True)
-            self.t = nxt
+            stretch = self._advance(nxt, stop=self._stop())
+            self._append(stretch.points, heating=True)
+            self.reasons.update(stretch.reasons)
+            self.t = stretch.end
             self._element_boundary()
-            if nxt >= finish:
-                # Stopped short of its target at the top of its range:
-                # the elements finish it.
-                short = self.lower < cycle.setpoint_f and not self._water_ok(
-                    self.lower
-                )
-                if not (short and self._check_availability()):
-                    self._dispatch(
-                        ctl.RecoveryDone(
-                            at=nxt, tank=self._tank(), capped=cycle.capped
-                        )
-                    )
+            if self.cycle is cycle and (
+                self.lower >= cycle.stop_level
+                or (cycle.stop_at is not None and self.t >= cycle.stop_at)
+            ):
+                self._recovery_done()
 
-    def _pause(self, stop: datetime) -> None:
-        """Coast over a withheld window with the compressor charged at
-        its running power: it runs, and is credited no heat."""
+    def _recovery_done(self) -> None:
+        """The running recovery is at its stop. Short of its target at
+        the top of the heat pump's range, the elements finish it."""
         cycle = self.cycle
         assert cycle is not None
-        if self.ledger is not None and self._peek_draws(stop):
-            # A draw the book takes the upper zone through stops the
-            # pause at its instant, as it stops a coast (``_upper_cut``).
-            ahead = self._coast(stop)
-            cut = self._upper_cut(ahead.points, stop)
-            if cut is not None and cut > self.t:
-                stop = cut
-        coast = self._physics_coast(stop, self._take_draws(self.t, stop))
-        points = list(coast.points)
-        for i in range(1, len(points)):
-            hours = (points[i].at - points[i - 1].at).total_seconds() / 3600
-            power = cycle.power_w
-            points[i] = replace(
-                points[i], input_wh=None if power is None else power * hours
+        short = self.lower < cycle.setpoint_f and not self._water_ok(self.lower)
+        if not (short and self._check_availability()):
+            self._dispatch(
+                ctl.RecoveryDone(
+                    at=self.t, tank=self._tank(), capped=cycle.capped
+                )
             )
-        self._account(points)
-        self._append(points, heating=True)
-        self.t = stop
-        if stop == cycle.paused_until:
-            cycle.paused_until = None
-            if stop < self.until:
-                self._position()
 
     def _step_point(self) -> None:
         """The state just after a draw, at the draw's instant, so the
@@ -1441,10 +1056,10 @@ class _Engine:
         start: Start,
         zone: Literal["upper", "lower"],
         live_at: datetime,
-        credited_min: float,
     ) -> None:
-        """An element starts (``controller.StartElement``): it lifts its
-        zone from ``live_at`` at the fitted rate."""
+        """An element starts (``controller.StartElement``): its heat
+        reaches the water from ``live_at``, its dead time after its
+        on-edge."""
         interval = HeatingInterval(
             start=start,
             end=start.at,
@@ -1458,20 +1073,8 @@ class _Engine:
             zone=zone,
         )
         self.heating.append(interval)
-        # A new run's own rise takes over from any coast still owed.
-        self.coast_f = 0.0
-        rate = (
-            self.ep.upper_f_per_min
-            if zone == "upper"
-            else self.ep.lower_f_per_min
-        )
         self.element = _Element(
-            zone,
-            interval,
-            rate,
-            self.t,
-            live_at=live_at,
-            credited_min=credited_min,
+            zone, interval, on_at=live_at - self._lag(zone), live_at=live_at
         )
 
     def _element_boundary(self) -> None:
@@ -1484,45 +1087,25 @@ class _Engine:
             self._dispatch(ctl.ElementCheck(at=self.t, tank=self._tank()))
 
     def _element_end(self, off: float) -> None:
-        """When the running element reaches ``off`` from the tank now (a
-        draw or a write moves it): what is left of its dead time, then
-        its rise. Inside a withheld window it is credited no heat, so it
-        runs on to the window's end."""
+        """The running element runs to ``off`` in its zone: the walk
+        stops there (``_stop``)."""
         el = self.element
         assert el is not None
         el.off = off
-        if self._withheld_at(self.t) is not None:
-            el.end = self.until
-            return
-        temp = self.upper if el.zone == "upper" else self.lower
-        el.end = max(self.t, el.live_at) + timedelta(
-            minutes=(off - temp) / el.rate
-        )
 
-    def _stop_element(
-        self, at: datetime, stop: StopReason, coast_mode: ElementMode | None
-    ) -> None:
-        """An element stops (``controller.StopElement``). Off at an off
-        point short of the setpoint (``coast_mode``), the zone coasts on,
-        toward the setpoint in force and by no more than the heat in
-        transit: what the run was charged for over its last dead time and
-        has not shown."""
+    def _stop_element(self, at: datetime, stop: StopReason) -> None:
+        """An element stops (``controller.StopElement``). Its heat still
+        on its way reaches the water over its dead time."""
         el = self.element
         assert el is not None
-        if coast_mode is not None:
-            self.coast_f = min(
-                max(0.0, self.sp - self.upper),
-                earned_coast_f(coast_mode, self.ep, el.credited_min),
-            )
-            self.coast_rate = el.rate
-            self.coast_end = at + timedelta(minutes=self.coast_f / el.rate)
         self.element = None
-        self.last_heated = at
+        if self._lag(el.zone) > timedelta(0):
+            self.cooling.append(
+                ElementRun(zone=el.zone, on_at=el.on_at, off_at=at)
+            )
         el.interval.end = at
         el.interval.stop = stop
         el.interval.final_target_f = self.sp
-        if self.cycle is not None and el.zone == "upper":
-            self.hold_upper = True
 
     # ── the walk ──
 
@@ -1590,12 +1173,11 @@ class _Engine:
         upcoming = set(self.marks)
         upcoming.update(fires for fires, _ in self.queue)
         upcoming |= wake_times(self.state, self.settings)
-        if self.element is not None:
-            upcoming.add(self.element.end)
-            for w0, w1 in self.withheld:
-                upcoming.update((w0, w1))
-        if self.coast_f and self.coast_end is not None:
-            upcoming.add(self.coast_end)
+        if self.element is not None or any(
+            self._heats_until(e) > self.t for e in self.cooling
+        ):
+            # Inside a withheld window an element's heat, running or on
+            # its way, is credited none.
             for w0, w1 in self.withheld:
                 upcoming.update((w0, w1))
         if self.raw:
@@ -1604,52 +1186,30 @@ class _Engine:
             upcoming.update((a, b))
         return {t for t in upcoming if t > self.t}
 
-    def _trigger_ahead(self, coast: Coast) -> ctl.Ahead | None:
-        """The heater's own start on ``coast``
+    def _trigger_ahead(self, stretch: Stretch) -> ctl.Ahead | None:
+        """The heater's own start on ``stretch``
         (``controller.trigger_ahead``)."""
-        drop = self._drop
-        impulses = coast.impulses
-        if drop is not None and drop.at == self.t:
-            impulses = [drop, *impulses]
         ahead, notes = trigger_ahead(
             self.state,
             self.settings,
             self.params,
-            [(p.at, p.upper_f, p.lower_f) for p in coast.points],
-            impulses,
+            [(p.at, p.upper_f, p.lower_f) for p in stretch.points],
+            stretch.impulses,
             self.t,
         )
         self.reasons.update(notes)
         return ahead
 
     def _coast_until(self, end: datetime) -> None:
-        if self._mixing:
-            # Any draw with a book may mix the upper zone down
-            # (``zone_mixed_f``), so the next is where the coast may
-            # stop: try it first, rather than a coast to ``end`` built
-            # again after every draw.
-            nxt = min((d[0] for d in self._peek_draws(end)), default=None)
-            if nxt == self.t:
-                # A draw at this instant is taken before anything else
-                # (the cut below would win every tie).
-                self._coast_draw()
-                return
-            if nxt is not None:
-                ahead = self._nothing_before(nxt)
-                if ahead is not None:
-                    # Nothing before it: coast to it and take it there,
-                    # without a coast to ``end`` that the draw would
-                    # make stale.
-                    self._take_draws(self.t, nxt)
-                    self._append(ahead.points, heating=False)
-                    self.t = nxt
-                    self._coast_draw()
-                    return
-        coast = self._coast(end)
+        """The tank with no recovery running, to ``end``, or to where
+        the heater starts itself, an element's later start reads its
+        zone, the running element reaches its off point, or the water
+        leaves or enters the heat pump's range, whichever is first."""
+        stretch = self._advance(end, self._peek_draws(end), stop=self._stop())
         at: datetime | None = None
-        own = self._trigger_ahead(coast)
+        own = self._trigger_ahead(stretch)
         if own is not None:
-            if own.starts_at >= end:
+            if own.starts_at >= stretch.end:
                 # Inside the restart lockout, starting past this
                 # segment: carried to it as a pending start, the instant
                 # it is due at, since a later segment's coast may begin
@@ -1664,50 +1224,22 @@ class _Engine:
                 )
             else:
                 at = own.starts_at
-        element_at = upper_on_crossing(self.state, self.settings, coast.points)
-        water_at = self._water_crossing(coast.points)
-        if water_at is not None and all(
-            x is None or water_at < x for x in (element_at, at)
-        ):
-            # The heat pump's availability changes before anything else
-            # happens: the walk takes it up there.
-            element_at = at = None
-            end = min(end, water_at)
-            coast = self._coast(end)
-        done_at = self._element_done(coast.points)
-        if done_at is not None and not self.t < done_at < end:
-            done_at = None
-        cut = self._upper_cut(
-            coast.points,
-            end,
-            # Only a draw before anything else happens is taken here.
-            min(x for x in (element_at, at, done_at, end) if x is not None),
+        element_at = upper_on_crossing(
+            self.state, self.settings, stretch.points
         )
-        if cut is not None and all(
-            x is None or cut <= x for x in (element_at, at, done_at)
-        ):
-            # The book takes the zones through a draw before anything
-            # else happens: coast to it, and take it at its instant.
-            self._coast_to(cut)
-            self._coast_draw()
-            return
-        if done_at is not None and all(
-            x is None or done_at < x for x in (element_at, at)
-        ):
-            # The running element reaches its off point first: the walk
-            # reads its zone there.
-            self._coast_to(done_at)
-            self._element_boundary()
-            return
         if (
             element_at is not None
-            and element_at < end
+            and element_at < stretch.end
             and (at is None or element_at < at)
         ):
             self._coast_to(element_at)
+            if any(d[0] == element_at for d in self.draws):
+                # The crossing is the draw's there: the element answers
+                # the tank it leaves.
+                self._coast_draw()
             self._dispatch(ctl.UpperOnCrossed(at=element_at, tank=self._tank()))
             return
-        if at is not None and at < end:
+        if at is not None:
             assert own is not None
             self._coast_to(at)
             if not self.state.hp_available and any(
@@ -1726,62 +1258,22 @@ class _Engine:
                 ctl.HeaterTrigger(at=at, tank=self._tank(), trigger=own.trigger)
             )
             return
-        self._take_draws(self.t, end)
-        self._append(coast.points, heating=False)
-        self.t = end
-
-    def _nothing_before(self, limit: datetime) -> Coast | None:
-        """The coast from now to ``limit`` when nothing on it acts before
-        ``limit``: no start of the heater's own (``heater_start``, after
-        ``_coast_until``'s own exceptions and the restart lockout), no
-        later element start, no element reaching its off point
-        (``_element_done``), and no draw the book takes the upper zone
-        through (``_upper_cut``). None when something does: the caller
-        then coasts as it always did. A trigger of its own on the coast
-        that the lockout puts at or past ``limit`` is carried as a
-        pending start."""
-        coast = self._coast(limit)
-        ahead = self._trigger_ahead(coast)
-        if ahead is not None and ahead.starts_at < limit:
-            return None
-        element_at = upper_on_crossing(self.state, self.settings, coast.points)
-        if element_at is not None and element_at < limit:
-            return None
-        water_at = self._water_crossing(coast.points)
-        if water_at is not None and water_at < limit:
-            return None
-        done_at = self._element_done(coast.points)
-        if done_at is not None and self.t < done_at < limit:
-            return None
-        if self._upper_cut(coast.points, limit) is not None:
-            return None
-        if ahead is not None and ahead.trigger_at <= limit:
-            # A trigger by ``limit`` that the restart lockout puts at or
-            # past it waits as a pending start, as ``_coast_until``
-            # carries one: the drop that set it (a flowing draw's, at
-            # the coast's end) is not on the coast from ``limit``.
-            self._dispatch(
-                ctl.TriggerDeferred(
-                    at=self.t,
-                    starts_at=ahead.starts_at,
-                    trigger=ahead.trigger,
-                    horizon=self.until,
-                )
-            )
-        return coast
+        # A stop a draw met ends the walk on the draw's step: it is taken.
+        points = stretch.points
+        taken = (
+            stretch.stopped and len(points) > 1 and points[-2].at == stretch.end
+        )
+        self._take_draws(
+            self.t, stretch.end + (_INSTANT if taken else timedelta(0))
+        )
+        self._append(stretch.points, heating=False)
+        self.t = stretch.end
 
     def _coast_draw(self) -> None:
-        """The draws at this instant outside a recovery, taken here and
-        not inside a coast because the book may take the upper zone
-        through one of them (``_upper_cut``): the path has the tank before and
-        after, so whatever reads the zone sees the step at its instant
-        rather than across a coast's grid."""
-        upper, lower = self.upper, self.lower
+        """The draws at this instant, taken here: the path has the tank
+        before and after."""
         for _, gal in self._take_draws(self.t, self.t + _INSTANT):
             self._set(self.physics.draw(self.t, self.tank_state, gal))
-        if self.lower < lower:
-            self._drop = Impulse(self.t, lower, self.lower)
-        self._follow_ledger(upper, lower)
         self.path.append(
             PathPoint(
                 self.t,
@@ -1793,243 +1285,12 @@ class _Engine:
                 mode=self.mode,
             )
         )
-        if self._drop is not None and self._drop.at == self.t:
-            self._carry_release()
-
-    def _carry_release(self) -> None:
-        """A start the drop just taken calls for, inside the restart
-        lockout, waits as a pending start from now: the walk may next
-        stop at another draw, where this one's drop is no longer seen."""
-        ahead = self._trigger_ahead(
-            Coast(
-                [Point(self.t, self.upper, self.lower, state=self.tank_state)]
-            )
-        )
-        if (
-            ahead is not None
-            and ahead.trigger_at == self.t
-            and ahead.starts_at > self.t
-        ):
-            self._dispatch(
-                ctl.TriggerDeferred(
-                    at=self.t,
-                    starts_at=ahead.starts_at,
-                    trigger=ahead.trigger,
-                    horizon=self.until,
-                )
-            )
-
-    def _heating_now(self, until: datetime) -> list[HeatingInterval]:
-        """``heating`` with the recovery and the element running now
-        taken to run to ``until`` (the element no further than its own
-        end): the book prices their heat to there."""
-        running: dict[int, datetime] = {}
-        if self.cycle is not None and self.cycle.interval is not None:
-            running[id(self.cycle.interval)] = until
-        if self.element is not None:
-            running[id(self.element.interval)] = min(
-                until, max(self.element.end, self.t)
-            )
-        return [
-            replace(h, end=running[id(h)]) if id(h) in running else h
-            for h in self.heating
-        ]
-
-    def _follow_ledger(self, upper: float, lower: float) -> bool:
-        """The ledger's say over the upper zone after the draws just
-        taken at this instant, ``upper`` and ``lower`` the tank before
-        them (*The booked heat at a draw*, in the module docstring;
-        ``HeatLedger.after_draw``): it goes down to the ledger's when
-        that is below the draw's own response. Whether it did."""
-        if self.ledger is None:
-            return False
-        gal = 0.0
-        for at, g in reversed(self.taken):
-            if at != self.t:
-                break
-            gal += g
-        path = [p for p in self._path_since_carry() if p.at < self.t]
-        path.append(
-            PathPoint(self.t, upper, lower, self.sp, False, 0.0, mode=self.mode)
-        )
-        taken = [d for d in self._taken_since_carry() if d[0] <= self.t]
-        said = self.ledger.after_draw(
-            DrawTaken(
-                at=self.t,
-                gallons=gal,
-                upper_f=upper,
-                lower_f=lower,
-                drawn_upper_f=self.upper,
-                drawn_lower_f=self.lower,
-                path=path,
-                intervals=self._heating_now(self.t),
-                draws=taken,
-                drawn_gal=sum(g for _, g in taken),
-                stand=self.ledger_carry,
-                bound=self._zone_bound(upper, lower),
-            )
-        )
-        self._stood(said.stand)
-        if said.upper_f is None:
-            return False
-        self._set(self.physics.estimate(said.upper_f, self.lower))
-        return True
-
-    def _zone_bound(self, upper: float, lower: float) -> ZoneBound | None:
-        """What the ledger needs to show, without walking, that the
-        draws just taken at this instant cannot move the upper zone:
-        the most standby and draws can take from it since its stand
-        (``loss_bound``), and the zone's range over the span. None
-        where no bound can: before a stand, with a ledger that mixes,
-        or across a heating that has stopped since the stand (a
-        re-anchor is no floor)."""
-        carry = self.ledger_carry
-        if carry is None or self.ledger is None or self._mixing:
-            return None
-        running = {
-            id(x.interval): x.interval.start.at
-            for x in (self.cycle, self.element)
-            if x is not None and x.interval is not None
-        }
-        if any(
-            carry.at < h.end <= self.t
-            for h in self.heating
-            if id(h) not in running
-        ):
-            return None
-        since = [p for p in self._path_since_carry() if p.at <= self.t]
-        uppers = [upper, *(p.upper_f for p in since)]
-        warmest = max(upper, lower, *(max(p.upper_f, p.lower_f) for p in since))
-        return ZoneBound(
-            lost_btu=self.ledger.loss_bound(carry.at, self.t, warmest),
-            upper_lo_f=self.upper,
-            upper_hi_f=max(*uppers, self.upper),
-            running_since=tuple(running.values()),
-        )
-
-    def _stood(self, stand: Stand | None) -> None:
-        """Where the ledger's walk now stands: each walk stands again at
-        the clock, the path before it written, so nothing a later walk
-        sees can change there."""
-        if stand is not None:
-            self.ledger_carry = stand
-
-    def _path_since_carry(self) -> list[PathPoint]:
-        carry = self.ledger_carry
-        if carry is None:
-            return list(self.path)
-        i = bisect_left(self.path, carry.at, key=lambda p: p.at)
-        return self.path[i:]
-
-    def _taken_since_carry(self) -> list[Draw]:
-        carry = self.ledger_carry
-        if carry is None:
-            return list(self.taken)
-        i = bisect_left(self.taken, carry.at, key=lambda d: d[0])
-        return self.taken[i:]
-
-    def _upper_cut(
-        self,
-        points: Sequence[Point],
-        end: datetime,
-        horizon: datetime | None = None,
-    ) -> datetime | None:
-        """The first draw onset in ``[t, end)``, and no later than
-        ``horizon``, at which the ledger would
-        take the upper zone below the draw's own response, read along
-        ``points``, a coast from now to ``end``
-        (``HeatLedger.upper_moves_at``). The coast stops there to take
-        the draw at its instant (``_coast_draw``). None without a
-        ledger, or with no such draw.
-
-        In a coast with nothing heating, the ledger is walked only to
-        the first draw: after it nothing re-anchors (a draw disturbs the
-        tank and nothing heats), so a bound decides the rest when the
-        ledger is far from the zone's empty point, and the coast is
-        walked through only when it is not."""
-        if self.ledger is None:
-            return None
-        pending = [
-            d
-            for d in self._peek_draws(end)
-            if horizon is None or d[0] <= horizon
-        ]
-        if not pending:
-            return None
-        onsets = sorted({at for at, _ in pending})
-        first = onsets[0]
-        last = self.path[-1].at
-        since = self._path_since_carry()
-        ahead = [
-            PathPoint(
-                p.at, p.upper_f, p.lower_f, self.sp, False, 0.0, mode=self.mode
-            )
-            for p in points
-            if p.at > last
-        ]
-        quiet = (
-            not self._mixing
-            and self.cycle is None
-            and self.element is None
-            and len(onsets) > 1
-        )
-        head: list[PathPoint] | None = None
-        bound: ZoneBound | None = None
-        if quiet:
-            head = [p for p in ahead if p.at < first]
-            if first > last:
-                there = point_at(points, first)
-                head.append(
-                    PathPoint(
-                        first,
-                        there.upper_f,
-                        there.lower_f,
-                        self.sp,
-                        False,
-                        0.0,
-                        mode=self.mode,
-                    )
-                )
-            head = [*since, *head]
-            uppers = [p.upper_f for p in points if p.at >= first]
-            hi = max(uppers) + 2.0
-            # Standby runs on the zones' mean.
-            warmest = (
-                max(max(p.upper_f, p.lower_f) for p in points if p.at >= first)
-                + 2.0
-            )
-            bound = ZoneBound(
-                lost_btu=self.ledger.loss_bound(first, onsets[-1], warmest),
-                # A draw's own response takes the zone a little under
-                # the coast's line, an element's coast a little over it.
-                upper_lo_f=min(uppers) - 2.0,
-                upper_hi_f=hi,
-            )
-        said = self.ledger.upper_moves_at(
-            DrawsAhead(
-                at=self.t,
-                path=[*since, *ahead],
-                head=head,
-                intervals=self._heating_now(end),
-                taken=self._taken_since_carry(),
-                pending=pending,
-                onsets=onsets,
-                points=points,
-                respond=self._respond,
-                stand=self.ledger_carry,
-                bound=bound,
-            )
-        )
-        self._stood(said.stand)
-        return said.at
 
     def _coast_to(self, at: datetime) -> None:
-        """Coast to ``at`` exactly. Cutting a longer coast would
-        interpolate across a step whose draw it had already taken at its
-        onset, charging part of a later draw before ``at`` and all of it
-        again after."""
+        """The tank walked to ``at`` exactly, taking the draws before
+        it."""
         if at > self.t:
-            upto = self._physics_coast(at, self._take_draws(self.t, at))
+            upto = self._advance(at, self._take_draws(self.t, at))
             self._append(upto.points, heating=False)
         self.t = at
 
@@ -2069,23 +1330,22 @@ def simulate(
     element_running_since: datetime | None = None,
     raw_writes: Sequence[RawWrite] = (),
     stopped_at: datetime | None = None,
-    heated_at: datetime | None = None,
     start_hold: Callable[[float | None], float] | None = None,
     running_hold: float = 0.0,
-    lead_draws: Sequence[Draw] = (),
-    ledger: HeatLedger | None = None,
     controller: ControllerParams | None = None,
+    state: TankState | None = None,
 ) -> Simulation:
     """Walk the heater from ``start`` to ``until``, its reservation
-    list holding ``entries``.
+    list holding ``entries``, from the tank ``state``, or with none,
+    the one ``physics`` makes of the probes ``upper_f`` and ``lower_f``
+    (``Physics.estimate``).
 
     ``draws`` are the scenario's draws (delivered gallons at their
     onsets). A coast takes the ones it spans; a recovery takes each of
-    the others at its onset and resumes from the colder tank, placed back
-    on its one served path (``_Cycle``). ``withheld_windows`` are the
-    forecast draw windows over which a recovery is credited no heat:
-    the compressor runs and is charged, and the tank coasts.
-    ``marks`` are instants the path must carry an
+    the others at its onset and walks on from the tank it leaves.
+    ``withheld_windows`` are the forecast draw windows over which a
+    recovery or an element is credited no heat: it runs and is charged,
+    and the tank coasts. ``marks`` are instants the path must carry an
     element at, so the tank there is read exactly rather than
     interpolated across a step. ``element_running``: an element is on at
     the start (in an element mode, ``heater.mode``);
@@ -2094,26 +1354,12 @@ def simulate(
     replayed as made (calibration only): a caller never passes them
     with entries.
     ``stopped_at`` is the compressor's last stop before ``start``, which
-    seeds the restart lockout. ``heated_at`` is when the tank last heated
-    by any source before ``start``, which a run's standby pool counts
-    from; None counts it from ``stopped_at``. ``start_hold`` is the hold
-    a compressor start begins with, minutes, by the minutes since the
-    compressor last stopped (None when not known), which a start's
-    recovery holds for before it climbs; None holds none.
-    A compressor already ``running`` holds for ``running_hold``, what is
-    left of its own start's hold (0.0: none).
-    ``lead_draws`` are draws recorded before ``start``: those within
-    ``DRAW_LEAD`` of the first recovery's start, one running at
-    ``start`` included, are the recovery model's ``draw_load`` for it,
-    as its training rows read them from the recorded tank. They are not
-    taken again.
-    ``ledger`` walks the booked heat along the path so far (*The booked
-    heat at a draw*, in the module docstring;
-    ``sim.extensions.HeatLedger``): with it, a
-    draw that spends the heat takes the upper zone down
-    (``_follow_ledger``); every draw takes the lower zone by its own
-    calibrated response either way. ``controller`` holds the numbers
-    of the firmware's rules (``sim/controller.py``); None, the measured
+    seeds the restart lockout. ``start_hold`` is the hold a compressor
+    start begins with, minutes, by the minutes since the compressor last
+    stopped (None when not known); None holds none. A compressor already
+    ``running`` holds for ``running_hold``, what is left of its own
+    start's hold (0.0: none). ``controller`` holds the numbers of the
+    firmware's rules (``sim/controller.py``); None, the measured
     defaults.
     """
     return _Engine(
@@ -2133,12 +1379,10 @@ def simulate(
         element_running_since=element_running_since,
         raw_writes=raw_writes,
         stopped_at=stopped_at,
-        heated_at=heated_at,
         start_hold=start_hold,
         running_hold=running_hold,
-        lead_draws=lead_draws,
-        ledger=ledger,
         controller=controller,
+        state=state,
     ).run()
 
 

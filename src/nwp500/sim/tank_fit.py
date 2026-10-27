@@ -73,6 +73,16 @@ TERMS: tuple[tuple[str, str, float, float, float], ...] = (
     ("tank", "upper_probe_spread_gal", 0.0, 20.0, 2.0),
     ("tank", "inlet_mix_gal", 0.0, 30.0, 2.0),
 )
+#: Where the condenser heats, fitted on recoveries (``fit``'s
+#: ``terms``): ``TankParams.condenser_span`` as its low end and its
+#: width, its top at most the tank's, so every point inside the bounds is
+#: a span.
+CONDENSER_TERMS: tuple[tuple[str, str, float, float, float], ...] = (
+    ("tank", "condenser_low", 0.0, 0.5, 0.05),
+    ("tank", "condenser_width", 0.1, 1.0, 0.05),
+)
+#: The condenser span as ``CONDENSER_TERMS`` name it.
+_SPAN = ("condenser_low", "condenser_width")
 
 
 @dataclass(frozen=True, eq=False)
@@ -284,6 +294,20 @@ def _flows(
     return out
 
 
+def flows(
+    params: HeaterParams, record: TankRecord, start: datetime, end: datetime
+) -> list[st.Flowing]:
+    """The circulation's runs in the record from ``start`` to ``end``,
+    as the water they move through the tank (``replay``'s)."""
+    i = max(0, record.minute(start))
+    j = min(len(record), record.minute(end) + 1)
+    return [
+        replace(f, start=max(f.start, start), end=min(f.end, end))
+        for f in _flows(params, record, i, j)
+        if f.end > start and f.start < end
+    ]
+
+
 def _span(
     lay: st.Layout,
     params: HeaterParams,
@@ -413,10 +437,12 @@ def start_state(
 
 @dataclass(frozen=True)
 class Coast:
-    """A stretch of the record with nothing heating: the probes at its
-    start, the air through it (readings holding to the next), its draws
-    ``(onset, delivered gallons)``, and the probes ``observed`` after
-    its start."""
+    """A stretch of the record: the probes at its start, the air
+    through it (readings holding to the next), its draws ``(onset,
+    delivered gallons)``, and the probes ``observed`` after its start.
+    Nothing heats it but the ``compressor`` run given, ``(on, heating
+    from, off)``, and the water ``flowing`` through it (the
+    circulation's) is given too."""
 
     start: datetime
     end: datetime
@@ -425,6 +451,8 @@ class Coast:
     air: tuple[Reading, ...]
     observed: tuple[Observed, ...]
     draws: tuple[tuple[datetime, float], ...] = ()
+    compressor: tuple[datetime, datetime, datetime] | None = None
+    flowing: tuple[st.Flowing, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.air:
@@ -466,12 +494,24 @@ def errors(
     )
     d = params.draw
     end = max(coast.end, coast.observed[-1][0] + timedelta(seconds=1))
+    run = coast.compressor
     walked = st.walk(
         lay,
         state,
         coast.start,
         end,
         air_f=_held(coast.air),
+        heating=st.Heating(
+            compressor=None
+            if run is None
+            else st.Compressor(
+                params=params.compressor,
+                on_at=run[0],
+                heats_at=run[1],
+                off_at=run[2],
+            )
+        ),
+        flowing=coast.flowing,
         draws=[
             st.Delivered(at=t, gal=g, inflow_f=d.inlet_temp_f)
             for t, g in coast.draws
@@ -494,26 +534,45 @@ def rmse(values: Sequence[float]) -> float:
 # ── the fit ──
 
 
-def term_values(params: HeaterParams) -> tuple[float, ...]:
-    """``params``' values of ``TERMS``; the sides' UA, when unset, the
+Terms = tuple[tuple[str, str, float, float, float], ...]
+
+
+def term_values(
+    params: HeaterParams, terms: Terms = TERMS
+) -> tuple[float, ...]:
+    """``params``' values of ``terms``; the sides' UA, when unset, the
     jacket's ``layout`` reads."""
     lay = st.layout(params)
     out: list[float] = []
-    for group, name, *_ in TERMS:
+    for group, name, *_ in terms:
         if name == "ua_side_btu_hr_f":
             out.append(lay.ua_btu_hr_f)
+        elif name in _SPAN:
+            low, high = params.tank.condenser_span
+            out.append(low if name == "condenser_low" else high - low)
         else:
             out.append(float(getattr(getattr(params, group), name)))
     return tuple(out)
 
 
-def with_terms(params: HeaterParams, values: Sequence[float]) -> HeaterParams:
-    """``params`` with ``TERMS`` set to ``values``."""
-    if len(values) != len(TERMS):
-        raise ValueError(f"{len(TERMS)} values, not {len(values)}")
-    groups: dict[str, dict[str, float]] = {}
-    for (group, name, *_), v in zip(TERMS, values, strict=True):
-        groups.setdefault(group, {})[name] = float(v)
+def with_terms(
+    params: HeaterParams, values: Sequence[float], terms: Terms = TERMS
+) -> HeaterParams:
+    """``params`` with ``terms`` set to ``values``."""
+    if len(values) != len(terms):
+        raise ValueError(f"{len(terms)} values, not {len(values)}")
+    groups: dict[str, dict[str, Any]] = {}
+    low, high = params.tank.condenser_span
+    span = [low, high - low]
+    for (group, name, *_), v in zip(terms, values, strict=True):
+        if name in _SPAN:
+            span[_SPAN.index(name)] = float(v)
+            groups.setdefault("tank", {})["condenser_span"] = (
+                span[0],
+                min(span[0] + span[1], 1.0),
+            )
+        else:
+            groups.setdefault(group, {})[name] = float(v)
     return replace(
         params,
         **{
@@ -552,10 +611,12 @@ def fit(
     record: TankRecord | None,
     coasts: Sequence[Coast],
     *,
+    terms: Terms = TERMS,
     map_: Callable[..., Iterable[Any]] = map,
     max_evaluations: int = 200,
 ) -> TankFit:
-    """``TERMS`` fitted on ``coasts`` from ``params``' values: a robust
+    """``terms`` (``TERMS``, or ``CONDENSER_TERMS`` on recoveries)
+    fitted on ``coasts`` from ``params``' values: a robust
     (soft-L1, 1 °F) least squares of each probe's error at each
     observation, each event weighing alike however long it was
     observed, the events started from the ``record``'s replay
@@ -564,15 +625,15 @@ def fit(
     two probes, of each probe's RMSE over the event, °F."""
     if not coasts:
         raise ValueError("no events to fit on")
-    lo = np.array([t[2] for t in TERMS])
-    hi = np.array([t[3] for t in TERMS])
-    scale = np.array([t[4] for t in TERMS])
-    x0 = np.clip(np.array(term_values(params)), lo, hi)
+    lo = np.array([t[2] for t in terms])
+    hi = np.array([t[3] for t in terms])
+    scale = np.array([t[4] for t in terms])
+    x0 = np.clip(np.array(term_values(params, terms)), lo, hi)
     n = len(coasts)
     parts = [None if record is None else record.before(c.start) for c in coasts]
 
     def trial(x: np.ndarray) -> list[tuple[tuple[float, ...], ...]]:
-        p = with_terms(params, x.tolist())
+        p = with_terms(params, x.tolist(), terms)
         return list(map_(errors, [p] * n, parts, coasts))
 
     def residuals(x: np.ndarray) -> np.ndarray:
@@ -600,11 +661,11 @@ def fit(
         max_nfev=max_evaluations,
     )
     x = done.x
-    names = tuple(t[1] for t in TERMS)
+    names = tuple(t[1] for t in terms)
     width = hi - lo
     edge = (x - lo < 1e-3 * width) | (hi - x < 1e-3 * width)
     return TankFit(
-        params=with_terms(params, x.tolist()),
+        params=with_terms(params, x.tolist(), terms),
         terms=dict(zip(names, x.tolist(), strict=True)),
         on_bound=tuple(k for k, e in zip(names, edge, strict=True) if e),
         rmse_before=before,
