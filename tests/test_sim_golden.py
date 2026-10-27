@@ -415,8 +415,8 @@ def test_the_engine_reads_the_tank_only_through_its_physics(
     case: str,
 ) -> None:
     """A physics whose state the engine cannot open or compare walks
-    every case as ``TankPhysics`` does: the engine carries the tank and
-    reads only its probes."""
+    every case as ``TankPhysics`` does: the engine reads the tank only
+    through its physics, and hands it back only states it gave."""
     assert _run(CASES[case], _SealedPhysics) == _run(CASES[case])
 
 

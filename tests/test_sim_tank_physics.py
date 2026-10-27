@@ -18,7 +18,7 @@ from nwp500.sim.heat_pump_recovery import (
     recovery,
 )
 from nwp500.sim.params import HeaterParams, params_from_document
-from nwp500.sim.tank_physics import TankPhysics, TwoZone
+from nwp500.sim.tank_physics import TankPhysics, TwoZone, point_at
 
 FIXTURES = Path(__file__).with_name("fixtures") / "sim"
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
@@ -200,3 +200,12 @@ class TestState:
     def test_another_physics_state_is_refused(self) -> None:
         with pytest.raises(TypeError):
             _physics().observe((130.0, 110.0))
+
+    def test_a_path_keeps_its_state_on_its_points(self) -> None:
+        physics = _physics()
+        coast = physics.coast(
+            T0, physics.estimate(130.0, 110.0), T0 + timedelta(hours=3), []
+        )
+        a, b = coast.points[1], coast.points[2]
+        assert point_at(coast.points, a.at).state is a.state
+        assert point_at(coast.points, a.at + (b.at - a.at) / 2).state is None

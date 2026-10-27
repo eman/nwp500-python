@@ -145,7 +145,8 @@ class Heat:
 def point_at(points: Sequence[Point], at: datetime) -> Point:
     """The state at ``at`` on a path, linear between its elements, with
     the interval's energy split in proportion to time (was
-    ``sim.engine._interp``)."""
+    ``sim.engine._interp``). On one of its elements it keeps that
+    element's physics state; between two it has none."""
     if at <= points[0].at:
         return replace(points[0], at=at, input_wh=0.0)
     for p0, p1 in pairwise(points):
@@ -157,6 +158,8 @@ def point_at(points: Sequence[Point], at: datetime) -> Point:
                 p0.upper_f + (p1.upper_f - p0.upper_f) * f,
                 p0.lower_f + (p1.lower_f - p0.lower_f) * f,
                 None if p1.input_wh is None else p1.input_wh * f,
+                # A recorded path's points (``PathPoint``) carry none.
+                state=getattr(p1, "state", None) if at == p1.at else None,
             )
     return points[-1]
 
