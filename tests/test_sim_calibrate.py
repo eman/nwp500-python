@@ -1201,10 +1201,30 @@ class TestKeepBetterTheHeatPump:
         greedy = (hpf.Plane(13500.0, 55.0, -16.0), *PUMP_A[1:])
         base = _with_pump(PUMP_A)
         params, judged, _ = _keep_pump(lambda _: greedy, base)
-        for group in ("heat_map", "power_map"):
-            assert judged[group].kept == "base"
-            assert "cop_over_carnot" in judged[group].why
+        assert judged["heat_map"].kept == "base"
+        assert "cop_over_carnot" in judged["heat_map"].why
+        # The power is judged with the heat kept, which claims nothing.
+        assert "claims" not in judged["power_map"].why
         assert params.compressor.heat_btu_h == base.compressor.heat_btu_h
+        assert hpf.violations(params.compressor) == ()
+
+    def test_each_plane_is_checked_with_the_other_it_is_applied_with(
+        self,
+    ) -> None:
+        # The refit heat with the refit power claims nothing; the refit
+        # heat with the base's lower power does. The latest power follows
+        # the base's, so the base's power is kept: the heat is judged
+        # with it, and not applied.
+        heat = hpf.Plane(9000.0, 0.0, 0.0)
+        strong = hpf.Plane(1000.0, 0.0, 0.0)
+        weak = (heat, hpf.Plane(400.0, 0.0, 0.0), *PUMP_A[2:])
+        base = _with_pump(PUMP_A)
+        params, judged, _ = _keep_pump(
+            lambda d: weak if d >= 40 else (heat, strong, *PUMP_A[2:]), base
+        )
+        assert judged["heat_map"].kept == "base"
+        assert "cop_over_carnot" in judged["heat_map"].why
+        assert hpf.violations(params.compressor) == ()
 
     def test_an_unfitted_heat_pump_takes_its_refit_unjudged(self) -> None:
         base = _with_pump(PUMP_B, unfitted=("compressor", "power"))

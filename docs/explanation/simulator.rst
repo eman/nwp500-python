@@ -69,8 +69,8 @@ The model
 
 **The heat pump.** A performance map fitted on the heater's own
 recoveries: the heat into the tank and the electricity drawn, each a
-plane in the air at the heater and the lower tank's water, held to the
-range the record covers. What the condenser gives is what the air gives
+plane in the air at the heater and the lower tank's water, each held
+to the range it was fitted over. What the condenser gives is what the air gives
 plus the electricity, and a fit that claims more than a real heat pump
 could is not applied. A start holds for a time set by how long the
 compressor was off (0 to 22 minutes on the record), drawing power while
@@ -344,16 +344,16 @@ scoreboard's (``sim_score``): parameters calibrated on the record from
 2026-10-26, with 90 % day-block bootstrap intervals.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error 7.5 min (4.8-10.5) on the 11 with no water moving, a mean
-  0.5 min short; 41.5 min (19.5-71.6) on the 16 with draws or
+  error 7.9 min (5.3-10.9) on the 11 with no water moving, a mean
+  0.0 min short; 42.0 min (20.8-71.5) on the 16 with draws or
   circulation inside them, a mean 31 min short, since the duration does
   not see the water a walk takes apart. Under the earlier refrigerant
   model, on the same recoveries: 13.6 and 44.4 min. Over 119
   recoveries each hot gallon drawn inside one added about 4.7 min to it
   and each minute of circulation about 1.3 min;
 - a recovery's electricity, from the map, against the heater's metered
-  energy on the 11 metered recoveries: mean absolute error 7.1 %
-  (4.6-9.9), a mean 1.7 % low; 12.8 % and 8.7 % low under the earlier
+  energy on the 11 metered recoveries: mean absolute error 7.2 %
+  (4.7-9.9), a mean 1.5 % low; 12.8 % and 8.7 % low under the earlier
   model;
 - replaying recorded writes, with a recovery model trained on the
   heater's record, under the earlier refrigerant model:

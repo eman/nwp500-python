@@ -200,15 +200,21 @@ air and 120 degF water (``physics.heat_pump``):
    \dot Q_h = Q_0 + q_a\,(T_a - 65) + q_w\,(T_L - 120), \qquad
    P = P_0 + p_a\,(T_a - 65) + p_w\,(T_L - 120)
 
-Both are read with the air and the water held to the map's domain
-(48 to 89 degF air, 70 to 150 degF water: what the record covers), so a
-forecast outside it takes the nearest edge rather than extrapolating.
+Each is read with the air and the water held to the span it was
+fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
+the power's 45 to 90 degF air and 73 to 148 degF water, on the record),
+so a recovery outside it takes the nearest edge rather than
+extrapolating. The heat is fitted on a mixed tank, where the tank's
+mean and the lower zone are within a few degrees, and read at the lower
+zone; while the tank is stratified the lower zone is below the heat's
+span and the heat is the edge's.
 The COP is :math:`\dot Q_h / 3.412 P`, and the heat taken from the air
 is :math:`\dot Q_h - 3.412 P`: what the condenser gives is what the
 evaporator takes plus the electricity, by construction. A fitted map
 must claim nowhere over its domain a COP above 0.6 of Carnot's between
 the air and the water, heat given to the air, or under 50 W; one that
-does is not applied.
+does is not applied. Each plane is checked with the one it would be
+applied with.
 
 **The climb.** The lower zone is integrated in 10-second steps, heated
 by the map at the air and the lower zone, less the standby loss and the
@@ -225,7 +231,8 @@ with the heat flows per hour. A step in which the gap closes takes the
 lower zone's mass up to the closure and the whole tank's after it. The
 electricity is :math:`\int P\,dt` over the same steps. The climb stops
 when the lower zone reaches the target (``hp_lower_off``) plus the
-run-on below, or after 30 hours, reported as truncated.
+run-on below, in ``simulate``, ``forecast`` and ``active_cycle``
+alike, or after 30 hours, reported as truncated.
 
 **Two zones in a recovery.** The condenser coil wraps the lower part of
 the tank. While there is a gap, the heat goes into the lower zone's
@@ -252,7 +259,7 @@ compressor already running.
 **The run-on.** The heat pump does not stop the moment the lower zone
 reaches its target: on the record it stops a median 0.9 degF past it
 (``ControllerParams.hp_stop_overshoot_f``). The climb is integrated to
-the target plus that overshoot. The upper zone's cap in a TOU window
+the target plus that overshoot. The TOU window's cap on the lower zone
 is still judged at the target.
 
 **Power and efficiency.** The electricity is the map's, so a COP is the
@@ -487,9 +494,9 @@ the constant closes, so the two fits alternate until the constant moves
 
 **The heat pump** (``sim.heat_pump_fit``). Each compressor run is put
 on a one-minute grid and split into its hold, its climb and its
-run-on, and four measures are read from the draw-free ones:
+run-on, and four measures are read from it:
 
-- **the heat**, on stretches of 20 minutes or more of a climb with the
+- **the heat**, on draw-free stretches of 20 minutes or more of a climb with the
   tank mixed (the probes within 5 degF below or 1 degF above each
   other), as the tank's mass times the mean's rise plus the standby
   and bottom loss. The heat's plane is a least-squares fit weighted by
@@ -497,12 +504,12 @@ run-on, and four measures are read from the draw-free ones:
 - **the power**, on 10-minute blocks of a climb's metered power,
   stratified or not, at the air and the lower probe: a least-squares
   plane with 30 blocks or more;
-- **the hold**, on clean starts (no water moving and the lower probe
-  at rest before them): the minutes until the lower probe stays 5
+- **the hold**, on clean starts (no water moving from 30 minutes
+  before them to the end of the hold): the minutes until the lower probe stays 5
   minutes above its reading from before the start. Each band's hold is
   the median of 3 starts or more in it, the base's otherwise;
 - **the run-on**: the median of the lower probe's overshoot past the
-  target at the stop, with 5 runs or more.
+  target at the stop of draw-free runs, with 5 runs or more.
 
 The planes are applied only when together they claim nothing no heat
 pump does (*The map*, above).

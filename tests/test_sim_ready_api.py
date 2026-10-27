@@ -120,7 +120,10 @@ class TestNextRecovery:
         )
         r = next_recovery(_scenario(state=running, settings=stop), params)
         assert r.outcome == "ok"
-        assert r.points[-1][2] == pytest.approx(136.4, abs=0.2)
+        # And on past it by the run-on, where the heater stops.
+        assert r.points[-1][2] == pytest.approx(
+            136.4 + params.controller.hp_stop_overshoot_f, abs=0.2
+        )
 
     def test_electric_still_has_a_heat_pump_recovery(
         self, params: HeaterParams

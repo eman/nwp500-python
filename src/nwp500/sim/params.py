@@ -44,6 +44,7 @@ from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, field, fields, replace
 from datetime import timedelta
 from enum import StrEnum
+from itertools import pairwise
 from types import MappingProxyType, NoneType, UnionType
 from typing import Any, cast, get_args, get_origin, get_type_hints
 
@@ -289,6 +290,15 @@ _POWER_MAP = (
 )
 
 
+#: ``CompressorParams``' domains, each (low, high) °F.
+DOMAINS = (
+    "heat_domain_air_f",
+    "heat_domain_water_f",
+    "power_domain_air_f",
+    "power_domain_water_f",
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CompressorParams:
     """The heat pump as a performance map (``physics.heat_pump``): the
@@ -300,8 +310,9 @@ class CompressorParams:
     condenser's output. The heat taken from the air is the heat less
     the electricity (``heat_pump.evaporator_btu_h``), so the cycle
     conserves energy by construction. The maps are read with the air
-    and the water held to ``domain_air_f`` and ``domain_water_f``: a
-    plane is not carried past the record it was fitted on.
+    and the water held to the span each was fitted on
+    (``heat_domain_*``, ``power_domain_*``): a plane is not carried past
+    the record it was fitted on.
 
     Defaults: one NWP500-65's record, 2025-12-28 to 2026-10-26
     (``heat_pump_fit``, ``docs/explanation/recovery-speed.rst``).
@@ -337,13 +348,19 @@ class CompressorParams:
     power_w_per_air_water_f: float = field(
         default=0.0, metadata=_p(DEFAULT, "W/°F²")
     )
-    #: The air and the water the maps are read at are held to these,
-    #: °F.
-    domain_air_f: tuple[float, float] = field(
-        default=(48.0, 89.0), metadata=_p(MEASURED, "°F")
+    #: The air and the water each map is read at are held to these, °F:
+    #: the span of the evidence it was fitted on, to the whole degree.
+    heat_domain_air_f: tuple[float, float] = field(
+        default=(61.0, 89.0), metadata=_p(FITTED, "°F", note=_HEAT_MAP)
     )
-    domain_water_f: tuple[float, float] = field(
-        default=(70.0, 150.0), metadata=_p(MEASURED, "°F")
+    heat_domain_water_f: tuple[float, float] = field(
+        default=(114.0, 144.0), metadata=_p(FITTED, "°F", note=_HEAT_MAP)
+    )
+    power_domain_air_f: tuple[float, float] = field(
+        default=(45.0, 90.0), metadata=_p(FITTED, "°F", note=_POWER_MAP)
+    )
+    power_domain_water_f: tuple[float, float] = field(
+        default=(73.0, 148.0), metadata=_p(FITTED, "°F", note=_POWER_MAP)
     )
     #: The hold at a start, minutes, by how long the compressor was off:
     #: ``start_hold_min[i]`` from ``start_hold_after_min[i - 1]``
@@ -360,7 +377,7 @@ class CompressorParams:
 
     def __post_init__(self) -> None:
         # A document carries the ranges and the bands as lists.
-        for name in ("domain_air_f", "domain_water_f"):
+        for name in DOMAINS:
             low, high = getattr(self, name)
             object.__setattr__(self, name, (float(low), float(high)))
             if not low < high:
@@ -373,8 +390,13 @@ class CompressorParams:
             raise ValueError(
                 "start_hold_min needs one more value than start_hold_after_min"
             )
-        if list(self.start_hold_after_min) != sorted(self.start_hold_after_min):
-            raise ValueError("start_hold_after_min is not ascending")
+        edges = self.start_hold_after_min
+        if any(b <= a for a, b in pairwise(edges)) or (
+            edges and edges[0] <= 0.0
+        ):
+            raise ValueError("start_hold_after_min is not positive, ascending")
+        if any(v < 0.0 for v in self.start_hold_min):
+            raise ValueError("start_hold_min is negative")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -626,6 +648,10 @@ class ControllerParams:
     #: out of its own median, the stop it places is 2.4 min off against
     #: 3.3 for a fixed run-on (``heat_pump_fit.run_ons``).
     hp_stop_overshoot_f: float = field(default=0.9, metadata=_p(FITTED, "°F"))
+
+    def __post_init__(self) -> None:
+        if self.hp_stop_overshoot_f < 0.0:
+            raise ValueError("hp_stop_overshoot_f is negative")
 
     @property
     def write_start_lag(self) -> timedelta:

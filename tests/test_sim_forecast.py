@@ -219,10 +219,11 @@ class TestTheRunningCycle:
             a.remaining_minutes, abs=0.2
         )
 
-    @pytest.mark.parametrize("lower", [140.0, 141.0])
-    def test_a_cycle_at_its_target_has_nothing_left(
-        self, params: HeaterParams, lower: float
+    @pytest.mark.parametrize("past", [0.0, 1.0])
+    def test_a_cycle_past_its_run_on_has_nothing_left(
+        self, params: HeaterParams, past: float
     ) -> None:
+        lower = 140.0 + params.controller.hp_stop_overshoot_f + past
         a = active_cycle(
             HeaterState(upper_f=141.0, lower_f=lower, compressor_running=True),
             SETTINGS,
@@ -232,6 +233,19 @@ class TestTheRunningCycle:
         )
         assert a.status == "heating" and a.remaining_minutes == 0.0
         assert a.ready_at == T0 and a.physics_remaining_minutes == 0.0
+
+    def test_a_cycle_at_its_target_has_its_run_on_left(
+        self, params: HeaterParams
+    ) -> None:
+        a = active_cycle(
+            HeaterState(upper_f=141.0, lower_f=140.0, compressor_running=True),
+            SETTINGS,
+            ENV,
+            params,
+            at=T0,
+        )
+        assert a.target_f == 140.0
+        assert 0.0 < a.remaining_minutes < 15.0
 
 
 class TestTheAdapters:

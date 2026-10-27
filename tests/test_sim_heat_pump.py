@@ -9,7 +9,12 @@ import pytest
 
 from nwp500 import sim
 from nwp500.sim import heat_pump_fit as hpf
-from nwp500.sim.params import CompressorParams, LossParams, TankParams
+from nwp500.sim.params import (
+    CompressorParams,
+    ControllerParams,
+    LossParams,
+    TankParams,
+)
 from nwp500.sim.physics import heat_pump as hp
 from nwp500.sim.physics.compressor import predict_physics_detailed
 from nwp500.sim.units import BTU_PER_WH
@@ -28,8 +33,8 @@ class TestTheMap:
         ) * BTU_PER_WH == pytest.approx(hp.heat_btu_h(C, air, water))
 
     def test_it_is_read_inside_its_domain(self) -> None:
-        assert hp.heat_btu_h(C, 30.0, 120.0) == hp.heat_btu_h(C, 48.0, 120.0)
-        assert hp.power_w(C, 65.0, 160.0) == hp.power_w(C, 65.0, 150.0)
+        assert hp.heat_btu_h(C, 30.0, 120.0) == hp.heat_btu_h(C, 61.0, 120.0)
+        assert hp.power_w(C, 65.0, 160.0) == hp.power_w(C, 65.0, 148.0)
 
     def test_it_is_quoted_at_its_reference(self) -> None:
         assert hp.heat_btu_h(C, 65.0, 120.0) == C.heat_btu_h
@@ -73,10 +78,21 @@ class TestTheHold:
     def test_its_bands_are_checked(self) -> None:
         with pytest.raises(ValueError, match="one more value"):
             CompressorParams(start_hold_min=(1.0, 2.0))
-        with pytest.raises(ValueError, match="ascending"):
-            CompressorParams(start_hold_after_min=(60.0, 15.0, 180.0, 720.0))
+        for edges in ((60.0, 15.0, 180.0, 720.0), (15.0, 15.0, 180.0, 720.0)):
+            with pytest.raises(ValueError, match="ascending"):
+                CompressorParams(start_hold_after_min=edges)
+        with pytest.raises(ValueError, match="negative"):
+            CompressorParams(start_hold_min=(0.0, -1.0, 10.0, 18.0, 22.0))
         with pytest.raises(ValueError, match="low, high"):
-            CompressorParams(domain_air_f=(89.0, 48.0))
+            CompressorParams(heat_domain_air_f=(89.0, 48.0))
+        with pytest.raises(ValueError, match="negative"):
+            ControllerParams(hp_stop_overshoot_f=-0.1)
+
+    def test_each_map_is_held_to_its_own_domain(self) -> None:
+        # The heat was fitted on a mixed tank from 114 °F; the power on
+        # a lower tank from 73 °F.
+        assert hp.heat_btu_h(C, 65.0, 80.0) == hp.heat_btu_h(C, 65.0, 114.0)
+        assert hp.power_w(C, 65.0, 80.0) < hp.power_w(C, 65.0, 114.0)
 
 
 def _walk(gap: float, loss: LossParams = LossParams()) -> object:

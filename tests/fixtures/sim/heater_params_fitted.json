@@ -22,13 +22,21 @@
     "power_w_per_air_f": 0.21405638109110056,
     "power_w_per_water_f": 2.8460496649489793,
     "power_w_per_air_water_f": 0.0,
-    "domain_air_f": [
-      48.0,
+    "heat_domain_air_f": [
+      61.0,
       89.0
     ],
-    "domain_water_f": [
-      70.0,
-      150.0
+    "heat_domain_water_f": [
+      114.0,
+      144.0
+    ],
+    "power_domain_air_f": [
+      45.0,
+      90.0
+    ],
+    "power_domain_water_f": [
+      73.0,
+      148.0
     ],
     "start_hold_after_min": [
       15.0,

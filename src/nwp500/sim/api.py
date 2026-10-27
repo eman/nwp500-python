@@ -315,7 +315,10 @@ def _history_defaults(
     state: HeaterState, history: History, defaults: list[str]
 ) -> None:
     if history.compressor_stopped_at is None and not state.compressor_running:
-        defaults.append("compressor_stopped_at=None (no lockout at the start)")
+        defaults.append(
+            "compressor_stopped_at=None (no lockout at the start, and the "
+            "longest start hold)"
+        )
     if history.heated_at is None:
         defaults.append("heated_at=None")
     if state.element_running and state.element_running_since is None:
@@ -1600,9 +1603,11 @@ def forecast(
     """When a heat-pump recovery must start for the tank to be ready at
     ``target_time``, from ``state`` at ``at``: the tank coasts to the
     start (jacket loss, and circulation's runs in ``loads``; no draws),
-    the recovery runs from there to the lower zone's target, and the
-    start is refined to ``target_time`` less that duration, to a fixed
-    point, the tank at the start projected to exactly it.
+    the recovery runs from there to the lower zone's target and on past
+    it to where the heater stops
+    (``ControllerParams.hp_stop_overshoot_f``), as ``simulate``'s does,
+    and the start is refined to ``target_time`` less that duration, to a
+    fixed point, the tank at the start projected to exactly it.
 
     The target is ``target_lower_f`` (a partial charge), else
     ``target_f``, else the heater's own stop threshold
@@ -1676,6 +1681,11 @@ def forecast(
         circulation=_circulation(loads, params),
     )
 
+    # The heater stops past the target: the recovery's own end.
+    stop = goal + params.controller.hp_stop_overshoot_f
+    if history.compressor_stopped_at is None and not state.compressor_running:
+        defaults.append("compressor_stopped_at=None (the longest start hold)")
+
     def coast_to(when: datetime) -> tuple[float, float, float | None]:
         """The tank coasted to ``when``, and the mean air over it."""
         coast = physics.coast(
@@ -1691,10 +1701,16 @@ def forecast(
 
     def hold_at(when: datetime) -> float:
         """The hold of a start at ``when``: none for the compressor
-        running now, else by the minutes since it last stopped."""
+        running now, else by the minutes since it last stopped. A
+        compressor running now stops no earlier than now, so a later
+        start counts its time off from now at most."""
         if state.compressor_running and when <= origin:
             return 0.0
-        stopped = history.compressor_stopped_at
+        stopped = (
+            origin
+            if state.compressor_running
+            else history.compressor_stopped_at
+        )
         return start_hold_min(
             params.compressor,
             None
@@ -1715,7 +1731,7 @@ def forecast(
         ctx = RecoveryContext(
             t_start_lower=lower,
             t_start_upper=upper,
-            target_f=goal,
+            target_f=stop,
             t_amb_start=amb,
             t_amb_mean=t_amb_mean,
             h_amb_start=environment.humidity,
@@ -1724,7 +1740,7 @@ def forecast(
             physics=physics_recovery(
                 t_start_lower=lower,
                 t_start_upper=upper,
-                target_f=goal,
+                target_f=stop,
                 t_amb_mean=t_amb_mean,
                 compressor=params.compressor,
                 loss=params.loss,
@@ -1835,7 +1851,9 @@ def active_cycle(
 ) -> ActiveCycle:
     """What is left of the recovery the compressor is running at
     ``at``: the lower zone from where it is to its target
-    (``Settings.hp_lower_off_f``, else the setpoint), at the air now,
+    (``Settings.hp_lower_off_f``, else the setpoint) and on to where the
+    heater stops past it (``ControllerParams.hp_stop_overshoot_f``), at
+    the air now,
     served by ``model`` when given, the start's hold taken as over.
     Beside it, the integrator's own remaining climb. A truncated
     integration says ``physics_truncated``. A lower zone already at its
@@ -1852,10 +1870,11 @@ def active_cycle(
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
     air = _ambient_at(environment, at)
-    if state.lower_f >= goal:
-        # The cycle is at its end: the lower zone has reached the target
-        # and the compressor is about to stop. Nothing is left, as the
-        # integrator says (0 minutes).
+    stop = goal + params.controller.hp_stop_overshoot_f
+    if state.lower_f >= stop:
+        # The cycle is at its end: the lower zone is past the target by
+        # the run-on, and the compressor is about to stop. Nothing is
+        # left, as the integrator says (0 minutes).
         return ActiveCycle(
             status="heating",
             ready_at=at,
@@ -1869,7 +1888,7 @@ def active_cycle(
     ctx = RecoveryContext(
         t_start_lower=state.lower_f,
         t_start_upper=state.upper_f,
-        target_f=goal,
+        target_f=stop,
         t_amb_start=air,
         # The cycle is under way: the air now stands for its mean.
         t_amb_mean=air,
@@ -1879,7 +1898,7 @@ def active_cycle(
         physics=physics_recovery(
             t_start_lower=state.lower_f,
             t_start_upper=state.upper_f,
-            target_f=goal,
+            target_f=stop,
             t_amb_mean=air,
             compressor=params.compressor,
             loss=params.loss,

@@ -1180,7 +1180,7 @@ def calibrate(
     ua_exponent: float | None = None,
 ) -> Calibration:
     """``base`` refitted on ``history``: the standby loss law and the
-    gap's time constant from its quiet windows, then the heat hp_fit's
+    gap's time constant from its quiet windows, then the heat pump's
     performance map, the hold at its starts and the overshoot at its
     stops from its recoveries (``heat_pump_fit.fit_heat_pump``), the
     heat priced against the loss just fitted, the air read from

@@ -646,11 +646,22 @@ def evidence(
 @dataclass(frozen=True)
 class Plane:
     """A map's plane: its value at ``params.MAP_REF_AIR_F`` air and
-    ``params.MAP_REF_WATER_F`` water, and its slopes per °F of each."""
+    ``params.MAP_REF_WATER_F`` water, its slopes per °F of each, and the
+    air and the water it was fitted over, to the whole degree (None:
+    the parameters' own)."""
 
     level: float
     per_air: float
     per_water: float
+    air_f: tuple[float, float] | None = None
+    water_f: tuple[float, float] | None = None
+
+
+def _span(values: np.ndarray) -> tuple[float, float]:
+    return (
+        float(math.floor(float(np.min(values)))),
+        float(math.ceil(float(np.max(values)))),
+    )
 
 
 def _fit_plane(
@@ -665,7 +676,13 @@ def _fit_plane(
     if np.linalg.matrix_rank(x * w) < 3:
         return None
     coef, *_ = np.linalg.lstsq(x * w, y * w[:, 0], rcond=None)
-    return Plane(float(coef[0]), float(coef[1]), float(coef[2]))
+    return Plane(
+        float(coef[0]),
+        float(coef[1]),
+        float(coef[2]),
+        _span(air),
+        _span(water),
+    )
 
 
 def _columns(rows: pd.DataFrame, *names: str) -> list[np.ndarray]:
@@ -752,10 +769,11 @@ def start_hold_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
 
 def fit_overshoot(rows: pd.DataFrame) -> float | None:
     """The median overshoot at the stop of ``Evidence.runs``' run-ons,
-    °F (``run_ons``); None with fewer than ``MIN_RUN_ONS``."""
+    °F (``run_ons``), at least 0: a heater does not stop short of its
+    target on its own; None with fewer than ``MIN_RUN_ONS``."""
     if len(rows) < MIN_RUN_ONS:
         return None
-    return float(np.median(rows["overshoot_f"].to_numpy(dtype=float)))
+    return max(0.0, float(np.median(rows["overshoot_f"].to_numpy(dtype=float))))
 
 
 def overshoot_error(rows: pd.DataFrame, overshoot_f: float) -> float | None:
@@ -769,12 +787,15 @@ def overshoot_error(rows: pd.DataFrame, overshoot_f: float) -> float | None:
 
 
 def violations(c: CompressorParams) -> tuple[str, ...]:
-    """What ``c``'s map claims somewhere over its domain that no
-    heat pump does (``CARNOT_SHARE``, ``MIN_POWER_W``): ``cop_over_carnot``,
-    ``evaporator_heat_negative``, ``power_too_low``; empty when none."""
+    """What ``c``'s map claims somewhere over its two maps' domains
+    together that no heat pump does (``CARNOT_SHARE``,
+    ``MIN_POWER_W``): ``cop_over_carnot``, ``evaporator_heat_negative``,
+    ``power_too_low``; empty when none."""
     found: set[str] = set()
-    for air in np.linspace(*c.domain_air_f, CHECK_POINTS):
-        for water in np.linspace(*c.domain_water_f, CHECK_POINTS):
+    airs = (*c.heat_domain_air_f, *c.power_domain_air_f)
+    waters = (*c.heat_domain_water_f, *c.power_domain_water_f)
+    for air in np.linspace(min(airs), max(airs), CHECK_POINTS):
+        for water in np.linspace(min(waters), max(waters), CHECK_POINTS):
             a, w = float(air), float(water)
             if hp.power_w(c, a, w) < MIN_POWER_W:
                 found.add("power_too_low")
@@ -789,7 +810,8 @@ def violations(c: CompressorParams) -> tuple[str, ...]:
 def with_planes(
     c: CompressorParams, heat: Plane | None, power: Plane | None
 ) -> CompressorParams:
-    """``c`` with the planes given, the cross terms 0 where one is."""
+    """``c`` with the planes given, the cross terms 0 where one is, and
+    each read over the span it was fitted on where it says."""
     if heat is not None:
         c = replace(
             c,
@@ -797,6 +819,8 @@ def with_planes(
             heat_btu_h_per_air_f=heat.per_air,
             heat_btu_h_per_water_f=heat.per_water,
             heat_btu_h_per_air_water_f=0.0,
+            heat_domain_air_f=heat.air_f or c.heat_domain_air_f,
+            heat_domain_water_f=heat.water_f or c.heat_domain_water_f,
         )
     if power is not None:
         c = replace(
@@ -805,6 +829,8 @@ def with_planes(
             power_w_per_air_f=power.per_air,
             power_w_per_water_f=power.per_water,
             power_w_per_air_water_f=0.0,
+            power_domain_air_f=power.air_f or c.power_domain_air_f,
+            power_domain_water_f=power.water_f or c.power_domain_water_f,
         )
     return c
 

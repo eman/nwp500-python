@@ -530,9 +530,19 @@ def _split_frame(
     rows: pd.DataFrame, hold_out: bool
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """``rows`` (in time order) without and with their latest
-    (``_split``), or all of them and none when not ``hold_out``."""
-    n = _split(len(rows)) if hold_out else 0
-    return rows.iloc[: len(rows) - n], rows.iloc[len(rows) - n :]
+    (``_split``), or all of them and none when not ``hold_out``. Rows
+    of one compressor run (``cycle``) fall on one side."""
+    if "cycle" not in rows.columns:
+        n = _split(len(rows)) if hold_out else 0
+        return rows.iloc[: len(rows) - n], rows.iloc[len(rows) - n :]
+    runs = list(dict.fromkeys(rows["cycle"]))
+    n = _split(len(runs)) if hold_out else 0
+    late = (
+        rows["cycle"].isin(runs[len(runs) - n :])
+        if n
+        else rows["cycle"].isin([])
+    )
+    return rows.loc[~late], rows.loc[late]
 
 
 def _keep_better_heat_pump(
@@ -544,8 +554,10 @@ def _keep_better_heat_pump(
     """The heat pump's groups (``heat_map``, ``power_map``,
     ``start_hold``, ``run_on``), each refitted on all but its latest
     evidence and kept only where it scores better there. The maps are
-    judged one at a time, and a refit whose planes claim what no heat
-    pump does is not applied (``heat_pump_fit.violations``). The groups
+    judged one at a time, the heat's with the base's power and the
+    power's with the heat kept, and a plane that would leave the pair
+    claiming what no heat pump does is not applied
+    (``heat_pump_fit.violations``). The groups
     of a term ``params`` lists as unfitted (``compressor`` for the heat,
     the hold and the run-on, ``power`` for the power) take their refit
     unjudged, on all their evidence. Returns the parameters, the refit,
@@ -560,10 +572,6 @@ def _keep_better_heat_pump(
     held = hpf.Evidence(held_heat, held_power, held_holds, held_runs)
     base = params.compressor
     refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, holds, runs), base)
-    claims = (
-        f"kept the base: the refit claims what no heat pump does "
-        f"({', '.join(refit.violations)})"
-    )
 
     def plane(
         group: str,
@@ -590,10 +598,15 @@ def _keep_better_heat_pump(
                     )
                 )
             return False
-        if refit.violations:
+        claims = hpf.violations(candidate)
+        if claims:
             if term not in unfitted:
+                why = (
+                    "kept the base: the refit claims what no heat pump "
+                    f"does ({', '.join(claims)})"
+                )
                 judged.append(
-                    Judged(group, "base", error(base), None, n_held, claims)
+                    Judged(group, "base", error(base), None, n_held, why)
                 )
             return False
         if term in unfitted:
@@ -613,6 +626,7 @@ def _keep_better_heat_pump(
         hpf.with_planes(base, refit.heat, None),
         hpf.MIN_HEAT_STRETCHES,
     )
+    heated = hpf.with_planes(base, refit.heat if take_heat else None, None)
     take_power = plane(
         "power_map",
         "metered climb blocks",
@@ -620,13 +634,11 @@ def _keep_better_heat_pump(
         refit.power,
         len(held_power),
         lambda c: hpf.power_map_error(held_power, c),
-        hpf.with_planes(base, None, refit.power),
+        hpf.with_planes(heated, None, refit.power),
         hpf.MIN_POWER_BLOCKS,
     )
     compressor = hpf.with_planes(
-        base,
-        refit.heat if take_heat else None,
-        refit.power if take_power else None,
+        heated, None, refit.power if take_power else None
     )
     controller = params.controller
     if refit.start_hold_min is None:

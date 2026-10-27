@@ -55,7 +55,8 @@ Changed
   tank and the electricity drawn are each a plane in the air at the
   heater and the lower tank's water (``CompressorParams.heat_btu_h``,
   ``power_w`` and their slopes), fitted on the heater's own recoveries
-  and read inside the span the record covers. The condenser gives what
+  and each read inside the span it was fitted over
+  (``heat_domain_*``, ``power_domain_*``). The condenser gives what
   the evaporator takes plus the electricity, by construction; a fit
   claiming a COP over 0.6 of Carnot's, heat given to the air, or under
   50 W anywhere in that span is not applied. It replaces the R-134a
@@ -63,8 +64,8 @@ Changed
   evaporator's approach and slope, the condenser approach, clearance,
   exponent, airflow and latent load, and ``two_zone``. Held out from
   2026-09-18 on one NWP500-65, a draw-free recovery's duration is out a
-  mean 7.5 min (13.6 before) and its electricity 7.1 % (12.8 % before,
-  a mean 8.7 % low; now 1.7 % low). See
+  mean 7.9 min (13.6 before) and its electricity 7.2 % (12.8 % before,
+  a mean 8.7 % low; now 1.5 % low). See
   :doc:`/explanation/simulator-methodology`.
 
 - **A recovery holds at its start and runs on past its target.** The
@@ -73,7 +74,8 @@ Changed
   power while the tank holds; ``simulate`` uses it with or without a
   ``RecoveryModel``, and ``start_hold`` still overrides it. The climb
   runs to ``ControllerParams.hp_stop_overshoot_f`` (0.9 °F) past the
-  target. Recorded durations already ran from start to stop, so the old
+  target in ``simulate``, ``forecast`` and ``active_cycle``, and a
+  ``RecoveryModel`` is asked with that stop as its ``target_f``. Recorded durations already ran from start to stop, so the old
   compressor constant had absorbed both.
 
 - **Parameters are ``heater-params/2``** (breaking). A

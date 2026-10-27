@@ -369,6 +369,15 @@ class TestTheFits:
         assert fit.power.per_air == pytest.approx(0.0, abs=0.2)
         assert fit.overshoot_f == pytest.approx(OVERSHOOT, abs=0.2)
         assert fit.violations == ()
+        # Each plane is read over what it was fitted on.
+        water = found.heat["water_f"]
+        assert fit.heat.water_f == (
+            math.floor(water.min()),
+            math.ceil(water.max()),
+        )
+        applied = hpf.with_planes(CompressorParams(), fit.heat, fit.power)
+        assert applied.heat_domain_water_f == fit.heat.water_f
+        assert applied.power_domain_air_f == fit.power.air_f
         assert fit.heat_error is not None and fit.heat_error < 200.0
 
     def test_a_band_with_its_starts_takes_their_hold(

@@ -850,11 +850,13 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        2025-12-28 to 2026-10-26, the lower tank 73.8 to 147.5 degF and
        the air 45.9 to 89.3 degF: 12.9 W RMS.
      - First fitted 2026-10-26
-   * - ``compressor.domain_air_f``, ``compressor.domain_water_f``
-     - 48-89 degF, 70-150 degF
-     - The span the record covers. The map is read with both held to
-       it, so a forecast past either edge takes the edge's value.
-     - Set, not fitted
+   * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
+       ``power_domain_air_f``, ``power_domain_water_f``
+     - 61-89 and 114-144 degF; 45-90 and 73-148 degF
+     - The span each map was fitted over, to the whole degree. Each is
+       read with the air and the water held to its own, so a recovery
+       past an edge takes the edge's value.
+     - Set by each fit
    * - ``compressor.start_hold_min`` by ``start_hold_after_min``
      - 0, 5, 10, 18 and 22 min after under 15, 60, 180 and 720 min off,
        and beyond
