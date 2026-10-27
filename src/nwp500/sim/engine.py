@@ -575,8 +575,9 @@ class _Engine:
             if outside is None
             else outside(start, until, *self.params.hp_air_range_f)
         )
-        self.lower = lower_f
         available = self._available(start)
+        #: The air inside the heat pump's range at the last check.
+        self._air_in = not any(a <= start < b for a, b in self.air_out)
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -587,7 +588,11 @@ class _Engine:
             hp_available=available,
         )
         self.reasons: set[str] = set()
-        if not available:
+        if (
+            not available
+            and heater.mode in ctl.COMPRESSOR_MODES
+            and not (heater.heating_disabled or heater.powered_off)
+        ):
             self.reasons.add(ctl.HEAT_PUMP_UNAVAILABLE)
         #: The setpoint and the mode in force as the path records them,
         #: moved by the controller's actions as they are carried out.
@@ -693,16 +698,30 @@ class _Engine:
             return False
         return self._water_ok(self.lower)
 
-    def _check_availability(self) -> None:
+    def _check_availability(self) -> bool:
         """Tell the controller when the heat pump has left or re-entered
-        its operating range (``controller.HeatPumpAvailability``)."""
+        its operating range (``controller.HeatPumpAvailability``);
+        whether it has left it here."""
         available = self._available(self.t)
+        air_in = not any(a <= self.t < b for a, b in self.air_out)
+        if (
+            available
+            and not self.state.hp_available
+            and self.element is not None
+            and self._air_in
+        ):
+            # The water came back into range under an element: it runs
+            # to its off point first.
+            available = False
+        self._air_in = air_in
         if available != self.state.hp_available:
             self._dispatch(
                 ctl.HeatPumpAvailability(
                     at=self.t, tank=self._tank(), available=available
                 )
             )
+            return not available
+        return False
 
     def _water_crossing(self, points: Sequence[Point]) -> datetime | None:
         """The first point of a coast past a bound of the heat pump's
@@ -715,18 +734,6 @@ class _Engine:
         for p0, p1 in pairwise(points):
             if self._water_ok(p0.lower_f) != self._water_ok(p1.lower_f):
                 return p1.at
-        return None
-        for p0, p1 in pairwise(points):
-            if self._water_ok(p0.lower_f) == self._water_ok(p1.lower_f):
-                continue
-            for bound in self.params.hp_water_range_f:
-                lo, hi = sorted((p0.lower_f, p1.lower_f))
-                if lo <= bound <= hi and p1.lower_f != p0.lower_f:
-                    f = (bound - p0.lower_f) / (p1.lower_f - p0.lower_f)
-                    at = p0.at + (p1.at - p0.at) * f
-                    # The instant the lower zone is past it, on the
-                    # side the next point is.
-                    return min(p1.at, at + _INSTANT)
         return None
 
     def _dispatch(self, event: ctl.Event) -> None:
@@ -1150,6 +1157,10 @@ class _Engine:
                     )
                 moved = self._follow_ledger(upper, lower)
                 self._step_point()
+                # A draw can take the lower zone out of the heat pump's
+                # range, which stops it.
+                if self._check_availability():
+                    continue
                 # A zone the book took down is off the recovery's path,
                 # which holds the upper zone where it began: predicted
                 # afresh from here.
@@ -1186,11 +1197,17 @@ class _Engine:
             self.t = nxt
             self._element_boundary()
             if nxt >= finish:
-                self._dispatch(
-                    ctl.RecoveryDone(
-                        at=nxt, tank=self._tank(), capped=cycle.capped
-                    )
+                # Stopped short of its target at the top of its range:
+                # the elements finish it.
+                short = self.lower < cycle.setpoint_f and not self._water_ok(
+                    self.lower
                 )
+                if not (short and self._check_availability()):
+                    self._dispatch(
+                        ctl.RecoveryDone(
+                            at=nxt, tank=self._tank(), capped=cycle.capped
+                        )
+                    )
 
     def _pause(self, stop: datetime) -> None:
         """Coast over a withheld window with the compressor charged at
@@ -1389,6 +1406,7 @@ class _Engine:
                 tank=self._tank(),
                 running=self.running,
                 running_hold=self.running_hold,
+                element_on=self.element_running,
             )
         )
         # The start's own instant is ordered as any later one's

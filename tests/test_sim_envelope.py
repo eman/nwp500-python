@@ -4,6 +4,7 @@ elements heat the tank (the user's manual, 3.13.1 and 3.13.4)."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -30,6 +31,10 @@ def _run(
     setpoint: float = 140.0,
     hours: float = 8.0,
     params: sim.HeaterParams | None = None,
+    mode: int = 1,
+    on: float = 105.0,
+    element_running: bool = False,
+    **scenario: Any,
 ) -> sim.SimulationResult:
     return sim.simulate(
         sim.Scenario(
@@ -37,15 +42,22 @@ def _run(
             horizon=timedelta(hours=hours),
             tz="UTC",
             state=sim.HeaterState(
-                upper_f=upper, lower_f=lower, compressor_running=running
+                upper_f=upper,
+                lower_f=lower,
+                compressor_running=running,
+                element_running=element_running,
             ),
             settings=sim.Settings(
                 setpoint_f=setpoint,
                 hp_lower_off_f=setpoint,
-                hp_lower_on_f=105.0,
+                hp_lower_on_f=on,
+                mode=mode,
             ),
-            history=sim.History(compressor_stopped_at=at(-3)),
-            environment=sim.Environment(ambient_f=air),
+            **{
+                "history": sim.History(compressor_stopped_at=at(-3)),
+                "environment": sim.Environment(ambient_f=air),
+                **scenario,
+            },
         ),
         params if params is not None else sim.site_example_params(),
     )
@@ -91,9 +103,68 @@ class TestTheAir:
         assert (r.heating[0].source, r.heating[0].zone) == ("element", "upper")
         back = [h for h in r.heating if h.source == "compressor"]
         assert back and back[0].start.at >= at(0.2)
-        # The element the cold started stops as the heat pump returns.
+        # The element the cold started stops as the heat pump returns,
+        # and the compressor carries the recovery on from there.
         assert r.heating[0].stop == "mode"
-        assert r.heating[0].end <= back[0].start.at
+        assert back[0].start.at == r.heating[0].end
+        assert back[0].start.trigger == "heat_pump_available"
+
+    @pytest.mark.parametrize("mode", [1, 3, 4])
+    def test_one_heat_source_on_the_lower_zone(self, mode: int) -> None:
+        # Cold for the first half hour, then warm: Electric's lower
+        # element, which no other mode runs, hands over to the
+        # compressor.
+        air = ((at(0), 35.0), (at(0.5), 35.0), (at(0.51), 60.0))
+        r = _run(air, upper=138.0, lower=60.0, mode=mode, hours=4)
+        lower = [h for h in r.heating if h.zone == "lower"]
+        hp = [h for h in r.heating if h.source == "compressor"]
+        assert lower and hp
+        assert lower[0].stop == "mode"
+        assert all(e.end <= c.start.at for e in lower for c in hp)
+
+    def test_nothing_restarts_a_finished_tank(self) -> None:
+        # Out of range with nothing heating, the return starts nothing:
+        # the heater's own trigger decides, and the tank is above it.
+        air = ((at(0), 35.0), (at(0.5), 35.0), (at(0.51), 60.0))
+        r = _run(air, upper=139.0, lower=120.0, hours=3)
+        assert not r.heating
+
+    def test_short_dips_are_seen(self) -> None:
+        # Eight minutes below 41 °F, inside one 10-minute air step.
+        air = (
+            (at(0), 60.0),
+            (at(1.0), 60.0),
+            (at(1.01), 35.0),
+            (at(1.13), 35.0),
+            (at(1.14), 60.0),
+        )
+        r = _run(air, upper=140.0, lower=139.5, hours=3)
+        assert ctl.HEAT_PUMP_UNAVAILABLE in r.reasons
+
+    def test_a_trigger_at_the_setpoint_does_not_stall(self) -> None:
+        # The lower trigger fires where Electric's rule starts nothing.
+        r = _run(35.0, upper=139.0, lower=141.0, on=140.0, hours=4)
+        assert all(h.source == "element" for h in r.heating)
+
+    @pytest.mark.parametrize("mode", [2, 5])
+    def test_not_said_where_the_heat_pump_never_runs(self, mode: int) -> None:
+        r = _run(35.0, upper=125.0, lower=100.0, mode=mode, hours=3)
+        assert ctl.HEAT_PUMP_UNAVAILABLE not in r.reasons
+
+    def test_an_element_on_at_the_start_runs_on(self) -> None:
+        r = _run(
+            35.0,
+            upper=125.0,
+            lower=100.0,
+            running=True,
+            element_running=True,
+            mode=3,
+            hours=3,
+        )
+        first = r.heating[0]
+        assert (first.source, first.zone) == ("element", "upper")
+        assert first.start.cause == "running"
+        assert not [h for h in r.heating if h.source == "compressor"]
 
 
 class TestTheWater:
@@ -104,6 +175,45 @@ class TestTheWater:
         stop = next(p for p in r.points if p.at >= first.end)
         # Within the integrator's 10-second step of it.
         assert stop.lower_f == pytest.approx(149.0, abs=0.03)
+
+    def test_short_of_a_setpoint_over_it_the_elements_finish(self) -> None:
+        r = _run(65.0, upper=145.0, lower=140.0, setpoint=150.0, running=True)
+        first = r.heating[0]
+        assert (first.source, first.stop) == ("compressor", "envelope")
+        assert [h.source for h in r.heating[1:]] == ["element", "element"]
+        assert max(p.lower_f for p in r.points) == pytest.approx(150.0, abs=0.1)
+
+    def test_a_draw_below_it_stops_the_heat_pump(self) -> None:
+        r = _run(
+            65.0,
+            upper=60.0,
+            lower=55.0,
+            running=True,
+            hours=3,
+            loads=sim.Loads(draws=(sim.Draw(at=at(0.5), gallons=60.0),)),
+            environment=sim.Environment(ambient_f=65.0, inlet_f=40.0),
+        )
+        first = r.heating[0]
+        assert (first.source, first.stop) == ("compressor", "envelope")
+        assert first.end == at(0.5)
+        assert r.heating[1].source == "element"
+
+    def test_the_handover_rests_on_no_other_event(self) -> None:
+        # An element heats a tank below 50 °F to its off point; a
+        # setpoint write while it runs changes nothing of that.
+        quiet = _run(65.0, upper=141.0, lower=45.0, hours=6)
+        written = _run(
+            65.0,
+            upper=141.0,
+            lower=45.0,
+            hours=6,
+            commands=sim.Commands(
+                writes=(sim.Write(at=at(1.0), setpoint_f=141.0),)
+            ),
+        )
+        for r in (quiet, written):
+            assert [h.source for h in r.heating] == ["element"]
+            assert r.heating[0].stop == "target"
 
     def test_a_tank_below_it_heats_with_the_elements(self) -> None:
         r = _run(65.0, upper=48.0, lower=45.0, hours=12.0)
@@ -213,5 +323,10 @@ class TestTheAnswers:
         assert sim.next_recovery(scenario(35.0), params).outcome == (
             "unavailable"
         )
-        ready = sim.time_to_ready(scenario(35.0), params)
+        ready = sim.time_to_ready(scenario(35.0), params, bath_gal=25.0)
         assert ctl.HEAT_PUMP_UNAVAILABLE in ready.reasons
+        assert "time_to_ready_unavailable" not in ready.reasons
+        # Every mode heats as Electric does.
+        by_mode = {m.mode: m.ready_in_minutes for m in ready.bath.by_mode}
+        assert by_mode["electric"] is not None
+        assert set(by_mode.values()) == {by_mode["electric"]}

@@ -101,6 +101,9 @@ class Recovery:
     #: (``heating_trajectory.HeatingPoint``): a projection's heating
     #: curve.
     trajectory: Sequence[Any] = ()
+    #: The heat pump is outside its operating range (``unavailable``):
+    #: every mode heats with the elements, as Electric does.
+    hp_unavailable: bool = False
 
 
 def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:
@@ -247,7 +250,7 @@ def assess(
     if not ready:
         if recovery.outcome == "not_scheduled":
             reasons.append("heating_not_scheduled")
-        elif recovery.outcome == "unavailable":
+        elif recovery.outcome == "unavailable" and not recovery.hp_unavailable:
             reasons.append("time_to_ready_unavailable")
         elif recovery.outcome == "idle":
             reasons.append("heating_not_triggered")
@@ -531,8 +534,10 @@ def _by_mode(
         upper_min = None
         top: float | None = None
         end = horizon
-        if mode != "heat_pump" and setpoint is not None:
-            device: ElementMode = DEVICE_MODE[mode]  # type: ignore[assignment]
+        # Outside the heat pump's range every mode heats as Electric.
+        heats: HeaterMode = "electric" if recovery.hp_unavailable else mode
+        if heats != "heat_pump" and setpoint is not None:
+            device: ElementMode = DEVICE_MODE[heats]  # type: ignore[assignment]
             rec = mode_recovery(
                 device,
                 tank.upper_f,
@@ -547,7 +552,7 @@ def _by_mode(
             top = rec.upper_end_f
             # The element model's own caveats.
             row["reasons"] = list(rec.confidence_reasons)
-            if mode == "electric":
+            if heats == "electric":
                 end = rec.full_minutes or 0.0
             else:
                 end = max(horizon, rec.upper_end_minutes or 0.0)
@@ -557,7 +562,7 @@ def _by_mode(
         steps = int(end // _GRID_MIN) + 1
         for t in [k * _GRID_MIN for k in range(steps)] + [end]:
             state = _mode_state(
-                mode, t, tank, hp, setpoint, upper_min, ep, recovery, top
+                heats, t, tank, hp, setpoint, upper_min, ep, recovery, top
             )
             if state is None:
                 break

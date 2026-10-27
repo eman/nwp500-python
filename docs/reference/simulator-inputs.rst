@@ -1131,8 +1131,11 @@ The ones about inputs and parameters:
    * - ``heat_pump_unavailable``
      - The heat pump was outside its operating range
        (``controller.hp_air_range_f``, ``hp_water_range_f``) in the
-       walk, or is at the answer's start: no heat-pump recovery runs,
-       and ``next_recovery`` is ``unavailable``.
+       walk, or is at the answer's start, in a mode that runs it. A
+       ``forecast`` or ``active_cycle`` answer is still the heat pump's,
+       which the heater will not run; ``next_recovery`` is
+       ``unavailable``, and ``time_to_ready`` projects every mode as
+       Electric.
    * - ``envelope_fallback_unverified``
      - The elements heated in the heat pump's place, outside its range,
        by Electric's rule (the upper element, then the lower): the

@@ -76,8 +76,9 @@ the walk's end (``Horizon``).
   heat pump runs only with the air at 41-113 °F and the tank's water at
   50-149 °F (``ControllerParams``). Outside them a running compressor
   stops, every mode heats as Electric does (``heats_as``), and a start
-  goes to the elements (``_fallback``); back inside, the compressor
-  starts as it does out of Electric. None of it is on the record.
+  goes to the elements (``_fallback``); back inside, a recovery the
+  elements were carrying returns to the compressor (``_availability``).
+  None of it is on the record.
 
 How the tank moves between events, and how far a recovery or an element
 lifts it, is the physics': the controller reads the tank at each event
@@ -350,6 +351,8 @@ class Begins(Event):
 
     running: bool = False
     running_hold: float = 0.0
+    #: An element on then too (``ElementWasOn`` follows).
+    element_on: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1150,7 +1153,7 @@ def _setpoint(
         else:
             s.act(ElementRetarget(s.sp - _off_deficit(s, e.zone)))
     elif (
-        s.mode == ENERGY_SAVER
+        s.heats_as == ENERGY_SAVER
         and value > previous
         and not mode_follows
         and not s.disabled
@@ -1293,6 +1296,10 @@ def _begins(s: _Step, ev: Begins) -> None:
     if s.mode == ELECTRIC and not s.disabled:
         s.note("element_later_starts_not_modelled")
     if ev.running and not s.disabled and s.mode != ELECTRIC:
+        if not s.state.hp_available and ev.element_on:
+            # The element on carries the recovery (``ElementWasOn``).
+            s.note(HEAT_PUMP_UNAVAILABLE)
+            return
         _start_compressor(
             s, Start(s.at, "running"), startup=False, hold=ev.running_hold
         )
@@ -1305,6 +1312,8 @@ def _element_was_on(s: _Step, ev: ElementWasOn) -> None:
     if s.disabled or s.heats_as not in ELEMENT_MODES or s.state.element.running:
         return
     zone: Zone = "upper" if s.upper < s.sp - ELEMENT_DONE_F else "lower"
+    if not s.state.hp_available and s.mode != ELECTRIC:
+        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
     _start_element(
         s, Start(s.at, "running", source="element"), zone, since=ev.since
     )
@@ -1493,61 +1502,93 @@ def _timer(s: _Step, ev: Event) -> None:
     (``_advance``)."""
 
 
+def electric_entry(
+    setpoint_f: float, upper_f: float, lower_f: float, element: ElementParams
+) -> Zone | None:
+    """The element Electric's entry rule starts (``_element_entry``):
+    the upper when its zone is the entry deficit short, else the lower
+    while its zone is short; None when neither is."""
+    deficit = setpoint_f - upper_f
+    need = entry_deficit_f(DEVICE_MODE[ELECTRIC], element)  # type: ignore[arg-type]
+    if deficit > 0.0 and deficit >= need - 1e-9:
+        return "upper"
+    if lower_f < setpoint_f - ELEMENT_DONE_F:
+        return "lower"
+    return None
+
+
 def _fallback(s: _Step, start: Start) -> None:
     """A start the heat pump cannot make, outside its operating range:
     the elements heat in its place, by Electric's entry rule, the upper
     element then the lower (the user's manual, 3.13.4: "If the
     heat pump cannot operate, the electric heater will be used to heat
     the tank"). Nothing on the record shows it, nor what ends it."""
-    if s.disabled or s.state.element.running:
+    if s.disabled:
+        return
+    s.note(HEAT_PUMP_UNAVAILABLE)
+    if s.state.element.running:
         return
     if start.cause == "running":
         start = Start(s.at, "heater", trigger="heat_pump_unavailable")
-    s.note(ENVELOPE_FALLBACK_UNVERIFIED)
     _element_entry(s, replace(start, source="element"))
+    if s.state.element.running:
+        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
 
 
 def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
-    """The heat pump leaves or re-enters its operating range. Leaving
-    it, a running compressor stops and the elements carry on its
-    recovery (``_fallback``); a running element heats on to Electric's
-    off point. Back in it, an element the heat pump's absence started
-    in ``heat_pump`` stops, and the compressor starts as it does out of
-    Electric (``_mode_write_starts``): the heat source the mode names
-    returns (3.13.4: "until the problematic heat source returns to
-    normal"), on a rule the record does not show."""
+    """The heat pump leaves or re-enters its operating range.
+
+    Leaving it, a running compressor stops and the elements carry on
+    its recovery (``_fallback``); a running element heats on to
+    Electric's off point. Back in it with an element still heating, the
+    recovery returns to the heat pump (3.13.4: "until the problematic
+    heat source returns to normal") when the compressor starts as it
+    does out of Electric (``_mode_write_starts``): it starts at once,
+    and the element its mode would not run stops (Electric's lower
+    element; in Heat Pump mode, either). Without one heating, nothing
+    starts: the heater's own triggers decide. The record shows none of
+    it."""
     if ev.available == s.state.hp_available:
         return
     s.state = replace(s.state, hp_available=ev.available)
     if not ev.available:
-        s.note(HEAT_PUMP_UNAVAILABLE)
         if s.state.compressor.running:
             _stop_compressor(s, "envelope")
             _fallback(s, Start(s.at, "heater", trigger="heat_pump_unavailable"))
-        elif s.state.element.running:
+        elif not s.disabled and s.mode in COMPRESSOR_MODES:
+            s.note(HEAT_PUMP_UNAVAILABLE)
+        if s.state.element.running:
             _check_element(s)
         return
-    if s.state.element.running:
-        if s.mode not in ELEMENT_MODES:
-            _stop_element(s, "mode")
-        else:
-            _check_element(s)
+    e = s.state.element
     if (
-        s.disabled
+        not e.running
+        or s.disabled
         or s.mode not in COMPRESSOR_MODES
         or s.state.compressor.running
         or s.state.compressor.pending is not None
     ):
+        if e.running:
+            _check_element(s)
         return
-    if _mode_write_starts(s, s.mode, ELECTRIC):
-        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
-        s.pend(
-            Start(
-                not_before(s.state, s.params, s.at),
-                "heater",
-                trigger="heat_pump_available",
-            )
-        )
+    if not _mode_write_starts(s, s.mode, ELECTRIC):
+        # Too little left for the heat pump: the element finishes it.
+        _check_element(s)
+        return
+    if s.mode not in ELEMENT_MODES or e.zone == "lower":
+        _stop_element(s, "mode")
+    else:
+        _check_element(s)
+    s.note(ENVELOPE_FALLBACK_UNVERIFIED)
+    start = Start(
+        not_before(s.state, s.params, s.at),
+        "heater",
+        trigger="heat_pump_available",
+    )
+    if start.at <= s.at:
+        _start_compressor(s, start)
+    else:
+        s.pend(start)
 
 
 def _horizon(s: _Step, ev: Horizon) -> None:
@@ -1644,6 +1685,7 @@ def trigger_ahead(
         # The elements are heating in the heat pump's place: the call
         # for heat is being answered.
         return None, ()
+    unavailable = not state.hp_available
     # No lower threshold disables the lower trigger alone: the upper
     # zone's at a TOU window's opening does not read it.
     on = settings.hp_lower_on_f
@@ -1669,9 +1711,42 @@ def trigger_ahead(
         at = None
     if at is not None and at == now and state.compressor.finished_at == now:
         at = None
+    if at is not None and unavailable:
+        # The elements answer the call, with no lockout to wait out,
+        # from where Electric's entry rule starts one: a trigger at or
+        # over the setpoint starts nothing.
+        at = next(
+            (
+                t
+                for t, upper, lower in [(at, *_tank_on(trajectory, at))]
+                + [p for p in trajectory if p[0] > at]
+                if electric_entry(
+                    state.setpoint_f, upper, lower, settings.element
+                )
+                is not None
+            ),
+            None,
+        )
+        if at is None:
+            return None, notes
+        return Ahead(at, at, trigger), notes
     if at is None:
         return None, notes
     return Ahead(at, not_before(state, params, at), trigger), notes
+
+
+def _tank_on(
+    trajectory: Sequence[tuple[datetime, float, float]], at: datetime
+) -> tuple[float, float]:
+    """The upper and lower zones on ``trajectory`` at ``at``, between
+    its points; held past its ends."""
+    if at <= trajectory[0][0]:
+        return trajectory[0][1], trajectory[0][2]
+    for (t0, u0, l0), (t1, u1, l1) in pairwise(trajectory):
+        if t0 <= at <= t1:
+            f = 0.0 if t1 == t0 else (at - t0) / (t1 - t0)
+            return u0 + (u1 - u0) * f, l0 + (l1 - l0) * f
+    return trajectory[-1][1], trajectory[-1][2]
 
 
 def upper_on_crossing(

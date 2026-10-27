@@ -267,19 +267,24 @@ is still judged at the target.
 heater at 41 to 113 degF and the water in the tank at 50 to 149 degF
 (the user's manual, 3.13.1; ``ControllerParams.hp_air_range_f`` and
 ``hp_water_range_f``, the water read at the lower zone). The walk finds
-where the air series crosses either air bound, exactly on its
-interpolation, and the first point of a coast past a water bound. Outside the range a running compressor stops, every mode heats as
-Electric does, and the heater's own triggers and a write's start go to
-the elements: the upper element, then the lower (3.13.4, "If the heat
-pump cannot operate, the electric heater will be used"). A recovery
-stops at 149 degF at most. Back inside, an element the heat pump's
-absence started in Heat Pump mode stops, and the compressor starts as it
-does out of Electric. Answers that assume a heat-pump recovery say so
-(``heat_pump_unavailable``), and ``next_recovery`` is ``unavailable``.
-None of this is on the record, whose air ran 45.9 to 89.3 degF, so a
-walk that uses it says ``envelope_fallback_unverified``. An element
-running in the heat pump's place runs to its off point: the walk does
-not hand a cold tank back to the heat pump as its water passes 50 degF.
+where the air readings cross either air bound, exactly on their
+interpolation, and checks the water at each coast point, after each
+draw and where a recovery ends. Outside the range a running compressor
+stops, every mode heats as Electric does, and the heater's own triggers
+and a write's start go to the elements: the upper element, then the
+lower (3.13.4, "If the heat pump cannot operate, the electric heater
+will be used"). A recovery stops at 149 degF at most, and the elements
+finish a target above it. Back inside the range with an element still
+heating, the recovery returns to the heat pump where the compressor
+starts as it does out of Electric: at once, with Electric's lower
+element (in Heat Pump mode, either element) stopping. With nothing
+heating, the heater's own triggers decide. An element heating a tank
+below 50 degF runs to its off point before the heat pump takes over.
+Answers that assume a heat-pump recovery say ``heat_pump_unavailable``,
+``next_recovery`` is ``unavailable``, and ``time_to_ready`` projects
+every mode as Electric. None of this is on the record, whose air ran
+45.9 to 89.3 degF, so a walk that uses it says
+``envelope_fallback_unverified``.
 
 **Power and efficiency.** The electricity is the map's, so a COP is the
 map's heat over its electricity over the same climb; neither is scaled.

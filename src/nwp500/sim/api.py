@@ -157,17 +157,19 @@ def _ambient_frame(
 ) -> pd.DataFrame:
     """The ambient as the core reads it: a frame on a 10-minute grid
     from an hour before ``start`` to 12 hours past ``until``, the
-    readings interpolated onto it and held past their ends."""
+    readings interpolated onto it and held past their ends. The
+    readings' own instants inside it are kept too, so an excursion
+    shorter than the grid (out of the heat pump's range) is not lost."""
     t0 = pd.Timestamp(start - AMBIENT_BEFORE).floor(AMBIENT_STEP)
     stamps = pd.date_range(t0, until + AMBIENT_AFTER, freq=AMBIENT_STEP)
     a = environment.ambient_f
     if isinstance(a, tuple):
+        readings = pd.DatetimeIndex([t for t, _ in a])
         sampler = AmbientSampler(
-            pd.DataFrame(
-                {"ambient_f": [v for _, v in a]},
-                index=pd.DatetimeIndex([t for t, _ in a]),
-            )
+            pd.DataFrame({"ambient_f": [v for _, v in a]}, index=readings)
         )
+        inside = readings[(readings > stamps[0]) & (readings < stamps[-1])]
+        stamps = stamps.union(inside.tz_convert(stamps.tz))
         values = [sampler.at(t.to_pydatetime()) for t in stamps]
     else:
         values = [float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F] * len(
@@ -1167,7 +1169,7 @@ def next_recovery(
     start; the recovery's heat into the book is the book's compressor
     term by the air now."""
     s = scenario
-    _, disabled = _engine_mode(s.settings.mode)
+    mode, disabled = _engine_mode(s.settings.mode)
     if disabled:
         return Recovery("not_scheduled")
     now = s.start
@@ -1208,9 +1210,11 @@ def next_recovery(
             coast_btu, coast_gal = _coast_loss(
                 s.model_copy(update={"loads": loads}), params, start, air
             )
-        if _out_of_range(params, [_ambient_at(s.environment, start)], lower):
+        if mode != "electric" and _out_of_range(
+            params, [_ambient_at(s.environment, start)], lower
+        ):
             # No heat-pump recovery runs: the elements heat the tank.
-            return Recovery("unavailable")
+            return Recovery("unavailable", hp_unavailable=True)
         starting = HeaterState(
             upper_f=upper,
             lower_f=lower,
@@ -1524,15 +1528,7 @@ def time_to_ready(
             *answer["reasons"],
             *_unfitted(params, "book", "readiness"),
             *_ambient_reasons(s.environment),
-            *(
-                [HEAT_PUMP_UNAVAILABLE]
-                if _out_of_range(
-                    params,
-                    [_ambient_at(s.environment, s.start)],
-                    s.state.lower_f,
-                )
-                else []
-            ),
+            *([HEAT_PUMP_UNAVAILABLE] if nxt.hp_unavailable else []),
         ]
     )
     if nxt.outcome == "ok":
