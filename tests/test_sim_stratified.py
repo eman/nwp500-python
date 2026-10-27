@@ -71,6 +71,11 @@ class TestTheLayout:
             {"upper_element": 1.2},
             {"condenser_span": (0.5, 0.5)},
             {"ua_btu_hr_f": -1.0},
+            {"volume_gal": math.nan},
+            {"inlet_mix_gal": math.nan},
+            # Both probes in the same end layer.
+            {"lower_probe": 0.01, "upper_probe": 0.04},
+            {"lower_probe": 0.96, "upper_probe": 0.99},
         ],
     )
     def test_nonsense_is_refused(self, change: dict[str, object]) -> None:
@@ -81,6 +86,13 @@ class TestTheLayout:
         doc = params_to_document(P)
         assert doc["tank"]["condenser_span"] == [0.0, 0.45]
         assert params_from_document(doc) == P
+
+    @pytest.mark.parametrize("layers", [12.5, "12", True])
+    def test_a_document_holds_whole_layers(self, layers: object) -> None:
+        doc = params_to_document(P)
+        doc["tank"]["layers"] = layers
+        with pytest.raises(ValueError):
+            params_from_document(doc)
 
     def test_a_state_of_another_size_is_refused(self) -> None:
         with pytest.raises(ValueError):
@@ -186,28 +198,49 @@ class TestHeat:
 
 class TestFlow:
     @given(profiles, st.floats(0.0, 250.0), inflows)
-    def test_the_heat_closes(
-        self, state: S.TankState, gal: float, inflow: float
-    ) -> None:
-        out = S.flow(L, state, gal, inflow)
-        assert out.heat_btu == pytest.approx(
-            _energy(state) - _energy(out.state), abs=1e-6
-        )
-
-    @given(profiles, st.floats(0.0, 50.0), inflows)
     def test_what_leaves_is_the_top_of_the_column(
         self, state: S.TankState, gal: float, inflow: float
     ) -> None:
         """The remap keeps the heat: what the tank loses is the water
-        that left the top, read off the column before, less what came
-        in."""
-        state = S.mix(state)
+        that left the top, read off the column before (the plug's, then
+        what the inlet zone passed up), less what came in."""
         out = S.flow(L, state, gal, inflow)
         col = S._Column(L, state.layers_f, inflow)
-        top = L.volume_gal
-        left = col.integral(top) - col.integral(top - gal)
+        top, plug = L.volume_gal, col.plug_gal
+        if gal <= plug:
+            left = col.integral(top) - col.integral(top - gal)
+        else:
+            left = col.integral(top) - col.integral(col.mix_gal)
+            left += col.mix_out(0.0, gal - plug)
         want = (left - gal * inflow) * WATER_BTU_PER_GAL_F
         assert out.heat_btu == pytest.approx(want, abs=1e-6, rel=1e-9)
+
+    @given(stable, inflows)
+    def test_a_vanishing_flow_moves_nothing(
+        self, state: S.TankState, inflow: float
+    ) -> None:
+        out = S.flow(L, state, 1e-9, inflow).state
+        for x, y in zip(out.layers_f, state.layers_f, strict=True):
+            assert x == pytest.approx(y, abs=1e-6)
+
+    def test_many_small_flows_are_one(self) -> None:
+        """The inlet zone mixes as the water comes, however it comes:
+        cut finer, a flow converges, and to the whole but for the grid's
+        remap of each piece (0.15 °F of it with no inlet zone at all)."""
+        state = S.mix(
+            S.TankState((70.0, 85.0, 100.0, 110.0, 118.0, *([124.0] * 7)))
+        )
+
+        def pieces(k: int) -> tuple[float, float]:
+            s = state
+            for _ in range(k):
+                s = S.flow(L, s, 1.0 / k, 60.0).state
+            return S.observe(L, s)
+
+        whole, hundred, thousand = pieces(1), pieces(100), pieces(1000)
+        for x, y, z in zip(whole, hundred, thousand, strict=True):
+            assert y == pytest.approx(z, abs=0.01)
+            assert x == pytest.approx(y, abs=0.3)
 
     @given(stable, st.floats(0.0, 250.0))
     def test_cold_in_stays_stratified_and_in_bounds(
@@ -258,9 +291,7 @@ class TestDraw:
         assert 0.0 <= out.withdrawn_gal <= gal + 1e-9
         if valve == S.NO_VALVE:
             assert out.withdrawn_gal == pytest.approx(gal)
-        assert out.heat_btu == pytest.approx(
-            _energy(state) - _energy(out.state), abs=1e-6
-        )
+        assert out.state == S.flow(L, state, out.withdrawn_gal, inflow).state
 
     @given(
         temps,
@@ -316,6 +347,18 @@ class TestDraw:
                 break
             state, delivered = out.state, delivered + 0.25
         assert delivered == pytest.approx(want, abs=max(1.0, 0.03 * want))
+
+    def test_warm_mains_do_not_hide_a_cold_bottom(self) -> None:
+        """The inlet zone's water passes up under the line before the
+        mains' does."""
+        state = S.TankState((60.0, *([140.0] * 11)))
+        got = S.deliverable_gal(L, state, 105.0, 110.0)
+        assert got == pytest.approx(S.deliverable_gal(L, state, 105.0, 104.9))
+        assert math.isfinite(got)
+
+    def test_mains_at_the_line_never_run_under(self) -> None:
+        state = S.TankState.uniform(12, 140.0)
+        assert S.deliverable_gal(L, state, 105.0, 110.0) == math.inf
 
     def test_a_tank_under_the_line_delivers_none(self) -> None:
         state = S.TankState.uniform(12, 100.0)
@@ -500,6 +543,18 @@ class TestTheWalk:
         )
         ends = [t for t, _ in w.path[1:-1]]
         assert all(t.minute % 10 == 0 and t.second == 0 for t in ends)
+
+    @pytest.mark.parametrize("step", [timedelta(0), timedelta(minutes=-10)])
+    def test_steps_are_positive(self, step: timedelta) -> None:
+        with pytest.raises(ValueError):
+            S.walk(
+                L,
+                S.TankState.uniform(12, 120.0),
+                T0,
+                T0 + timedelta(hours=1),
+                air_f=_air,
+                idle_step=step,
+            )
 
     def test_naive_instants_are_refused(self) -> None:
         with pytest.raises(ValueError):

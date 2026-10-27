@@ -19,8 +19,8 @@ Added
   - ``conduct`` conducts between neighbours;
   - ``add_heat``, with the condenser's heat spread over the span it
     wraps and an element's into its layer;
-  - ``flow`` pushes water in at the bottom through a well-mixed inlet
-    zone and out of the top as a plug;
+  - ``flow`` pushes water in at the bottom, through an inlet zone that
+    mixes it in as it comes, and out of the top as a plug;
   - ``draw`` takes a delivered draw through the mixing valve.
 
   The probes read the layers (``observe``); ``estimate`` and

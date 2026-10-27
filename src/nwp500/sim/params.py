@@ -1395,7 +1395,8 @@ def unknown_fields(doc: Mapping[str, Any]) -> list[str]:
 
 def _check(where: str, hint: Any, value: Any) -> None:
     """A ``ValueError`` naming ``where`` when ``value`` is not what a
-    document holds for a field of type ``hint``: a number for a float,
+    document holds for a field of type ``hint``: a number for a float, a
+    whole number for an int,
     a list for a tuple, null for None."""
     args = get_args(hint)
     if get_origin(hint) is UnionType:
@@ -1419,6 +1420,9 @@ def _check(where: str, hint: Any, value: Any) -> None:
     if hint is float:
         ok = isinstance(value, int | float) and not isinstance(value, bool)
         kind = "a number"
+    elif hint is int:
+        ok = isinstance(value, int) and not isinstance(value, bool)
+        kind = "a whole number"
     elif hint is bool:
         ok, kind = isinstance(value, bool), "true or false"
     elif hint is str:

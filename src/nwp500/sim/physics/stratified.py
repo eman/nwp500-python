@@ -19,9 +19,9 @@ past what drives it:
 - ``add_heat``: heat into layers, then ``mix``, so heat put in low
   rises to where it belongs;
 - ``flow``: water in at the bottom pushes the column up and out of the
-  top as a plug, through a well-mixed zone of ``inlet_mix_gal`` at the
-  inlet, solved exactly and remapped onto the layers by exact
-  integrals;
+  top as a plug, through an inlet zone of ``inlet_mix_gal`` that mixes
+  it in as it comes, solved exactly and remapped onto the layers by
+  exact integrals;
 - ``draw``: a delivered draw through the mixing valve
   (``physics.draw.delivery_temp_f``, ``hot_fraction``), the tank water
   it takes solved from the water leaving the top in turn.
@@ -168,14 +168,23 @@ class Layout:
             "ua_bottom_btu_hr_f",
             "conductance_btu_hr_f",
         ):
-            if getattr(self, name) < 0.0:
-                raise ValueError(f"{name} must not be negative")
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(f"{name} must be finite, not negative")
+        if not math.isfinite(self.volume_gal):
+            raise ValueError("volume_gal must be finite")
         n = self.layers
         gal = self.volume_gal / n
         set_ = object.__setattr__
         set_(self, "layer_gal", gal)
         set_(self, "layer_btu_f", gal * WATER_BTU_PER_GAL_F)
         set_(self, "centers", tuple((i + 0.5) / n for i in range(n)))
+        if self.upper_probe <= self.centers[0] or (
+            self.lower_probe >= self.centers[-1]
+        ):
+            # Both would read the same end layer: they could not tell a
+            # profile's lean (``estimate``).
+            raise ValueError("the probes read the same end layer")
         overlap = [
             max(0.0, min(high, (i + 1) / n) - max(low, i / n)) for i in range(n)
         ]
@@ -340,8 +349,10 @@ def element_heat(lay: Layout, zone: Zone, btu: float) -> tuple[float, ...]:
 class _Column:
     """The water leaving the top, and the column after, for a flow in at
     ``inflow_f`` from ``state``: the inlet zone, the bottom
-    ``inlet_mix_gal``, well mixed from the flow's start, feeds a plug
-    above it, which leaves at the top."""
+    ``inlet_mix_gal``, mixes the inflow in as a well-mixed zone would
+    (its mean) while its own unevenness decays on the same scale, and
+    passes its mean up into a plug above it, which leaves at the
+    top."""
 
     lay: Layout
     layers: tuple[float, ...]
@@ -419,14 +430,22 @@ class _Column:
 
     def after(self, gal: float, a: float, b: float) -> float:
         """The column ``gal`` in, integrated from ``a`` to ``b`` gallons
-        up, gal·°F: the inlet zone at its temperature then, above it
-        what it passed up (the latest lowest), and above that the plug
-        that was, moved up by ``gal``."""
+        up, gal·°F: the inlet zone at its mean then, with what it held
+        apart from its mean decayed as the mean was (``e^(−gal / zone)``),
+        above it what it passed up (the latest lowest), and above that the
+        plug that was, moved up by ``gal``. A vanishing flow moves
+        nothing; the zone's unevenness, summing to nothing, carries no
+        heat."""
         m = self.mix_gal
         total = 0.0
         lo, hi = max(a, 0.0), min(b, m)
         if hi > lo:
-            total += (hi - lo) * self.mix_f(gal)
+            uneven = (
+                self.integral(hi)
+                - self.integral(lo)
+                - (hi - lo) * self.mix_start_f
+            )
+            total += (hi - lo) * self.mix_f(gal) + uneven * math.exp(-gal / m)
         lo, hi = max(a, m), min(b, m + min(gal, self.plug_gal))
         if hi > lo:
             # Water at ``v`` left the inlet zone ``gal - (v - m)`` in.
@@ -581,11 +600,14 @@ def deliverable_gal(
         if temp < need:
             return total
         total += gal / _tank_share(temp, inflow_f, valve)
+    m, start = col.mix_gal, col.mix_start_f
+    if m > 0.0 and start < need:
+        # The inlet zone's water passes up under the line first.
+        return total
     if inflow_f >= need:
         # What comes in is at the line already.
         return math.inf
-    m, start = col.mix_gal, col.mix_start_f
-    if m <= 0.0 or start < need:
+    if m <= 0.0:
         return total
     # The inlet zone's water reaches the top: it passes ``need`` or
     # warmer for ``m · ln((start − in) / (need − in))`` gallons.
@@ -914,6 +936,8 @@ def walk(
     ``CUT_RESOLUTION``."""
     if start.tzinfo is None or end.tzinfo is None:
         raise ValueError("the walk's instants are aware")
+    if idle_step <= timedelta(0) or active_step <= timedelta(0):
+        raise ValueError("the walk's steps are positive")
     _layers(lay, state)
     w = _Walk(
         lay,
