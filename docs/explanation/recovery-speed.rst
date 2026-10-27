@@ -341,10 +341,11 @@ The start of a recovery
 
 At a compressor start the lower tank dips, then holds while the
 refrigerant circuit and the condenser warm, and only then climbs. The
-hold is longer the longer the compressor has been off. Over 94 starts
-with no water in use from 30 minutes before to the end of the hold,
-2025-12-28 to 2026-10-26, the minutes until the lower tank read above
-its reading from before the start and stayed above it for 5 minutes
+hold is longer the longer the compressor has been off. There were 94
+starts with no water in use from 30 minutes before to the end of the
+hold, 2025-12-28 to 2026-10-26. For the 84 of them with the time off
+known and a climb, the minutes until the lower tank read above its
+reading from before the start and stayed above it for 5 minutes
 (``heat_pump_fit.start_holds``):
 
 .. list-table::
@@ -356,7 +357,7 @@ its reading from before the start and stayed above it for 5 minutes
      - Hold, median
      - Middle half
    * - Under 15 minutes
-     - 9
+     - 8
      - 0 min
      - 0-1 min
    * - 15 minutes to 1 hour
@@ -370,9 +371,9 @@ its reading from before the start and stayed above it for 5 minutes
    * - 3-12 hours
      - 14
      - 18 min
-     - 13-29 min
+     - 13.25-28.5 min
    * - Over 12 hours
-     - 46
+     - 43
      - 22 min
      - 15.5-28 min
 
