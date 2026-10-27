@@ -758,6 +758,72 @@ class TestRecoveryAndStandby:
         assert drawn.points[-1].lower_f < quiet.points[-1].lower_f
 
 
+class TestADrawOnACoastsEdge:
+    """A draw at the instant a coast ends is taken once, and the walk
+    goes on past it."""
+
+    @staticmethod
+    def _physics(params: HeaterParams) -> TankPhysics:
+        stamps = pd.date_range(at(-1), at(6), freq="10min")
+        frame = pd.DataFrame({"ambient_f": AMBIENT_F}, index=stamps)
+        return TankPhysics(params, frame, 50.0, draws_on=True)
+
+    @pytest.mark.parametrize("gal", [20.0, 40.0])
+    def test_one_taking_the_upper_zone_to_an_element_starts_it(
+        self, params: HeaterParams, gal: float
+    ) -> None:
+        """High Demand, its lower trigger unknown: the draw takes the
+        upper zone past the element's start, which answers the tank the
+        draw leaves."""
+        draw = (at(32 / 60), gal)
+        sim = walk(
+            start=T0,
+            upper_f=118.5,
+            lower_f=86.7,
+            running=False,
+            until=at(50 / 60),
+            setpoint_f=130.0,
+            heater=Heater(
+                hp_lower_on_f=None, mode="high_demand", element=params.element
+            ),
+            physics=self._physics(params),
+            draws=[draw],
+            stopped_at=at(-1.0),
+        )
+        assert [h.start.at for h in sim.heating if h.source == "element"][
+            -1
+        ] == draw[0]
+        assert len([p for p in sim.points if p.at == draw[0]]) == 2
+
+    def test_one_meeting_the_coasts_stop_is_taken_once(
+        self, params: HeaterParams
+    ) -> None:
+        """A draw that takes the lower zone out of the heat pump's range
+        ends the coast there: the walk goes on from the tank it left."""
+        cold = replace(params, draw=replace(params.draw, inlet_temp_f=40.0))
+        physics = self._physics(cold)
+        draw = (at(1.0), 30.0)
+        sim = walk(
+            start=T0,
+            upper_f=60.0,
+            lower_f=53.0,
+            running=False,
+            until=at(3.0),
+            setpoint_f=120.0,
+            heater=Heater(hp_lower_on_f=None, heating_disabled=True),
+            physics=physics,
+            draws=[draw],
+        )
+        once = physics.advance(
+            T0, physics.estimate(60.0, 53.0), at(3.0), [draw]
+        )
+        end = sim.points[-1]
+        assert (end.upper_f, end.lower_f) == pytest.approx(
+            physics.observe(once.state), abs=1e-9
+        )
+        assert len([p for p in sim.points if p.at == draw[0]]) == 2
+
+
 class TestAnElementStopsAtItsOffPoint:
     """An element stops where its zone reaches its off point, though
     something else lifts the zone too: it is not charged at the

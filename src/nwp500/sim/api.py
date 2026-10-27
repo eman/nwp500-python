@@ -1816,8 +1816,9 @@ def active_cycle(
     heater stops past it (``ControllerParams.hp_stop_overshoot_f``), at
     the air now,
     served by ``model`` when given, the start's hold taken as over.
-    Beside it, the integrator's own remaining climb. A truncated
-    integration says ``physics_truncated``. ``ready_at`` is when the
+    Beside it, the integrator's own remaining climb. A climb short of
+    its target after ``tank_physics.RECOVERY_BOUND`` is refused
+    (``SimulationError``). ``ready_at`` is when the
     compressor stops: a lower zone at its target has the run-on left,
     and one past it by the run-on has nothing left (0 minutes, ready
     now). ``forecast`` asks a different question, when the tank reaches

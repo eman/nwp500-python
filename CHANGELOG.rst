@@ -17,10 +17,10 @@ Added
   record=...)`` starts each event from them.
 
 - **Where the condenser heats, fitted.** ``tank_fit.CONDENSER_TERMS``
-  (``TankParams.condenser_span``'s ends) is fitted on recoveries
-  (``sim_score.layer_recoveries``: the compressor from its start, its
-  hold by time off, and the circulation through it) together with the
-  tank's other terms on the quiet windows and draws
+  (``TankParams.condenser_span``'s low end and width) is fitted on
+  recoveries (``sim_score.layer_recoveries``: the compressor from its
+  start, its hold by time off, and the circulation through it) together
+  with the tank's other terms on the quiet windows and draws
   (``sim_score.fit_layers``). Fitted apart, the span that times the
   recoveries left the bottom of the tank each window starts from wrong:
   held out, a coast's lower probe went from 0.52 to 0.86 °F.

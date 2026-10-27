@@ -450,7 +450,7 @@ class _Engine:
         available = self._available(start)
         #: The tank was below the heat pump's water range with no element
         #: since to heat it past: one heating it runs to its off point.
-        self._cold = lower_f < self.params.hp_water_range_f[0]
+        self._cold = self.probes[1] < self.params.hp_water_range_f[0]
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -1173,8 +1173,11 @@ class _Engine:
         upcoming = set(self.marks)
         upcoming.update(fires for fires, _ in self.queue)
         upcoming |= wake_times(self.state, self.settings)
-        if self.element is not None:
-            # Inside a withheld window it is credited no heat.
+        if self.element is not None or any(
+            self._heats_until(e) > self.t for e in self.cooling
+        ):
+            # Inside a withheld window an element's heat, running or on
+            # its way, is credited none.
             for w0, w1 in self.withheld:
                 upcoming.update((w0, w1))
         if self.raw:
@@ -1230,6 +1233,10 @@ class _Engine:
             and (at is None or element_at < at)
         ):
             self._coast_to(element_at)
+            if any(d[0] == element_at for d in self.draws):
+                # The crossing is the draw's there: the element answers
+                # the tank it leaves.
+                self._coast_draw()
             self._dispatch(ctl.UpperOnCrossed(at=element_at, tank=self._tank()))
             return
         if at is not None:
@@ -1251,7 +1258,14 @@ class _Engine:
                 ctl.HeaterTrigger(at=at, tank=self._tank(), trigger=own.trigger)
             )
             return
-        self._take_draws(self.t, stretch.end)
+        # A stop a draw met ends the walk on the draw's step: it is taken.
+        points = stretch.points
+        taken = (
+            stretch.stopped and len(points) > 1 and points[-2].at == stretch.end
+        )
+        self._take_draws(
+            self.t, stretch.end + (_INSTANT if taken else timedelta(0))
+        )
         self._append(stretch.points, heating=False)
         self.t = stretch.end
 

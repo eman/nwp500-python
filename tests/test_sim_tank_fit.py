@@ -390,11 +390,22 @@ def _climb(path) -> tf.Coast:
 
 class TestTheCondenser:
     def test_its_terms_round_trip(self) -> None:
+        low, high = TRUE.tank.condenser_span
         values = tf.term_values(TRUE, tf.CONDENSER_TERMS)
-        assert values == TRUE.tank.condenser_span
-        moved = tf.with_terms(TRUE, (0.1, 0.7), tf.CONDENSER_TERMS)
-        assert moved.tank.condenser_span == (0.1, 0.7)
+        assert values == pytest.approx((low, high - low))
+        moved = tf.with_terms(TRUE, (0.1, 0.6), tf.CONDENSER_TERMS)
+        assert moved.tank.condenser_span == pytest.approx((0.1, 0.7))
         assert tf.term_values(moved) == tf.term_values(TRUE)
+
+    def test_every_point_inside_its_bounds_is_a_span(self) -> None:
+        """The fit may step anywhere inside the terms' bounds."""
+        for low in (0.0, 0.5):
+            for width in (0.1, 1.0):
+                lay = S.layout(
+                    tf.with_terms(TRUE, (low, width), tf.CONDENSER_TERMS)
+                )
+                assert 0.0 <= lay.condenser_span[0] < lay.condenser_span[1]
+                assert lay.condenser_span[1] <= 1.0
 
     def test_a_recovery_is_tracked_by_the_tank_that_heated(
         self, history, record

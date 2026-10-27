@@ -74,13 +74,15 @@ TERMS: tuple[tuple[str, str, float, float, float], ...] = (
     ("tank", "inlet_mix_gal", 0.0, 30.0, 2.0),
 )
 #: Where the condenser heats, fitted on recoveries (``fit``'s
-#: ``terms``): the ends of ``TankParams.condenser_span``.
+#: ``terms``): ``TankParams.condenser_span`` as its low end and its
+#: width, its top at most the tank's, so every point inside the bounds is
+#: a span.
 CONDENSER_TERMS: tuple[tuple[str, str, float, float, float], ...] = (
     ("tank", "condenser_low", 0.0, 0.5, 0.05),
-    ("tank", "condenser_high", 0.3, 1.0, 0.05),
+    ("tank", "condenser_width", 0.1, 1.0, 0.05),
 )
-#: The condenser span's ends as ``TERMS`` name them.
-_SPAN = ("condenser_low", "condenser_high")
+#: The condenser span as ``CONDENSER_TERMS`` name it.
+_SPAN = ("condenser_low", "condenser_width")
 
 
 @dataclass(frozen=True, eq=False)
@@ -546,7 +548,8 @@ def term_values(
         if name == "ua_side_btu_hr_f":
             out.append(lay.ua_btu_hr_f)
         elif name in _SPAN:
-            out.append(params.tank.condenser_span[_SPAN.index(name)])
+            low, high = params.tank.condenser_span
+            out.append(low if name == "condenser_low" else high - low)
         else:
             out.append(float(getattr(getattr(params, group), name)))
     return tuple(out)
@@ -559,11 +562,15 @@ def with_terms(
     if len(values) != len(terms):
         raise ValueError(f"{len(terms)} values, not {len(values)}")
     groups: dict[str, dict[str, Any]] = {}
-    span = list(params.tank.condenser_span)
+    low, high = params.tank.condenser_span
+    span = [low, high - low]
     for (group, name, *_), v in zip(terms, values, strict=True):
         if name in _SPAN:
             span[_SPAN.index(name)] = float(v)
-            groups.setdefault("tank", {})["condenser_span"] = tuple(span)
+            groups.setdefault("tank", {})["condenser_span"] = (
+                span[0],
+                min(span[0] + span[1], 1.0),
+            )
         else:
             groups.setdefault(group, {})[name] = float(v)
     return replace(
