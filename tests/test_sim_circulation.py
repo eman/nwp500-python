@@ -416,7 +416,7 @@ class TestASplitCoast:
     def test_one_coast_or_two_cool_the_tank_alike(
         self, params: HeaterParams
     ) -> None:
-        from nwp500.sim.tank_physics import TankPhysics
+        from nwp500.sim.tank_physics import TankPhysics, TwoZone
 
         stamps = pd.date_range(at(-1), at(4), freq="10min")
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
@@ -434,13 +434,14 @@ class TestASplitCoast:
             )
 
         whole = physics().coast(
-            at(0), 139.0, 132.0, at(1), [], heated_at=at(-1)
+            at(0), TwoZone(139.0, 132.0), at(1), [], heated_at=at(-1)
         )
         p = physics()
         cut = at(0.0) + timedelta(minutes=8)
-        a = p.coast(at(0), 139.0, 132.0, cut, [], heated_at=at(-1))
+        a = p.coast(at(0), TwoZone(139.0, 132.0), cut, [], heated_at=at(-1))
         mid = a.points[-1]
-        b = p.coast(cut, mid.upper_f, mid.lower_f, at(1), [], heated_at=at(-1))
+        assert mid.state is not None
+        b = p.coast(cut, mid.state, at(1), [], heated_at=at(-1))
         end, split = whole.points[-1], b.points[-1]
         assert split.lower_f == pytest.approx(end.lower_f, abs=0.05)
         assert split.upper_f == pytest.approx(end.upper_f, abs=0.05)

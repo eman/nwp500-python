@@ -124,6 +124,14 @@ Added
 Changed
 -------
 
+- **The engine carries the tank as its physics' state** (breaking for
+  a custom ``Physics``). ``Physics`` gains ``estimate`` (the state two
+  probe readings stand for) and ``observe`` (the probes on a state),
+  and its ``coast``, ``heat`` and ``draw`` take and give a state
+  (``TankState``) in place of the two zones' temperatures; each
+  ``Point`` carries the state it reached. The engine reads the tank
+  only through ``observe``. ``TankPhysics``' state is ``TwoZone``, the
+  two zones as before, so every simulation is unchanged.
 - **The heat pump is a performance map** (breaking). The heat into the
   tank and the electricity drawn are each a plane in the air at the
   heater and the lower tank's water (``CompressorParams.heat_btu_h``,

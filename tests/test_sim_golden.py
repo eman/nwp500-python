@@ -45,7 +45,14 @@ from nwp500.sim.engine import (
     simulate,
 )
 from nwp500.sim.params import HeaterParams, params_from_document
-from nwp500.sim.tank_physics import TankPhysics
+from nwp500.sim.tank_physics import (
+    Coast,
+    Heat,
+    Physics,
+    Point,
+    TankPhysics,
+    TankState,
+)
 
 FIXTURES = Path(__file__).with_name("fixtures") / "sim"
 GOLDEN = FIXTURES / "engine_golden.json"
@@ -197,10 +204,13 @@ CASES: dict[str, dict[str, Any]] = {
 }
 
 
-def _run(case: dict[str, Any]) -> Simulation:
+def _run(
+    case: dict[str, Any],
+    wrap: Callable[[TankPhysics], Physics] = lambda p: p,
+) -> Simulation:
     c = dict(case)
     until = at(c.pop("until_h"))
-    physics = _physics(until, c.pop("draws_on"))
+    physics = wrap(_physics(until, c.pop("draws_on")))
     mode = c.pop("mode", "heat_pump")
     return simulate(
         start=T0,
@@ -339,6 +349,75 @@ def test_the_cases_cover_what_they_claim() -> None:
     assert held["recovering_draws"]["heating"]
     assert held["withheld_windows"]["heating"]
     assert held["coast_into_tou"]["heating"]
+
+
+@dataclasses.dataclass(frozen=True, eq=False)
+class _Sealed:
+    """A state only its physics opens: equal to nothing but itself."""
+
+    inner: TankState
+
+
+class _SealedPhysics:
+    """``TankPhysics`` behind states the engine cannot read."""
+
+    def __init__(self, inner: TankPhysics) -> None:
+        self.inner = inner
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
+
+    @staticmethod
+    def _open(state: TankState) -> TankState:
+        assert isinstance(state, _Sealed)
+        return state.inner
+
+    @staticmethod
+    def _seal(points: list[Point]) -> list[Point]:
+        return [
+            dataclasses.replace(
+                p, state=None if p.state is None else _Sealed(p.state)
+            )
+            for p in points
+        ]
+
+    def estimate(self, upper_f: float, lower_f: float) -> TankState:
+        return _Sealed(self.inner.estimate(upper_f, lower_f))
+
+    def observe(self, state: TankState) -> tuple[float, float]:
+        return self.inner.observe(self._open(state))
+
+    def coast(
+        self,
+        start: datetime,
+        state: TankState,
+        end: datetime,
+        draws: Any,
+        heated_at: datetime | None = None,
+    ) -> Coast:
+        got = self.inner.coast(start, self._open(state), end, draws, heated_at)
+        return dataclasses.replace(got, points=self._seal(got.points))
+
+    def heat(
+        self, start: datetime, state: TankState, target_f: float, **kw: float
+    ) -> Heat | None:
+        got = self.inner.heat(start, self._open(state), target_f, **kw)
+        if got is None:
+            return None
+        return dataclasses.replace(got, points=self._seal(got.points))
+
+    def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
+        return _Sealed(self.inner.draw(at, self._open(state), gal))
+
+
+@pytest.mark.parametrize("case", sorted(CASES))
+def test_the_engine_reads_the_tank_only_through_its_physics(
+    case: str,
+) -> None:
+    """A physics whose state the engine cannot open or compare walks
+    every case as ``TankPhysics`` does: the engine carries the tank and
+    reads only its probes."""
+    assert _run(CASES[case], _SealedPhysics) == _run(CASES[case])
 
 
 def _on_a_thread(fn: Callable[[], Simulation]) -> Simulation:

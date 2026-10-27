@@ -19,6 +19,13 @@ the delivered draws the engine hands each coast, and the flowing draws
 the client's ``FlowingDraws`` gives for it, each with the temperature of
 the water replacing it. What a flowing draw stands for is the client's.
 
+**The tank is the physics' state** (``TankState``), which the engine
+carries without reading it: the probes are what ``Physics.observe``
+reads from it, and ``Physics.estimate`` makes one from them. Each
+segment starts from a state and its points carry the state they reach.
+``TankPhysics``' is the two zones (``TwoZone``), each as its probe
+reads it.
+
 **The ambient frame** (``t_amb_series``) is a ``pd.DataFrame`` with a
 tz-aware ``DatetimeIndex`` and an ``ambient_f`` column, °F: the air
 at the heater's evaporator. ``sim.decay.AmbientSampler`` reads it.
@@ -65,6 +72,10 @@ Delivered = tuple[datetime, float]
 #: called once per coast in the order the coasts are walked.
 FlowingDraws = Callable[[datetime, datetime], Sequence[Draw]]
 
+#: The tank as a ``Physics`` carries it: opaque to the engine, which
+#: reads it only through ``Physics.observe``.
+TankState = object
+
 #: The recovery's refinement: a recovery is predicted again with the
 #: air's mean over the duration the last pass found, until it moves no
 #: more than this, minutes.
@@ -72,10 +83,20 @@ REFINE_TOL_MINUTES = 2.0
 
 
 @dataclass(frozen=True)
+class TwoZone:
+    """``TankPhysics``' state: the two zones, each as its probe reads
+    it."""
+
+    upper_f: float
+    lower_f: float
+
+
+@dataclass(frozen=True)
 class Point:
-    """A state on the path. ``input_wh`` is the electricity over the
-    interval ending here: 0.0 while coasting and on a segment's first
-    element, None when the recovery could not price it."""
+    """A state on the path: the probes, and the physics' state when it
+    gave one. ``input_wh`` is the electricity over the interval ending
+    here: 0.0 while coasting and on a segment's first element, None
+    when the recovery could not price it."""
 
     at: datetime
     upper_f: float
@@ -84,6 +105,11 @@ class Point:
     #: The element's electricity over the same interval (the engine's;
     #: the physics never sets it).
     element_wh: float = 0.0
+    #: The physics' state here, whose observation ``upper_f`` and
+    #: ``lower_f`` are; None where the engine made the point (between
+    #: the physics' points, or under an element), when the engine
+    #: estimates one from the probes.
+    state: TankState | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -137,13 +163,22 @@ def point_at(points: Sequence[Point], at: datetime) -> Point:
 
 class Physics(Protocol):
     """The calibrated tank, as the engine takes it: ``TankPhysics`` is
-    the core's."""
+    the core's. The tank is its state (``TankState``), which only it
+    reads."""
+
+    def estimate(self, upper_f: float, lower_f: float) -> TankState:
+        """The state the probes reading ``upper_f`` and ``lower_f``
+        stand for."""
+        ...
+
+    def observe(self, state: TankState) -> tuple[float, float]:
+        """The probes on ``state``: upper, lower, °F."""
+        ...
 
     def coast(
         self,
         start: datetime,
-        upper_f: float,
-        lower_f: float,
+        state: TankState,
         end: datetime,
         draws: Sequence[Delivered | Draw],
         heated_at: datetime | None = None,
@@ -159,8 +194,7 @@ class Physics(Protocol):
     def heat(
         self,
         start: datetime,
-        upper_f: float,
-        lower_f: float,
+        state: TankState,
         target_f: float,
         *,
         hold_minutes: float = 0.0,
@@ -176,11 +210,15 @@ class Physics(Protocol):
         long, and climbs after."""
         ...
 
-    def draw(
-        self, at: datetime, upper_f: float, lower_f: float, gal: float
-    ) -> tuple[float, float]:
+    def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
         """The tank just after a delivered draw of ``gal`` at ``at``."""
         ...
+
+
+def _zones(state: TankState) -> TwoZone:
+    if not isinstance(state, TwoZone):
+        raise TypeError(f"not TankPhysics' state: {state!r}")
+    return state
 
 
 def ambient_window_mean(
@@ -287,16 +325,23 @@ class TankPhysics:
         self.failed_recoveries = 0
         self.last_failure: str | None = None
 
+    def estimate(self, upper_f: float, lower_f: float) -> TwoZone:
+        return TwoZone(upper_f, lower_f)
+
+    def observe(self, state: TankState) -> tuple[float, float]:
+        z = _zones(state)
+        return z.upper_f, z.lower_f
+
     def coast(
         self,
         start: datetime,
-        upper_f: float,
-        lower_f: float,
+        state: TankState,
         end: datetime,
         draws: Sequence[Delivered | Draw],
         heated_at: datetime | None = None,
     ) -> Coast:
         p = self.params
+        upper_f, lower_f = self.observe(state)
         flowing = (
             self.flowing_draws(start, end)
             if self.flowing_draws is not None
@@ -337,7 +382,10 @@ class TankPhysics:
             tank=p.tank,
         )
         return Coast(
-            [Point(at, up, lo) for at, up, lo in decay.trajectory],
+            [
+                Point(at, up, lo, state=TwoZone(up, lo))
+                for at, up, lo in decay.trajectory
+            ],
             decay.impulses,
             draw_volume_gal=decay.draw_volume_gal,
             draw_heat_btu=decay.draw_heat_btu,
@@ -416,13 +464,14 @@ class TankPhysics:
     def heat(
         self,
         start: datetime,
-        upper_f: float,
-        lower_f: float,
+        state: TankState,
         target_f: float,
+        *,
         hold_minutes: float = 0.0,
         draw_load: float = 0.0,
     ) -> Heat | None:
-        first = Point(start, upper_f, lower_f, 0.0)
+        upper_f, lower_f = self.observe(state)
+        first = Point(start, upper_f, lower_f, 0.0, state=state)
         if lower_f >= target_f:
             return Heat([first], 1.0)
         p = self._predict(
@@ -452,7 +501,13 @@ class TankPhysics:
         # (``sim.heat_pump_recovery._path_publishable`` leaves no path then).
         if p.path is not None:
             points = [
-                Point(pt.at, pt.t_upper_f, pt.t_lower_f, pt.input_energy_wh)
+                Point(
+                    pt.at,
+                    pt.t_upper_f,
+                    pt.t_lower_f,
+                    pt.input_energy_wh,
+                    state=TwoZone(pt.t_upper_f, pt.t_lower_f),
+                )
                 for pt in build_heating_trajectory(
                     p.path,
                     served_minutes=p.minutes,
@@ -477,17 +532,25 @@ class TankPhysics:
         points = [first]
         if hold > 0.0:
             points.append(
-                Point(start + timedelta(minutes=hold), upper_f, lower_f, None)
+                Point(
+                    start + timedelta(minutes=hold),
+                    upper_f,
+                    lower_f,
+                    None,
+                    state=state,
+                )
             )
         for i in range(1, steps + 1):
             f = i / steps
             lower = lower_f + (target_f - lower_f) * f
+            upper = max(upper_f, lower)
             points.append(
                 Point(
                     start + timedelta(minutes=hold + minutes * f),
-                    max(upper_f, lower),
+                    upper,
                     lower,
                     None,
+                    state=TwoZone(upper, lower),
                 )
             )
         return Heat(points, p.confidence, reasons, linear=True)
@@ -503,23 +566,24 @@ class TankPhysics:
         air = self.ambient if self.air_readings is None else self.air_readings
         return air.outside(start, end, low, high)
 
-    def draw(
-        self, at: datetime, upper_f: float, lower_f: float, gal: float
-    ) -> tuple[float, float]:
+    def draw(self, at: datetime, state: TankState, gal: float) -> TwoZone:
         d = self.params.draw
+        z = _zones(state)
         # As in ``coast``: with draws off, a draw does not move the tank.
         if not self.draws_on or d.observability is None:
-            return upper_f, lower_f
-        return draw_step(
-            upper_f,
-            lower_f,
-            gal,
-            draw_observability=d.observability,
-            draw_inlet_temp_f=self.draw_inlet_temp_f,
-            tmv_delivery_intercept_f=d.delivery_intercept_f,
-            tmv_delivery_slope=d.delivery_slope,
-            draw_reach_gate_f=d.reach_gate_f,
-            draw_reach_offset_f=d.reach_offset_f,
-            draw_reach_gal=d.reach_gal,
-            draw_upper_f_per_gal=d.upper_f_per_gal,
+            return z
+        return TwoZone(
+            *draw_step(
+                z.upper_f,
+                z.lower_f,
+                gal,
+                draw_observability=d.observability,
+                draw_inlet_temp_f=self.draw_inlet_temp_f,
+                tmv_delivery_intercept_f=d.delivery_intercept_f,
+                tmv_delivery_slope=d.delivery_slope,
+                draw_reach_gate_f=d.reach_gate_f,
+                draw_reach_offset_f=d.reach_offset_f,
+                draw_reach_gal=d.reach_gal,
+                draw_upper_f_per_gal=d.upper_f_per_gal,
+            )
         )

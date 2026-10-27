@@ -253,8 +253,8 @@ The pieces the entry points are built from.
    :members:
 
 .. automodule:: nwp500.sim.tank_physics
-   :members: TankPhysics, Physics, Point, Coast, Heat, point_at,
-      ambient_window_mean, REFINE_TOL_MINUTES
+   :members: TankPhysics, Physics, TankState, TwoZone, Point, Coast,
+      Heat, point_at, ambient_window_mean, REFINE_TOL_MINUTES
 
 .. automodule:: nwp500.sim.heat_pump_recovery
    :members: physics_recovery, PhysicsRecovery, recovery, Recovery,
