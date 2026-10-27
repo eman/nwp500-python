@@ -18,7 +18,7 @@ from nwp500.sim.heat_pump_recovery import (
     recovery,
 )
 from nwp500.sim.params import HeaterParams, params_from_document
-from nwp500.sim.tank_physics import TankPhysics
+from nwp500.sim.tank_physics import TankPhysics, TwoZone, point_at
 
 FIXTURES = Path(__file__).with_name("fixtures") / "sim"
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
@@ -77,14 +77,13 @@ def _context(*, truncated: bool) -> RecoveryContext:
 
 class TestDraws:
     def test_with_draws_off_a_draw_moves_nothing(self) -> None:
-        assert _physics(draws_on=False).draw(T0, 130.0, 110.0, 10.0) == (
-            130.0,
-            110.0,
-        )
+        assert _physics(draws_on=False).draw(
+            T0, TwoZone(130.0, 110.0), 10.0
+        ) == TwoZone(130.0, 110.0)
 
     def test_a_draw_cools_the_tank(self) -> None:
-        upper, lower = _physics().draw(T0, 130.0, 110.0, 10.0)
-        assert upper + lower < 240.0
+        got = _physics().draw(T0, TwoZone(130.0, 110.0), 10.0)
+        assert got.upper_f + got.lower_f < 240.0
 
     def test_the_draw_terms_are_the_parameters(self) -> None:
         """A wider reach gate moves the lower zone less for the same
@@ -93,16 +92,18 @@ class TestDraws:
         wide = dataclasses.replace(
             p, draw=dataclasses.replace(p.draw, reach_gate_f=60.0)
         )
-        upper, lower = _physics(p).draw(T0, 130.0, 110.0, 10.0)
-        _, wide_lower = _physics(wide).draw(T0, 130.0, 110.0, 10.0)
-        assert 110.0 - wide_lower < 110.0 - lower
-        assert upper == pytest.approx(130.0 - 10.0 * p.draw.upper_f_per_gal)
+        got = _physics(p).draw(T0, TwoZone(130.0, 110.0), 10.0)
+        wide_got = _physics(wide).draw(T0, TwoZone(130.0, 110.0), 10.0)
+        assert 110.0 - wide_got.lower_f < 110.0 - got.lower_f
+        assert got.upper_f == pytest.approx(
+            130.0 - 10.0 * p.draw.upper_f_per_gal
+        )
 
 
 class TestRecoveryReasons:
     def test_a_models_reasons_reach_the_heat(self) -> None:
         heat = _physics(recovery_model=_Model(("model_extrapolated",))).heat(
-            T0, 125.0, 100.0, 140.0
+            T0, TwoZone(125.0, 100.0), 140.0
         )
         assert heat is not None
         assert "model_extrapolated" in heat.reasons
@@ -111,7 +112,7 @@ class TestRecoveryReasons:
         heat = _physics(
             recovery_model=_Model(("model_extrapolated",)),
             low_confidence_floor=2.0,
-        ).heat(T0, 125.0, 100.0, 140.0)
+        ).heat(T0, TwoZone(125.0, 100.0), 140.0)
         assert heat is not None
         assert heat.reasons == ("model_extrapolated", "recovery_low_confidence")
 
@@ -182,3 +183,29 @@ class TestTheAmbientSeries:
         )
         assert not given.ambient_defaulted
         assert given.t_amb_mean == pytest.approx(56.0)
+
+
+class TestState:
+    def test_the_probes_are_the_states_observation(self) -> None:
+        physics = _physics()
+        state = physics.estimate(130.0, 110.0)
+        assert physics.observe(state) == (130.0, 110.0)
+        coast = physics.coast(T0, state, T0 + timedelta(hours=3), [])
+        heat = physics.heat(T0, state, 140.0)
+        assert heat is not None
+        for p in (*coast.points, *heat.points):
+            assert p.state is not None
+            assert physics.observe(p.state) == (p.upper_f, p.lower_f)
+
+    def test_another_physics_state_is_refused(self) -> None:
+        with pytest.raises(TypeError):
+            _physics().observe((130.0, 110.0))
+
+    def test_a_path_keeps_its_state_on_its_points(self) -> None:
+        physics = _physics()
+        coast = physics.coast(
+            T0, physics.estimate(130.0, 110.0), T0 + timedelta(hours=3), []
+        )
+        a, b = coast.points[1], coast.points[2]
+        assert point_at(coast.points, a.at).state is a.state
+        assert point_at(coast.points, a.at + (b.at - a.at) / 2).state is None

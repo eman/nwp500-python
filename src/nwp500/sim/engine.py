@@ -109,6 +109,7 @@ from nwp500.sim.tank_physics import (
     Heat,
     Physics,
     Point,
+    TankState,
     point_at,
 )
 from nwp500.sim.tou_triggers import Window
@@ -423,7 +424,7 @@ class _Cycle:
     start: Start
     #: The setpoint whose recovery this is.
     setpoint_f: float
-    origin: tuple[datetime, float, float]
+    origin: tuple[datetime, TankState]
     #: The origin's served path to each target asked for, unshifted.
     bases: dict[float, Heat]
     #: The path from now to where this recovery ends.
@@ -544,8 +545,10 @@ class _Engine:
         self.recorded_lead: list[Draw] = [d for d in lead_draws if d[0] < start]
         #: The rest of a running compressor's hold at the start, minutes.
         self.running_hold = running_hold if running else 0.0
-        self.upper = upper_f
-        self.lower = lower_f
+        #: The tank, as the physics carries it (``_set``), and its
+        #: probes, which everything else reads.
+        self.tank_state: TankState = physics.estimate(upper_f, lower_f)
+        self.probes = physics.observe(self.tank_state)
         self.running = running
         self.element_running = element_running
         self.element_running_since = element_running_since
@@ -684,6 +687,45 @@ class _Engine:
                 )
             self.queue.append((fires, len(self.writes)))
             self.writes.append(w)
+
+    # ── the tank ──
+
+    @property
+    def upper(self) -> float:
+        """The upper probe on the tank now."""
+        return self.probes[0]
+
+    @property
+    def lower(self) -> float:
+        """The lower probe on the tank now."""
+        return self.probes[1]
+
+    def _set(self, state: TankState) -> None:
+        """The tank is now ``state``."""
+        self.tank_state = state
+        self.probes = self.physics.observe(state)
+
+    def _adopt(self, point: Point) -> None:
+        """The tank is now the one at ``point``: its state, or where the
+        engine made the point, the physics' estimate from its probes."""
+        self._set(
+            point.state
+            if point.state is not None
+            else self.physics.estimate(point.upper_f, point.lower_f)
+        )
+
+    def _respond(
+        self, at: datetime, upper_f: float, lower_f: float, gal: float
+    ) -> tuple[float, float]:
+        """The probes just after a draw of ``gal`` at ``at`` from a tank
+        reading ``upper_f`` and ``lower_f``: the ledger's draw response
+        (``DrawsAhead.respond``)."""
+        state = self.physics.estimate(upper_f, lower_f)
+        return self.physics.observe(self.physics.draw(at, state, gal))
+
+    def _origin_lower(self, cycle: _Cycle) -> float:
+        """The lower probe where ``cycle``'s recovery began."""
+        return self.physics.observe(cycle.origin[1])[1]
 
     # ── the controller ──
 
@@ -877,7 +919,7 @@ class _Engine:
                     self.mode,
                 )
             )
-        self.upper, self.lower = points[-1].upper_f, points[-1].lower_f
+        self._adopt(points[-1])
 
     def _overlay(
         self, points: Sequence[Point], *, heat_path: bool
@@ -973,8 +1015,7 @@ class _Engine:
         """The calibrated coast from now to ``end`` over ``draws``."""
         return self.physics.coast(
             self.t,
-            self.upper,
-            self.lower,
+            self.tank_state,
             end,
             draws,
             heated_at=self._heated_at(),
@@ -997,14 +1038,14 @@ class _Engine:
     def _base(self, cycle: _Cycle, target: float) -> Heat:
         """The origin's served path to ``target``, predicted once."""
         if target not in cycle.bases:
-            t0, up, lo = cycle.origin
+            t0, state = cycle.origin
             kw: dict[str, float] = {}
             if cycle.hold_minutes > 0.0:
                 kw["hold_minutes"] = cycle.hold_minutes
             if cycle.lead_load > 0.0:
                 kw["draw_load"] = cycle.lead_load
             truncated = getattr(self.physics, "truncated_recoveries", 0)
-            heat = self.physics.heat(t0, up, lo, target, **kw)
+            heat = self.physics.heat(t0, state, target, **kw)
             if heat is None:
                 if getattr(self.physics, "truncated_recoveries", 0) > truncated:
                     # A weak fit or very cold air, not missing physics.
@@ -1032,7 +1073,7 @@ class _Engine:
             at: datetime | None = base.points[0].at
         elif (
             into < timedelta(minutes=cycle.hold_minutes)
-            and self.lower <= cycle.origin[2] + 1e-9
+            and self.lower <= self._origin_lower(cycle) + 1e-9
         ):
             # Still in the start's hold, where the path is flat: placed
             # by the clock, or a write would skip the rest of it.
@@ -1045,7 +1086,9 @@ class _Engine:
         placed = _slice(shifted, self.t, shifted[-1].at)
         # It starts from the tank as it is, which a draw or a pause may
         # have left a little off the path's upper zone.
-        placed[0] = Point(self.t, self.upper, self.lower, 0.0)
+        placed[0] = Point(
+            self.t, self.upper, self.lower, 0.0, state=self.tank_state
+        )
         return placed
 
     def _lead_load(self) -> float:
@@ -1061,7 +1104,9 @@ class _Engine:
             return 0.0
         drop = 0.0
         for at, gal in lead:
-            up, lo = self.physics.draw(at, self.upper, self.lower, gal)
+            up, lo = self.physics.observe(
+                self.physics.draw(at, self.tank_state, gal)
+            )
             drop += (self.upper + self.lower - up - lo) / 2.0
         return drop / max(self.sp - self.lower, _MIN_LOAD_DEFICIT_F)
 
@@ -1080,16 +1125,19 @@ class _Engine:
         """
         cycle = self.cycle
         assert cycle is not None
-        if renew or self.lower < cycle.origin[2] - 1e-9:
+        if renew or self.lower < self._origin_lower(cycle) - 1e-9:
             # Colder than where the cycle began: no point of its path
             # matches, so the recovery is predicted afresh from here.
-            cycle.origin = (self.t, self.upper, self.lower)
+            cycle.origin = (self.t, self.tank_state)
             cycle.bases = {}
             cycle.lead_load = 0.0
             gone = (self.t - cycle.start.at).total_seconds() / 60.0
             cycle.hold_minutes = max(0.0, cycle.hold_total - gone)
         target = cycle.setpoint_f
-        empty = Heat([Point(self.t, self.upper, self.lower, 0.0)], 1.0)
+        empty = Heat(
+            [Point(self.t, self.upper, self.lower, 0.0, state=self.tank_state)],
+            1.0,
+        )
         # The heat pump stops at the top of its water range.
         stop = min(
             target + self.params.hp_stop_overshoot_f,
@@ -1144,9 +1192,20 @@ class _Engine:
         self.cycle = _Cycle(
             start=start,
             setpoint_f=self.sp,
-            origin=(self.t, self.upper, self.lower),
+            origin=(self.t, self.tank_state),
             bases={},
-            heat=Heat([Point(self.t, self.upper, self.lower, 0.0)], 1.0),
+            heat=Heat(
+                [
+                    Point(
+                        self.t,
+                        self.upper,
+                        self.lower,
+                        0.0,
+                        state=self.tank_state,
+                    )
+                ],
+                1.0,
+            ),
             capped=False,
             hold_total=hold,
             hold_minutes=hold,
@@ -1212,9 +1271,7 @@ class _Engine:
             if now:
                 upper, lower = self.upper, self.lower
                 for _, gal in now:
-                    self.upper, self.lower = self.physics.draw(
-                        self.t, self.upper, self.lower, gal
-                    )
+                    self._set(self.physics.draw(self.t, self.tank_state, gal))
                 moved = self._follow_ledger(upper, lower)
                 self._step_point()
                 # A draw can take the lower zone out of the heat pump's
@@ -1721,9 +1778,7 @@ class _Engine:
         rather than across a coast's grid."""
         upper, lower = self.upper, self.lower
         for _, gal in self._take_draws(self.t, self.t + _INSTANT):
-            self.upper, self.lower = self.physics.draw(
-                self.t, self.upper, self.lower, gal
-            )
+            self._set(self.physics.draw(self.t, self.tank_state, gal))
         if self.lower < lower:
             self._drop = Impulse(self.t, lower, self.lower)
         self._follow_ledger(upper, lower)
@@ -1746,7 +1801,9 @@ class _Engine:
         lockout, waits as a pending start from now: the walk may next
         stop at another draw, where this one's drop is no longer seen."""
         ahead = self._trigger_ahead(
-            Coast([Point(self.t, self.upper, self.lower)])
+            Coast(
+                [Point(self.t, self.upper, self.lower, state=self.tank_state)]
+            )
         )
         if (
             ahead is not None
@@ -1815,7 +1872,7 @@ class _Engine:
         self._stood(said.stand)
         if said.upper_f is None:
             return False
-        self.upper = said.upper_f
+        self._set(self.physics.estimate(said.upper_f, self.lower))
         return True
 
     def _zone_bound(self, upper: float, lower: float) -> ZoneBound | None:
@@ -1958,7 +2015,7 @@ class _Engine:
                 pending=pending,
                 onsets=onsets,
                 points=points,
-                respond=self.physics.draw,
+                respond=self._respond,
                 stand=self.ledger_carry,
                 bound=bound,
             )

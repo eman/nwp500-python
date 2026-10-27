@@ -60,7 +60,7 @@ from nwp500.sim.params import (
     unknown_fields,
 )
 from nwp500.sim.physics.heat_pump import start_hold_min
-from nwp500.sim.tank_physics import TankPhysics
+from nwp500.sim.tank_physics import TankPhysics, TankState, TwoZone
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
@@ -196,10 +196,10 @@ class TestTheBookInASimulation:
 
         class SecondLeavesItWarm(TankPhysics):
             def draw(
-                self, at: datetime, upper_f: float, lower_f: float, gal: float
-            ) -> tuple[float, float]:
-                upper, lower = super().draw(at, upper_f, lower_f, gal)
-                return (upper, 106.0) if at == second else (upper, lower)
+                self, at: datetime, state: TankState, gal: float
+            ) -> TwoZone:
+                got = super().draw(at, state, gal)
+                return replace(got, lower_f=106.0) if at == second else got
 
         stamps = pd.date_range(at(-2), at(30), freq="1h")
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
@@ -254,10 +254,9 @@ class TestTheBookInASimulation:
 
         class DrawLeavesItWarm(TankPhysics):
             def draw(
-                self, at: datetime, upper_f: float, lower_f: float, gal: float
-            ) -> tuple[float, float]:
-                upper, _ = super().draw(at, upper_f, lower_f, gal)
-                return upper, 106.0
+                self, at: datetime, state: TankState, gal: float
+            ) -> TwoZone:
+                return replace(super().draw(at, state, gal), lower_f=106.0)
 
         stamps = pd.date_range(at(-2), at(30), freq="1h")
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)

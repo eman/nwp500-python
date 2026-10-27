@@ -932,8 +932,7 @@ def standby(
     draws = [(d.at, d.gallons) for d in loads.draws if start <= d.at < until]
     coast = physics.coast(
         start,
-        state.upper_f,
-        state.lower_f,
+        physics.estimate(state.upper_f, state.lower_f),
         until,
         draws,
         heated_at=history.heated_at,
@@ -1176,7 +1175,9 @@ def _to_start(
             circulation=_circulation(s.loads, params),
         )
         for g in at_start:
-            upper, lower = physics.draw(start, upper, lower, g)
+            upper, lower = physics.observe(
+                physics.draw(start, physics.estimate(upper, lower), g)
+            )
         gal += sum(at_start)
     return upper, lower, lost, gal
 
@@ -1771,8 +1772,7 @@ def forecast(
         """The tank coasted to ``when``, and the mean air over it."""
         coast = physics.coast(
             origin,
-            state.upper_f,
-            state.lower_f,
+            physics.estimate(state.upper_f, state.lower_f),
             when,
             [],
             heated_at=history.heated_at,
