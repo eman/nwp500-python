@@ -416,7 +416,7 @@ class TestTheFits:
         assert fit.heat is not None and fit.overshoot_f is not None
         assert got.compressor.heat_btu_h == fit.heat.level
         assert got.controller.hp_stop_overshoot_f == fit.overshoot_f
-        claims = replace(fit, violations=("cop_over_carnot",))
+        claims = replace(fit, heat_violations=("cop_over_carnot",))
         base = sim.default_params()
         kept = hpf.with_heat_pump(base, claims)
         assert kept.compressor.heat_btu_h == base.compressor.heat_btu_h

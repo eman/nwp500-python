@@ -1603,9 +1603,9 @@ def forecast(
     """When a heat-pump recovery must start for the tank to be ready at
     ``target_time``, from ``state`` at ``at``: the tank coasts to the
     start (jacket loss, and circulation's runs in ``loads``; no draws),
-    the recovery runs from there to the lower zone's target and on past
-    it to where the heater stops
-    (``ControllerParams.hp_stop_overshoot_f``), as ``simulate``'s does,
+    the recovery runs from there to the lower zone's target (and, at
+    the heater's own threshold, on past it to where the heater stops,
+    ``ControllerParams.hp_stop_overshoot_f``, as ``simulate``'s does),
     and the start is refined to ``target_time`` less that duration, to a
     fixed point, the tank at the start projected to exactly it.
 
@@ -1681,8 +1681,10 @@ def forecast(
         circulation=_circulation(loads, params),
     )
 
-    # The heater stops past the target: the recovery's own end.
-    stop = goal + params.controller.hp_stop_overshoot_f
+    # The heater stops past its own threshold: the recovery's own end.
+    # A caller's target (a partial charge, or a TOU cap's level) is
+    # where it is asked to end.
+    stop = goal + (0.0 if override else params.controller.hp_stop_overshoot_f)
     if history.compressor_stopped_at is None and not state.compressor_running:
         defaults.append("compressor_stopped_at=None (the longest start hold)")
 
@@ -1856,8 +1858,11 @@ def active_cycle(
     the air now,
     served by ``model`` when given, the start's hold taken as over.
     Beside it, the integrator's own remaining climb. A truncated
-    integration says ``physics_truncated``. A lower zone already at its
-    target has nothing left: 0 minutes, ready now."""
+    integration says ``physics_truncated``. ``ready_at`` is when the
+    compressor stops: a lower zone at its target has the run-on left,
+    and one past it by the run-on has nothing left (0 minutes, ready
+    now). ``forecast`` asks a different question, when the tank reaches
+    its target, and finds no heating required from the target on."""
     at = _instant(at)
     if not state.compressor_running:
         return ActiveCycle(status="not_heating")

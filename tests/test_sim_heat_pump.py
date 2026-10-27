@@ -52,6 +52,21 @@ class TestTheMap:
         assert hpf.violations(C) == ()
         assert hpf.violations(sim.site_example_params().compressor) == ()
 
+    def test_a_claim_at_a_domains_edge_is_found(self) -> None:
+        # The heat less the power bends where the heat's domain ends
+        # (114 °F water), which no even grid point need hit.
+        c = replace(
+            C,
+            heat_btu_h=2942.5,
+            heat_btu_h_per_air_f=0.0,
+            heat_btu_h_per_water_f=200.0,
+            power_w=600.0,
+            power_w_per_air_f=0.0,
+            power_w_per_water_f=10.0,
+        )
+        assert hp.evaporator_btu_h(c, 65.0, 114.0) < 0.0
+        assert "evaporator_heat_negative" in hpf.violations(c)
+
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)
         assert hp.carnot_cop(80.0, 75.0) == float("inf")

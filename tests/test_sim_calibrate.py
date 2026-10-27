@@ -150,7 +150,7 @@ class TestTheFits:
             fitted,
             calibration=replace(
                 fitted.calibration,
-                heat_pump=replace(fit, violations=("cop_over_carnot",)),
+                heat_pump=replace(fit, heat_violations=("cop_over_carnot",)),
             ),
         )
         heat = _terms(claims)["Heat at 65 °F air, 120 °F water (BTU/h)"]
@@ -1207,6 +1207,49 @@ class TestKeepBetterTheHeatPump:
         assert "claims" not in judged["power_map"].why
         assert params.compressor.heat_btu_h == base.compressor.heat_btu_h
         assert hpf.violations(params.compressor) == ()
+
+    def test_the_report_says_which_plane_was_applied(self) -> None:
+        # The refit heat claims too much and is not applied; the refit
+        # power is, with the base's heat, and wins.
+        greedy = (hpf.Plane(13500.0, 55.0, -16.0), *PUMP_A[1:])
+        base = _with_pump(PUMP_B)
+        found = planted_evidence(lambda _: greedy)
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(hpf, "evidence", lambda *_, **__: found)
+            done, judged, held = sc._keep_better(
+                recovery_days(1), base, "air_f"
+            )
+        kept = {j.group: j.kept for j in judged}
+        assert (kept["heat_map"], kept["power_map"]) == ("base", "refit")
+        assert done.params.compressor.power_w == pytest.approx(400.0)
+        report = _terms(
+            sc.Calibrated(
+                done,
+                "constant",
+                1,
+                timedelta(minutes=5),
+                0,
+                (),
+                judged=judged,
+                held=held,
+            )
+        )
+        power = report["Power at 65 °F air, 120 °F water (W)"]
+        assert power.fitted and "claims" not in power.why
+        heat = report["Heat at 65 °F air, 120 °F water (BTU/h)"]
+        assert not heat.fitted and "cop_over_carnot" in heat.why
+
+    def test_a_split_keeps_each_run_whole_and_counts_rows(self) -> None:
+        import pandas as pd
+
+        # 40 blocks over 8 runs: the latest runs holding a fifth of them.
+        rows = pd.DataFrame({"cycle": np.repeat(np.arange(8), 5)})
+        fit, held = sc._split_frame(rows, True)
+        assert len(held) == 10 and set(held["cycle"]) == {6, 7}
+        assert set(fit["cycle"]).isdisjoint(held["cycle"])
+        # One run alone is never held out whole.
+        one = pd.DataFrame({"cycle": [3] * 40})
+        assert sc._split_frame(one, True)[1].empty
 
     def test_each_plane_is_checked_with_the_other_it_is_applied_with(
         self,

@@ -790,12 +790,19 @@ def violations(c: CompressorParams) -> tuple[str, ...]:
     """What ``c``'s map claims somewhere over its two maps' domains
     together that no heat pump does (``CARNOT_SHARE``,
     ``MIN_POWER_W``): ``cop_over_carnot``, ``evaporator_heat_negative``,
-    ``power_too_low``; empty when none."""
+    ``power_too_low``; empty when none. The grid holds every domain's
+    edges, where a map held to its domain bends, so the heat less the
+    power, linear between them, is checked at its extremes."""
     found: set[str] = set()
-    airs = (*c.heat_domain_air_f, *c.power_domain_air_f)
-    waters = (*c.heat_domain_water_f, *c.power_domain_water_f)
-    for air in np.linspace(min(airs), max(airs), CHECK_POINTS):
-        for water in np.linspace(min(waters), max(waters), CHECK_POINTS):
+
+    def axis(*edges: float) -> list[float]:
+        grid = np.linspace(min(edges), max(edges), CHECK_POINTS)
+        return sorted({*(float(v) for v in grid), *edges})
+
+    airs = axis(*c.heat_domain_air_f, *c.power_domain_air_f)
+    waters = axis(*c.heat_domain_water_f, *c.power_domain_water_f)
+    for air in airs:
+        for water in waters:
             a, w = float(air), float(water)
             if hp.power_w(c, a, w) < MIN_POWER_W:
                 found.add("power_too_low")
@@ -841,9 +848,10 @@ class HeatPumpFit:
     where it had too little to go on: the heat's and the power's planes,
     the hold by time off, and the overshoot at the stop; how many of
     each they were fitted on; and the in-sample errors
-    (``heat_map_error``, ``power_map_error``). ``violations``: what the
-    planes together claim that no heat pump does (``violations``), in
-    which case neither is applied."""
+    (``heat_map_error``, ``power_map_error``). ``heat_violations`` and
+    ``power_violations``: what each plane, with the other it is applied
+    with, claims that no heat pump does (``violations``), in which case
+    it is not applied; ``violations`` is either's."""
 
     heat: Plane | None
     power: Plane | None
@@ -855,7 +863,12 @@ class HeatPumpFit:
     n_runs: int
     heat_error: float | None
     power_error: float | None
-    violations: tuple[str, ...] = ()
+    heat_violations: tuple[str, ...] = ()
+    power_violations: tuple[str, ...] = ()
+
+    @property
+    def violations(self) -> tuple[str, ...]:
+        return tuple(sorted({*self.heat_violations, *self.power_violations}))
 
 
 def fit_heat_pump(found: Evidence, base: CompressorParams) -> HeatPumpFit:
@@ -863,6 +876,7 @@ def fit_heat_pump(found: Evidence, base: CompressorParams) -> HeatPumpFit:
     heat = fit_heat_map(found.heat)
     power = fit_power_map(found.power)
     planes = with_planes(base, heat, power)
+    found_claims = violations(planes)
     return HeatPumpFit(
         heat=heat,
         power=power,
@@ -876,7 +890,8 @@ def fit_heat_pump(found: Evidence, base: CompressorParams) -> HeatPumpFit:
         power_error=(
             None if power is None else power_map_error(found.power, planes)
         ),
-        violations=violations(planes),
+        heat_violations=found_claims if heat is not None else (),
+        power_violations=found_claims if power is not None else (),
     )
 
 

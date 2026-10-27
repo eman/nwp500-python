@@ -74,8 +74,10 @@ Changed
   power while the tank holds; ``simulate`` uses it with or without a
   ``RecoveryModel``, and ``start_hold`` still overrides it. The climb
   runs to ``ControllerParams.hp_stop_overshoot_f`` (0.9 °F) past the
-  target in ``simulate``, ``forecast`` and ``active_cycle``, and a
-  ``RecoveryModel`` is asked with that stop as its ``target_f``. Recorded durations already ran from start to stop, so the old
+  target in ``simulate`` and ``active_cycle``, and in ``forecast`` to
+  the heater's own threshold (not a partial charge or a TOU cap's
+  level); a ``RecoveryModel`` is asked with that stop as its
+  ``target_f``. Recorded durations already ran from start to stop, so the old
   compressor constant had absorbed both.
 
 - **Parameters are ``heater-params/2``** (breaking). A

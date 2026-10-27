@@ -100,6 +100,13 @@ class TestReadyByATime:
         )
         assert part.status == "partial_charge" and part.target_f == 120.0
         assert part.duration_minutes < full.duration_minutes
+        # To the target asked for, with no run-on past it; the heater's
+        # own threshold, with it.
+        assert part.trajectory is not None and full.trajectory is not None
+        assert part.trajectory[-1].t_lower_f == pytest.approx(120.0, abs=0.1)
+        assert full.trajectory[-1].t_lower_f == pytest.approx(
+            140.0 + params.controller.hp_stop_overshoot_f, abs=0.1
+        )
 
     def test_without_the_stop_threshold_it_heats_to_the_setpoint(
         self, params: HeaterParams

@@ -231,8 +231,9 @@ with the heat flows per hour. A step in which the gap closes takes the
 lower zone's mass up to the closure and the whole tank's after it. The
 electricity is :math:`\int P\,dt` over the same steps. The climb stops
 when the lower zone reaches the target (``hp_lower_off``) plus the
-run-on below, in ``simulate``, ``forecast`` and ``active_cycle``
-alike, or after 30 hours, reported as truncated.
+run-on below (in ``simulate`` and ``active_cycle``, and in ``forecast``
+to the heater's own threshold, not a partial charge's), or after 30
+hours, reported as truncated.
 
 **Two zones in a recovery.** The condenser coil wraps the lower part of
 the tank. While there is a gap, the heat goes into the lower zone's

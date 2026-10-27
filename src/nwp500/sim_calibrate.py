@@ -531,18 +531,22 @@ def _split_frame(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """``rows`` (in time order) without and with their latest
     (``_split``), or all of them and none when not ``hold_out``. Rows
-    of one compressor run (``cycle``) fall on one side."""
+    of one compressor run (``cycle``) fall on one side: the latest runs
+    holding at least that many rows, short of every run."""
+    n = _split(len(rows)) if hold_out else 0
     if "cycle" not in rows.columns:
-        n = _split(len(rows)) if hold_out else 0
         return rows.iloc[: len(rows) - n], rows.iloc[len(rows) - n :]
     runs = list(dict.fromkeys(rows["cycle"]))
-    n = _split(len(runs)) if hold_out else 0
-    late = (
-        rows["cycle"].isin(runs[len(runs) - n :])
-        if n
-        else rows["cycle"].isin([])
-    )
-    return rows.loc[~late], rows.loc[late]
+    per_run = rows["cycle"].value_counts()
+    late: list[object] = []
+    count = 0
+    for run in reversed(runs[1:]):
+        if count >= n:
+            break
+        late.append(run)
+        count += int(per_run[run])
+    held = rows["cycle"].isin(late)
+    return rows.loc[~held], rows.loc[held]
 
 
 def _keep_better_heat_pump(
@@ -572,6 +576,8 @@ def _keep_better_heat_pump(
     held = hpf.Evidence(held_heat, held_power, held_holds, held_runs)
     base = params.compressor
     refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, holds, runs), base)
+    # What each plane claims with the other it would be applied with.
+    found_claims: dict[str, tuple[str, ...]] = {}
 
     def plane(
         group: str,
@@ -599,6 +605,7 @@ def _keep_better_heat_pump(
                 )
             return False
         claims = hpf.violations(candidate)
+        found_claims[group] = claims
         if claims:
             if term not in unfitted:
                 why = (
@@ -704,6 +711,11 @@ def _keep_better_heat_pump(
             controller = replace(
                 controller, hp_stop_overshoot_f=refit.overshoot_f
             )
+    refit = replace(
+        refit,
+        heat_violations=found_claims.get("heat_map", ()),
+        power_violations=found_claims.get("power_map", ()),
+    )
     return (
         replace(params, compressor=compressor, controller=controller),
         refit,
@@ -1327,19 +1339,22 @@ def report(done: Calibrated) -> list[Term]:
     ]
     pump = c.heat_pump
     cp = c.params.compressor
-    claims = (
-        "the fit claims what no heat pump does "
-        f"({', '.join(pump.violations)}): not applied"
-        if pump.violations
-        else ""
-    )
+
+    def claims(found: tuple[str, ...]) -> str:
+        return (
+            "the fit claims what no heat pump does "
+            f"({', '.join(found)}): not applied"
+            if found
+            else ""
+        )
+
     air_why = air_unread_note(done) if done.n_runs_without_air else ""
 
     def needs(n: int, what: str, needed: int) -> str:
         why = f"{n} {what}; {needed} needed"
         return f"{air_why}; {why}" if air_why else why
 
-    heat_why = claims or (
+    heat_why = claims(pump.heat_violations) or (
         ""
         if pump.heat is not None
         else needs(
@@ -1348,7 +1363,7 @@ def report(done: Calibrated) -> list[Term]:
             hpf.MIN_HEAT_STRETCHES,
         )
     )
-    power_why = claims or (
+    power_why = claims(pump.power_violations) or (
         ""
         if pump.power is not None
         else needs(pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS)
@@ -1359,8 +1374,8 @@ def report(done: Calibrated) -> list[Term]:
     power_error = (
         "-" if pump.power_error is None else f"{pump.power_error:.1f} W rms"
     )
-    heat_ok = pump.heat is not None and not pump.violations
-    power_ok = pump.power is not None and not pump.violations
+    heat_ok = pump.heat is not None and not pump.heat_violations
+    power_ok = pump.power is not None and not pump.power_violations
     terms += [
         Term(
             name,
