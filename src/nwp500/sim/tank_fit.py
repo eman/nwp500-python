@@ -1,0 +1,585 @@
+"""The stratified tank (``physics.stratified``) fitted to a recorded
+history.
+
+Two probes do not say where the water below the lower one is: a tank
+that coasts after a draw and one that coasts after a recovery read
+alike and behave apart. So each event is started from the layers the
+history before it leaves (``replay``): the tank walked through the
+recorded heating, draws and circulation, corrected to the probes every
+``ASSIMILATE_EVERY``, the probes' own readings at the event laid over
+it (``start_state``).
+
+``fit`` then fits the tank's terms (``TERMS``) by robust least squares
+on the probes' errors over the record's quiet coasts and the hours
+after its draws (``Coast``), each event weighted alike. A fit walks
+every event at every trial, so it takes ``map_`` to spread them: the
+builtin ``map`` by default, an executor's ``map`` to use more cores.
+
+The record carries no word on which element heats; its element runs
+are taken as the upper's, where the heater runs its elements first.
+
+Nothing here reads a file, the network or the clock.
+"""
+
+import math
+from bisect import bisect_left, bisect_right
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
+
+import numpy as np
+import pandas as pd
+from scipy.optimize import least_squares
+
+from nwp500.sim.circulation import cooled_share
+from nwp500.sim.params import HeaterParams
+from nwp500.sim.physics import stratified as st
+from nwp500.sim.physics.heat_pump import start_hold_min
+
+__author__ = "Emmanuel Levijarvi"
+__copyright__ = "Emmanuel Levijarvi"
+__license__ = "MIT"
+
+#: A reading: an instant and a value.
+Reading = tuple[datetime, float]
+#: A pair of probe readings at an instant: (instant, upper, lower).
+Observed = tuple[datetime, float, float]
+#: A run of something on: its first and its last-plus-one minute.
+Run = tuple[int, int]
+
+#: The record's grid.
+MINUTE = timedelta(minutes=1)
+#: How far back ``replay`` starts before an event.
+REPLAY = timedelta(hours=24)
+#: How often ``replay`` corrects the layers to the probes.
+ASSIMILATE_EVERY = timedelta(minutes=10)
+
+#: The terms ``fit`` fits: (the params group, the field, its lower and
+#: upper bounds, its typical step). The probe heights are shares of the
+#: volume; the spreads and the inlet zone gallons.
+TERMS: tuple[tuple[str, str, float, float, float], ...] = (
+    ("loss", "ua_side_btu_hr_f", 0.0, 10.0, 0.5),
+    ("loss", "ua_bottom_btu_hr_f", 0.0, 10.0, 1.0),
+    ("loss", "ua_top_btu_hr_f", 0.0, 10.0, 0.5),
+    ("tank", "conductance_btu_hr_f", 0.01, 10.0, 0.3),
+    ("tank", "lower_probe_height", 0.05, 0.5, 0.05),
+    ("tank", "lower_probe_spread_gal", 0.0, 20.0, 3.0),
+    ("tank", "lower_probe_offset_f", -3.0, 3.0, 0.5),
+    ("tank", "upper_probe_height", 0.6, 0.98, 0.05),
+    ("tank", "upper_probe_spread_gal", 0.0, 20.0, 2.0),
+    ("tank", "inlet_mix_gal", 0.0, 30.0, 2.0),
+)
+
+
+@dataclass(frozen=True, eq=False)
+class TankRecord:
+    """A history on a one-minute grid from ``start``: the probes and the
+    air as of each minute (NaN unknown), the runs of the compressor, the
+    elements and the circulation, and the draws, ``(onset, delivered
+    gallons)``. Its arrays are read-only."""
+
+    start: datetime
+    upper_f: np.ndarray = field(repr=False)
+    lower_f: np.ndarray = field(repr=False)
+    air_f: np.ndarray = field(repr=False)
+    compressor: tuple[Run, ...] = field(repr=False)
+    element: tuple[Run, ...] = field(repr=False)
+    circulating: tuple[Run, ...] = field(repr=False)
+    draws: tuple[tuple[datetime, float], ...] = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if self.start.tzinfo is None:
+            raise ValueError("the record's start is aware")
+        n = len(self.upper_f)
+        for name in ("upper_f", "lower_f", "air_f"):
+            a = np.array(getattr(self, name), dtype=float)
+            if len(a) != n:
+                raise ValueError(f"{name} is not the record's length")
+            a.setflags(write=False)
+            object.__setattr__(self, name, a)
+
+    def __len__(self) -> int:
+        return len(self.upper_f)
+
+    def minute(self, at: datetime) -> int:
+        """The minute ``at`` falls in."""
+        return math.floor((at - self.start) / MINUTE)
+
+    def instant(self, minute: int) -> datetime:
+        return self.start + minute * MINUTE
+
+    def air_at(self, at: datetime) -> float:
+        """The air as of ``at``: the record's nearest minute inside it."""
+        i = min(len(self) - 1, max(0, self.minute(at)))
+        return float(self.air_f[i])
+
+    def before(self, at: datetime, span: timedelta = REPLAY) -> TankRecord:
+        """The part of the record ``replay`` reads for ``at``: from
+        ``span`` before it, on the clock's grid, to it, with the runs
+        reaching into it and the compressor's run before those (its
+        time off sets the next one's hold). Small enough to hand to
+        another process."""
+        step = ASSIMILATE_EVERY // MINUTE
+        i = max(0, self.minute(at - span))
+        i -= (i - self.minute(datetime(1970, 1, 1, tzinfo=UTC))) % step
+        i = max(0, i)
+        j = min(len(self), max(i, self.minute(at) + 1))
+
+        def runs(of: tuple[Run, ...]) -> tuple[Run, ...]:
+            k = _overlapping(of, i, j)
+            first = max(0, k.start - 1) if of is self.compressor else k.start
+            return tuple((a - i, b - i) for a, b in of[first : k.stop])
+
+        a, b = self.instant(i), self.instant(j)
+        lo = bisect_left(self.draws, (a, -math.inf))
+        hi = bisect_left(self.draws, (b, -math.inf))
+        return TankRecord(
+            start=a,
+            upper_f=self.upper_f[i:j],
+            lower_f=self.lower_f[i:j],
+            air_f=self.air_f[i:j],
+            compressor=runs(self.compressor),
+            element=runs(self.element),
+            circulating=runs(self.circulating),
+            draws=self.draws[lo:hi],
+        )
+
+
+def _runs(on: np.ndarray) -> tuple[Run, ...]:
+    edges = np.diff(np.r_[0, on.astype(np.int8), 0])
+    starts = np.where(edges == 1)[0]
+    ends = np.where(edges == -1)[0]
+    return tuple(zip(starts.tolist(), ends.tolist(), strict=True))
+
+
+def tank_record(
+    frame: pd.DataFrame, draws: Iterable[tuple[datetime, float]] = ()
+) -> TankRecord:
+    """The record of a history frame (``sim_calibrate.prepare``): its
+    ``upper_f``, ``lower_f``, ``air_f`` (held through its gaps),
+    ``compressor_on``, ``element_on`` and ``circulating`` as of each
+    minute, and the ``draws`` from a meter, ``(onset, delivered
+    gallons)``."""
+    if frame.empty:
+        raise ValueError("the frame is empty")
+    for name in ("upper_f", "lower_f", "air_f"):
+        if name not in frame.columns:
+            raise ValueError(f"the frame has no {name}")
+    rows = frame[~frame.index.duplicated(keep="last")].sort_index()
+    first = pd.Timestamp(rows.index[0]).ceil("1min")
+    grid = pd.date_range(first, pd.Timestamp(rows.index[-1]), freq="1min")
+
+    def column(name: str) -> pd.Series:
+        return cast(pd.Series, rows[name])
+
+    def held(name: str) -> np.ndarray:
+        if name not in rows.columns:
+            return np.zeros(len(grid), dtype=bool)
+        on = column(name).astype("boolean").fillna(False).astype(bool)
+        return on.reindex(grid, method="ffill").fillna(False).to_numpy()
+
+    def value(name: str) -> pd.Series:
+        return column(name).astype(float).reindex(grid, method="ffill")
+
+    return TankRecord(
+        start=cast(datetime, first.to_pydatetime()).astimezone(UTC),
+        upper_f=value("upper_f").to_numpy(dtype=float),
+        lower_f=value("lower_f").to_numpy(dtype=float),
+        # The air holds through a gap in its readings, and before the
+        # first, as the walk needs one.
+        air_f=value("air_f").ffill().bfill().to_numpy(dtype=float),
+        compressor=_runs(held("compressor_on")),
+        element=_runs(held("element_on")),
+        circulating=_runs(held("circulating")),
+        draws=tuple(sorted((t, float(g)) for t, g in draws if g > 0.0)),
+    )
+
+
+# ── the replay ──
+
+
+def _overlapping(runs: Sequence[Run], i: int, j: int) -> range:
+    """The indices of the runs that overlap minutes ``[i, j)``."""
+    k = bisect_right(runs, (i, math.inf))
+    if k > 0 and runs[k - 1][1] > i:
+        k -= 1
+    m = k
+    while m < len(runs) and runs[m][0] < j:
+        m += 1
+    return range(k, m)
+
+
+def _compressor(
+    params: HeaterParams, record: TankRecord, run: Run, k: int
+) -> st.Compressor:
+    """The compressor run ``run`` (the ``k``-th): its hold by the time
+    off before it."""
+    a, b = run
+    off = float(a - record.compressor[k - 1][1]) if k > 0 else None
+    hold = start_hold_min(params.compressor, off)
+    on_at = record.instant(a)
+    return st.Compressor(
+        params=params.compressor,
+        on_at=on_at,
+        heats_at=on_at + timedelta(minutes=hold),
+        off_at=record.instant(b),
+    )
+
+
+def _flows(
+    params: HeaterParams, record: TankRecord, i: int, j: int
+) -> list[st.Flowing]:
+    """The circulation runs over minutes ``[i, j)``: the water the
+    circuit's pipe cooled comes back first, at the return's rest
+    (``CirculationParams.return_rest_offset_f`` above the air), as much
+    as the pipe cooled since the last run (``circulation.cooled_share``);
+    then the run's own water, back at the upper probe's reading."""
+    c = params.circulation
+    if c is None or c.flow_gpm <= 0.0:
+        return []
+    runs = record.circulating
+    out: list[st.Flowing] = []
+    for k in _overlapping(runs, i, j):
+        a, b = runs[k]
+        rest = (a - runs[k - 1][1]) / 60.0 if k > 0 else None
+        cooled = c.displaced_gal * cooled_share(rest, c.return_cool_tau_h)
+        turn = record.instant(a) + timedelta(minutes=cooled / c.flow_gpm)
+        lo, hi = record.instant(max(a, i)), record.instant(min(b, j))
+        air = float(record.air_f[max(a, 0)])
+        if lo < min(turn, hi):
+            out.append(
+                st.Flowing(
+                    start=lo,
+                    end=min(turn, hi),
+                    gpm=c.flow_gpm,
+                    inflow_f=air + c.return_rest_offset_f,
+                )
+            )
+        if max(turn, lo) < hi:
+            m = max(record.minute(max(turn, lo)), 0)
+            back = float(record.upper_f[m])
+            out.append(
+                st.Flowing(
+                    start=max(turn, lo),
+                    end=hi,
+                    gpm=c.flow_gpm,
+                    inflow_f=back if math.isfinite(back) else air,
+                )
+            )
+    return out
+
+
+def _span(
+    lay: st.Layout,
+    params: HeaterParams,
+    record: TankRecord,
+    state: st.TankState,
+    i: int,
+    j: int,
+) -> st.TankState:
+    """``state`` walked over minutes ``[i, j)`` of the record: split
+    where a second compressor run starts, so each walk has one."""
+    runs = _overlapping(record.compressor, i, j)
+    if len(runs) > 1:
+        cut = record.compressor[runs[1]][0]
+        state = _span(lay, params, record, state, i, cut)
+        return _span(lay, params, record, state, cut, j)
+    compressor = (
+        _compressor(params, record, record.compressor[runs[0]], runs[0])
+        if runs
+        else None
+    )
+    lag = timedelta(minutes=params.element.upper_dead_time_min)
+    reach = math.ceil(lag / MINUTE)
+    elements = tuple(
+        st.Element(
+            zone="upper",
+            watts=params.element.element_w,
+            on_at=record.instant(record.element[k][0]),
+            off_at=record.instant(record.element[k][1]),
+            lag=lag,
+        )
+        for k in _overlapping(record.element, i - reach, j)
+    )
+    start, end = record.instant(i), record.instant(j)
+    lo = bisect_left(record.draws, (start, -math.inf))
+    hi = bisect_left(record.draws, (end, -math.inf))
+    d = params.draw
+    walked = st.walk(
+        lay,
+        state,
+        start,
+        end,
+        air_f=record.air_at,
+        heating=st.Heating(compressor=compressor, elements=elements),
+        flowing=_flows(params, record, i, j),
+        draws=[
+            st.Delivered(at=t, gal=g, inflow_f=d.inlet_temp_f)
+            for t, g in record.draws[lo:hi]
+        ],
+        valve=(d.delivery_intercept_f, d.delivery_slope),
+    )
+    return walked.state
+
+
+def _known(record: TankRecord, i: int) -> bool:
+    return bool(
+        math.isfinite(record.upper_f[i])
+        and math.isfinite(record.lower_f[i])
+        and math.isfinite(record.air_f[i])
+    )
+
+
+def replay(
+    lay: st.Layout,
+    params: HeaterParams,
+    record: TankRecord,
+    until: datetime,
+    *,
+    span: timedelta = REPLAY,
+    gain: float = 1.0,
+) -> st.TankState | None:
+    """The layers at ``until`` the record leaves: from ``estimate`` of
+    the probes ``span`` before it, walked through the record's heating,
+    draws and circulation, corrected to the probes by ``gain``
+    (``stratified.assimilate``) every ``ASSIMILATE_EVERY`` they are
+    read. None when the record does not reach back to a reading of both
+    probes and the air before ``until``."""
+    step = ASSIMILATE_EVERY // MINUTE
+    end = record.minute(until)
+    if end <= 0 or end > len(record):
+        return None
+    i = max(0, record.minute(until - span))
+    # On the clock's grid, as every walk is.
+    i += (record.minute(datetime(1970, 1, 1, tzinfo=UTC)) - i) % step
+    while i < end and not _known(record, i):
+        i += step
+    if i >= end:
+        return None
+    state = st.mix(
+        st.estimate(lay, float(record.upper_f[i]), float(record.lower_f[i]))
+    )
+    while i < end:
+        j = min(end, i + step)
+        state = _span(lay, params, record, state, i, j)
+        if j < len(record) and _known(record, j):
+            state = st.mix(
+                st.assimilate(
+                    lay,
+                    state,
+                    float(record.upper_f[j]),
+                    float(record.lower_f[j]),
+                    gain,
+                )
+            )
+        i = j
+    return state
+
+
+def start_state(
+    lay: st.Layout,
+    params: HeaterParams,
+    record: TankRecord | None,
+    at: datetime,
+    upper_f: float,
+    lower_f: float,
+) -> st.TankState:
+    """The layers an event at ``at`` starts from: the ``replay`` there
+    corrected to the probes' ``upper_f`` and ``lower_f`` exactly, or,
+    with no record or none reaching back, ``estimate`` of them."""
+    state = None if record is None else replay(lay, params, record, at)
+    if state is None:
+        return st.mix(st.estimate(lay, upper_f, lower_f))
+    return st.mix(st.assimilate(lay, state, upper_f, lower_f))
+
+
+# ── the events and their errors ──
+
+
+@dataclass(frozen=True)
+class Coast:
+    """A stretch of the record with nothing heating: the probes at its
+    start, the air through it (readings holding to the next), its draws
+    ``(onset, delivered gallons)``, and the probes ``observed`` after
+    its start."""
+
+    start: datetime
+    end: datetime
+    upper_f: float
+    lower_f: float
+    air: tuple[Reading, ...]
+    observed: tuple[Observed, ...]
+    draws: tuple[tuple[datetime, float], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.air:
+            raise ValueError("a coast needs its air")
+        if not self.observed:
+            raise ValueError("a coast needs its observations")
+
+
+def _held(readings: Sequence[Reading]) -> Callable[[datetime], float]:
+    times = [t for t, _ in readings]
+
+    def at(t: datetime) -> float:
+        return readings[max(0, bisect_right(times, t) - 1)][1]
+
+    return at
+
+
+def _along(path: Sequence[tuple[datetime, float]], t: datetime) -> float:
+    """``path`` at ``t``, linear between its points, its last beyond."""
+    times = [p[0] for p in path]
+    k = bisect_right(times, t) - 1
+    if k < 0:
+        return path[0][1]
+    if k >= len(path) - 1:
+        return path[-1][1]
+    (t0, a), (t1, b) = path[k], path[k + 1]
+    return a + (b - a) * ((t - t0) / (t1 - t0))
+
+
+def errors(
+    params: HeaterParams, record: TankRecord | None, coast: Coast
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Each probe's error over ``coast``, predicted less observed at
+    each observation: the tank ``params`` describe started from
+    ``start_state`` and walked through the coast's air and draws."""
+    lay = st.layout(params)
+    state = start_state(
+        lay, params, record, coast.start, coast.upper_f, coast.lower_f
+    )
+    d = params.draw
+    end = max(coast.end, coast.observed[-1][0] + timedelta(seconds=1))
+    walked = st.walk(
+        lay,
+        state,
+        coast.start,
+        end,
+        air_f=_held(coast.air),
+        draws=[
+            st.Delivered(at=t, gal=g, inflow_f=d.inlet_temp_f)
+            for t, g in coast.draws
+        ],
+        valve=(d.delivery_intercept_f, d.delivery_slope),
+    )
+    read = [(t, st.observe(lay, s)) for t, s in walked.path]
+    upper = [(t, u) for t, (u, _) in read]
+    lower = [(t, lo) for t, (_, lo) in read]
+    return (
+        tuple(_along(upper, t) - u for t, u, _ in coast.observed),
+        tuple(_along(lower, t) - lo for t, _, lo in coast.observed),
+    )
+
+
+def rmse(values: Sequence[float]) -> float:
+    return math.sqrt(math.fsum(v * v for v in values) / len(values))
+
+
+# ── the fit ──
+
+
+def term_values(params: HeaterParams) -> tuple[float, ...]:
+    """``params``' values of ``TERMS``; the sides' UA, when unset, the
+    jacket's ``layout`` reads."""
+    lay = st.layout(params)
+    out: list[float] = []
+    for group, name, *_ in TERMS:
+        if name == "ua_side_btu_hr_f":
+            out.append(lay.ua_btu_hr_f)
+        else:
+            out.append(float(getattr(getattr(params, group), name)))
+    return tuple(out)
+
+
+def with_terms(params: HeaterParams, values: Sequence[float]) -> HeaterParams:
+    """``params`` with ``TERMS`` set to ``values``."""
+    if len(values) != len(TERMS):
+        raise ValueError(f"{len(TERMS)} values, not {len(values)}")
+    groups: dict[str, dict[str, float]] = {}
+    for (group, name, *_), v in zip(TERMS, values, strict=True):
+        groups.setdefault(group, {})[name] = float(v)
+    return replace(
+        params,
+        **{
+            g: replace(getattr(params, g), **changes)
+            for g, changes in groups.items()
+        },
+    )
+
+
+@dataclass(frozen=True)
+class TankFit:
+    """``fit``'s result: the parameters with the terms fitted, each
+    term's value (``TERMS``' names), those the fit left on a bound, the
+    probes' RMSE over the events at the start and at the end, and the
+    trials it took."""
+
+    params: HeaterParams
+    terms: dict[str, float]
+    on_bound: tuple[str, ...]
+    rmse_before: float
+    rmse_after: float
+    evaluations: int
+
+
+def _residuals(
+    params: HeaterParams, record: TankRecord | None, coast: Coast
+) -> list[float]:
+    # ``record`` is the coast's own part (``TankRecord.before``).
+    du, dl = errors(params, record, coast)
+    # Each event weighs alike, however long it was observed.
+    w = 1.0 / math.sqrt(len(du))
+    return [w * v for v in (*du, *dl)]
+
+
+def fit(
+    params: HeaterParams,
+    record: TankRecord | None,
+    coasts: Sequence[Coast],
+    *,
+    map_: Callable[..., Iterable[Any]] = map,
+    max_evaluations: int = 200,
+) -> TankFit:
+    """``TERMS`` fitted on ``coasts`` from ``params``' values: a robust
+    (soft-L1, 1 °F) least squares of each probe's error at each
+    observation, the events started from the ``record``'s replay
+    (``start_state``). ``map_(function, a, b)`` maps over the events."""
+    if not coasts:
+        raise ValueError("no events to fit on")
+    lo = np.array([t[2] for t in TERMS])
+    hi = np.array([t[3] for t in TERMS])
+    scale = np.array([t[4] for t in TERMS])
+    x0 = np.clip(np.array(term_values(params)), lo, hi)
+    n = len(coasts)
+    parts = [None if record is None else record.before(c.start) for c in coasts]
+
+    def residuals(x: np.ndarray) -> np.ndarray:
+        p = with_terms(params, x.tolist())
+        out = map_(_residuals, [p] * n, parts, coasts)
+        return np.array([v for r in out for v in r])
+
+    first = residuals(x0)
+    done = least_squares(
+        residuals,
+        x0,
+        bounds=(lo, hi),
+        loss="soft_l1",
+        f_scale=1.0,
+        x_scale=scale,
+        diff_step=2e-2,
+        max_nfev=max_evaluations,
+    )
+    x = done.x
+    names = tuple(t[1] for t in TERMS)
+    width = hi - lo
+    edge = (x - lo < 1e-3 * width) | (hi - x < 1e-3 * width)
+    return TankFit(
+        params=with_terms(params, x.tolist()),
+        terms=dict(zip(names, x.tolist(), strict=True)),
+        on_bound=tuple(k for k, e in zip(names, edge, strict=True) if e),
+        rmse_before=float(np.sqrt(np.mean(np.square(first)))),
+        rmse_after=float(np.sqrt(np.mean(np.square(done.fun)))),
+        evaluations=int(done.nfev),
+    )

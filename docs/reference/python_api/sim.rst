@@ -295,6 +295,11 @@ The pieces the entry points are built from.
       assimilate, walk, Walked, Books, Heating, Compressor, Element,
       Flowing, Delivered, IDLE_STEP, ACTIVE_STEP, CUT_RESOLUTION, NO_VALVE
 
+.. automodule:: nwp500.sim.tank_fit
+   :members: TankRecord, tank_record, replay, start_state, Coast, errors,
+      rmse, fit, TankFit, TERMS, term_values, with_terms, REPLAY,
+      ASSIMILATE_EVERY, MINUTE
+
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
       ElementInterval, entry_deficit_f, entry_bracket_f,
@@ -355,7 +360,7 @@ Recorded history
 .. automodule:: nwp500.sim_score
    :members: events, Events, Recovery, Window, DrawEvent, Delivery, score,
       Score, Stat, compare, Comparison, Change, holdout_start,
-      params_digest, SCHEMA
+      params_digest, SCHEMA, score_layers, fit_layers, layer_coasts
 
 
 Home Assistant sources

@@ -29,6 +29,16 @@ stable = profiles.map(S.mix)
 airs = st.floats(30.0, 110.0)
 inflows = st.floats(35.0, 90.0)
 valves = st.sampled_from([S.NO_VALVE, SITE_VALVE])
+#: A layout whose probes feel the water around them, the lower one
+#: reading high, and whose top loses heat too.
+SPREAD = replace(
+    L,
+    upper_probe_spread_gal=6.0,
+    lower_probe_spread_gal=4.0,
+    lower_probe_offset_f=0.7,
+    ua_top_btu_hr_f=1.8,
+)
+layouts = st.sampled_from([L, SPREAD])
 
 
 def _air(_: datetime) -> float:
@@ -76,6 +86,11 @@ class TestTheLayout:
             # Both probes in the same end layer.
             {"lower_probe": 0.01, "upper_probe": 0.04},
             {"lower_probe": 0.96, "upper_probe": 0.99},
+            {"ua_top_btu_hr_f": -1.0},
+            {"lower_probe_spread_gal": -1.0},
+            {"upper_probe_spread_gal": math.inf},
+            {"lower_probe_offset_f": math.nan},
+            {"lower_probe_spread_gal": 70.0},
         ],
     )
     def test_nonsense_is_refused(self, change: dict[str, object]) -> None:
@@ -144,6 +159,33 @@ class TestLose:
         bottom, *rest = after.layers_f
         assert bottom < min(rest)
         assert len(set(rest)) == 1
+
+    @given(profiles, airs, st.floats(0.0, 72.0))
+    def test_the_top_keeps_the_law(
+        self, state: S.TankState, air: float, hours: float
+    ) -> None:
+        after, lost = S.lose(SPREAD, state, air, hours)
+        for t0, t1 in zip(state.layers_f, after.layers_f, strict=True):
+            assert min(t0, air) - 1e-9 <= t1 <= max(t0, air) + 1e-9
+        assert S.energy_btu(SPREAD, state) - S.energy_btu(
+            SPREAD, after
+        ) == pytest.approx(lost, abs=1e-6)
+
+    def test_the_top_loses_through_the_top(self) -> None:
+        lay = replace(SPREAD, ua_bottom_btu_hr_f=0.0)
+        after, lost = S.lose(lay, S.TankState.uniform(12, 140.0), 65.0, 1.0)
+        *rest, top = after.layers_f
+        assert top < min(rest)
+        assert len(set(rest)) == 1
+        side, _ = S.lose(
+            replace(lay, ua_top_btu_hr_f=0.0),
+            S.TankState.uniform(12, 140.0),
+            65.0,
+            1.0,
+        )
+        assert lost > S.energy_btu(lay, S.TankState.uniform(12, 140.0)) - (
+            S.energy_btu(lay, side)
+        )
 
 
 class TestConduct:
@@ -372,11 +414,11 @@ class TestDraw:
 
 
 class TestTheProbes:
-    @given(st.floats(40.0, 160.0), st.floats(40.0, 160.0))
+    @given(layouts, st.floats(40.0, 160.0), st.floats(40.0, 160.0))
     def test_an_estimate_reads_as_it_was_built(
-        self, upper: float, lower: float
+        self, lay: S.Layout, upper: float, lower: float
     ) -> None:
-        u, lo = S.observe(L, S.estimate(L, upper, lower))
+        u, lo = S.observe(lay, S.estimate(lay, upper, lower))
         assert u == pytest.approx(upper, abs=1e-9)
         assert lo == pytest.approx(lower, abs=1e-9)
 
@@ -386,14 +428,44 @@ class TestTheProbes:
     ) -> None:
         assert _monotone(S.estimate(L, lower + gap, lower))
 
-    @given(profiles, temps, temps, st.floats(0.0, 1.0))
+    @given(layouts, profiles, temps, temps, st.floats(0.0, 1.0))
     def test_assimilating_moves_the_reading_by_the_gain(
-        self, state: S.TankState, upper: float, lower: float, gain: float
+        self,
+        lay: S.Layout,
+        state: S.TankState,
+        upper: float,
+        lower: float,
+        gain: float,
     ) -> None:
-        u0, l0 = S.observe(L, state)
-        u1, l1 = S.observe(L, S.assimilate(L, state, upper, lower, gain))
+        u0, l0 = S.observe(lay, state)
+        u1, l1 = S.observe(lay, S.assimilate(lay, state, upper, lower, gain))
         assert u1 == pytest.approx(u0 + gain * (upper - u0), abs=1e-9)
         assert l1 == pytest.approx(l0 + gain * (lower - l0), abs=1e-9)
+
+    @given(layouts)
+    def test_the_weights_are_shares(self, lay: S.Layout) -> None:
+        for w in (lay.upper_weights, lay.lower_weights):
+            assert all(x >= 0.0 for x in w)
+            assert sum(w) == pytest.approx(1.0, abs=1e-12)
+
+    def test_a_vanishing_spread_reads_the_point(self) -> None:
+        for spread in (1e-9, 1e-3):
+            near = replace(L, lower_probe_spread_gal=spread)
+            for a, b in zip(near.lower_weights, L.lower_weights, strict=True):
+                assert a == pytest.approx(b, abs=1e-6)
+
+    def test_a_spread_feels_the_water_below(self) -> None:
+        """A cold bottom the lower probe's point does not reach moves a
+        probe that feels the water around it."""
+        state = S.TankState((70.0, *([140.0] * 11)))
+        assert S.observe(L, state)[1] == 140.0
+        assert (
+            S.observe(replace(L, lower_probe_spread_gal=6.0), state)[1] < 139.0
+        )
+
+    def test_the_offset_reads_above_the_water(self) -> None:
+        state = S.TankState.uniform(12, 130.0)
+        assert S.observe(SPREAD, state) == pytest.approx((130.0, 130.7))
 
 
 def _heating(at: datetime) -> S.Heating:

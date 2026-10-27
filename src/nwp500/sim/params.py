@@ -231,6 +231,19 @@ class TankParams:
     lower_probe_height: float = field(
         default=0.2, metadata=_p(DEFAULT, "fraction")
     )
+    #: How far along the column each probe feels the water, gal: it
+    #: reads the layers weighted by ``exp(-distance / spread)`` from its
+    #: height, a probe in a well on the wall rather than a point in the
+    #: water. 0.0 reads the point.
+    upper_probe_spread_gal: float = field(
+        default=0.0, metadata=_p(DEFAULT, "gal")
+    )
+    lower_probe_spread_gal: float = field(
+        default=0.0, metadata=_p(DEFAULT, "gal")
+    )
+    #: What the lower probe reads above the water it feels, °F: the
+    #: probes' disagreement in a mixed tank.
+    lower_probe_offset_f: float = field(default=0.0, metadata=_p(DEFAULT, "°F"))
     #: Where the elements heat, the same way: the upper element with
     #: 17.5 gal of the 63.2 above it, the lower near the bottom. Priors;
     #: fitted on the element runs.
@@ -321,6 +334,17 @@ class LossParams:
     #: above over a 50 °F gap to the air. A prior.
     ua_bottom_btu_hr_f: float = field(
         default=1.8, metadata=_p(DEFAULT, "BTU/hr/°F")
+    )
+    #: Its loss through its top, from the top layer: the head, the
+    #: fittings and the pipes, BTU/hr·°F.
+    ua_top_btu_hr_f: float = field(
+        default=0.0, metadata=_p(DEFAULT, "BTU/hr/°F")
+    )
+    #: Its loss through its sides, shared equally by the layers,
+    #: BTU/hr·°F. None: the jacket's (``ua_btu_hr_f``, else the
+    #: baseline), for a tank fitted only as two zones.
+    ua_side_btu_hr_f: float | None = field(
+        default=None, metadata=_p(FITTED, "BTU/hr/°F", note=_LOCATION_AIR)
     )
 
 

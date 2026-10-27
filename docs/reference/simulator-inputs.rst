@@ -1077,10 +1077,28 @@ volume from the bottom.
      - The water column's, end to end (10.7 between each pair of twelve
        layers): its slowest mode closes a two-zone gap on the 60 h
        prior, ``mass / (pi^2 tau)``.
+   * - ``tank.upper_probe_spread_gal``, ``tank.lower_probe_spread_gal``
+     - 0 gal
+     - How far along the column each probe feels the water: it reads the
+       layers weighted by ``exp(-distance / spread)``. 0 reads the
+       point; the fit (``sim.tank_fit``) finds a few gallons.
+   * - ``tank.lower_probe_offset_f``
+     - 0 degF
+     - What the lower probe reads above the water it feels: the probes'
+       disagreement in a mixed tank (about 0.5 degF on the record, the
+       lower higher, after a recovery).
    * - ``loss.ua_bottom_btu_hr_f``
      - 1.8 BTU/hr per degF
      - The bottom loss (``loss.bottom_loss_btu_hr``, 90.8 BTU/hr) over a
        50 degF gap to the air, from the bottom layer alone.
+   * - ``loss.ua_top_btu_hr_f``
+     - 0 BTU/hr per degF
+     - The top's loss, from the top layer: the head, the fittings and
+       the pipes.
+   * - ``loss.ua_side_btu_hr_f``
+     - unset
+     - The sides' loss, shared equally by the layers; unset, the
+       jacket's (``loss.ua_btu_hr_f``, else the baseline).
 
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document
