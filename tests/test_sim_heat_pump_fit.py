@@ -3,15 +3,17 @@ history, recovered from a tank planted with a known heat, power, start
 hold and stop."""
 
 import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from nwp500 import sim
 from nwp500.sim import heat_pump_fit as hpf
 from nwp500.sim.calibration import heat_pump_cycles
-from nwp500.sim.params import LossParams, TankParams
+from nwp500.sim.params import CompressorParams, LossParams, TankParams
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 T0 = datetime(2026, 3, 2, tzinfo=UTC)
@@ -337,3 +339,98 @@ class TestThePower:
         water = (got["upper_f"] + got["lower_f"]) / 2.0
         assert np.abs(got["power_w"] - water.map(power)).max() < 5.0
         assert set(got["phase"]) <= set(hpf.PHASES)
+
+
+@pytest.fixture(scope="module")
+def found() -> hpf.Evidence:
+    """Three passes of ``CYCLES``: enough of each measure to fit."""
+    return hpf.evidence(planted(CYCLES * 3, seed=11), TANK, LOSS)
+
+
+class TestTheFits:
+    def test_the_evidence_in_time_order(self, found: hpf.Evidence) -> None:
+        for rows in (found.heat, found.power, found.holds, found.runs):
+            assert rows["start"].is_monotonic_increasing
+        assert (found.power["phase"] == "climb").all()
+        assert found.holds["minutes_off"].notna().all()
+
+    def test_it_recovers_the_planted_heat_pump(
+        self, found: hpf.Evidence
+    ) -> None:
+        fit = hpf.fit_heat_pump(found, CompressorParams())
+        assert fit.n_heat >= hpf.MIN_HEAT_STRETCHES
+        assert fit.heat is not None and fit.power is not None
+        assert fit.heat.level == pytest.approx(heat(65.0, 120.0), rel=0.03)
+        assert fit.heat.per_air == pytest.approx(33.0, abs=10.0)
+        # The power is read at the lower probe, a quarter degree under
+        # the planted tank's mean.
+        assert fit.power.level == pytest.approx(power(120.25), abs=2.0)
+        assert fit.power.per_water == pytest.approx(2.33, abs=0.1)
+        assert fit.power.per_air == pytest.approx(0.0, abs=0.2)
+        assert fit.overshoot_f == pytest.approx(OVERSHOOT, abs=0.2)
+        assert fit.violations == ()
+        # Each plane is read over what it was fitted on.
+        water = found.heat["water_f"]
+        assert fit.heat.water_f == (
+            math.floor(water.min()),
+            math.ceil(water.max()),
+        )
+        applied = hpf.with_planes(CompressorParams(), fit.heat, fit.power)
+        assert applied.heat_domain_water_f == fit.heat.water_f
+        assert applied.power_domain_air_f == fit.power.air_f
+        assert fit.heat_error is not None and fit.heat_error < 200.0
+
+    def test_a_band_with_its_starts_takes_their_hold(
+        self, found: hpf.Evidence
+    ) -> None:
+        c = CompressorParams()
+        held = hpf.fit_start_hold(found.holds, c)
+        assert held is not None
+        band = np.searchsorted(
+            c.start_hold_after_min, found.holds["minutes_off"], side="right"
+        )
+        for i, value in enumerate(held):
+            n = int((band == i).sum())
+            if n >= hpf.MIN_BAND_STARTS:
+                # The band's planted hold, read on the minute grid at the
+                # first 0.18 °F step of a slow climb: up to a few minutes
+                # late, never early (``TestTheHold``).
+                edge = (15, 60, 180, 720, math.inf)[i] - 1e-9
+                assert -0.5 <= value - hold(edge) <= 3.0
+            else:
+                assert value == c.start_hold_min[i]
+
+    def test_too_little_fits_nothing(self) -> None:
+        empty = hpf.evidence(planted(CYCLES[:2]), TANK, LOSS)
+        fit = hpf.fit_heat_pump(empty, CompressorParams())
+        assert fit.heat is None and fit.power is None
+        assert fit.overshoot_f is None
+        base = sim.default_params()
+        assert hpf.with_heat_pump(base, fit) == base
+
+    def test_a_fit_applies_where_it_had_the_evidence(
+        self, found: hpf.Evidence
+    ) -> None:
+        fit = hpf.fit_heat_pump(found, CompressorParams())
+        got = hpf.with_heat_pump(sim.default_params(), fit)
+        assert fit.heat is not None and fit.overshoot_f is not None
+        assert got.compressor.heat_btu_h == fit.heat.level
+        assert got.controller.hp_stop_overshoot_f == fit.overshoot_f
+        claims = replace(fit, heat_violations=("cop_over_carnot",))
+        base = sim.default_params()
+        kept = hpf.with_heat_pump(base, claims)
+        assert kept.compressor.heat_btu_h == base.compressor.heat_btu_h
+        assert kept.compressor.power_w == base.compressor.power_w
+
+    def test_the_errors_are_the_maps_own(self, found: hpf.Evidence) -> None:
+        c = CompressorParams()
+        fit = hpf.fit_heat_pump(found, c)
+        better = hpf.with_planes(c, fit.heat, fit.power)
+        heat_before = hpf.heat_map_error(found.heat, c)
+        heat_after = hpf.heat_map_error(found.heat, better)
+        assert heat_before is not None and heat_after is not None
+        assert heat_after < heat_before
+        assert hpf.start_hold_error(found.holds.iloc[0:0], c) is None
+        assert hpf.overshoot_error(found.runs, OVERSHOOT) == pytest.approx(
+            0.0, abs=0.2
+        )

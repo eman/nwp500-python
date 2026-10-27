@@ -59,6 +59,7 @@ from nwp500.sim.params import (
     params_to_document,
     unknown_fields,
 )
+from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import TankPhysics
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
@@ -132,9 +133,9 @@ def _by_hand(params: HeaterParams, s: Scenario, book: Any) -> Any:
         physics=physics,
         draws=[(d.at, d.gallons) for d in s.loads.draws],
         marks=[x for w in s.loads.windows for x in (w.start, w.end)],
-        startup_wh=params.power.startup_wh,
         stopped_at=s.history.compressor_stopped_at,
         heated_at=s.history.heated_at,
+        start_hold=lambda off: start_hold_min(params.compressor, off),
         controller=params.controller,
         ledger=BookedHeatLedger(book, physics.ambient.at, params.book_terms()),
     )
@@ -545,51 +546,14 @@ class TestTheParameters:
             params, readiness=ReadinessParams(), book=params.book
         )
 
-    def test_a_document_with_the_retired_front_terms_loads(
+    def test_a_document_from_before_the_map_is_refused(
         self, params: HeaterParams
     ) -> None:
-        """An older writer's front and settling terms are read past, and
-        not named as unknown."""
-        doc = json.loads(json.dumps(params_to_document(params)))
-        doc["book"].update(
-            lower_probe_gal=25.0, front_width_gal=32.0, front_settle_min=300.0
-        )
-        assert params_from_document(doc) == params
-        assert unknown_fields(doc) == []
-
-    def test_a_document_with_the_retired_cold_release_loads(
-        self, params: HeaterParams
-    ) -> None:
-        """An older writer's ``cold_release_f`` is read past, and not
-        named as unknown: the book holds no heat back."""
-        doc = json.loads(json.dumps(params_to_document(params)))
-        doc["book"]["cold_release_f"] = 100.0
-        assert params_from_document(doc) == params
-        assert unknown_fields(doc) == []
-
-    def test_a_document_with_the_retired_gap_opening_loads(
-        self, params: HeaterParams
-    ) -> None:
-        """An older writer's ``draw.gap_open_f_per_gal`` is read past,
-        and not named as unknown; the draw's response takes the
-        defaults."""
-        doc = json.loads(json.dumps(params_to_document(params)))
-        for name in (
-            "reach_gate_f",
-            "reach_offset_f",
-            "reach_gal",
-            "upper_f_per_gal",
-        ):
-            del doc["draw"][name]
-        doc["draw"]["gap_open_f_per_gal"] = 1.235
-        assert params_from_document(doc).draw == replace(
-            params.draw,
-            reach_gate_f=30.0,
-            reach_offset_f=1.25,
-            reach_gal=9.0,
-            upper_f_per_gal=0.05,
-        )
-        assert unknown_fields(doc) == []
+        """A ``heater-params/1`` document ran the refrigerant cycle: it
+        is refitted, not read."""
+        doc = {**params_to_document(params), "schema": "heater-params/1"}
+        with pytest.raises(ValueError, match="calibrate again"):
+            params_from_document(doc)
 
     @pytest.mark.parametrize(
         ("part", "name", "value", "match"),
@@ -619,21 +583,10 @@ class TestTheParameters:
         with pytest.raises(ValueError, match=match):
             params_from_document(doc)
 
-    def test_an_older_document_with_retired_fields_loads(
+    def test_a_newer_field_is_named_and_read_past(
         self, params: HeaterParams
     ) -> None:
-        """Saved documents still carry the readiness fields this code no
-        longer has: they load without them and are not named unknown."""
-        doc = params_to_document(params)
-        doc["readiness"].update(
-            cold_lower_cutoff_f=100.0,
-            cold_lower_cap_gal=6.5,
-            full_setpoint_band_f=2.0,
-            full_hidden_gal=13.5,
-        )
-        doc = json.loads(json.dumps(doc))
-        assert params_from_document(doc) == params
-        assert unknown_fields(doc) == []
+        doc = json.loads(json.dumps(params_to_document(params)))
         doc["readiness"]["newer_f"] = 1.0
         assert unknown_fields(doc) == ["readiness.newer_f"]
         assert params_from_document(doc) == params

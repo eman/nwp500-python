@@ -208,7 +208,6 @@ def _run(case: dict[str, Any]) -> Simulation:
         setpoint_f=140.9,
         heater=Heater(hp_lower_on_f=105.0, tou_windows=TOU, mode=mode),
         physics=physics,
-        startup_wh=162.0,
         **c,
     )
 

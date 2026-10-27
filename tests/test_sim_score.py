@@ -11,6 +11,7 @@ import pytest
 
 from nwp500 import sim
 from nwp500 import sim_score as ss
+from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim_calibrate import Prepared
 
 T0 = datetime(2026, 3, 2, 0, 0, tzinfo=UTC)
@@ -46,7 +47,8 @@ def _coast(
 
 def model_history(params: sim.HeaterParams) -> tuple[Prepared, datetime]:
     """A day the model itself walks: a quiet coast, a heat-pump
-    recovery from where it left the tank, and a coast after; a sample a
+    recovery from where it left the tank, holding as the model holds a
+    start after a stop it has not seen, and a coast after; a sample a
     minute, the compressor's power as the model prices it. The frame
     as ``sim_calibrate.prepare`` leaves one, and the recovery's start."""
     first = _coast(params, T0, 130.0, 110.0, 8.0)
@@ -63,6 +65,7 @@ def model_history(params: sim.HeaterParams) -> tuple[Prepared, datetime]:
             environment=sim.Environment(ambient_f=AIR),
         ),
         params,
+        running_hold=start_hold_min(params.compressor, None),
     )
     run = result.heating[0]
     assert run.input_wh is not None

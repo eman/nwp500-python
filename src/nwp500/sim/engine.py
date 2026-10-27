@@ -237,14 +237,10 @@ class HeatingInterval:
     target_f: float
     capped: bool
     stop: StopReason
-    #: Metered electricity over the interval: the power recipe, which
-    #: is fitted to the meter over whole cycles and so already holds
-    #: each start's start-up.
+    #: Electricity over the interval, the start's hold and the run-on
+    #: included (the compressor's performance map, or the element's
+    #: rating); None when a recovery could not price it.
     input_wh: float | None
-    #: The power recipe's per-start figure, for pricing stored heat by
-    #: ``cop``. It is inside ``input_wh`` already, so no energy total
-    #: adds it.
-    startup_wh: float | None
     #: Lowest confidence of the recoveries it was built from; None for an
     #: element, whose model carries ``element_model_small_n`` instead.
     confidence: float | None
@@ -510,7 +506,6 @@ class _Engine:
         physics: Physics,
         draws: Sequence[Draw],
         withheld_windows: Sequence[Window],
-        startup_wh: float | None,
         marks: Sequence[datetime] = (),
         element_running: bool = False,
         element_running_since: datetime | None = None,
@@ -606,7 +601,6 @@ class _Engine:
         #: or a recovery takes it.
         self.draws = sorted(d for d in draws if start <= d[0] < until)
         self.withheld = sorted(withheld_windows)
-        self.startup_wh = startup_wh
         self.path: list[PathPoint] = [
             PathPoint(
                 start,
@@ -692,8 +686,8 @@ class _Engine:
                 self.sp = value
                 if self.cycle is not None:
                     self.cycle.setpoint_f = value
-            case ctl.StartCompressor(start, startup, hold):
-                self._begin(start, startup=startup, hold=hold)
+            case ctl.StartCompressor(start, _, hold):
+                self._begin(start, hold=hold)
             case ctl.StopCompressor(at, reason):
                 self._finish(at, reason)
             case ctl.Retarget():
@@ -951,8 +945,10 @@ class _Engine:
         A recovery stops at the first instant it is inside a window with
         the lower zone at the cap's level (the target less ``tou_cap_f``).
         The level's timing is the path to that level from the origin: a
-        capped recovery is predicted as a recovery to the level. ``renew``
-        predicts it afresh from the tank now, as a colder tank does.
+        capped recovery is predicted as a recovery to the level. One the
+        cap does not stop runs on past its target to
+        ``hp_stop_overshoot_f`` over it. ``renew`` predicts it afresh
+        from the tank now, as a colder tank does.
         """
         cycle = self.cycle
         assert cycle is not None
@@ -966,7 +962,7 @@ class _Engine:
             cycle.hold_minutes = max(0.0, cycle.hold_total - gone)
         target = cycle.setpoint_f
         empty = Heat([Point(self.t, self.upper, self.lower, 0.0)], 1.0)
-        full = self._placed(cycle, target)
+        full = self._placed(cycle, target + self.params.hp_stop_overshoot_f)
         if full is None:
             cycle.heat, cycle.capped = empty, False
             return
@@ -1008,7 +1004,7 @@ class _Engine:
         if heat.linear:
             self.reasons.add("recovery_path_linear")
 
-    def _begin(self, start: Start, *, startup: bool, hold: float) -> None:
+    def _begin(self, start: Start, *, hold: float) -> None:
         """The compressor starts (``controller.StartCompressor``): its
         recovery, from the tank now, holding ``hold`` minutes before it
         climbs."""
@@ -1032,7 +1028,6 @@ class _Engine:
             capped=cycle.capped,
             stop="horizon",
             input_wh=0.0,
-            startup_wh=self.startup_wh if startup else 0.0,
             confidence=cycle.confidence,
             final_target_f=self.sp,
         )
@@ -1251,7 +1246,6 @@ class _Engine:
             capped=False,
             stop="horizon",
             input_wh=0.0,
-            startup_wh=0.0,
             confidence=None,
             final_target_f=self.sp,
             source="element",
@@ -1812,7 +1806,6 @@ def simulate(
     entries: Sequence[Entry] = (),
     draws: Sequence[Draw] = (),
     withheld_windows: Sequence[Window] = (),
-    startup_wh: float | None = None,
     marks: Sequence[datetime] = (),
     element_running: bool = False,
     element_running_since: datetime | None = None,
@@ -1834,8 +1827,6 @@ def simulate(
     on its one served path (``_Cycle``). ``withheld_windows`` are the
     forecast draw windows over which a recovery is credited no heat:
     the compressor runs and is charged, and the tank coasts.
-    ``startup_wh`` is recorded once per start, and not for a compressor
-    already ``running``; no energy total adds it (``HeatingInterval``).
     ``marks`` are instants the path must carry an
     element at, so the tank there is read exactly rather than
     interpolated across a step. ``element_running``: an element is on at
@@ -1879,7 +1870,6 @@ def simulate(
         physics=physics,
         draws=draws,
         withheld_windows=withheld_windows,
-        startup_wh=startup_wh,
         marks=marks,
         element_running=element_running,
         element_running_since=element_running_since,

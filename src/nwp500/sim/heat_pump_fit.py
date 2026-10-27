@@ -15,12 +15,16 @@ minute grid, with each minute's phase:
 - **run_on**: from there until the compressor stops.
 
 ``start_holds``, ``run_ons``, ``climb_heat`` and ``power_blocks``
-measure from that frame.
+measure from that frame, and ``fit_heat_pump`` fits the heat pump's
+parameters on them (``evidence``): the heat's and the power's maps
+(``physics.heat_pump``), the hold by time off, and the overshoot at
+the stop.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -33,7 +37,15 @@ from nwp500.sim.calibration import (
     water_in_use,
     water_over,
 )
-from nwp500.sim.params import LossParams, TankParams
+from nwp500.sim.params import (
+    MAP_REF_AIR_F,
+    MAP_REF_WATER_F,
+    CompressorParams,
+    HeaterParams,
+    LossParams,
+    TankParams,
+)
+from nwp500.sim.physics import heat_pump as hp
 from nwp500.sim.physics.tank import bottom_loss_reach, ua_at
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
@@ -565,3 +577,333 @@ def power_blocks(
                         }
                     )
     return pd.DataFrame(rows, columns=list(_POWER_COLUMNS))
+
+
+# ── the heat pump's parameters, fitted on these measures ────────────
+
+#: Fewer than these and a part is not fitted: stretches for the heat,
+#: climb blocks for the power, starts in a band for its hold, and
+#: draw-free run-ons for the overshoot.
+MIN_HEAT_STRETCHES = 10
+MIN_POWER_BLOCKS = 30
+MIN_BAND_STARTS = 3
+MIN_RUN_ONS = 5
+#: What a fitted map may claim anywhere over its domain, checked on a
+#: ``CHECK_POINTS`` × ``CHECK_POINTS`` grid: a COP no more than
+#: ``CARNOT_SHARE`` of the ideal heat pump's between the air and the
+#: water, heat taken from the air (not given to it), and at least
+#: ``MIN_POWER_W``.
+CARNOT_SHARE = 0.6
+MIN_POWER_W = 50.0
+CHECK_POINTS = 8
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """What the heat pump's parameters are fitted on, each in time
+    order: ``climb_heat``'s stretches, ``power_blocks``' climb blocks
+    with their air, lower tank and power read, the clean starts with
+    their time off and hold known (``start_holds``), and the draw-free
+    run-ons (``run_ons``)."""
+
+    heat: pd.DataFrame
+    power: pd.DataFrame
+    holds: pd.DataFrame
+    runs: pd.DataFrame
+
+
+def evidence(
+    history: pd.DataFrame,
+    tank: TankParams,
+    loss: LossParams,
+    *,
+    air: str = "air_f",
+) -> Evidence:
+    """``Evidence`` from ``history`` (``recovery_frame``, read with
+    ``air``), the heat priced against ``loss``."""
+    frame = recovery_frame(history, air=air)
+    heat = climb_heat(frame, tank, loss).dropna(
+        subset=["air_f", "water_f", "heat_btu_h"]
+    )
+    blocks = power_blocks(frame)
+    power = blocks.loc[blocks["phase"] == "climb"].dropna(
+        subset=["air_f", "lower_f", "power_w"]
+    )
+    holds = start_holds(frame)
+    holds = holds.loc[holds["start_clean"].astype(bool)].dropna(
+        subset=["minutes_off", "hold_minutes"]
+    )
+    runs, _ = run_ons(frame)
+    runs = runs.loc[runs["draw_free"].astype(bool)]
+    return Evidence(
+        *(
+            cast(pd.DataFrame, d.sort_values("start").reset_index(drop=True))
+            for d in (heat, power, holds, runs)
+        )
+    )
+
+
+@dataclass(frozen=True)
+class Plane:
+    """A map's plane: its value at ``params.MAP_REF_AIR_F`` air and
+    ``params.MAP_REF_WATER_F`` water, its slopes per °F of each, and the
+    air and the water it was fitted over, to the whole degree (None:
+    the parameters' own)."""
+
+    level: float
+    per_air: float
+    per_water: float
+    air_f: tuple[float, float] | None = None
+    water_f: tuple[float, float] | None = None
+
+
+def _span(values: np.ndarray) -> tuple[float, float]:
+    return (
+        float(math.floor(float(np.min(values)))),
+        float(math.ceil(float(np.max(values)))),
+    )
+
+
+def _fit_plane(
+    air: np.ndarray, water: np.ndarray, y: np.ndarray, weight: np.ndarray
+) -> Plane | None:
+    """The weighted least-squares plane through ``y``; None when the
+    air and the water do not place one."""
+    x = np.column_stack(
+        [np.ones(len(y)), air - MAP_REF_AIR_F, water - MAP_REF_WATER_F]
+    )
+    w = np.sqrt(weight)[:, None]
+    if np.linalg.matrix_rank(x * w) < 3:
+        return None
+    coef, *_ = np.linalg.lstsq(x * w, y * w[:, 0], rcond=None)
+    return Plane(
+        float(coef[0]),
+        float(coef[1]),
+        float(coef[2]),
+        _span(air),
+        _span(water),
+    )
+
+
+def _columns(rows: pd.DataFrame, *names: str) -> list[np.ndarray]:
+    return [rows[n].to_numpy(dtype=float) for n in names]
+
+
+def fit_heat_map(rows: pd.DataFrame) -> Plane | None:
+    """The heat's plane through ``Evidence.heat``'s stretches, each
+    weighted by its minutes, in the air and the tank's mean (the tank
+    is mixed); None with fewer than ``MIN_HEAT_STRETCHES``."""
+    if len(rows) < MIN_HEAT_STRETCHES:
+        return None
+    air, water, heat, minutes = _columns(
+        rows, "air_f", "water_f", "heat_btu_h", "minutes"
+    )
+    return _fit_plane(air, water, heat, minutes)
+
+
+def fit_power_map(rows: pd.DataFrame) -> Plane | None:
+    """The power's plane through ``Evidence.power``'s blocks, in the
+    air and the lower tank; None with fewer than ``MIN_POWER_BLOCKS``."""
+    if len(rows) < MIN_POWER_BLOCKS:
+        return None
+    air, water, power = _columns(rows, "air_f", "lower_f", "power_w")
+    return _fit_plane(air, water, power, np.ones(len(rows)))
+
+
+def heat_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
+    """``c``'s heat against ``Evidence.heat``'s stretches: the RMS
+    error weighted by their minutes, BTU/h; None with none."""
+    if rows.empty:
+        return None
+    air, water, heat, minutes = _columns(
+        rows, "air_f", "water_f", "heat_btu_h", "minutes"
+    )
+    got = np.array(
+        [hp.heat_btu_h(c, a, w) for a, w in zip(air, water, strict=True)]
+    )
+    return float(np.sqrt(np.average((got - heat) ** 2, weights=minutes)))
+
+
+def power_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
+    """``c``'s power against ``Evidence.power``'s blocks: the RMS
+    error, W; None with none."""
+    if rows.empty:
+        return None
+    air, water, power = _columns(rows, "air_f", "lower_f", "power_w")
+    got = np.array(
+        [hp.power_w(c, a, w) for a, w in zip(air, water, strict=True)]
+    )
+    return float(np.sqrt(np.mean((got - power) ** 2)))
+
+
+def fit_start_hold(
+    rows: pd.DataFrame, c: CompressorParams
+) -> tuple[float, ...] | None:
+    """The hold by time off: each of ``c``'s bands
+    (``CompressorParams.start_hold_after_min``) the median of
+    ``Evidence.holds``' starts in it, or ``c``'s own with fewer than
+    ``MIN_BAND_STARTS`` there; None when no band has as many."""
+    off, held = _columns(rows, "minutes_off", "hold_minutes")
+    band = np.searchsorted(c.start_hold_after_min, off, side="right")
+    out: list[float] = []
+    fitted = False
+    for i, base in enumerate(c.start_hold_min):
+        inside = held[band == i]
+        if len(inside) >= MIN_BAND_STARTS:
+            out.append(float(np.median(inside)))
+            fitted = True
+        else:
+            out.append(base)
+    return tuple(out) if fitted else None
+
+
+def start_hold_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
+    """``c``'s hold against ``Evidence.holds``' starts: the mean
+    absolute error, minutes; None with none."""
+    if rows.empty:
+        return None
+    off, held = _columns(rows, "minutes_off", "hold_minutes")
+    got = np.array([hp.start_hold_min(c, float(o)) for o in off])
+    return float(np.mean(np.abs(got - held)))
+
+
+def fit_overshoot(rows: pd.DataFrame) -> float | None:
+    """The median overshoot at the stop of ``Evidence.runs``' run-ons,
+    °F (``run_ons``), at least 0: a heater does not stop short of its
+    target on its own; None with fewer than ``MIN_RUN_ONS``."""
+    if len(rows) < MIN_RUN_ONS:
+        return None
+    return max(0.0, float(np.median(rows["overshoot_f"].to_numpy(dtype=float))))
+
+
+def overshoot_error(rows: pd.DataFrame, overshoot_f: float) -> float | None:
+    """``overshoot_f`` against ``Evidence.runs``' run-ons: the mean
+    absolute error, °F; None with none."""
+    if rows.empty:
+        return None
+    return float(
+        np.mean(np.abs(rows["overshoot_f"].to_numpy(dtype=float) - overshoot_f))
+    )
+
+
+def violations(c: CompressorParams) -> tuple[str, ...]:
+    """What ``c``'s map claims somewhere over its two maps' domains
+    together that no heat pump does (``CARNOT_SHARE``,
+    ``MIN_POWER_W``): ``cop_over_carnot``, ``evaporator_heat_negative``,
+    ``power_too_low``; empty when none. The grid holds every domain's
+    edges, where a map held to its domain bends, so the heat less the
+    power, linear between them, is checked at its extremes."""
+    found: set[str] = set()
+
+    def axis(*edges: float) -> list[float]:
+        grid = np.linspace(min(edges), max(edges), CHECK_POINTS)
+        return sorted({*(float(v) for v in grid), *edges})
+
+    airs = axis(*c.heat_domain_air_f, *c.power_domain_air_f)
+    waters = axis(*c.heat_domain_water_f, *c.power_domain_water_f)
+    for air in airs:
+        for water in waters:
+            a, w = float(air), float(water)
+            if hp.power_w(c, a, w) < MIN_POWER_W:
+                found.add("power_too_low")
+                continue
+            if hp.cop(c, a, w) > CARNOT_SHARE * hp.carnot_cop(a, w):
+                found.add("cop_over_carnot")
+            if hp.evaporator_btu_h(c, a, w) < 0.0:
+                found.add("evaporator_heat_negative")
+    return tuple(sorted(found))
+
+
+def with_planes(
+    c: CompressorParams, heat: Plane | None, power: Plane | None
+) -> CompressorParams:
+    """``c`` with the planes given, the cross terms 0 where one is, and
+    each read over the span it was fitted on where it says."""
+    if heat is not None:
+        c = replace(
+            c,
+            heat_btu_h=heat.level,
+            heat_btu_h_per_air_f=heat.per_air,
+            heat_btu_h_per_water_f=heat.per_water,
+            heat_btu_h_per_air_water_f=0.0,
+            heat_domain_air_f=heat.air_f or c.heat_domain_air_f,
+            heat_domain_water_f=heat.water_f or c.heat_domain_water_f,
+        )
+    if power is not None:
+        c = replace(
+            c,
+            power_w=power.level,
+            power_w_per_air_f=power.per_air,
+            power_w_per_water_f=power.per_water,
+            power_w_per_air_water_f=0.0,
+            power_domain_air_f=power.air_f or c.power_domain_air_f,
+            power_domain_water_f=power.water_f or c.power_domain_water_f,
+        )
+    return c
+
+
+@dataclass(frozen=True)
+class HeatPumpFit:
+    """The heat pump's parameters fitted on ``Evidence``, each None
+    where it had too little to go on: the heat's and the power's planes,
+    the hold by time off, and the overshoot at the stop; how many of
+    each they were fitted on; and the in-sample errors
+    (``heat_map_error``, ``power_map_error``). ``heat_violations`` and
+    ``power_violations``: what each plane, with the other it is applied
+    with, claims that no heat pump does (``violations``), in which case
+    it is not applied; ``violations`` is either's."""
+
+    heat: Plane | None
+    power: Plane | None
+    start_hold_min: tuple[float, ...] | None
+    overshoot_f: float | None
+    n_heat: int
+    n_power: int
+    n_holds: int
+    n_runs: int
+    heat_error: float | None
+    power_error: float | None
+    heat_violations: tuple[str, ...] = ()
+    power_violations: tuple[str, ...] = ()
+
+    @property
+    def violations(self) -> tuple[str, ...]:
+        return tuple(sorted({*self.heat_violations, *self.power_violations}))
+
+
+def fit_heat_pump(found: Evidence, base: CompressorParams) -> HeatPumpFit:
+    """Every part of the heat pump fitted on ``found``, over ``base``."""
+    heat = fit_heat_map(found.heat)
+    power = fit_power_map(found.power)
+    planes = with_planes(base, heat, power)
+    found_claims = violations(planes)
+    return HeatPumpFit(
+        heat=heat,
+        power=power,
+        start_hold_min=fit_start_hold(found.holds, base),
+        overshoot_f=fit_overshoot(found.runs),
+        n_heat=len(found.heat),
+        n_power=len(found.power),
+        n_holds=len(found.holds),
+        n_runs=len(found.runs),
+        heat_error=None if heat is None else heat_map_error(found.heat, planes),
+        power_error=(
+            None if power is None else power_map_error(found.power, planes)
+        ),
+        heat_violations=found_claims if heat is not None else (),
+        power_violations=found_claims if power is not None else (),
+    )
+
+
+def with_heat_pump(params: HeaterParams, fit: HeatPumpFit) -> HeaterParams:
+    """``params`` with ``fit``'s values where it has them; the planes
+    only when they claim nothing no heat pump does."""
+    c = params.compressor
+    if not fit.violations:
+        c = with_planes(c, fit.heat, fit.power)
+    if fit.start_hold_min is not None:
+        c = replace(c, start_hold_min=fit.start_hold_min)
+    controller = params.controller
+    if fit.overshoot_f is not None:
+        controller = replace(controller, hp_stop_overshoot_f=fit.overshoot_f)
+    return replace(params, compressor=c, controller=controller)

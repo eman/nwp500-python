@@ -27,8 +27,11 @@ Added
   a stop at an overshoot judged against each other), ``climb_heat``
   (the heat a mixed, draw-free climb puts into the tank) and
   ``power_blocks`` (the metered power in 10-minute blocks) measure
-  from it. The helpers that read a history frame moved to
-  ``sim.history_frame``.
+  from it. ``evidence`` gathers them, and ``fit_heat_pump`` fits the
+  heat's and the power's maps, the hold by time off and the run-on on
+  them (``with_heat_pump`` applies it). The helpers that read a history
+  frame moved to ``sim.history_frame``. ``physics.heat_pump`` reads the
+  map.
 
 - **``nwp-cli simulate calibrate --holdout-from DATE``** fits on the
   history before ``DATE`` and prints the base's and the fit's scores on
@@ -44,6 +47,67 @@ Added
 
 - **``ChangeRows.until`` and ``HeaterHistory.until``**, the mirror of
   ``since``: a history split at an instant is the two.
+
+Changed
+-------
+
+- **The heat pump is a performance map** (breaking). The heat into the
+  tank and the electricity drawn are each a plane in the air at the
+  heater and the lower tank's water (``CompressorParams.heat_btu_h``,
+  ``power_w`` and their slopes), fitted on the heater's own recoveries
+  and each read inside the span it was fitted over
+  (``heat_domain_*``, ``power_domain_*``). The condenser gives what
+  the evaporator takes plus the electricity, by construction; a fit
+  claiming a COP over 0.6 of Carnot's, heat given to the air, or under
+  50 W anywhere in that span is not applied. It replaces the R-134a
+  cycle: ``physics.refrigerant``, the compressor constant, the
+  evaporator's approach and slope, the condenser approach, clearance,
+  exponent, airflow and latent load, and ``two_zone``. Held out from
+  2026-09-18 on one NWP500-65, a draw-free recovery's duration is out a
+  mean 7.9 min (13.6 before) and its electricity 7.2 % (12.8 % before,
+  a mean 8.7 % low; now 1.5 % low). See
+  :doc:`/explanation/simulator-methodology`.
+
+- **A recovery holds at its start and runs on past its target.** The
+  hold is ``CompressorParams.start_hold_min`` by the time the
+  compressor was off (0, 5, 10, 18 and 22 min on the record), drawing
+  power while the tank holds; ``simulate`` uses it with or without a
+  ``RecoveryModel``, and ``start_hold`` still overrides it. The climb
+  runs to ``ControllerParams.hp_stop_overshoot_f`` (0.9 °F) past the
+  target in ``simulate`` and ``active_cycle``, and in ``forecast`` to
+  the heater's own threshold (not a partial charge or a TOU cap's
+  level); a ``RecoveryModel`` is asked with that stop as its
+  ``target_f``. Recorded durations already ran from start to stop, so the old
+  compressor constant had absorbed both.
+
+- **Parameters are ``heater-params/2``** (breaking). A
+  ``heater-params/1`` document is refused: calibrate again with
+  ``nwp-cli simulate calibrate``.
+
+- **``sim_calibrate``'s groups** are ``heat_map``, ``power_map``,
+  ``start_hold`` and ``run_on`` in place of ``compressor``,
+  ``power_scale`` and ``cop``, each refitted and judged on the latest
+  fifth with ``keep_better``. ``Calibration.heat_pump``
+  (``heat_pump_fit.HeatPumpFit``) replaces ``compressor`` and ``power``.
+
+- **A recovery's trajectory and COP are the map's.** The electricity is
+  the map's power over the hold and the climb; the COP is the map's heat
+  over it.
+
+Removed
+-------
+
+- ``PowerParams`` and ``HeaterParams.power`` (``power_scale``,
+  ``cop_scale``, ``startup_wh``, ``cop_lift_coeff``);
+  ``Forecast.startup_energy_wh`` and ``Recovery.startup_energy_wh``;
+  the ``startup_wh`` arguments of the engine; ``evaporator_f`` of
+  ``active_cycle`` and ``sim_adapters.evaporator_f``.
+- ``calibration.fit_compressor``, ``CompressorFit``,
+  ``recovery_minutes``, ``split_recoveries``, ``with_compressor``,
+  ``PowerFit``, ``fit_power``, ``with_power``, ``power_cycles``,
+  ``cop_cycles``, ``CopCycle``, ``path_to_end`` and the COP solvers;
+  ``physics.compressor.predict_physics``, ``heating_trajectory.path_cop``
+  and ``heat_pump_recovery.DEFAULT_HUMIDITY``.
 
 Version 9.12.2 (2026-10-25)
 ===========================

@@ -11,6 +11,7 @@ import pytest
 from nwp500 import sim
 from nwp500 import sim_calibrate as sc
 from nwp500.sim import calibration as cal
+from nwp500.sim import heat_pump_fit as hpf
 from nwp500.sim.decay import DecayProjection, project_decay
 from nwp500.sim.params import (
     HeaterParams,
@@ -158,13 +159,10 @@ class TestTheRecovery:
             t_start_lower=100.0,
             hp_lower_off=130.0,
             t_amb_mean=60.0,
-            compressor_constant=params.compressor.compressor_constant,
-            evap_approach_f=params.compressor.evap_approach_f,
             compressor=params.compressor,
             loss=loss,
             ua_btu_hr_f=UA,
             stratification_gap=gap,
-            two_zone=True,
             tank=params.tank,
         ).minutes
 
@@ -177,13 +175,10 @@ class TestTheRecovery:
             t_start_lower=100.0,
             hp_lower_off=130.0,
             t_amb_mean=60.0,
-            compressor_constant=params.compressor.compressor_constant,
-            evap_approach_f=params.compressor.evap_approach_f,
             compressor=params.compressor,
             loss=params.loss,
             ua_btu_hr_f=UA,
             stratification_gap=20.0,
-            two_zone=True,
             tank=params.tank,
         )
         assert self._minutes(0.0, 20.0) == before.minutes
@@ -416,7 +411,12 @@ class TestKeepBetter:
         assert standby.kept == "base"
         assert params.loss == base.loss
         done = sc.Calibrated(
-            cal.Calibration(params, cast_fit(), None, None, pd.DataFrame()),
+            cal.Calibration(
+                params,
+                cast_fit(),
+                hpf.HeatPumpFit(None, None, None, None, 0, 0, 0, 0, None, None),
+                pd.DataFrame(),
+            ),
             "constant",
             2,
             timedelta(minutes=5),

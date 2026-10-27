@@ -129,10 +129,11 @@ Parameters
    :members:
 
 .. automodule:: nwp500.sim.params
-   :members: TankParams, LossParams, CompressorParams, PowerParams,
-      ElementParams, DrawParams, ControllerParams, ReadinessParams,
-      BookParams, Provenance, provenance_of, unit_of, params_to_document,
-      params_from_document, unknown_fields, RETIRED_FIELDS, FITTED,
+   :members: TankParams, LossParams, CompressorParams, MAP_REF_AIR_F,
+      MAP_REF_WATER_F, ElementParams, DrawParams, ControllerParams,
+      ReadinessParams, BookParams, Provenance, provenance_of, unit_of,
+      params_to_document, params_from_document, unknown_fields,
+      PARAMS_SCHEMA, RETIRED_SCHEMAS, FITTED,
       MEASURED, DEFAULT, HEATER, INSTALLATION, UNFITTED_TERMS,
       INSTALLATION_TERMS, UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F,
       CirculationParams
@@ -171,7 +172,6 @@ Hot water and the heat book
 
 .. automodule:: nwp500.sim.calibration
    :members: calibrate, Calibration, fit_standby, StandbyFit, StandbyWindow,
-      fit_compressor, CompressorFit, split_recoveries, recovery_minutes,
       clean_draws, CleanDraw, crossing,
       demonstrated, frontier, capacity, held_out, fit_evidence,
       EvidenceFit, RecordedBook, fit_book_terms, BookFit,
@@ -185,21 +185,22 @@ Hot water and the heat book
       fit_ungated_observability, element_stints, fit_element_lag, ElementLagFit,
       element_off_points, element_power, element_grid, element_runs,
       fit_element_rates, ElementRateFit, day_ci,
-      energy_saver_off_deficit, upper_start_edge, fit_power,
-      PowerFit, fit_power_scale, power_cycles, cop_cycles, CopCycle,
-      fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
-      metered_withdrawn,
-      path_to_end, with_power, snapshots, recoveries, quiet_windows,
+      energy_saver_off_deficit, upper_start_edge, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       fit_loss, LossFit, loss_windows, standby_ends, standby_error,
-      walk_tau, gap_paths, gap_error,
-      with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD,
+      walk_tau, gap_paths, gap_error, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD,
       heat_pump_cycles, HeatPumpCycle, water_in_use
 
 .. automodule:: nwp500.sim.heat_pump_fit
    :members: recovery_frame, start_holds, run_ons, RunOnFit, climb_heat,
       power_blocks, PHASES, CLIMB_HELD, MIXED_BELOW_F, MIXED_ABOVE_F,
-      MIN_STRETCH_MINUTES, POWER_BLOCK_MINUTES
+      MIN_STRETCH_MINUTES, POWER_BLOCK_MINUTES, Evidence, evidence,
+      Plane, fit_heat_map, fit_power_map, heat_map_error,
+      power_map_error, fit_start_hold, start_hold_error, fit_overshoot,
+      overshoot_error, violations, with_planes, HeatPumpFit,
+      fit_heat_pump, with_heat_pump, MIN_HEAT_STRETCHES,
+      MIN_POWER_BLOCKS, MIN_BAND_STARTS, MIN_RUN_ONS, CARNOT_SHARE,
+      MIN_POWER_W, CHECK_POINTS
 
 .. automodule:: nwp500.sim.history_frame
    :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
@@ -260,7 +261,7 @@ The pieces the entry points are built from.
       RecoveryContext, ModelDuration, PHYSICS_TRUNCATED
 
 .. automodule:: nwp500.sim.heating_trajectory
-   :members: build_heating_trajectory, HeatingPoint, path_cop
+   :members: build_heating_trajectory, HeatingPoint
 
 .. automodule:: nwp500.sim.decay
    :members: project_decay, DecayProjection, AmbientSampler, Draw,
@@ -276,13 +277,13 @@ The pieces the entry points are built from.
    :members: TouRule, tou_rules, tou_windows, rule_windows, Firing,
       reservation_firings, week_bit, month_bit, half_c_to_f, weekly_runs
 
-.. automodule:: nwp500.sim.physics.compressor
-   :members: predict_physics_detailed, predict_physics, PhysicsPath,
-      PhysicsResult, MAX_MINUTES, evaporator_f, EVAP_REF_AIR_F
+.. automodule:: nwp500.sim.physics.heat_pump
+   :members: heat_btu_h, power_w, cop, evaporator_btu_h, start_hold_min,
+      carnot_cop
 
-.. automodule:: nwp500.sim.physics.refrigerant
-   :members: sat_pressure, vapor_density, liquid_enthalpy,
-      vapor_enthalpy, dew_point_f
+.. automodule:: nwp500.sim.physics.compressor
+   :members: predict_physics_detailed, PhysicsPath, PhysicsResult,
+      MAX_MINUTES
 
 .. automodule:: nwp500.sim.physics.tank
    :members: ua_at, bottom_loss_reach, bottom_loss_drop_f

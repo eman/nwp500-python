@@ -179,10 +179,6 @@ class Forecast:
     #: interval (``heating_trajectory.HeatingPoint``); None when none
     #: can be published.
     trajectory: tuple[Any, ...] | None
-    #: The electricity a compressor start spends before the tank gains
-    #: anything, Wh; 0 when it has already started; None without a
-    #: fitted COP.
-    startup_energy_wh: float | None
     reasons: tuple[str, ...]
     defaults_used: tuple[str, ...]
 
@@ -196,9 +192,8 @@ class ActiveCycle:
     status: str
     ready_at: datetime | None = None
     remaining_minutes: float | None = None
-    #: The integrator's own remaining time, with the live evaporator
-    #: coil standing in for its approach estimate when given; None when
-    #: the physics is not usable.
+    #: The integrator's own remaining climb, minutes, whatever model
+    #: serves ``remaining_minutes``.
     physics_remaining_minutes: float | None = None
     lower_f: float | None = None
     target_f: float | None = None

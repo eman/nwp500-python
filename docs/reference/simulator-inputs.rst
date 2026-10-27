@@ -365,11 +365,9 @@ The environment: ``Environment``
    * - ``humidity``
      - %RH
      - 50
-     - **Not reported.** It changes the compressor's output through the
-       evaporator's latent load. At one installation the air beside the
-       heater averaged 53 % (monthly 45-70 %); holding every recovery
-       at 50 % instead of its own reading moved the mean duration error
-       by 0.4 min (27.5 to 27.9 over 178 recoveries).
+     - **Not reported.** Passed to a ``RecoveryModel``; the heat
+       pump's map does not use it. At one installation the air beside
+       the heater averaged 53 % (monthly 45-70 %).
    * - ``inlet_f``
      - degF
      - the parameters' ``draw.inlet_temp_f``
@@ -788,9 +786,6 @@ what a simulation needs of it:
      - A 60 h prior (history puts the constant near it on this
        product), named in ``defaults_used``; with draws, which open a
        gap that closes on it, ``reasons`` says ``tau_gap_prior``.
-   * - ``compressor.compressor_constant`` above 0
-     - No heat-pump recovery can be predicted, and a walk that needs
-       one raises ``SimulationError``.
    * - ``draw.observability``
      - A scenario with draws is refused: ``SimulationError``
        (``draw_model_unsupported``).
@@ -837,44 +832,42 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        earlier 60.06 h without a bottom loss. Fitted without one, on
        146 windows, it was 59 h (95 % CI 47-94 h).
      - 60.0-60.4 h without a bottom loss
-   * - ``compressor.compressor_constant``
-     - 0.0160 ft³/s
-     - 142 recoveries from 2026-02-18 to 09-01, at the coil's approach;
-       mean absolute error 25.3 min on them and 33.7 min on the 35 that
-       followed (the old refrigerant table: 25.9 and 32.2, a difference
-       the paired errors don't resolve). A rotary compressor of about
-       8 cc at 3,500 rpm.
-     - Refit on the CoolProp table once
-   * - ``compressor.evap_approach_f``
-     - 19.56 degF
-     - The evaporator coil's reading, 6.7 + 0.596 x air, at 65 degF air.
-       Held by the compressor fit: the durations don't place it (with K
-       free they reach the same error from 6.9 degF).
-     - Measured once, not refit
-   * - ``compressor.evap_air_slope``
-     - 0.596
-     - The evaporator coil's reading against the air beside the heater
-       over 377 compressor runs, air 48-86 degF. A free fit on the
-       recoveries' durations chose 0.62. 1 is a fixed approach.
-     - Measured once, not refit
-   * - ``power.power_scale``
-     - 1.640
-     - The heater's own power readings over 323 compressor cycles: the
-       metered input is 1.64 times the model's polytropic work, about
-       61 % compression efficiency. Carried from the old table's 0.530
-       by the two models' power on 83 metered cycles.
-     - 0.528-0.551 on the old table
-   * - ``power.cop_scale``, ``power.startup_wh``, ``power.cop_lift_coeff``
-     - 0.688, 160.3 Wh, 0.002
-     - 257 cycles against an energy meter on the heater's circuit. The
-       lift term corrects the model's efficiency for the gap between the
-       tank and the air, which the refrigerant model alone under-states.
-       No error is recorded for these coefficients. An evaluation of the
-       same fit on 2026-09-18, on the record to then, gave a median error
-       of 4.8 % per recovery (Accuracy in :doc:`/explanation/simulator`).
-     - 2.08-2.22, 158-171 Wh, 0.004-0.0065 on the old table. Carried
-       to this one by the two models' COP on 178 recoveries, which
-       differ by 1.156 - 0.003 per degF of lift in log
+   * - ``compressor.heat_btu_h`` and its slopes per degF of air and
+       of water
+     - 4,499 BTU/hr at 65 degF air and 120 degF water; +55.5 per degF
+       of air, -15.9 per degF of water
+     - 38 stretches of 20 minutes or more of draw-free climbs with the
+       tank mixed (3,059 minutes, 2026-04-21 to 10-22), the air 61.2 to
+       88.7 degF and the tank 114.8 to 143.3 degF: 236 BTU/hr RMS. The
+       air slope is the one ``recovery-speed`` measures on whole
+       recoveries
+       (:doc:`/explanation/recovery-speed`).
+     - First fitted 2026-10-26
+   * - ``compressor.power_w`` and its slopes
+     - 401.7 W at 65 degF air and 120 degF water; +0.21 per degF of
+       air, +2.85 per degF of the lower tank
+     - 6,132 ten-minute blocks of metered climbs over 342 runs,
+       2025-12-28 to 2026-10-26, the lower tank 73.8 to 147.5 degF and
+       the air 45.9 to 89.3 degF: 12.9 W RMS.
+     - First fitted 2026-10-26
+   * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
+       ``power_domain_air_f``, ``power_domain_water_f``
+     - 61-89 and 114-144 degF; 45-90 and 73-148 degF
+     - The span each map was fitted over, to the whole degree. Each is
+       read with the air and the water held to its own, so a recovery
+       past an edge takes the edge's value.
+     - Set by each fit
+   * - ``compressor.start_hold_min`` by ``start_hold_after_min``
+     - 0, 5, 10, 18 and 22 min after under 15, 60, 180 and 720 min off,
+       and beyond
+     - The medians of 84 clean starts, 2026-04-18 to 10-25
+       (:doc:`/explanation/recovery-speed`).
+     - First fitted 2026-10-26
+   * - ``controller.hp_stop_overshoot_f``
+     - 0.9 degF
+     - The median overshoot at the stop of 31 draw-free run-ons,
+       2026-04-21 to 10-22.
+     - First fitted 2026-10-26
    * - ``draw.ungated_observability``
      - 0.263
      - ``fit_ungated_observability`` on 165 windows around circulation
@@ -921,8 +914,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        (:doc:`/explanation/tank-energy`). Recoveries heat 0.44-0.48 of
        the tank while it is stratified and 0.96 once mixed, over 269
        recoveries (:doc:`/explanation/recovery-speed`). The share
-       is a round 0.5: refitting the compressor constant at 0.435-0.5
-       moved the held-out recovery error by under 0.7 min (33.7-34.3).
+       is a round 0.5: under the earlier refrigerant model, a share of
+       0.435-0.5 moved the held-out recovery error by under 0.7 min
+       (33.7-34.3).
    * - ``element.element_w``
      - 5,148 W
      - Element-only minutes in the record (90 % CI 5,104-5,176 W,
@@ -1037,22 +1031,15 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - The bath tests, the outlet lag and the readiness evidence
        (:doc:`/explanation/draws`).
 
-**Engineering values**, not measured on the heater: the condenser
-approach (10 degF), clearance ratio (0.05), polytropic exponent (1.17),
-the fan's airflow in the latent term (229 CFM; no airflow is
-published, and the manual's 229 is the 50 gal model's shipping weight
-in pounds), the jacket loss fallback (5.0 BTU/hr per degF) and the
-lift reference (62 degF). The record cannot fit the first three: the
-compressor constant absorbs each, and refitting it with the condenser
-approach at 5 to 20 degF, the clearance at 0.02 to 0.08 or the exponent
-at 1.10 to 1.25 moved the held-out recovery error by under 0.7 min
-(33.1 to 34.3 on 35 recoveries). The latent term is up to about 150 BTU/hr
-of about 4,000; on the record, a recovery's duration moves a mean
-1.2 min between its own humidity and 50 % (at most 3 %).
+**Engineering values**, not measured on the heater: the jacket loss
+fallback (5.0 BTU/hr per degF) and the maps' cross terms (0: the record
+does not place them). ``CompressorParams()`` is this fit, rounded.
 
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document
-(schema ``heater-params/1``). ``sim.codec`` writes a scenario with its
+(schema ``heater-params/2``; a ``heater-params/1`` document is refused,
+and a heater fitted under it is calibrated again). ``sim.codec`` writes
+a scenario with its
 parameters as one document.
 
 

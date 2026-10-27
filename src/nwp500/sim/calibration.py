@@ -22,7 +22,7 @@ Its columns, °F where a temperature:
 - ``excluded``: a sample no heat-pump recovery may span (a hybrid
   mode, an anti-legionella cycle, an error);
 - ``power_w``: what the heater draws (``current_inst_power``), each
-  report held until the next, for the power fits;
+  report held until the next, for the power map;
 - ``energy_to_setpoint_wh``: the heater's own deficit to its setpoint
   (``DeviceStatus.energy_to_setpoint``), to tell a recovery cut short
   from one that finished;
@@ -32,22 +32,22 @@ Its columns, °F where a temperature:
   the cabinet's, NaN otherwise;
 - ``air_f``: the air where the heater stands throughout, for the
   standby loss: a sensor's, or ``location_air``'s projection;
-- optionally ``humidity_pct`` (the air's, for the evaporator; 50
-  without) and ``drawing``, ``circulating`` (a meter's draws and the
-  circulation's runs, ``sim.circulation``; with them, the quiet test needs no
+- optionally ``humidity_pct`` (the air's) and ``drawing``,
+  ``circulating`` (a meter's draws and the circulation's runs,
+  ``sim.circulation``; with them, the quiet test needs no
   ``dhw_in_use``).
 
 Each fit reports what it saw and what it left out
-(``StandbyFit``, ``CompressorFit``), and only replaces the base
-parameters' values when it had the evidence to.
+(``StandbyFit``, ``heat_pump_fit.HeatPumpFit``), and only replaces the
+base parameters' values when it had the evidence to.
 """
 
 import bisect
 import math
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -72,7 +72,6 @@ from nwp500.sim.book import (
 from nwp500.sim.book import Step as BookStep
 from nwp500.sim.circulation import RUN_GAP, cooled_share, merge_runs
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
-from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.history_frame import Interval
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (
@@ -83,16 +82,17 @@ from nwp500.sim.params import (
     UNFITTED_TERMS,
     BookParams,
     CirculationParams,
-    CompressorParams,
     HeaterParams,
     LossParams,
     TankParams,
 )
-from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
 from nwp500.sim.physics.draw import delivery_temp_f, draw_energy_btu
 from nwp500.sim.physics.tank import ua_at
 from nwp500.sim.record import Record
-from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
+from nwp500.sim.units import WATER_BTU_PER_GAL_F
+
+if TYPE_CHECKING:
+    from nwp500.sim.heat_pump_fit import HeatPumpFit
 
 # ── standby: quiet windows, the loss law, the gap's time constant ────
 
@@ -739,229 +739,17 @@ def fit_standby(
     )
 
 
-# ── the compressor: its constant ─────────────────────────────────────
+# ── holding out the latest ───────────────────────────────────────
 
-#: Bounds of the compressor fit; a fit on a bound is reported, not
-#: trusted. K is a displacement rate: 0.004-0.08 ft³/s is a rotary
-#: compressor of about 2 to 40 cc at 3,500 rpm.
-K_BOUNDS = (0.004, 0.08)
-_BOUND_HIT_RTOL = 0.01
-#: The recoveries fitted, by duration, minutes.
-MIN_RECOVERY_MINUTES = 15.0
-MAX_RECOVERY_MINUTES = 480.0
-#: Fewer recoveries than this and nothing is fitted.
-MIN_RECOVERIES = 5
-#: With this many, the latest ``HELDOUT_FRACTION`` (at least
-#: ``MIN_HELDOUT``) are held out to score the fit.
+#: With this many of a fit's items, the latest ``HELDOUT_FRACTION`` (at
+#: least ``MIN_HELDOUT``) are held out to judge it
+#: (``sim_calibrate.keep_better``).
 MIN_RECOVERIES_FOR_SPLIT = 10
 HELDOUT_FRACTION = 0.20
 MIN_HELDOUT = 2
 
 
-@dataclass(frozen=True)
-class CompressorFit:
-    """The compressor fit, and how well it scores: the mean absolute
-    error on the recoveries fitted and on those held out."""
-
-    compressor_constant: float
-    #: The approach it was fitted at, the compressor's own.
-    evap_approach_f: float
-    mae_minutes: float
-    heldout_mae_minutes: float | None
-    n_fitted: int
-    n_heldout: int
-    #: The fit landed on a bound: the model could not fit the corpus,
-    #: and the values are pinned, not converged.
-    hit_bounds: bool
-    two_zone: bool
-
-
-_RECOVERY_NEED = (
-    "t_start_lower",
-    "delta_t_lower",
-    "t_amb_mean",
-    "duration_minutes",
-)
-
-
-def split_recoveries(
-    recoveries: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """``(fitted, held_out)``: the recoveries a compressor fit uses, in
-    time order where ``start_time`` says, the latest ``HELDOUT_FRACTION``
-    (at least ``MIN_HELDOUT``) held out once there are
-    ``MIN_RECOVERIES_FOR_SPLIT``. Usable: the figures known and a
-    duration from ``MIN_RECOVERY_MINUTES`` to ``MAX_RECOVERY_MINUTES``."""
-    if any(c not in recoveries.columns for c in _RECOVERY_NEED):
-        empty = recoveries.iloc[0:0]
-        return empty, empty
-    df = recoveries.dropna(subset=list(_RECOVERY_NEED))
-    minutes = df["duration_minutes"]
-    df = df.loc[
-        (minutes >= MIN_RECOVERY_MINUTES) & (minutes <= MAX_RECOVERY_MINUTES)
-    ].copy()
-    if "start_time" in df.columns:
-        df = df.sort_values("start_time").reset_index(drop=True)
-    n = len(df)
-    n_held = (
-        max(MIN_HELDOUT, round(n * HELDOUT_FRACTION))
-        if n >= MIN_RECOVERIES_FOR_SPLIT
-        else 0
-    )
-    return df.iloc[: n - n_held], df.iloc[n - n_held :]
-
-
-def recovery_minutes(
-    recoveries: pd.DataFrame,
-    compressor_constant: float,
-    evap_approach_f: float,
-    *,
-    compressor: CompressorParams,
-    loss: LossParams,
-    tank: TankParams,
-    two_zone: bool,
-    gaps: bool,
-) -> np.ndarray:
-    """Each recovery's duration as the physics predicts it, minutes, on
-    ``fit_compressor``'s columns; ``gaps`` uses its
-    ``stratification_gap``, else none."""
-    rows = len(recoveries)
-    start = np.asarray(recoveries["t_start_lower"], dtype=float)
-    target = start + np.asarray(recoveries["delta_t_lower"], dtype=float)
-    air = np.asarray(recoveries["t_amb_mean"], dtype=float)
-    humidity = np.asarray(
-        recoveries["h_amb_start"]
-        if "h_amb_start" in recoveries.columns
-        else np.full(rows, 50.0),
-        dtype=float,
-    )
-    gap = np.asarray(
-        recoveries["stratification_gap"] if gaps else np.zeros(rows),
-        dtype=float,
-    )
-    return np.array(
-        [
-            predict_physics_detailed(
-                t_start_lower=float(start[i]),
-                hp_lower_off=float(target[i]),
-                t_amb_mean=float(air[i]),
-                compressor_constant=compressor_constant,
-                evap_approach_f=evap_approach_f,
-                compressor=compressor,
-                loss=loss,
-                h_amb_start=float(humidity[i]),
-                ua_btu_hr_f=loss.ua_btu_hr_f,
-                ua_exponent=loss.ua_exponent,
-                ua_ref_delta_t=loss.ua_ref_delta_t_f,
-                stratification_gap=float(gap[i]),
-                two_zone=two_zone,
-                tank=tank,
-            ).minutes
-            for i in range(rows)
-        ]
-    )
-
-
-def fit_compressor(
-    recoveries: pd.DataFrame,
-    compressor: CompressorParams,
-    loss: LossParams,
-    *,
-    two_zone: bool = True,
-    tank: TankParams = TankParams(),
-) -> CompressorFit | None:
-    """``compressor_constant`` minimising the squared error of the
-    physics' durations against recorded ones, each integrated on
-    ``tank`` (the heater's own: pass ``HeaterParams.tank``), at
-    ``compressor``'s own ``evap_approach_f``. The durations do not
-    place the approach: on one installation's 142 recoveries the
-    approach and K together reached the same error from 6.9 °F, where
-    the evaporator coil read 19.6 °F below the air.
-
-    ``recoveries``: exactly one row per heat-pump recovery (a recovery
-    read twice, from overlapping windows say, is weighted twice and
-    moves the fit; keep one row for each), with
-    ``t_start_lower``, ``delta_t_lower`` (the lower zone's rise to its
-    target), ``t_amb_mean`` (the air over it, °F) and
-    ``duration_minutes``; optionally ``h_amb_start`` (%RH; 50 without),
-    ``stratification_gap`` (upper minus lower at the start; without it
-    the fit falls back to the one-zone integrator, so the constant stays
-    the one the simulation will use) and ``start_time`` (to hold out the
-    latest, ``split_recoveries``). None with fewer than
-    ``MIN_RECOVERIES`` usable.
-    """
-    fit_df, held_df = split_recoveries(recoveries)
-    if len(fit_df) + len(held_df) < MIN_RECOVERIES:
-        return None
-    n_held = len(held_df)
-    # Usable gaps are judged on the rows fitted, as the model's fit did:
-    # a gap the fit has not got cannot be the mass model's.
-    has_gaps = "stratification_gap" in fit_df.columns and bool(
-        fit_df["stratification_gap"].notna().all()
-    )
-    two_zone = two_zone and has_gaps
-
-    approach = compressor.evap_approach_f
-
-    def predicted(
-        frame: pd.DataFrame, k: float, gaps: bool = has_gaps
-    ) -> np.ndarray:
-        return recovery_minutes(
-            frame,
-            k,
-            approach,
-            compressor=compressor,
-            loss=loss,
-            tank=tank,
-            two_zone=two_zone,
-            gaps=gaps,
-        )
-
-    actual = np.asarray(fit_df["duration_minutes"], dtype=float)
-
-    def sse(k: float) -> float:
-        return float(np.sum((predicted(fit_df, k) - actual) ** 2))
-
-    found = cast(
-        OptimizeResult,
-        minimize_scalar(
-            sse, bounds=K_BOUNDS, method="bounded", options={"xatol": 1e-6}
-        ),
-    )
-    k = float(found.x)
-    hit = any(
-        abs(k - bound) <= _BOUND_HIT_RTOL * max(abs(bound), 1e-9)
-        for bound in K_BOUNDS
-    )
-    mae = float(np.mean(np.abs(predicted(fit_df, k) - actual)))
-    held_mae = None
-    if n_held:
-        # The held-out rows' gaps as recorded, wherever the column is.
-        held_mae = float(
-            np.mean(
-                np.abs(
-                    predicted(
-                        held_df,
-                        k,
-                        gaps="stratification_gap" in held_df.columns,
-                    )
-                    - np.asarray(held_df["duration_minutes"], dtype=float)
-                )
-            )
-        )
-    return CompressorFit(
-        compressor_constant=k,
-        evap_approach_f=approach,
-        mae_minutes=mae,
-        heldout_mae_minutes=held_mae,
-        n_fitted=len(fit_df),
-        n_heldout=n_held,
-        hit_bounds=hit,
-        two_zone=two_zone,
-    )
-
-
-# ── the recoveries a compressor fit learns from ──────────────────────
+# ── the heat pump's recoveries ───────────────────────────────────────
 
 #: How far before a compressor start a disqualifying state still counts:
 #: a mode change is reported seconds before the compressor.
@@ -1250,7 +1038,7 @@ def snapshots(
     in use from ``DRAW_LEAD`` before the start to the end); and, with a
     meter's ``draws`` (``(instant, delivered gallons)``) and
     ``circulation``'s runs, what was drawn and circulated over the
-    snapshot (``_in_cycle``), which ``metered_withdrawn`` prices.
+    snapshot (``_in_cycle``).
     """
     if history.empty:
         return pd.DataFrame(columns=list(_SNAPSHOT_COLUMNS))
@@ -1332,13 +1120,12 @@ def snapshots(
 def recoveries(
     history: pd.DataFrame, *, air: str = "heater_air_f"
 ) -> pd.DataFrame:
-    """One row per recovery, as ``fit_compressor`` takes them: of a
-    cycle's ``snapshots``, the one with the coldest lower probe (the
-    earliest of equals), timed from there. A draw that takes the probe
-    below where it started moves the row to after the draw; without a
-    dip it is the start. Only reached recoveries teach a duration: the
-    heater stops some short by design, and those never reach the
-    instant the fit models."""
+    """One row per recovery: of a cycle's ``snapshots``, the one with
+    the coldest lower probe (the earliest of equals), timed from there.
+    A draw that takes the probe below where it started moves the row to
+    after the draw; without a dip it is the start. ``reached`` says
+    which reached their target: the heater stops some short by
+    design."""
     rows = snapshots(history, air=air)
     if rows.empty:
         return rows
@@ -1373,439 +1160,14 @@ def with_standby(params: HeaterParams, fit: StandbyFit) -> HeaterParams:
     return replace(params, loss=loss, tank=tank)
 
 
-def with_compressor(params: HeaterParams, fit: CompressorFit) -> HeaterParams:
-    """``params`` with the compressor fit's values, unless it is pinned
-    on a bound."""
-    if fit.hit_bounds:
-        return params
-    return replace(
-        params,
-        compressor=replace(
-            params.compressor,
-            compressor_constant=fit.compressor_constant,
-            evap_approach_f=fit.evap_approach_f,
-            two_zone=fit.two_zone,
-        ),
-    )
-
-
-# ── power and COP, against the heater's own power readings ───────────
-
-#: Fewer cycles than this and neither power fit is made.
-MIN_POWER_EVENTS = 10
-#: Shorter cycles are the meter's resolution, Wh.
-MIN_COP_METERED_WH = 300.0
-#: The lift (tank mean less the air, °F) the COP's lift term is
-#: referred to, and the coefficients tried, per °F.
-COP_LIFT_REF_F = 62.0
-COP_LIFT_GRID = tuple(i * 0.0005 for i in range(61))
-
-
-def _starts(rows: pd.DataFrame) -> pd.DataFrame:
-    """Each cycle's first snapshot: the power fits read a cycle whole."""
-    if rows.empty:
-        return rows
-    first = rows.loc[rows["offset_minutes"] == 0.0]
-    return first.drop_duplicates(subset=["cycle"])
-
-
-def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
-    """A frame's rows as plain mappings."""
-    return cast(list[dict[str, Any]], frame.to_dict("records"))
-
-
-def path_to_end(
-    row: Mapping[str, Any], params: HeaterParams
-) -> PhysicsPath | None:
-    """The integrator's path over the lift a cycle made: to where its
-    lower probe got (``t_lower_end``), not its target, so a cycle cut
-    short is compared over the heating it did. None when nothing was
-    heated or the walk did not finish."""
-    start = float(row["t_start_lower"])
-    target = start + float(row["delta_t_lower"])
-    end = row.get("t_lower_end")
-    if end is not None and not pd.isna(end):
-        if float(end) <= start:
-            return None
-        target = min(target, float(end))
-    gap = row.get("stratification_gap")
-    result = predict_physics_detailed(
-        t_start_lower=start,
-        hp_lower_off=target,
-        t_amb_mean=float(row["t_amb_mean"]),
-        compressor_constant=params.compressor.compressor_constant,
-        evap_approach_f=params.compressor.evap_approach_f,
-        compressor=params.compressor,
-        loss=params.loss,
-        h_amb_start=float(row.get("h_amb_start", 50.0)),
-        ua_btu_hr_f=params.loss.ua_btu_hr_f,
-        ua_exponent=params.loss.ua_exponent,
-        ua_ref_delta_t=params.loss.ua_ref_delta_t_f,
-        stratification_gap=0.0 if gap is None else float(gap),
-        two_zone=params.compressor.two_zone,
-        record_path=True,
-        tank=params.tank,
-    )
-    if not result.converged or result.path is None or result.minutes <= 0.0:
-        return None
-    return result.path
-
-
-@dataclass(frozen=True)
-class PowerFit:
-    """Input power and apparent COP against the heater's own readings.
-
-    ``power_scale``: metered energy over the integrator's mean power for
-    each cycle's real duration, a ratio of sums. ``cop_scale``,
-    ``startup_wh`` and ``cop_lift_coeff``: ``metered = startup + heat /
-    (scale x COP x exp(-coeff (lift - COP_LIFT_REF_F)))``, the heat what
-    the tank kept. None where too few cycles carried the figures.
-    """
-
-    power_scale: float | None
-    n_power: int
-    cop_scale: float | None
-    startup_wh: float | None
-    cop_lift_coeff: float | None
-    n_cop: int
-
-
-def power_cycles(
-    rows: pd.DataFrame, params: HeaterParams
-) -> list[tuple[datetime | None, float, float]]:
-    """Each cycle's ``(start, metered, modelled)`` Wh for the power scale
-    (``start`` None where the rows carry no ``start_time``):
-    the integrator's own mean power over the cycle's real duration, so
-    both sides are energy over the same clock."""
-    out: list[tuple[datetime | None, float, float]] = []
-    for row in _records(_starts(rows)):
-        raw = row["metered_input_wh"]
-        if raw is None or pd.isna(raw):
-            continue
-        metered = float(raw)
-        if not math.isfinite(metered) or metered <= 0.0:
-            continue
-        path = path_to_end(row, params)
-        real_minutes = float(row["duration_minutes"])
-        if path is None or not real_minutes > 0.0:
-            continue
-        physics_minutes = path.elapsed_s[-1] / 60.0
-        power_w = path.input_btu[-1] / BTU_PER_WH / (physics_minutes / 60)
-        modelled = power_w * real_minutes / 60
-        if not math.isfinite(modelled) or modelled <= 0.0:
-            continue
-        out.append((row.get("start_time"), metered, modelled))
-    return out
-
-
-def fit_power_scale(
-    rows: pd.DataFrame, params: HeaterParams
-) -> tuple[float | None, int]:
-    """``(metered / modelled, cycles)`` over ``power_cycles``, a ratio
-    of sums. ``(None, n)`` with fewer than ``MIN_POWER_EVENTS``."""
-    cycles = power_cycles(rows, params)
-    metered_total = sum(m for _, m, _ in cycles)
-    modelled_total = sum(e for _, _, e in cycles)
-    n = len(cycles)
-    if n < MIN_POWER_EVENTS or modelled_total <= 0.0:
-        return None, n
-    return metered_total / modelled_total, n
-
-
-def solve_cop_scale(
-    heat_wh: np.ndarray,
-    modelled_cop: np.ndarray,
-    metered_wh: np.ndarray,
-) -> tuple[float, float] | None:
-    """``(scale, startup_wh)`` for ``metered = startup + heat / (scale x
-    COP)``, by least squares weighted ``1 / metered``; ``startup`` at
-    least 0."""
-    h, c, e = (
-        np.asarray(v, dtype=float) for v in (heat_wh, modelled_cop, metered_wh)
-    )
-    w = np.sqrt(1.0 / e)
-    for intercept in (True, False):
-        cols = [h / c]
-        if intercept:
-            cols.insert(0, np.ones_like(h))
-        coef, *_ = np.linalg.lstsq(
-            np.column_stack(cols) * w[:, None], e * w, rcond=None
-        )
-        startup = float(coef[0]) if intercept else 0.0
-        inv = float(coef[1 if intercept else 0])
-        if not inv > 0.0:
-            return None
-        if startup >= 0.0:
-            return 1.0 / inv, startup
-    return None
-
-
-def solve_cop_fit(
-    heat_wh: Sequence[float],
-    modelled_cop: Sequence[float],
-    metered_wh: Sequence[float],
-    lift_f: Sequence[float],
-) -> tuple[float, float, float] | None:
-    """``(scale, startup_wh, lift_coeff)``: ``solve_cop_scale`` at each
-    ``COP_LIFT_GRID`` coefficient, the least weighted squared error in
-    the meter kept."""
-    c0 = np.asarray(modelled_cop, dtype=float)
-    lift = np.asarray(lift_f, dtype=float)
-    e = np.asarray(metered_wh, dtype=float)
-    h = np.asarray(heat_wh, dtype=float)
-    best: tuple[float, tuple[float, float, float]] | None = None
-    for gamma in COP_LIFT_GRID:
-        c = c0 * np.exp(-gamma * (lift - COP_LIFT_REF_F))
-        solved = solve_cop_scale(h, c, e)
-        if solved is None:
-            continue
-        a, startup = solved
-        pred = startup + h / (a * c)
-        sse = float((((pred - e) ** 2) / e).sum())
-        if best is None or sse < best[0]:
-            best = (sse, (a, startup, gamma))
-    return None if best is None else best[1]
-
-
-#: The heat a cycle's draws and circulation took, Wh: None when it is
-#: not known, which rules the cycle out (an unknown withdrawal is not a
-#: zero one).
-Withdrawn = Callable[[Mapping[str, Any]], float | None]
-
-
-def metered_withdrawn(
-    params: HeaterParams,
-    *,
-    flow_at: Callable[[datetime], float | None] | None = None,
-) -> Withdrawn:
-    """With a meter: the apparent heat a cycle's draws and circulation
-    took (``snapshots``' ``draw_gal`` and ``circulation_runs``), Wh.
-    Draws through the calibrated draw term at their volume-weighted
-    upper zone; each run through the run model (``run_heat_btu``) at the
-    upper zone at its start, times
-    ``DrawParams.ungated_observability`` (the share of the run's heat
-    the probes show). None when either record is missing, when draws
-    happened and the draw term is off, or when circulation ran and the
-    installation has no circulation terms: an unknown withdrawal is not
-    a zero one. ``flow_at`` prices a cycle's runs at the flow the
-    circulation ran at then, by the cycle's ``start_time``
-    (``flow_lookup``), ``CirculationParams.flow_gpm`` where it has none:
-    the flow moves run to run, and today's priced months of runs
-    wrongly."""
-    d, c = params.draw, params.circulation
-
-    def withdrawn(row: Mapping[str, Any]) -> float | None:
-        gal, runs = row.get("draw_gal"), row.get("circulation_runs")
-        if gal is None or runs is None or pd.isna(gal):
-            return None
-        btu = 0.0
-        if runs:
-            if c is None or c.displaced_gal <= 0.0:
-                return None
-            air = row.get("t_amb_mean")
-            if air is None or pd.isna(air):
-                return None
-            flow = c.flow_gpm
-            at = row.get("start_time")
-            if flow_at is not None and at is not None and not pd.isna(at):
-                then = flow_at(cast(datetime, pd.Timestamp(at).to_pydatetime()))
-                flow = then if then is not None else c.flow_gpm
-            for minutes, upper, rest, before in runs:
-                btu += d.ungated_observability * run_heat_btu(
-                    minutes,
-                    upper,
-                    float(air),
-                    c.displaced_gal,
-                    flow,
-                    rest_offset_f=c.return_rest_offset_f,
-                    rest_h=rest,
-                    cool_tau_h=c.return_cool_tau_h,
-                    before_min=before,
-                )
-        if float(gal) > 0.0:
-            upper = row.get("draw_t_upper")
-            if d.observability is None or upper is None or pd.isna(upper):
-                return None
-            btu += draw_energy_btu(
-                float(gal),
-                float(upper),
-                delivery_temp_f(
-                    float(upper), d.delivery_intercept_f, d.delivery_slope
-                ),
-                d.inlet_temp_f,
-                d.observability,
-            )
-        return btu / BTU_PER_WH
-
-    return withdrawn
-
-
-def draw_free_withdrawn(row: Mapping[str, Any]) -> float | None:
-    """Without a meter: nothing withdrawn from a cycle with no water in
-    use from ``DRAW_LEAD`` before it to its end, and unknown otherwise."""
-    return 0.0 if bool(row.get("draw_free")) else None
-
-
-@dataclass(frozen=True)
-class CopCycle:
-    """One cycle's figures for the apparent COP: when it started, the
-    heat it stored plus what draws took, the integrator's COP, the
-    metered energy (Wh) and the lift (°F).
-    ``start`` is None where the rows carry no ``start_time``."""
-
-    start: datetime | None
-    heat_wh: float
-    modelled_cop: float
-    metered_wh: float
-    lift_f: float
-
-
-def cop_cycles(
-    rows: pd.DataFrame,
-    params: HeaterParams,
-    *,
-    withdrawn: Withdrawn = draw_free_withdrawn,
-) -> list[CopCycle]:
-    """The cycles ``fit_cop_scale`` fits on, and their figures."""
-    needed = [
-        "metered_input_wh",
-        "t_start_lower",
-        "t_start_upper",
-        "t_lower_end",
-        "t_upper_end",
-    ]
-    if not set(needed) <= set(rows.columns):
-        return []
-    wh_per_f = params.tank.thermal_mass_btu_f / BTU_PER_WH
-    out: list[CopCycle] = []
-    for row in _records(_starts(rows)):
-        if any(row[c] is None or pd.isna(row[c]) for c in needed):
-            continue
-        metered = float(row["metered_input_wh"])
-        if metered < MIN_COP_METERED_WH:
-            continue
-        stored = wh_per_f * (
-            (float(row["t_lower_end"]) + float(row["t_upper_end"])) / 2
-            - (float(row["t_start_lower"]) + float(row["t_start_upper"])) / 2
-        )
-        # No screen on what was stored: that would select on the outcome
-        # being fitted.
-        took = withdrawn(row)
-        if took is None or not math.isfinite(took):
-            continue
-        path = path_to_end(row, params)
-        if path is None:
-            continue
-        modelled = path_cop(
-            path,
-            0.0,
-            path.elapsed_s[-1],
-            params.compressor.two_zone,
-            float(row["t_start_upper"]),
-            tank=params.tank,
-        )
-        if modelled is None or not math.isfinite(modelled) or modelled <= 0:
-            continue
-        air = row.get("t_amb_mean")
-        if air is None or pd.isna(air):
-            continue
-        mean = (
-            float(row["t_lower_end"])
-            + float(row["t_upper_end"])
-            + float(row["t_start_lower"])
-            + float(row["t_start_upper"])
-        ) / 4
-        out.append(
-            CopCycle(
-                start=row.get("start_time"),
-                heat_wh=stored + took,
-                modelled_cop=modelled,
-                metered_wh=metered,
-                lift_f=mean - float(air),
-            )
-        )
-    return out
-
-
-def fit_cop_scale(
-    rows: pd.DataFrame,
-    params: HeaterParams,
-    *,
-    withdrawn: Withdrawn = draw_free_withdrawn,
-) -> tuple[tuple[float, float, float] | None, int]:
-    """``((scale, startup_wh, lift_coeff), cycles)`` for the apparent
-    COP, the heat a cycle stored (the full tank's mass times the rise of
-    the probes' mean) plus what ``withdrawn`` says draws took during it
-    (``cop_cycles``). ``(None, n)`` with fewer than
-    ``MIN_POWER_EVENTS``.
-
-    Without a meter the default keeps only the cycles no water was
-    drawn around: the heat drawn during a cycle is otherwise missing
-    from its heat and pulls the scale low.
-    """
-    cycles = cop_cycles(rows, params, withdrawn=withdrawn)
-    n = len(cycles)
-    if n < MIN_POWER_EVENTS:
-        return None, n
-    return (
-        solve_cop_fit(
-            [c.heat_wh for c in cycles],
-            [c.modelled_cop for c in cycles],
-            [c.metered_wh for c in cycles],
-            [c.lift_f for c in cycles],
-        ),
-        n,
-    )
-
-
-def fit_power(
-    rows: pd.DataFrame,
-    params: HeaterParams,
-    *,
-    withdrawn: Withdrawn = draw_free_withdrawn,
-) -> PowerFit:
-    """Both power fits on ``snapshots`` rows, every cycle whether or not
-    it reached its target (a capped cycle is as good a sample of heat
-    per Wh as any), on ``params``' compressor and loss."""
-    scale, n_power = fit_power_scale(rows, params)
-    cop, n_cop = fit_cop_scale(rows, params, withdrawn=withdrawn)
-    return PowerFit(
-        power_scale=scale,
-        n_power=n_power,
-        cop_scale=None if cop is None else cop[0],
-        startup_wh=None if cop is None else cop[1],
-        cop_lift_coeff=None if cop is None else cop[2],
-        n_cop=n_cop,
-    )
-
-
-def with_power(params: HeaterParams, fit: PowerFit) -> HeaterParams:
-    """``params`` with the power fit's values where it had them."""
-    power = params.power
-    if fit.power_scale is not None:
-        power = replace(power, power_scale=fit.power_scale)
-    if fit.cop_scale is not None:
-        power = replace(
-            power,
-            cop_scale=fit.cop_scale,
-            startup_wh=cast(float, fit.startup_wh),
-            cop_lift_coeff=cast(float, fit.cop_lift_coeff),
-            cop_lift_ref_f=COP_LIFT_REF_F,
-        )
-    return replace(params, power=power)
-
-
 @dataclass(frozen=True)
 class Calibration:
-    """A heater's calibration: the parameters, and the fits behind them
-    (None where a fit had too little to go on)."""
+    """A heater's calibration: the parameters, and the fits behind them."""
 
     params: HeaterParams
     standby: StandbyFit
-    compressor: CompressorFit | None
-    #: None when the compressor was not fitted or is pinned on a bound:
-    #: power is scaled against the compressor the simulation will run.
-    power: PowerFit | None
+    #: The heat pump's (``heat_pump_fit.fit_heat_pump``).
+    heat_pump: HeatPumpFit
     #: The recoveries found, reached or not.
     recoveries: pd.DataFrame = field(repr=False)
 
@@ -1815,36 +1177,27 @@ def calibrate(
     base: HeaterParams,
     *,
     recovery_air: str = "heater_air_f",
-    withdrawn: Withdrawn | None = None,
-    draws: Sequence[tuple[datetime, float]] | None = None,
-    circulation: Sequence[tuple[datetime, datetime]] | None = None,
-    circulation_flow_at: Callable[[datetime], float | None] | None = None,
     ua_exponent: float | None = None,
 ) -> Calibration:
     """``base`` refitted on ``history``: the standby loss law and the
-    gap's time constant from its quiet windows, then the compressor on
-    its reached recoveries, against the loss just fitted (as the
-    simulation will run it), then input power and COP against the
-    ``power_w`` readings, on that compressor. A part without the
-    evidence keeps ``base``'s value; a compressor fit pinned on a bound
-    is reported but not applied, and no power is fitted on it.
-    With a meter's ``draws`` (``(instant, delivered gallons)``) and
-    ``circulation``'s runs (an empty list for none), the COP fit prices
-    the heat each cycle's draws and runs took (``metered_withdrawn``),
-    each run at the flow it ran at when ``circulation_flow_at`` says
-    (``flow_lookup`` over ``measure_runs``); without them it keeps
-    draw-free cycles. ``withdrawn`` replaces either. With ``ua_exponent``,
-    the standby loss law's exponent is held there (``fit_standby``).
+    gap's time constant from its quiet windows, then the heat pump's
+    performance map, the hold at its starts and the overshoot at its
+    stops from its recoveries (``heat_pump_fit.fit_heat_pump``), the
+    heat priced against the loss just fitted, the air read from
+    ``recovery_air``. With ``ua_exponent``, the standby loss law's
+    exponent is held there (``fit_standby``).
 
     What could not be fitted keeps ``base``'s value, the best prior
     there is for the same product, and is named in the result's
     ``HeaterParams.unfitted``, so a failed fit never reads as a fitted
-    one: a compressor not fitted (too few recoveries, or pinned on a
-    bound) leaves ``compressor`` and ``power``, power or COP not fitted
-    ``power``, no quiet window ``standby`` and no gap constant
-    ``gap_tau``. ``base``'s record of the installation's terms
-    (``INSTALLATION_TERMS``) is kept: they are fitted apart, and a
-    caller applying its own fits drops each from ``unfitted``."""
+    one: no heat map leaves ``compressor``, no power map ``power``, no
+    quiet window ``standby`` and no gap constant ``gap_tau``. ``base``'s
+    record of the installation's terms (``INSTALLATION_TERMS``) is
+    kept: they are fitted apart, and a caller applying its own fits
+    drops each from ``unfitted``."""
+    # ``heat_pump_fit`` measures on this module's recoveries.
+    from nwp500.sim import heat_pump_fit as hpf
+
     standby = fit_standby(
         history,
         base.tank.thermal_mass_btu_f,
@@ -1853,32 +1206,18 @@ def calibrate(
         ua_exponent=ua_exponent,
     )
     params = with_standby(base, standby)
-    rows = snapshots(
-        history, air=recovery_air, draws=draws, circulation=circulation
-    )
     found = recoveries(history, air=recovery_air)
-    reached = found.loc[found["reached"].astype(bool)] if len(found) else found
-    compressor = fit_compressor(
-        reached, params.compressor, params.loss, tank=params.tank
+    hp_fit = hpf.fit_heat_pump(
+        hpf.evidence(history, params.tank, params.loss, air=recovery_air),
+        params.compressor,
     )
-    power = None
-    if compressor is not None and not compressor.hit_bounds:
-        params = with_compressor(params, compressor)
-        metered = draws is not None and circulation is not None
-        if withdrawn is None:
-            withdrawn = (
-                metered_withdrawn(params, flow_at=circulation_flow_at)
-                if metered
-                else draw_free_withdrawn
-            )
-        power = fit_power(rows, params, withdrawn=withdrawn)
-        params = with_power(params, power)
+    params = hpf.with_heat_pump(params, hp_fit)
     # The installation's terms are fitted apart (``fit_book_terms``,
     # ``fit_evidence``, ``fit_zone_mix``): ``base``'s record of them holds.
     unfitted = [t for t in base.unfitted if t in INSTALLATION_TERMS]
-    if compressor is None or compressor.hit_bounds:
-        unfitted += ["compressor", "power"]
-    elif power is None or power.power_scale is None or power.cop_scale is None:
+    if hp_fit.heat is None or hp_fit.violations:
+        unfitted.append("compressor")
+    if hp_fit.power is None or hp_fit.violations:
         unfitted.append("power")
     if standby.ua_ref is None or standby.ua_exponent is None:
         unfitted.append("standby")
@@ -1887,7 +1226,7 @@ def calibrate(
     params = replace(
         params, unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted)
     )
-    return Calibration(params, standby, compressor, power, found)
+    return Calibration(params, standby, hp_fit, found)
 
 
 # ── readiness evidence, from metered draws ─────────────────────────

@@ -6,7 +6,7 @@ port; these hold its answers' shapes.
 """
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -21,6 +21,7 @@ from nwp500.sim import (
 from nwp500.sim.api import counter_measures_to_setpoint
 from nwp500.sim.inputs import VACATION
 from nwp500.sim.params import HeaterParams
+from nwp500.sim.physics.heat_pump import start_hold_min
 
 if TYPE_CHECKING:
     from nwp500.models import DeviceStatus
@@ -55,7 +56,12 @@ class TestReadyByATime:
         assert f.ready_at == at(10)
         assert f.start_at == at(10) - timedelta(minutes=f.duration_minutes)
         assert f.target_f == 140.0 and f.estimator == "physics"
-        assert f.physics_estimate_minutes == f.duration_minutes
+        # The physics' climb after a start's hold, the compressor's last
+        # stop not known.
+        assert f.physics_estimate_minutes is not None
+        assert f.duration_minutes == pytest.approx(
+            f.physics_estimate_minutes + start_hold_min(params.compressor, None)
+        )
         # The tank coasted to the start, cooler than now.
         assert f.lower_f_at_start < 100.0
         assert f.trajectory is not None
@@ -94,6 +100,13 @@ class TestReadyByATime:
         )
         assert part.status == "partial_charge" and part.target_f == 120.0
         assert part.duration_minutes < full.duration_minutes
+        # To the target asked for, with no run-on past it; the heater's
+        # own threshold, with it.
+        assert part.trajectory is not None and full.trajectory is not None
+        assert part.trajectory[-1].t_lower_f == pytest.approx(120.0, abs=0.1)
+        assert full.trajectory[-1].t_lower_f == pytest.approx(
+            140.0 + params.controller.hp_stop_overshoot_f, abs=0.1
+        )
 
     def test_without_the_stop_threshold_it_heats_to_the_setpoint(
         self, params: HeaterParams
@@ -208,23 +221,16 @@ class TestTheRunningCycle:
         assert a.status == "heating" and a.target_f == 140.0
         assert a.remaining_minutes is not None and a.remaining_minutes > 0
         assert a.ready_at == T0 + timedelta(minutes=a.remaining_minutes)
+        # Under way, its hold is over: what is left is the climb.
         assert a.physics_remaining_minutes == pytest.approx(
             a.remaining_minutes, abs=0.2
         )
-        # A colder coil than the approach estimate moves less heat.
-        cold = active_cycle(
-            state, SETTINGS, ENV, params, at=T0, evaporator_f=30.0
-        )
-        assert cold.physics_remaining_minutes is not None
-        assert cold.physics_remaining_minutes > cast(
-            float, a.physics_remaining_minutes
-        )
-        assert cold.remaining_minutes == a.remaining_minutes
 
-    @pytest.mark.parametrize("lower", [140.0, 141.0])
-    def test_a_cycle_at_its_target_has_nothing_left(
-        self, params: HeaterParams, lower: float
+    @pytest.mark.parametrize("past", [0.0, 1.0])
+    def test_a_cycle_past_its_run_on_has_nothing_left(
+        self, params: HeaterParams, past: float
     ) -> None:
+        lower = 140.0 + params.controller.hp_stop_overshoot_f + past
         a = active_cycle(
             HeaterState(upper_f=141.0, lower_f=lower, compressor_running=True),
             SETTINGS,
@@ -234,6 +240,19 @@ class TestTheRunningCycle:
         )
         assert a.status == "heating" and a.remaining_minutes == 0.0
         assert a.ready_at == T0 and a.physics_remaining_minutes == 0.0
+
+    def test_a_cycle_at_its_target_has_its_run_on_left(
+        self, params: HeaterParams
+    ) -> None:
+        a = active_cycle(
+            HeaterState(upper_f=141.0, lower_f=140.0, compressor_running=True),
+            SETTINGS,
+            ENV,
+            params,
+            at=T0,
+        )
+        assert a.target_f == 140.0
+        assert 0.0 < a.remaining_minutes < 15.0
 
 
 class TestTheAdapters:
@@ -257,17 +276,6 @@ class TestTheAdapters:
         assert settings.hp_lower_off_f == pytest.approx(140.0)
         assert settings.hp_upper_on_f == pytest.approx(104.9)
         assert sa.heater_state(s).energy_to_setpoint_wh == s.energy_to_setpoint
-
-    def test_the_coil_only_while_the_compressor_runs(
-        self, device_status_dict: dict[str, Any]
-    ) -> None:
-        from nwp500 import sim_adapters as sa
-
-        running = self._status(
-            device_status_dict, compUse=2, evaporatorTemperature=50
-        )
-        assert sa.evaporator_f(running) == pytest.approx(41.0)
-        assert sa.evaporator_f(self._status(device_status_dict)) is None
 
 
 def test_recovery_says_why_none_comes_on_vacation(

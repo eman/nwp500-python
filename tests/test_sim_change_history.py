@@ -575,7 +575,9 @@ class TestRunsWithoutAir:
         rows, heard = self._runs(air=False)
         done = sc.calibrate_changes(rows, heard)
         assert (done.n_runs, done.n_runs_without_air) == (5, 5)
-        why = {t.name: t.why for t in sc.report(done)}["Compressor constant"]
+        why = {t.name: t.why for t in sc.report(done)}[
+            "Heat at 65 °F air, 120 °F water (BTU/h)"
+        ]
         assert why.startswith(
             "5 of 5 compressor runs have no air temperature (no air given, "
             "and no heater ambient reading while the compressor runs)"
@@ -586,7 +588,9 @@ class TestRunsWithoutAir:
         rows, heard = self._runs(air=True)
         done = sc.calibrate_changes(rows, heard)
         assert (done.n_runs, done.n_runs_without_air) == (5, 0)
-        why = {t.name: t.why for t in sc.report(done)}["Compressor constant"]
+        why = {t.name: t.why for t in sc.report(done)}[
+            "Heat at 65 °F air, 120 °F water (BTU/h)"
+        ]
         assert "no air temperature" not in why
         assert sc.air_unread_note(done) == ""
 

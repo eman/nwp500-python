@@ -56,6 +56,7 @@ from nwp500 import sim
 from nwp500.sim import calibration as cal
 from nwp500.sim.engine import SimulationError
 from nwp500.sim.params import HeaterParams, params_to_document
+from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import point_at
 from nwp500.sim_calibrate import Prepared
 
@@ -577,10 +578,17 @@ def _recovery_score(
     tally: _Tally,
     day: int,
 ) -> bool:
-    """The recovery predicted from its recorded start; False when the
+    """The recovery predicted from its recorded start, with the hold
+    ``params`` give a start after the time off it had; False when the
     simulator could not answer."""
     horizon = (e.end - e.start) + RECOVERY_SLACK
     draws = tuple(sim.Draw(at=t, gallons=g) for t, g in e.draws)
+    hold = start_hold_min(
+        params.compressor,
+        None
+        if e.stopped_at is None
+        else (e.start - e.stopped_at).total_seconds() / 60.0,
+    )
     try:
         result = sim.simulate(
             sim.Scenario(
@@ -600,6 +608,7 @@ def _recovery_score(
                 loads=sim.Loads(draws=draws),
             ),
             params,
+            running_hold=hold,
         )
     except SimulationError, ValueError:
         return False

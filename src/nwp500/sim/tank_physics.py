@@ -50,6 +50,7 @@ from nwp500.sim.heat_pump_recovery import (
 )
 from nwp500.sim.heating_trajectory import build_heating_trajectory
 from nwp500.sim.params import HeaterParams
+from nwp500.sim.physics.heat_pump import power_w
 
 #: A delivered draw at the inlet: its onset, and the gallons the meter
 #: counts (``Draw(at, gallons)``).
@@ -223,8 +224,7 @@ class TankPhysics:
     - ``draw_inlet_temp_f``: the inlet a draw is priced at; None, the
       parameters' reference (``DrawParams.inlet_temp_f``);
     - ``physics_usable``: whether the integrator's duration may be
-      served as an estimate; None, when the compressor is calibrated
-      (a positive constant);
+      served as an estimate; None, yes;
     - ``recovery_model``: the correction to the physics recovery; None,
       the physics alone;
     - ``low_confidence_floor``: a recovery whose confidence is below it
@@ -264,11 +264,7 @@ class TankPhysics:
         #: The draws that flow over a coast.
         self.flowing_draws = flowing_draws
         self.tau_gap_hours = tau_gap_hours
-        self.physics_usable = (
-            params.compressor.compressor_constant > 0.0
-            if physics_usable is None
-            else physics_usable
-        )
+        self.physics_usable = True if physics_usable is None else physics_usable
         self.recovery_model = recovery_model
         self.low_confidence_floor = low_confidence_floor
         self.series = t_amb_series
@@ -380,7 +376,6 @@ class TankPhysics:
                             t_start_upper=upper_f,
                             target_f=target_f,
                             t_amb_mean=t_amb_mean,
-                            h_amb_start=self.humidity,
                             compressor=self.params.compressor,
                             loss=self.params.loss,
                             usable=self.physics_usable,
@@ -425,7 +420,6 @@ class TankPhysics:
         )
         if p is None:
             return None
-        power = self.params.power
         # The served recovery's own reasons (a truncated integration,
         # a model's diagnostics), and this tank's confidence flag.
         reasons: tuple[str, ...] = (*p.reasons,) + (
@@ -445,13 +439,10 @@ class TankPhysics:
                     start_at=start,
                     t_upper_start=upper_f,
                     t_lower_start=lower_f,
-                    two_zone=self.params.compressor.two_zone,
-                    power_scale=power.power_scale,
-                    cop_scale=power.cop_scale,
-                    cop_lift_coeff=power.cop_lift_coeff,
-                    cop_lift_ref_f=power.cop_lift_ref_f,
-                    t_amb=p.context.t_amb_mean,
                     hold_minutes=p.start_hold_minutes,
+                    start_power_w=power_w(
+                        self.params.compressor, p.context.t_amb_start, lower_f
+                    ),
                     tank=self.params.tank,
                 )
             ]

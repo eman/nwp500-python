@@ -759,13 +759,11 @@ recovery from there, and moves the start until the two agree:
 tank is already there; or ``not_scheduled`` in Vacation or Power Off.
 The target is the heater's own stop threshold
 (``hp_lower_off_temp_setting``); pass ``target_lower_f=`` for a
-partial charge. With a fitted COP, ``f.trajectory`` carries the
-electricity, the heat stored and the COP along the way, and
-``f.startup_energy_wh`` the cost of the compressor's start.
+partial charge. ``f.trajectory`` carries the electricity, the heat
+stored and the COP along the way, the start's hold included.
 
 While the compressor runs, ``sim.active_cycle`` says what is left of
-the recovery under way. Pass ``evaporator_f=sa.evaporator_f(status)``
-so its physics estimate uses the coil's live reading.
+the recovery under way.
 
 
 Check a shower or a bath
@@ -1133,35 +1131,25 @@ and says which air to give; from Python:
    fitted = calibration.calibrate(history, sa.params(feature),
                                   recovery_air="air_f")
    print(fitted.standby.ua_ref, fitted.standby.n_quiet)
-   print(fitted.compressor)      # None: too few recoveries
+   print(fitted.heat_pump.heat, fitted.heat_pump.n_heat)
    params = fitted.params
 
-Three fits run, each only where the record holds the evidence for it,
-and each says what it used:
+The fits run only where the record holds the evidence for them, and
+each says what it used:
 
 - **Standby loss**: the jacket's loss law, and how fast the zones
   mix, from windows of 3 hours or more with no heating and no hot water
   in use (45 minutes after either). It needs ``air``.
-- **The compressor**: its constant, from heat-pump recoveries that
-  reached their target, against the loss just fitted, at the
-  evaporator approach the parameters carry (the coil's, 19.56 degF). ``recovery_air="air_f"`` takes the air over a recovery
-  from the sensor's too; the default is the heater's own reading,
-  taken while its compressor runs. With 10 recoveries or more, the
-  latest fifth is held out, and ``heldout_mae_minutes`` says how well
-  the fit predicts recoveries it did not see. A fit that lands on a
-  bound is reported (``hit_bounds``) and not applied.
-- **Power and COP** (``fitted.power``): the heater's own power readings
-  against the compressor just fitted, over 10 cycles or more. Input
-  power is scaled as a ratio of sums. The apparent COP gets a level, a
-  start-up cost in Wh and a lift term. Without a meter, the COP uses
-  only cycles with no hot water in use from 30 minutes before them to
-  their end. With one, pass its draws and the circulation's runs,
-  ``calibrate(..., draws=[(instant, gallons), ...],
-  circulation=[(start, end), ...])`` (an empty list for none), and every
-  cycle counts, the heat its draws and runs took priced in. The flow of
-  a circulation can move from run to run; pass
-  ``circulation_flow_at=cal.flow_lookup(cal.measure_runs(...))`` and
-  each cycle's runs are priced at the flow they ran at.
+- **The heat pump** (``fitted.heat_pump``,
+  ``sim.heat_pump_fit.HeatPumpFit``): from the compressor runs with no
+  water moving, the heat's map on mixed climbs of 20 minutes or more
+  (10 needed), priced against the loss just fitted; the power's map on
+  the heater's own power readings in 10-minute blocks (30 needed); the
+  hold by time off on clean starts (3 a band); and the run-on past the
+  target (5 runs). ``recovery_air="air_f"`` takes the air over a
+  recovery from the sensor's too; the default is the heater's own
+  reading, taken while its compressor runs. A map that claims more
+  than a heat pump can (``violations``) is not applied.
 - **The probes' share of circulation's heat**
   (``DrawParams.ungated_observability``):
   ``cal.fit_ungated_observability(cal.circulation_windows(history,

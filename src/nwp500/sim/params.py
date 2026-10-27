@@ -7,9 +7,8 @@ or a module constant:
 - ``TankParams``: the tank's size, and the thermal masses derived
   from it;
 - ``LossParams``: the jacket's UA law;
-- ``CompressorParams``: the vapour-compression cycle, its four fixed
-  constants included;
-- ``PowerParams``: input power and COP, fitted per retrain;
+- ``CompressorParams``: the heat pump's performance map, the heat it
+  puts in and the power it draws, and the hold at its start;
 - ``ElementParams``: the resistance elements;
 - ``DrawParams``: a draw through the tank, delivered through the
   mixing valve or flowing from it, and its inflow;
@@ -45,6 +44,7 @@ from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, field, fields, replace
 from datetime import timedelta
 from enum import StrEnum
+from itertools import pairwise
 from types import MappingProxyType, NoneType, UnionType
 from typing import Any, cast, get_args, get_origin, get_type_hints
 
@@ -206,10 +206,10 @@ class TankParams:
     #: the stratum the condenser coil wraps. The recoveries put the
     #: stratified tank's share at 0.435-0.475
     #: (``docs/explanation/recovery-speed.rst``) and the draw fit's free
-    #: lower zone at 33.2 gal (0.525). Refitting the compressor constant
-    #: at 0.435, 0.455, 0.475 and 0.5 (177 recoveries, 35 held out) gave
-    #: held-out duration errors of 34.3, 33.9, 33.7 and 33.7 min: the
-    #: constant absorbs the share, so 0.5 stays.
+    #: lower zone at 33.2 gal (0.525). A cycle model's constant fitted
+    #: to durations at 0.435, 0.455, 0.475 and 0.5 (177 recoveries, 35
+    #: held out) gave held-out errors of 34.3, 33.9, 33.7 and 33.7 min,
+    #: so 0.5 stays.
     lower_zone_share: float = field(
         default=0.5, metadata=_p(DEFAULT, "fraction")
     )
@@ -274,68 +274,129 @@ class LossParams:
     bottom_gate_f: float = field(default=1.0, metadata=_p(FITTED, "°F"))
 
 
+#: The air and the water the heat pump's maps are quoted at, °F
+#: (``physics.heat_pump``).
+MAP_REF_AIR_F = 65.0
+MAP_REF_WATER_F = 120.0
+
+_HEAT_MAP = (
+    "fitted on one installation's draw-free climbs with the tank mixed "
+    "(38 stretches, water 115-143 °F, air 61-89 °F), against a "
+    "location-air sensor"
+)
+_POWER_MAP = (
+    "fitted on one installation's metered 10-minute blocks of its "
+    "recoveries' climbs (lower tank 74-148 °F, air 46-89 °F)"
+)
+
+
+#: ``CompressorParams``' domains, each (low, high) °F.
+DOMAINS = (
+    "heat_domain_air_f",
+    "heat_domain_water_f",
+    "power_domain_air_f",
+    "power_domain_water_f",
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CompressorParams:
-    """The R-134a vapour-compression cycle (``physics.compressor``).
+    """The heat pump as a performance map (``physics.heat_pump``): the
+    heat it puts into the tank and the electricity it draws, each a
+    plane in the air at the heater and the lower tank's water, and the
+    hold at its start.
 
-    The constant and the two-zone flag come from a calibration. The
-    integrator takes the constant and the approach as arguments,
-    because calibration searches over the constant; it reads the rest
-    from here.
+    The heat is what the tank gains plus its standby loss: the
+    condenser's output. The heat taken from the air is the heat less
+    the electricity (``heat_pump.evaporator_btu_h``), so the cycle
+    conserves energy by construction. The maps are read with the air
+    and the water held to the span each was fitted on
+    (``heat_domain_*``, ``power_domain_*``): a plane is not carried past
+    the record it was fitted on.
+
+    Defaults: one NWP500-65's record, 2025-12-28 to 2026-10-26
+    (``heat_pump_fit``, ``docs/explanation/recovery-speed.rst``).
     """
 
-    #: K = V_disp × N_RPM × η_motor, ft³/s. 0.0 is uncalibrated.
-    compressor_constant: float = field(
-        default=0.0, metadata=_p(FITTED, "ft³/s", note=_IN_RECOVERY)
+    #: The heat into the tank at ``MAP_REF_AIR_F`` air and
+    #: ``MAP_REF_WATER_F`` water, BTU/h, and how it moves per °F of
+    #: air, of water, and of both together.
+    heat_btu_h: float = field(
+        default=4499.4, metadata=_p(FITTED, "BTU/hr", note=_HEAT_MAP)
     )
-    #: T_amb − T_evap at the coil with the air at 65 °F, °F. The
-    #: NWP500's coil read 6.7 + 0.596 · air over 377 compressor runs at
-    #: one installation, 19.56 below 65 °F air. The compressor fit holds
-    #: it (``calibration.fit_compressor``).
-    evap_approach_f: float = field(default=19.56, metadata=_p(MEASURED, "°F"))
-    #: How far T_evap moves per °F of air (``physics.compressor``): 1 is
-    #: a fixed approach. The NWP500's coil moved 0.596 °F per °F over
-    #: 377 compressor runs at one installation, air at 48-86 °F.
-    evap_air_slope: float = field(default=1.0, metadata=_p(MEASURED, "1"))
-    #: Whether ``compressor_constant`` was fitted under the two-zone
-    #: integration.
-    two_zone: bool = field(default=False, metadata=_p(FITTED, "flag"))
-    #: T_cond ≈ T_lower + this, °F. This and the next two are
-    #: engineering values: the compressor constant absorbs each, and
-    #: refitting it with the approach at 5-20 °F, the clearance at
-    #: 0.02-0.08 or the exponent at 1.10-1.25 moved the held-out
-    #: recovery error by under 0.7 min (33.1-34.3, 35 held out at one
-    #: installation), so the durations cannot fit them.
-    cond_approach_f: float = field(default=10.0, metadata=_p(DEFAULT, "°F"))
-    #: Clearance volume ratio, in the volumetric efficiency.
-    clearance_ratio: float = field(default=0.05, metadata=_p(DEFAULT, "1"))
-    #: Polytropic exponent for R-134a compression (1.15-1.20).
-    polytropic_exp: float = field(default=1.17, metadata=_p(DEFAULT, "1"))
-    #: Evaporator fan airflow in the latent term (humid air condensing
-    #: on the coil). No airflow is published: the manual's 229 is the
-    #: 50 gal model's shipping weight in pounds. On 178 recorded
-    #: recoveries the term is 0-150 BTU/hr of about 4,000, humidity's
-    #: own effect on duration with the air held is not resolved
-    #: (t 1.3), and the term off scored 0.6 min worse held out.
-    fan_airflow_cfm: float = field(
-        default=229.0, metadata=_p(DEFAULT, "ft³/min")
+    heat_btu_h_per_air_f: float = field(
+        default=55.5, metadata=_p(FITTED, "BTU/hr/°F", note=_HEAT_MAP)
+    )
+    heat_btu_h_per_water_f: float = field(
+        default=-15.95, metadata=_p(FITTED, "BTU/hr/°F", note=_HEAT_MAP)
+    )
+    heat_btu_h_per_air_water_f: float = field(
+        default=0.0, metadata=_p(DEFAULT, "BTU/hr/°F²")
+    )
+    #: The electricity it draws at the same point, W, and its slopes.
+    #: The meter's 10-minute blocks fit it to 13 W RMS; the air moves it
+    #: 0.2 W per °F.
+    power_w: float = field(
+        default=401.7, metadata=_p(FITTED, "W", note=_POWER_MAP)
+    )
+    power_w_per_air_f: float = field(
+        default=0.21, metadata=_p(FITTED, "W/°F", note=_POWER_MAP)
+    )
+    power_w_per_water_f: float = field(
+        default=2.85, metadata=_p(FITTED, "W/°F", note=_POWER_MAP)
+    )
+    power_w_per_air_water_f: float = field(
+        default=0.0, metadata=_p(DEFAULT, "W/°F²")
+    )
+    #: The air and the water each map is read at are held to these, °F:
+    #: the span of the evidence it was fitted on, to the whole degree.
+    heat_domain_air_f: tuple[float, float] = field(
+        default=(61.0, 89.0), metadata=_p(FITTED, "°F", note=_HEAT_MAP)
+    )
+    heat_domain_water_f: tuple[float, float] = field(
+        default=(114.0, 144.0), metadata=_p(FITTED, "°F", note=_HEAT_MAP)
+    )
+    power_domain_air_f: tuple[float, float] = field(
+        default=(45.0, 90.0), metadata=_p(FITTED, "°F", note=_POWER_MAP)
+    )
+    power_domain_water_f: tuple[float, float] = field(
+        default=(73.0, 148.0), metadata=_p(FITTED, "°F", note=_POWER_MAP)
+    )
+    #: The hold at a start, minutes, by how long the compressor was off:
+    #: ``start_hold_min[i]`` from ``start_hold_after_min[i - 1]``
+    #: minutes off (the first from 0), and the last for a stop not
+    #: known. On the record's 84 starts with no water in use and the
+    #: time off known, the medians under 15 min, 15-60 min, 1-3 h,
+    #: 3-12 h and over 12 h off.
+    start_hold_after_min: tuple[float, ...] = field(
+        default=(15.0, 60.0, 180.0, 720.0), metadata=_p(DEFAULT, "min")
+    )
+    start_hold_min: tuple[float, ...] = field(
+        default=(0.0, 5.0, 10.0, 18.0, 22.0), metadata=_p(FITTED, "min")
     )
 
-
-@dataclass(frozen=True, kw_only=True)
-class PowerParams:
-    """Input power and COP, fitted per retrain to metered cycles. None,
-    unfitted: a projection carries no power or COP."""
-
-    power_scale: float | None = field(metadata=_p(FITTED, "1"))
-    cop_scale: float | None = field(metadata=_p(FITTED, "1"))
-    #: Electricity a compressor start spends before the tank gains
-    #: anything.
-    startup_wh: float = field(metadata=_p(FITTED, "Wh"))
-    #: How much faster than the integrator's COP falls with lift, per °F
-    #: about ``cop_lift_ref_f``.
-    cop_lift_coeff: float = field(metadata=_p(FITTED, "1/°F"))
-    cop_lift_ref_f: float = field(metadata=_p(DEFAULT, "°F"))
+    def __post_init__(self) -> None:
+        # A document carries the ranges and the bands as lists.
+        for name in DOMAINS:
+            low, high = getattr(self, name)
+            object.__setattr__(self, name, (float(low), float(high)))
+            if not low < high:
+                raise ValueError(f"{name} is not (low, high)")
+        for name in ("start_hold_after_min", "start_hold_min"):
+            object.__setattr__(
+                self, name, tuple(float(v) for v in getattr(self, name))
+            )
+        if len(self.start_hold_min) != len(self.start_hold_after_min) + 1:
+            raise ValueError(
+                "start_hold_min needs one more value than start_hold_after_min"
+            )
+        edges = self.start_hold_after_min
+        if any(b <= a for a, b in pairwise(edges)) or (
+            edges and edges[0] <= 0.0
+        ):
+            raise ValueError("start_hold_after_min is not positive, ascending")
+        if any(v < 0.0 for v in self.start_hold_min):
+            raise ValueError("start_hold_min is negative")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -574,11 +635,23 @@ class ControllerParams:
     #: counter 2 °C under the setpoint while the window is in force.
     #: The probe reads 1.9 °C (3.42 °F) short at the stop, one 0.1 °C
     #: step past the threshold; a recovery reaching its setpoint ends
-    #: with the probe 0.5-2 °F over it in the same way, and the
-    #: simulator stops both at the threshold.
+    #: with the probe 0.5-2 °F over it in the same way. The simulator
+    #: stops a capped one at the threshold, and one outside a window
+    #: ``hp_stop_overshoot_f`` past its target.
     #: Judging at the start caught 17 of 59 capped cycles against 43 at
     #: the end (``docs/explanation/tou-recovery-cap.rst``).
     tou_cap_f: float = field(default=3.6, metadata=_p(MEASURED, "°F"))
+    #: Outside a TOU window the compressor runs on past its target
+    #: until the lower probe reads this far over it, °F. On 31
+    #: draw-free recoveries (2025-12-28 to 2026-10-26) the median
+    #: overshoot at the stop, after a median 10 min run-on; leaving each
+    #: out of its own median, the stop it places is 2.4 min off against
+    #: 3.3 for a fixed run-on (``heat_pump_fit.run_ons``).
+    hp_stop_overshoot_f: float = field(default=0.9, metadata=_p(FITTED, "°F"))
+
+    def __post_init__(self) -> None:
+        if self.hp_stop_overshoot_f < 0.0:
+            raise ValueError("hp_stop_overshoot_f is negative")
 
     @property
     def write_start_lag(self) -> timedelta:
@@ -1145,7 +1218,6 @@ class HeaterParams:
     tank: TankParams
     loss: LossParams
     compressor: CompressorParams
-    power: PowerParams
     element: ElementParams
     draw: DrawParams
     controller: ControllerParams
@@ -1186,7 +1258,10 @@ class HeaterParams:
 
 #: The document's schema: its name, and a version that moves only when
 #: a reader of the previous one would misread it.
-PARAMS_SCHEMA = "heater-params/1"
+PARAMS_SCHEMA = "heater-params/2"
+#: Schemas this code no longer reads: their parameters ran a model it
+#: no longer has, so they are refitted, not converted.
+RETIRED_SCHEMAS = frozenset({"heater-params/1"})
 
 #: Each part of ``HeaterParams``, by its field name, in document order.
 PARTS: Mapping[str, type] = MappingProxyType(
@@ -1194,7 +1269,6 @@ PARTS: Mapping[str, type] = MappingProxyType(
         "tank": TankParams,
         "loss": LossParams,
         "compressor": CompressorParams,
-        "power": PowerParams,
         "element": ElementParams,
         "draw": DrawParams,
         "controller": ControllerParams,
@@ -1206,32 +1280,6 @@ PARTS: Mapping[str, type] = MappingProxyType(
 
 #: Parts that may be absent: None, not their defaults.
 OPTIONAL_PARTS = frozenset({"circulation"})
-#: Fields a part no longer has, by part: an older document's, read
-#: without them and without naming them (``unknown_fields``).
-RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
-    {
-        "draw": frozenset({"gap_open_f_per_gal"}),
-        "book": frozenset(
-            {
-                "lower_probe_gal",
-                "front_width_gal",
-                "front_settle_min",
-                "cold_release_f",
-                "inlet_window_s",
-            }
-        ),
-        "readiness": frozenset(
-            {
-                "cold_lower_cutoff_f",
-                "cold_lower_cap_gal",
-                "full_setpoint_band_f",
-                "full_hidden_gal",
-                "dip_f",
-                "dip_min",
-            }
-        ),
-    }
-)
 
 
 def _plain(value: Any) -> Any:
@@ -1261,12 +1309,10 @@ def params_to_document(params: HeaterParams) -> dict[str, Any]:
 def unknown_fields(doc: Mapping[str, Any]) -> list[str]:
     """The parts and fields ``doc`` names that ``HeaterParams`` has not
     (``part`` or ``part.field``): what a newer writer added, which
-    ``params_from_document`` leaves out. Fields this code no longer has
-    (``RETIRED_FIELDS``) are left out without being named."""
+    ``params_from_document`` leaves out."""
     out = [k for k in doc if k not in ("schema", "unfitted") and k not in PARTS]
     for name, cls in PARTS.items():
-        retired = RETIRED_FIELDS.get(name, frozenset())
-        known = {f.name for f in fields(cls)} | retired
+        known = {f.name for f in fields(cls)}
         given = doc.get(name, {})
         if isinstance(given, Mapping):
             keys = cast(Mapping[str, Any], given)
@@ -1324,10 +1370,15 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     """
     if not isinstance(doc, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ValueError("a parameters document is an object")
-    if doc.get("schema") != PARAMS_SCHEMA:
+    schema = doc.get("schema")
+    if schema in RETIRED_SCHEMAS:
         raise ValueError(
-            f"not a {PARAMS_SCHEMA} document: schema {doc.get('schema')!r}"
+            f"a {schema} document is from before the heat pump's "
+            f"performance map, which {PARAMS_SCHEMA} carries: calibrate "
+            "again (see the CHANGELOG)"
         )
+    if schema != PARAMS_SCHEMA:
+        raise ValueError(f"not a {PARAMS_SCHEMA} document: schema {schema!r}")
     parts: dict[str, Any] = {}
     for name, cls in PARTS.items():
         if name in OPTIONAL_PARTS and doc.get(name) is None:

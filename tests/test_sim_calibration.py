@@ -5,12 +5,11 @@ The fits are held to their source by the parity check run with the
 port; these hold what each recovers, screens and reports.
 """
 
-import dataclasses
 import math
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -32,16 +31,9 @@ from nwp500.sim import (
 from nwp500.sim import calibration as cal
 from nwp500.sim import history_frame as hf
 from nwp500.sim.params import (
-    CompressorParams,
-    HeaterParams,
-    LossParams,
     TankParams,
     params_from_document,
     params_to_document,
-)
-from nwp500.sim.physics.compressor import (
-    PhysicsPath,
-    predict_physics_detailed,
 )
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
@@ -288,106 +280,6 @@ class TestRecoveries:
         ).empty
 
 
-def physics_durations(
-    starts: list[float],
-    air: list[float],
-    k: float,
-    approach: float,
-    tank: TankParams | None = None,
-) -> pd.DataFrame:
-    df = pd.DataFrame(
-        {
-            "t_start_lower": starts,
-            "t_amb_mean": air,
-            "stratification_gap": [10.0] * len(starts),
-            "start_time": [T0 + timedelta(days=i) for i in range(len(starts))],
-        }
-    )
-    df["delta_t_lower"] = 140.0 - df["t_start_lower"]
-    df["duration_minutes"] = [
-        predict_physics_detailed(
-            t_start_lower=s,
-            hp_lower_off=140.0,
-            t_amb_mean=a,
-            compressor_constant=k,
-            evap_approach_f=approach,
-            compressor=CompressorParams(),
-            loss=LossParams(),
-            stratification_gap=10.0,
-            two_zone=True,
-            tank=TankParams() if tank is None else tank,
-        ).minutes
-        for s, a in zip(starts, air, strict=True)
-    ]
-    return df
-
-
-class TestCompressor:
-    def test_too_few_recoveries_fit_nothing(self) -> None:
-        df = physics_durations([100.0] * 4, [60.0] * 4, 0.025, 12.0)
-        assert cal.fit_compressor(df, CompressorParams(), LossParams()) is None
-
-    def test_it_recovers_known_physics(self) -> None:
-        starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
-        air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
-        df = physics_durations(starts, air, 0.025, 12.0)
-        fit = cal.fit_compressor(
-            df, CompressorParams(evap_approach_f=12.0), LossParams()
-        )
-        assert fit is not None
-        assert fit.compressor_constant == pytest.approx(0.025, rel=0.02)
-        assert fit.evap_approach_f == 12.0
-        assert fit.mae_minutes < 1.0
-        assert (fit.n_fitted, fit.n_heldout, fit.two_zone) == (8, 0, True)
-        assert not fit.hit_bounds
-
-    def test_without_gaps_it_fits_one_zone(self) -> None:
-        df = physics_durations([100.0] * 6, [60.0] * 6, 0.025, 12.0)
-        fit = cal.fit_compressor(
-            df.drop(columns="stratification_gap"),
-            CompressorParams(),
-            LossParams(),
-        )
-        assert fit is not None and not fit.two_zone
-
-    def test_it_fits_on_the_heaters_tank(self) -> None:
-        """The replacement review of #162: durations recorded on a
-        50 gal tank fit the constant that made them only when the fit
-        integrates that tank, as the simulation will."""
-        starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
-        air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
-        small = TankParams(volume_gal=50.0)
-        df = physics_durations(starts, air, 0.025, 12.0, tank=small)
-        at = CompressorParams(evap_approach_f=12.0)
-        fit = cal.fit_compressor(df, at, LossParams(), tank=small)
-        assert fit is not None
-        assert fit.compressor_constant == pytest.approx(0.025, rel=0.02)
-        assert fit.mae_minutes < 1.0
-        wrong = cal.fit_compressor(df, at, LossParams())
-        assert wrong is not None
-        assert wrong.compressor_constant != pytest.approx(0.025, rel=0.02)
-
-    def test_a_cycles_path_is_walked_on_the_heaters_tank(self) -> None:
-        row = {
-            "t_start_lower": 100.0,
-            "delta_t_lower": 30.0,
-            "t_amb_mean": 65.0,
-            "stratification_gap": 10.0,
-        }
-        base = default_params()
-        small = dataclasses.replace(
-            base, tank=dataclasses.replace(base.tank, volume_gal=50.0)
-        )
-        full, short = cal.path_to_end(row, base), cal.path_to_end(row, small)
-        assert full is not None and short is not None
-        assert short.elapsed_s[-1] < full.elapsed_s[-1]
-
-    def test_a_pinned_fit_is_not_applied(self) -> None:
-        fit = cal.CompressorFit(0.3, 4.0, 1.0, None, 8, 0, True, True)
-        base = default_params()
-        assert cal.with_compressor(base, fit) is base
-
-
 class TestCalibrate:
     def test_an_unrecorded_stop_threshold_is_the_usual_one(self) -> None:
         h = recovery_history([(2, 100, 100.0)]).drop(columns=["target_f"])
@@ -399,7 +291,7 @@ class TestCalibrate:
     def test_too_little_history_keeps_the_base(self) -> None:
         base = default_params()
         got = cal.calibrate(recovery_history([(2, 100, 100.0)]), base)
-        assert got.compressor is None
+        assert got.heat_pump.heat is None and got.heat_pump.power is None
         assert got.standby.ua_ref is None
         # Base's values, each named as not fitted on this heater, and
         # base's own record of the installation's terms kept.
@@ -422,7 +314,6 @@ class TestCalibrate:
             "standby",
             "gap_tau",
         )
-        assert got.power is None
         assert len(got.recoveries) == 1
 
     def test_what_was_not_fitted_says_so_in_its_answers(self) -> None:
@@ -546,44 +437,8 @@ class TestTheHistoryAdapter:
         assert not h["circulating"].any()
 
 
-def power_rows(n: int, params: HeaterParams) -> pd.DataFrame:
-    """``n`` cycles' first snapshots, metered from the integrator itself
-    at a power scale of 0.55 and a COP scale of 1.3 with 150 Wh of
-    start-up, no lift term."""
-    rng = np.random.default_rng(3)
-    rows = pd.DataFrame(
-        {
-            "cycle": range(n),
-            "offset_minutes": 0.0,
-            "t_start_lower": rng.uniform(80, 120, n),
-            "t_start_upper": rng.uniform(122, 136, n),
-            "t_amb_mean": rng.uniform(50, 80, n),
-            "h_amb_start": 50.0,
-            "draw_free": True,
-        }
-    )
-    rows["delta_t_lower"] = 140.0 - rows["t_start_lower"]
-    rows["stratification_gap"] = rows["t_start_upper"] - rows["t_start_lower"]
-    rows["t_lower_end"] = 140.0
-    rows["t_upper_end"] = 140.0
-    rows["duration_minutes"] = rows["delta_t_lower"] * 2.5
-    return rows
-
-
-class TestPower:
-    def _fitted(self) -> HeaterParams:
-        base = default_params()
-        return replace(
-            base,
-            compressor=replace(
-                base.compressor,
-                compressor_constant=0.08,
-                evap_approach_f=12.0,
-                two_zone=True,
-            ),
-        )
-
-    def test_the_energy_integral_holds_each_reading(self) -> None:
+class TestTheEnergyIntegral:
+    def test_it_holds_each_reading(self) -> None:
         s = np.array([0.0, 600.0, 1200.0]) + T0.timestamp()
         w = np.array([400.0, 500.0, 300.0])
         end = T0 + timedelta(minutes=30)
@@ -596,148 +451,8 @@ class TestPower:
         )
         assert hf.energy_wh(np.array([]), np.array([]), T0, end) is None
 
-    def test_the_power_scale_is_a_ratio_of_sums(self) -> None:
-        params = self._fitted()
-        rows = power_rows(12, params)
-        modelled = []
-        for row in rows.to_dict("records"):
-            path = cal.path_to_end(row, params)
-            assert path is not None
-            minutes = path.elapsed_s[-1] / 60
-            watts = path.input_btu[-1] / 3.412141633 / (minutes / 60)
-            modelled.append(watts * row["duration_minutes"] / 60)
-        rows["metered_input_wh"] = 0.55 * np.array(modelled)
-        scale, n = cal.fit_power_scale(rows, params)
-        assert scale == pytest.approx(0.55)
-        assert n == 12
-        assert cal.fit_power_scale(rows.head(9), params) == (None, 9)
 
-    def test_the_cop_recovers_its_scale_and_start_up(self) -> None:
-        params = self._fitted()
-        rows = power_rows(14, params)
-        wh_per_f = params.tank.thermal_mass_btu_f / 3.412141633
-        metered = []
-        for row in rows.to_dict("records"):
-            path = cast(PhysicsPath, cal.path_to_end(row, params))
-            cop = cast(
-                float,
-                cal.path_cop(  # type: ignore[attr-defined]  # re-export
-                    path,
-                    0.0,
-                    path.elapsed_s[-1],
-                    True,
-                    row["t_start_upper"],
-                ),
-            )
-            heat = wh_per_f * (
-                140.0 - (row["t_start_lower"] + row["t_start_upper"]) / 2
-            )
-            metered.append(150.0 + heat / (1.3 * cop))
-        rows["metered_input_wh"] = metered
-        (scale, startup, lift), n = cast(
-            tuple[tuple[float, float, float], int],
-            cal.fit_cop_scale(rows, params),
-        )
-        assert scale == pytest.approx(1.3, rel=1e-6)
-        assert startup == pytest.approx(150.0, rel=1e-6)
-        assert lift == 0.0 and n == 14
-
-    def test_without_a_meter_only_draw_free_cycles_count(self) -> None:
-        params = self._fitted()
-        rows = power_rows(14, params)
-        rows["metered_input_wh"] = 1000.0
-        rows.loc[rows.index[:5], "draw_free"] = False
-        assert cal.fit_cop_scale(rows, params) == (None, 9)
-
-    def test_the_fit_applies_where_it_had_the_evidence(self) -> None:
-        base = default_params()
-        fit = cal.PowerFit(0.6, 12, None, None, None, 4)
-        got = cal.with_power(base, fit)
-        assert got.power.power_scale == 0.6
-        assert got.power.cop_scale == base.power.cop_scale
-
-
-class TestMeteredPricing:
-    """With a meter, the COP fit prices what each cycle's draws and
-    circulation took instead of keeping only draw-free cycles."""
-
-    def _row(self, **kw: Any) -> dict[str, Any]:
-        return {
-            "draw_gal": 0.0,
-            "draw_t_upper": None,
-            "circulation_runs": (),
-            "t_amb_mean": 65.0,
-            "t_start_upper": 130.0,
-        } | kw
-
-    def test_nothing_drawn_is_nothing_withdrawn(self) -> None:
-        from nwp500.sim import site_example_params
-
-        w = cal.metered_withdrawn(site_example_params())
-        assert w(self._row()) == 0.0
-        assert w(self._row(draw_gal=None)) is None
-
-    def test_draws_and_runs_are_priced(self) -> None:
-        from nwp500.sim import site_example_params
-
-        p = site_example_params()
-        w = cal.metered_withdrawn(p)
-        drawn = w(self._row(draw_gal=10.0, draw_t_upper=130.0))
-        run = w(self._row(circulation_runs=((10.0, 130.0, None, 0.0),)))
-        assert drawn is not None and drawn > 0
-        assert run is not None and run > 0
-        both = w(
-            self._row(
-                draw_gal=10.0,
-                draw_t_upper=130.0,
-                circulation_runs=((10.0, 130.0, None, 0.0),),
-            )
-        )
-        assert both == pytest.approx(drawn + run)
-        # Circulation without the installation's terms is unpriceable.
-        bare = cal.metered_withdrawn(replace(p, circulation=None))
-        assert (
-            bare(self._row(circulation_runs=((10.0, 130.0, None, 0.0),)))
-            is None
-        )
-
-    def test_a_run_under_way_is_priced_from_where_it_was(self) -> None:
-        """A snapshot that takes a run up partway charges only what the
-        run displaces inside it: once its volume is through, nothing."""
-        from nwp500.sim import site_example_params
-
-        p = site_example_params()
-        c = p.circulation
-        assert c is not None
-        w = cal.metered_withdrawn(p)
-        whole = c.displaced_gal / c.flow_gpm
-        late = w(self._row(circulation_runs=((3.0, 130.0, None, whole + 1.0),)))
-        assert late == 0.0
-        fresh = cast(
-            float, w(self._row(circulation_runs=((3.0, 130.0, None, 0.0),)))
-        )
-        part = cast(
-            float,
-            w(self._row(circulation_runs=((3.0, 130.0, None, whole - 1.0),))),
-        )
-        assert part == pytest.approx(fresh / 3.0)
-
-    def test_a_run_is_priced_at_the_flow_it_ran_at(self) -> None:
-        """A slower circulation displaces its volume later, so a short
-        run priced at the flow it ran at takes less heat."""
-        from nwp500.sim import site_example_params
-
-        p = site_example_params()
-        row = self._row(
-            circulation_runs=((2.0, 135.0, None, 0.0),),
-            start_time=pd.Timestamp("2026-07-10", tz="UTC"),
-        )
-        today = cal.metered_withdrawn(p)(row)
-        then = cal.metered_withdrawn(p, flow_at=lambda _: 1.1)(row)
-        assert then is not None and today is not None and then < today
-        unknown = cal.metered_withdrawn(p, flow_at=lambda _: None)(row)
-        assert unknown == today
-
+class TestSnapshots:
     def test_snapshots_carry_the_cycles_draws(self) -> None:
         h = recovery_history([(2, 100, 100.0)])
         start = T0 + timedelta(hours=2)
