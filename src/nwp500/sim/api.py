@@ -744,18 +744,19 @@ def _range_reasons(
     params: HeaterParams,
     airs: Sequence[float],
     lower_f: float,
-    target_f: float,
+    stop_f: float,
 ) -> list[str]:
     """What a heat-pump answer at ``airs`` and ``lower_f`` says of the
     heat pump's range: ``heat_pump_unavailable`` outside its operating
     range, where the heater heats with its elements and no heat-pump
-    recovery runs, or with ``target_f`` over its top, which the elements
-    finish; ``heat_map_out_of_domain`` with the air outside the span its
-    heat was fitted on."""
+    recovery runs, or with the recovery's stop (``stop_f``, its target
+    and run-on) over its top, which the elements finish;
+    ``heat_map_out_of_domain`` with the air outside the span its heat
+    was fitted on."""
     out: list[str] = []
     if (
         _out_of_range(params, airs, lower_f)
-        or target_f > params.controller.hp_water_range_f[1]
+        or stop_f > params.controller.hp_water_range_f[1]
     ):
         out.append(HEAT_PUMP_UNAVAILABLE)
     if any(heat_air_outside(params.compressor, a) for a in airs):
@@ -1229,6 +1230,7 @@ def next_recovery(
             # from the heater's own start.
             return Recovery(
                 "unavailable",
+                [(start, upper, lower)],
                 start_minute=(start - now).total_seconds() / 60.0,
                 coast_btu=coast_btu,
                 coast_draw_gal=coast_gal,
@@ -1547,7 +1549,21 @@ def time_to_ready(
             *answer["reasons"],
             *_unfitted(params, "book", "readiness"),
             *_ambient_reasons(s.environment),
-            *([HEAT_PUMP_UNAVAILABLE] if nxt.hp_unavailable else []),
+            *(
+                [HEAT_PUMP_UNAVAILABLE]
+                if nxt.hp_unavailable
+                or (
+                    nxt.outcome == "ok"
+                    and (
+                        s.settings.hp_lower_off_f
+                        if s.settings.hp_lower_off_f is not None
+                        else s.settings.setpoint_f
+                    )
+                    + params.controller.hp_stop_overshoot_f
+                    > params.controller.hp_water_range_f[1]
+                )
+                else []
+            ),
         ]
     )
     if nxt.outcome == "ok":
@@ -1899,7 +1915,7 @@ def forecast(
                             served.context.t_amb_mean,
                         ],
                         lower_s,
-                        goal,
+                        stop,
                     ),
                     *_unfitted(params, "compressor", "power", "standby"),
                     *(_unfitted(params, "draw") if loads.draws else []),
@@ -2006,7 +2022,7 @@ def active_cycle(
             _unique(
                 [
                     *reasons,
-                    *_range_reasons(params, [air], state.lower_f, goal),
+                    *_range_reasons(params, [air], state.lower_f, stop),
                     *_unfitted(params, "compressor", "standby"),
                     *_ambient_reasons(environment),
                 ]

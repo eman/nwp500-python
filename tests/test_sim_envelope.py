@@ -511,3 +511,152 @@ class TestTheAnswersAtTheEdges:
             at=T0,
         )
         assert ctl.HEAT_PUMP_UNAVAILABLE in a.reasons
+
+
+def _secs(n: float) -> datetime:
+    return T0 + timedelta(seconds=n)
+
+
+class TestTheHandOver:
+    """Who heats across a return, and what it says."""
+
+    @pytest.mark.parametrize("to", [3, 4])
+    def test_in_range_an_electric_element_runs_on(self, to: int) -> None:
+        # Nothing heats in the heat pump's place here: a write out of
+        # Electric leaves its lower element to its target, as before.
+        r = _run(
+            60.0,
+            upper=141.0,
+            lower=100.0,
+            mode=2,
+            hours=3,
+            element_running=True,
+            commands=sim.Commands(writes=(sim.Write(at=at(1 / 6), mode=to),)),
+        )
+        lower = [h for h in r.heating if h.zone == "lower"]
+        assert lower[0].stop == "target"
+
+    def test_a_draw_back_into_range_waits_out_the_lockout(self) -> None:
+        r = _run(
+            70.0,
+            upper=150.0,
+            lower=149.5,
+            setpoint=150.0,
+            hours=2,
+            history=sim.History(compressor_stopped_at=at(-1 / 60)),
+            loads=sim.Loads(draws=(sim.Draw(at=at(1 / 60), gallons=30.0),)),
+        )
+        hp = [h for h in r.heating if h.source == "compressor"]
+        lockout = sim.site_example_params().controller.restart_lockout
+        assert hp and hp[0].start.at >= at(-1 / 60) + lockout
+
+    def test_an_air_dip_keeps_the_cold_tank_hold(self) -> None:
+        air = (
+            (at(0), 70.0),
+            (at(10 / 60), 70.0),
+            (at(10 / 60) + timedelta(seconds=1), 30.0),
+            (at(12 / 60), 30.0),
+            (at(12 / 60) + timedelta(seconds=1), 70.0),
+        )
+        r = _run(air, upper=140.0, lower=45.0, hours=3)
+        assert [h.source for h in r.heating] == ["element"]
+        assert r.heating[0].stop == "target"
+
+    def test_too_little_room_with_a_start_pending(self) -> None:
+        # A write pends a start; the air returns with the lower zone too
+        # near the top for the heat pump, and the elements finish.
+        air = ((at(0), 30.0), (_secs(40), 30.0), (_secs(41), 70.0))
+        r = _run(
+            air,
+            upper=146.0,
+            lower=146.5,
+            setpoint=149.0,
+            hours=3,
+            element_running=True,
+            commands=sim.Commands(
+                writes=(sim.Write(at=_secs(30), setpoint_f=149.9),)
+            ),
+        )
+        assert all(h.source == "element" for h in r.heating)
+
+    def test_a_return_is_not_a_write(self) -> None:
+        air = ((at(0), 30.0), (_secs(20), 30.0), (_secs(21), 70.0))
+        r = _run(
+            air,
+            upper=138.0,
+            lower=138.5,
+            hours=2,
+            element_running=True,
+        )
+        assert "write_start_uncertain" not in r.reasons
+
+
+class TestTheAnswersOverTheTop:
+    def test_a_stop_past_the_top_is_flagged(self) -> None:
+        # The target is under 149 °F; its run-on is not.
+        a = sim.active_cycle(
+            sim.HeaterState(
+                upper_f=140.0, lower_f=130.0, compressor_running=True
+            ),
+            sim.Settings(
+                setpoint_f=148.5, hp_lower_off_f=148.5, hp_lower_on_f=105.0
+            ),
+            sim.Environment(ambient_f=70.0),
+            sim.site_example_params(),
+            at=T0,
+        )
+        assert ctl.HEAT_PUMP_UNAVAILABLE in a.reasons
+
+    def test_time_to_ready_over_the_top(self) -> None:
+        s = sim.Scenario(
+            start=T0,
+            horizon=timedelta(hours=12),
+            tz="UTC",
+            state=sim.HeaterState(
+                upper_f=120.0, lower_f=100.0, compressor_running=True
+            ),
+            settings=sim.Settings(
+                setpoint_f=150.0, hp_lower_off_f=150.0, hp_lower_on_f=105.0
+            ),
+            history=sim.History(compressor_stopped_at=at(-3)),
+            environment=sim.Environment(ambient_f=70.0),
+        )
+        ready = sim.time_to_ready(s, sim.site_example_params(), bath_gal=60.0)
+        assert ctl.HEAT_PUMP_UNAVAILABLE in ready.reasons
+
+    def test_heat_pump_mode_heats_from_the_coasted_tank(self) -> None:
+        s = sim.Scenario(
+            start=T0,
+            horizon=timedelta(hours=12),
+            tz="UTC",
+            state=sim.HeaterState(upper_f=112.0, lower_f=100.0),
+            settings=sim.Settings(
+                setpoint_f=140.0, hp_lower_off_f=140.0, hp_lower_on_f=95.0
+            ),
+            history=sim.History(compressor_stopped_at=at(-3)),
+            environment=sim.Environment(ambient_f=30.0),
+        )
+        params = sim.site_example_params()
+        nxt = sim.next_recovery(s, params)
+        ready = sim.time_to_ready(s, params, bath_gal=30.0)
+        by_mode = {m.mode: m.ready_in_minutes for m in ready.bath.by_mode}
+        hp, electric = by_mode["heat_pump"], by_mode["electric"]
+        assert hp is not None and electric is not None
+        # As Electric from the tank the coast leaves at the trigger.
+        (when, upper, lower), *_ = nxt.points
+        then = sim.time_to_ready(
+            s.model_copy(
+                update={
+                    "start": when,
+                    "state": sim.HeaterState(upper_f=upper, lower_f=lower),
+                }
+            ),
+            params,
+            bath_gal=30.0,
+        )
+        from_there = {m.mode: m.ready_in_minutes for m in then.bath.by_mode}
+        assert from_there["electric"] is not None
+        assert hp == pytest.approx(
+            nxt.start_minute + from_there["electric"], abs=1.0
+        )
+        assert hp > nxt.start_minute + electric

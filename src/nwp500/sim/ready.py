@@ -72,7 +72,8 @@ class Recovery:
     """The heat-pump recovery from the tank now (``next_recovery``).
 
     ``points`` are ``(at, t_upper_f, t_lower_f)``; empty unless
-    ``outcome`` is ``ok``. ``input_wh`` is the heat pump's electrical
+    ``outcome`` is ``ok``, or, with ``hp_unavailable``, the tank at the
+    heater's own start alone. ``input_wh`` is the heat pump's electrical
     input over the interval ending at each point, where known.
     ``tou_capped`` says the recovery was projected only to the TOU
     window's reduced target, because the device heats no further until
@@ -546,12 +547,22 @@ def _by_mode(
             if recovery.hp_unavailable and mode == "heat_pump"
             else 0.0
         )
+        # Heat Pump mode heats from the tank its coast leaves.
+        start = (
+            replace(
+                tank,
+                upper_f=recovery.points[0][1],
+                lower_f=recovery.points[0][2],
+            )
+            if delay > 0.0 and recovery.points
+            else tank
+        )
         if heats != "heat_pump" and setpoint is not None:
             device: ElementMode = DEVICE_MODE[heats]  # type: ignore[assignment]
             rec = mode_recovery(
                 device,
-                tank.upper_f,
-                tank.lower_f,
+                start.upper_f,
+                start.lower_f,
                 setpoint,
                 params=ep,
             )
@@ -574,7 +585,7 @@ def _by_mode(
             state = _mode_state(
                 heats,
                 t,
-                tank,
+                start,
                 hp,
                 setpoint,
                 upper_min,

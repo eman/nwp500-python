@@ -576,12 +576,9 @@ class _Engine:
             else outside(start, until, *self.params.hp_air_range_f)
         )
         available = self._available(start)
-        #: At the last check the heat pump was out of range by a tank
-        #: below its water range alone.
-        self._cold = (
-            not any(a <= start < b for a, b in self.air_out)
-            and lower_f < self.params.hp_water_range_f[0]
-        )
+        #: The tank was below the heat pump's water range with no element
+        #: since to heat it past: one heating it runs to its off point.
+        self._cold = lower_f < self.params.hp_water_range_f[0]
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -707,6 +704,10 @@ class _Engine:
         its operating range (``controller.HeatPumpAvailability``);
         whether it has left it here."""
         available = self._available(self.t)
+        if self.lower < self.params.hp_water_range_f[0]:
+            self._cold = True
+        elif self.element is None or self.state.hp_available:
+            self._cold = False
         if (
             available
             and not self.state.hp_available
@@ -714,13 +715,8 @@ class _Engine:
             and self.element is not None
         ):
             # The water came up past the range's bottom under an element:
-            # it runs to its off point first.
+            # it runs to its off point first, whatever the air did.
             available = False
-        else:
-            self._cold = (
-                not any(a <= self.t < b for a, b in self.air_out)
-                and self.lower < self.params.hp_water_range_f[0]
-            )
         if available != self.state.hp_available:
             self._dispatch(
                 ctl.HeatPumpAvailability(
@@ -1590,6 +1586,10 @@ class _Engine:
                 # back in the heat pump's range.
                 self._coast_draw()
                 self._check_availability()
+                if self.state.hp_available:
+                    # Back in range: the trigger is the heat pump's, with
+                    # its lockout, found afresh from here.
+                    return
             self._dispatch(
                 ctl.HeaterTrigger(at=at, tank=self._tank(), trigger=own.trigger)
             )

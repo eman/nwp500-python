@@ -233,6 +233,8 @@ class Element:
     #: When its zone starts to rise: the on-edge plus the dead time for
     #: an upper element; the on-edge itself for the lower element.
     live_at: datetime | None = None
+    #: Started in the heat pump's place, outside its operating range.
+    in_place: bool = False
 
     @property
     def running(self) -> bool:
@@ -841,9 +843,10 @@ def _start_compressor(
         _fallback(s, start)
         return
     e = s.state.element
-    if e.running and (
-        s.mode not in ELEMENT_MODES
-        or (e.zone == "lower" and s.mode != ELECTRIC)
+    if (
+        e.running
+        and e.in_place
+        and (s.mode not in ELEMENT_MODES or e.zone == "lower")
     ):
         # An element heating in the heat pump's place, which this mode
         # would not run: the heat pump takes the recovery back.
@@ -935,7 +938,9 @@ def _write_start(s: _Step, serves: str | None) -> Start:
     )
 
 
-def _mode_write_starts(s: _Step, mode: str, previous: str) -> bool:
+def _mode_write_starts(
+    s: _Step, mode: str, previous: str, *, note: bool = True
+) -> bool:
     """Whether ``mode`` taking effect, out of ``previous``, starts the
     compressor (``ControllerParams``' record of 91 mode writes).
     Inside a window a change to ``heat_pump`` (a dropped element mode)
@@ -953,17 +958,17 @@ def _mode_write_starts(s: _Step, mode: str, previous: str) -> bool:
     p = s.params
     short = s.sp - s.upper
     if s.in_tou():
-        if short <= p.window_write_starts_f:
+        if short <= p.window_write_starts_f and note:
             s.note("write_start_uncertain")
         return short > p.window_write_starts_f
     lower_short = s.sp - s.lower >= p.mode_write_lower_starts_f - 1e-9
     if lower_short and (short > 0.0 or previous in ELEMENT_MODES):
         return True
     if mode == HEAT_PUMP:
-        if short <= p.mode_write_starts_f:
+        if short <= p.mode_write_starts_f and note:
             s.note("write_start_uncertain")
         return short > p.mode_write_starts_f
-    if (
+    if note and (
         short < p.energy_saver_write_seen_f
         or mode == HIGH_DEMAND
         or previous == ELECTRIC
@@ -998,7 +1003,8 @@ def _start_element(
     known, and is taken to be past it, with a whole dead time's heat in
     transit, when it is not. A zone already at its off point stops it at
     once (``_check_element``)."""
-    if not s.state.hp_available and s.mode != ELECTRIC:
+    in_place = not s.state.hp_available and s.mode != ELECTRIC
+    if in_place:
         # Electric's rule in the heat pump's place (``heats_as``).
         s.note(HEAT_PUMP_UNAVAILABLE)
         s.note(ENVELOPE_FALLBACK_UNVERIFIED)
@@ -1015,7 +1021,10 @@ def _start_element(
     s.state = replace(
         s.state,
         element=Element(
-            "dead_time" if live_at > s.at else "heating", zone, live_at
+            "dead_time" if live_at > s.at else "heating",
+            zone,
+            live_at,
+            in_place,
         ),
     )
     s.act(
@@ -1570,20 +1579,21 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
             _check_element(s)
         return
     e = s.state.element
-    eligible = (
+    carrying = (
         e.running
         and not s.disabled
         and s.mode in COMPRESSOR_MODES
         and not s.state.compressor.running
-        and s.state.compressor.pending is None
     )
-    if eligible and not (
-        _mode_write_starts(s, s.mode, ELECTRIC)
+    if carrying and not (
+        _mode_write_starts(s, s.mode, ELECTRIC, note=False)
         and s.lower
         <= s.params.hp_water_range_f[1] - s.params.mode_write_lower_starts_f
     ):
-        # Too little left for the heat pump: the elements finish it.
+        # Too little left for the heat pump: the elements finish it,
+        # a start pending or not.
         return
+    eligible = carrying and s.state.compressor.pending is None
     s.state = replace(s.state, hp_available=True)
     if not eligible:
         if e.running:

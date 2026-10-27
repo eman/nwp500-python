@@ -278,15 +278,18 @@ electric heater will be used"). A recovery stops at 149 degF at most,
 and the elements finish a target above it. Back inside the range with
 an element still heating, the recovery returns to the heat pump where
 the compressor starts as it does out of Electric with room to heat
-before 149 degF: it starts at once, or when its lockout ends, and
-Electric's lower element (in Heat Pump mode, either element) stops as
-it starts. With less left, the elements finish the recovery first. With
-nothing heating, the heater's own triggers decide. An element heating a
-tank below 50 degF runs to its off point before the heat pump takes
-over. Answers that assume a heat-pump recovery say
-``heat_pump_unavailable``, as does one whose target is over 149 degF;
-``next_recovery`` is ``unavailable``, and ``time_to_ready`` projects
-every mode as Electric, Heat Pump mode from the heater's own trigger.
+before 149 degF: it starts at once, or when its lockout ends, and an
+element started in its place that the mode would not run (Electric's
+lower element; in Heat Pump mode, either) stops as it starts. With less
+left, the elements finish the recovery first, a start pending or not.
+With nothing heating, the heater's own triggers decide. An element
+heating a tank below 50 degF runs to its off point before the heat pump
+takes over, whatever the air does meanwhile. Answers that assume a
+heat-pump recovery say ``heat_pump_unavailable``, as does one whose stop
+(its target and run-on) is over 149 degF; ``next_recovery`` is
+``unavailable``, and ``time_to_ready`` projects every mode as Electric,
+Heat Pump mode from the heater's own trigger and the tank its coast
+leaves there.
 None of this is on the record, whose air ran 45.9 to 89.3 degF, so a
 walk that uses it says ``envelope_fallback_unverified``.
 
