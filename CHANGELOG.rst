@@ -8,6 +8,19 @@ Unreleased
 Added
 -----
 
+- **The heat pump's operating range.** It runs only with the air at
+  41-113 °F and the tank's lower zone at 50-149 °F
+  (``ControllerParams.hp_air_range_f``, ``hp_water_range_f``, from the
+  user's manual). Outside them a running compressor stops and the
+  elements heat the tank by Electric's rule; back inside, the heat pump
+  takes over again. ``forecast``, ``active_cycle`` and ``time_to_ready``
+  say ``heat_pump_unavailable``, and ``next_recovery`` is
+  ``unavailable``; a walk that relied on the elements' takeover says
+  ``envelope_fallback_unverified``, since none is on the record. A
+  recovery with its air outside the span its heat was fitted on says
+  ``heat_map_out_of_domain``. ``AmbientSampler.outside`` finds the air's
+  spans outside a range. See :doc:`/explanation/simulator-methodology`.
+
 - **``nwp500.sim_score``: parameters scored on recorded events they
   were not fitted on.** It takes the events from the record without a
   model (recoveries that reached their target, quiet windows, a meter's

@@ -279,7 +279,7 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.physics.heat_pump
    :members: heat_btu_h, power_w, cop, evaporator_btu_h, start_hold_min,
-      carnot_cop
+      carnot_cop, heat_air_outside, HEAT_MAP_OUT_OF_DOMAIN
 
 .. automodule:: nwp500.sim.physics.compressor
    :members: predict_physics_detailed, PhysicsPath, PhysicsResult,

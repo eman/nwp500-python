@@ -263,6 +263,24 @@ reaches its target: on the record it stops a median 0.9 degF past it
 the target plus that overshoot. The TOU window's cap on the lower zone
 is still judged at the target.
 
+**The operating range.** The heat pump runs only with the air at the
+heater at 41 to 113 degF and the water in the tank at 50 to 149 degF
+(the user's manual, 3.13.1; ``ControllerParams.hp_air_range_f`` and
+``hp_water_range_f``, the water read at the lower zone). The walk finds
+where the air series crosses either air bound, exactly on its
+interpolation, and the first point of a coast past a water bound. Outside the range a running compressor stops, every mode heats as
+Electric does, and the heater's own triggers and a write's start go to
+the elements: the upper element, then the lower (3.13.4, "If the heat
+pump cannot operate, the electric heater will be used"). A recovery
+stops at 149 degF at most. Back inside, an element the heat pump's
+absence started in Heat Pump mode stops, and the compressor starts as it
+does out of Electric. Answers that assume a heat-pump recovery say so
+(``heat_pump_unavailable``), and ``next_recovery`` is ``unavailable``.
+None of this is on the record, whose air ran 45.9 to 89.3 degF, so a
+walk that uses it says ``envelope_fallback_unverified``. An element
+running in the heat pump's place runs to its off point: the walk does
+not hand a cold tank back to the heat pump as its water passes 50 degF.
+
 **Power and efficiency.** The electricity is the map's, so a COP is the
 map's heat over its electricity over the same climb; neither is scaled.
 When a ``RecoveryModel`` serves a different duration, the climb's

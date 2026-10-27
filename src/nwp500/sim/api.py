@@ -32,6 +32,7 @@ from nwp500.sim.circulation import (
     CirculationDraws,
     CirculationLoss,
 )
+from nwp500.sim.controller import HEAT_PUMP_UNAVAILABLE
 from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
@@ -85,7 +86,12 @@ from nwp500.sim.physics.element import (
     HeaterMode,
     mode_plan,
 )
-from nwp500.sim.physics.heat_pump import power_w, start_hold_min
+from nwp500.sim.physics.heat_pump import (
+    HEAT_MAP_OUT_OF_DOMAIN,
+    heat_air_outside,
+    power_w,
+    start_hold_min,
+)
 from nwp500.sim.ready import (
     Readiness,
     Recovery,
@@ -710,6 +716,35 @@ UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
 )
 
 
+def _out_of_range(
+    params: HeaterParams, airs: Sequence[float], lower_f: float
+) -> bool:
+    """Whether the heat pump is outside its operating range at any of
+    ``airs`` with the lower zone at ``lower_f``
+    (``ControllerParams.hp_air_range_f``, ``hp_water_range_f``)."""
+    a_lo, a_hi = params.controller.hp_air_range_f
+    w_lo, w_hi = params.controller.hp_water_range_f
+    return any(not a_lo <= a < a_hi for a in airs) or not (
+        w_lo <= lower_f < w_hi
+    )
+
+
+def _range_reasons(
+    params: HeaterParams, airs: Sequence[float], lower_f: float
+) -> list[str]:
+    """What a heat-pump answer at ``airs`` and ``lower_f`` says of the
+    heat pump's range: ``heat_pump_unavailable`` outside its operating
+    range, where the heater heats with its elements and no heat-pump
+    recovery runs; ``heat_map_out_of_domain`` with the air outside the
+    span its heat was fitted on."""
+    out: list[str] = []
+    if _out_of_range(params, airs, lower_f):
+        out.append(HEAT_PUMP_UNAVAILABLE)
+    if any(heat_air_outside(params.compressor, a) for a in airs):
+        out.append(HEAT_MAP_OUT_OF_DOMAIN)
+    return out
+
+
 def _unfitted(params: HeaterParams, *terms: str) -> list[str]:
     """The reasons for those of ``terms`` the parameters did not fit."""
     return [UNFITTED_REASONS[t] for t in params.unfitted if t in terms]
@@ -1173,6 +1208,9 @@ def next_recovery(
             coast_btu, coast_gal = _coast_loss(
                 s.model_copy(update={"loads": loads}), params, start, air
             )
+        if _out_of_range(params, [_ambient_at(s.environment, start)], lower):
+            # No heat-pump recovery runs: the elements heat the tank.
+            return Recovery("unavailable")
         starting = HeaterState(
             upper_f=upper,
             lower_f=lower,
@@ -1486,6 +1524,15 @@ def time_to_ready(
             *answer["reasons"],
             *_unfitted(params, "book", "readiness"),
             *_ambient_reasons(s.environment),
+            *(
+                [HEAT_PUMP_UNAVAILABLE]
+                if _out_of_range(
+                    params,
+                    [_ambient_at(s.environment, s.start)],
+                    s.state.lower_f,
+                )
+                else []
+            ),
         ]
     )
     if nxt.outcome == "ok":
@@ -1830,6 +1877,14 @@ def forecast(
             _unique(
                 [
                     *served.reasons,
+                    *_range_reasons(
+                        params,
+                        [
+                            served.context.t_amb_start,
+                            served.context.t_amb_mean,
+                        ],
+                        lower_s,
+                    ),
                     *_unfitted(params, "compressor", "power", "standby"),
                     *(_unfitted(params, "draw") if loads.draws else []),
                     *_ambient_reasons(environment),
@@ -1935,6 +1990,7 @@ def active_cycle(
             _unique(
                 [
                     *reasons,
+                    *_range_reasons(params, [air], state.lower_f),
                     *_unfitted(params, "compressor", "standby"),
                     *_ambient_reasons(environment),
                 ]

@@ -50,7 +50,11 @@ from nwp500.sim.heat_pump_recovery import (
 )
 from nwp500.sim.heating_trajectory import build_heating_trajectory
 from nwp500.sim.params import HeaterParams
-from nwp500.sim.physics.heat_pump import power_w
+from nwp500.sim.physics.heat_pump import (
+    HEAT_MAP_OUT_OF_DOMAIN,
+    heat_air_outside,
+    power_w,
+)
 
 #: A delivered draw at the inlet: its onset, and the gallons the meter
 #: counts (``Draw(at, gallons)``).
@@ -422,10 +426,20 @@ class TankPhysics:
             return None
         # The served recovery's own reasons (a truncated integration,
         # a model's diagnostics), and this tank's confidence flag.
-        reasons: tuple[str, ...] = (*p.reasons,) + (
-            ("recovery_low_confidence",)
-            if p.confidence < self.low_confidence_floor
-            else ()
+        reasons: tuple[str, ...] = (
+            (*p.reasons,)
+            + (
+                ("recovery_low_confidence",)
+                if p.confidence < self.low_confidence_floor
+                else ()
+            )
+            + (
+                (HEAT_MAP_OUT_OF_DOMAIN,)
+                if heat_air_outside(
+                    self.params.compressor, p.context.t_amb_mean
+                )
+                else ()
+            )
         )
         # When the physics path is not the served recovery: none at all,
         # or the model clamped the duration
@@ -471,6 +485,14 @@ class TankPhysics:
                 )
             )
         return Heat(points, p.confidence, reasons, linear=True)
+
+    def air_outside(
+        self, start: datetime, end: datetime, low: float, high: float
+    ) -> list[tuple[datetime, datetime]]:
+        """The spans of ``[start, end)`` with the air at the heater below
+        ``low`` or at ``high`` and above (``AmbientSampler.outside``):
+        where the heat pump is outside its operating range."""
+        return self.ambient.outside(start, end, low, high)
 
     def draw(
         self, at: datetime, upper_f: float, lower_f: float, gal: float

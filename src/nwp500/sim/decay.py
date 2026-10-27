@@ -1101,6 +1101,50 @@ class AmbientSampler:
         weight = (want - stamps[lo]) / span
         return float(values[lo] + weight * (values[hi] - values[lo]))
 
+    def outside(
+        self, start: datetime, end: datetime, low: float, high: float
+    ) -> list[tuple[datetime, datetime]]:
+        """The spans of ``[start, end)`` with the air below ``low`` or at
+        ``high`` and above, in time order: exact on the interpolated
+        series, which is linear between its samples and flat past its
+        ends."""
+        if end <= start:
+            return []
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=UTC)
+        cuts = [start, end]
+        if self._stamps is not None:
+            for x in self._stamps:
+                at = self._base + timedelta(seconds=float(x))
+                if start < at < end:
+                    cuts.append(at)
+        cuts.sort()
+        out: list[tuple[datetime, datetime]] = []
+
+        def add(a: datetime, b: datetime) -> None:
+            if b <= a:
+                return
+            if out and out[-1][1] == a:
+                out[-1] = (out[-1][0], b)
+            else:
+                out.append((a, b))
+
+        for a, b in pairwise(cuts):
+            va, vb = self.at(a), self.at(b)
+            pieces = [a, b]
+            for level in (low, high):
+                if (va - level) * (vb - level) < 0.0:
+                    f = (level - va) / (vb - va)
+                    pieces.append(a + (b - a) * f)
+            pieces.sort()
+            for p0, p1 in pairwise(pieces):
+                mid = self.at(p0 + (p1 - p0) / 2)
+                if mid < low or mid >= high:
+                    add(p0, p1)
+        return out
+
 
 def _get_t_amb(series: pd.DataFrame, target: datetime) -> float:
     """Ambient temperature at ``target``, linearly interpolated.

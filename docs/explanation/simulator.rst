@@ -76,6 +76,8 @@ could is not applied. A start holds for a time set by how long the
 compressor was off (0 to 22 minutes on the record), drawing power while
 the tank holds; the climb is integrated in 10-second steps until the
 lower thermistor is a fitted run-on (0.9 degF) past its target.
+Outside the manual's operating range (41-113 degF air, 50-149 degF
+water) it does not run, and the elements heat the tank as in Electric.
 
 **The tank, in two zones.** The condenser coil wraps the lower part of
 the tank, so while the tank is stratified a recovery warms the lower

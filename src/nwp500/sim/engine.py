@@ -566,6 +566,17 @@ class _Engine:
             element=heater.element,
             start_hold=start_hold,
         )
+        #: Where the air at the heater is outside the heat pump's
+        #: operating range (``ControllerParams.hp_air_range_f``), from
+        #: the physics' air; none from a physics that cannot say.
+        outside = getattr(physics, "air_outside", None)
+        self.air_out: list[Window] = (
+            []
+            if outside is None
+            else outside(start, until, *self.params.hp_air_range_f)
+        )
+        self.lower = lower_f
+        available = self._available(start)
         self.state = ctl.initial_state(
             at=start,
             setpoint_f=setpoint_f,
@@ -573,7 +584,11 @@ class _Engine:
             running=running,
             stopped_at=stopped_at,
             params=self.params,
+            hp_available=available,
         )
+        self.reasons: set[str] = set()
+        if not available:
+            self.reasons.add(ctl.HEAT_PUMP_UNAVAILABLE)
         #: The setpoint and the mode in force as the path records them,
         #: moved by the controller's actions as they are carried out.
         self.sp = setpoint_f
@@ -613,7 +628,6 @@ class _Engine:
             )
         ]
         self.heating: list[HeatingInterval] = []
-        self.reasons: set[str] = set()
         self.cycle: _Cycle | None = None
         #: Instants the path must carry an element at, exactly (the
         #: forecast's draw windows): not the feature's events, only stops.
@@ -667,6 +681,53 @@ class _Engine:
 
     def _tank(self) -> Tank:
         return Tank(self.upper, self.lower)
+
+    def _water_ok(self, lower: float) -> bool:
+        low, high = self.params.hp_water_range_f
+        return low <= lower < high
+
+    def _available(self, at: datetime) -> bool:
+        """Whether the heat pump is inside its operating range at ``at``
+        with the lower zone as it is now."""
+        if any(a <= at < b for a, b in self.air_out):
+            return False
+        return self._water_ok(self.lower)
+
+    def _check_availability(self) -> None:
+        """Tell the controller when the heat pump has left or re-entered
+        its operating range (``controller.HeatPumpAvailability``)."""
+        available = self._available(self.t)
+        if available != self.state.hp_available:
+            self._dispatch(
+                ctl.HeatPumpAvailability(
+                    at=self.t, tank=self._tank(), available=available
+                )
+            )
+
+    def _water_crossing(self, points: Sequence[Point]) -> datetime | None:
+        """The first point of a coast past a bound of the heat pump's
+        water range, where its availability changes (at most a coast
+        step after the crossing, and on its far side); None when the
+        coast crosses none, or an element runs (its rise is laid over
+        the coast, and its end is a boundary)."""
+        if self.element is not None:
+            return None
+        for p0, p1 in pairwise(points):
+            if self._water_ok(p0.lower_f) != self._water_ok(p1.lower_f):
+                return p1.at
+        return None
+        for p0, p1 in pairwise(points):
+            if self._water_ok(p0.lower_f) == self._water_ok(p1.lower_f):
+                continue
+            for bound in self.params.hp_water_range_f:
+                lo, hi = sorted((p0.lower_f, p1.lower_f))
+                if lo <= bound <= hi and p1.lower_f != p0.lower_f:
+                    f = (bound - p0.lower_f) / (p1.lower_f - p0.lower_f)
+                    at = p0.at + (p1.at - p0.at) * f
+                    # The instant the lower zone is past it, on the
+                    # side the next point is.
+                    return min(p1.at, at + _INSTANT)
+        return None
 
     def _dispatch(self, event: ctl.Event) -> None:
         """Hand ``event`` to the firmware (``controller.transition``) and
@@ -962,7 +1023,12 @@ class _Engine:
             cycle.hold_minutes = max(0.0, cycle.hold_total - gone)
         target = cycle.setpoint_f
         empty = Heat([Point(self.t, self.upper, self.lower, 0.0)], 1.0)
-        full = self._placed(cycle, target + self.params.hp_stop_overshoot_f)
+        # The heat pump stops at the top of its water range.
+        stop = min(
+            target + self.params.hp_stop_overshoot_f,
+            self.params.hp_water_range_f[1],
+        )
+        full = self._placed(cycle, stop)
         if full is None:
             cycle.heat, cycle.capped = empty, False
             return
@@ -1346,6 +1412,7 @@ class _Engine:
             steps += 1
             if steps > _MAX_STEPS:
                 raise SimulationError("the walk did not advance")
+            self._check_availability()
             self._element_trigger()
             nxt = min([*self._upcoming(), self.until])
             if self.cycle is not None:
@@ -1387,6 +1454,8 @@ class _Engine:
                 upcoming.update((w0, w1))
         if self.raw:
             upcoming.add(self.raw[0].at)
+        for a, b in self.air_out:
+            upcoming.update((a, b))
         return {t for t in upcoming if t > self.t}
 
     def _trigger_ahead(self, coast: Coast) -> ctl.Ahead | None:
@@ -1450,6 +1519,15 @@ class _Engine:
             else:
                 at = own.starts_at
         element_at = upper_on_crossing(self.state, self.settings, coast.points)
+        water_at = self._water_crossing(coast.points)
+        if water_at is not None and all(
+            x is None or water_at < x for x in (element_at, at)
+        ):
+            # The heat pump's availability changes before anything else
+            # happens: the walk takes it up there.
+            element_at = at = None
+            end = min(end, water_at)
+            coast = self._coast(end)
         cut = self._upper_cut(
             coast.points,
             end,
@@ -1498,6 +1576,9 @@ class _Engine:
             return None
         element_at = upper_on_crossing(self.state, self.settings, coast.points)
         if element_at is not None and element_at < limit:
+            return None
+        water_at = self._water_crossing(coast.points)
+        if water_at is not None and water_at < limit:
             return None
         if self._upper_cut(coast.points, limit) is not None:
             return None
