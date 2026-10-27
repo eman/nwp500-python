@@ -1,5 +1,5 @@
 """An installation's circulation (``nwp500.sim.circulation``): its runs
-as flowing draws and its loss to the book, through the API.
+as water through the tank and its loss to the book, through the API.
 
 The terms are held to their source by the parity check run with the
 port; these hold the API to the core and the runs to their schedule.
@@ -36,11 +36,9 @@ from nwp500.sim import (
 from nwp500.sim.circulation import (
     RUN_GAP,
     Circulation,
-    CirculationDraws,
     CirculationLoss,
     cooled_share,
     merge_runs,
-    run_draws,
 )
 from nwp500.sim.codec import (
     scenario_from_document,
@@ -54,6 +52,7 @@ from nwp500.sim.params import (
 )
 from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.schedules import weekly_runs
+from nwp500.sim.tank_physics import circulation_flows, point_at
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 LA = ZoneInfo("America/Los_Angeles")
@@ -95,6 +94,31 @@ def params() -> HeaterParams:
     return site_example_params()
 
 
+MIN = timedelta(minutes=1)
+TERMS = CirculationParams(
+    displaced_gal=6.0,
+    flow_gpm=1.5,
+    return_rest_offset_f=2.0,
+    return_cool_tau_h=0.0,
+    loss_btu_per_gal=0.0,
+)
+
+
+def _flows(
+    runs: list[tuple[datetime, datetime]],
+    start: datetime,
+    end: datetime,
+    *,
+    tau: float = 0.0,
+) -> list[Any]:
+    """The runs through the tank in 68 °F air, on ``TERMS`` with the pipe
+    cooling on ``tau``."""
+    terms = replace(TERMS, return_cool_tau_h=tau)
+    return circulation_flows(
+        Circulation(tuple(runs)), terms, lambda _: 68.0, start, end
+    )
+
+
 class TestTheRuns:
     def test_runs_closer_than_the_gap_are_one(self) -> None:
         a, b = at(0.0), at(0.1)
@@ -102,51 +126,42 @@ class TestTheRuns:
         far = (near[1] + RUN_GAP + timedelta(seconds=1), at(2.0))
         assert merge_runs([(a, b), near, far]) == [(a, near[1]), far]
 
-    def test_a_run_stops_charging_once_it_has_displaced_its_volume(
+    def test_a_run_returns_the_cooled_pipe_then_its_own_water(
         self,
     ) -> None:
-        (d,) = run_draws(
-            [(at(0), at(1))], at(0), at(2), 6.0, 1.5, lambda _: 68.0
+        (cooled, own) = _flows([(at(0), at(1))], at(0), at(2))
+        assert (cooled.start, cooled.end) == (at(0), at(0) + MIN * 4)
+        assert cooled.gpm == 1.5 and cooled.inflow_f == 68.0 + 2.0
+        assert (own.start, own.end, own.inflow_f) == (
+            at(0) + MIN * 4,
+            at(1),
+            None,
         )
-        assert d.gallons == 6.0 and d.gpm == 1.5 and d.until == at(1)
-        (short,) = run_draws(
-            [(at(0), at(0) + timedelta(minutes=2))],
-            at(0),
-            at(2),
-            6.0,
-            1.5,
-            lambda _: 68.0,
-        )
-        assert short.gallons == pytest.approx(3.0)
+        # A run shorter than its pipe returns cooled water throughout.
+        (short,) = _flows([(at(0), at(0) + MIN * 2)], at(0), at(2))
+        assert short.end == at(0) + MIN * 2 and short.inflow_f == 70.0
 
     def test_a_run_soon_after_another_finds_the_pipe_warm(self) -> None:
         assert cooled_share(None, 0.5) == 1.0
         assert cooled_share(0.5, 0.0) == 1.0
         assert cooled_share(0.5, 0.5) == pytest.approx(1 - math.exp(-1))
-        first = (at(0), at(0) + timedelta(minutes=2))
-        second = (at(0.5), at(0.5) + timedelta(minutes=2))
-        a, b = run_draws(
-            [first, second], at(0), at(2), 6.0, 1.5, lambda _: 68.0, 0.5
-        )
-        assert a.gallons == pytest.approx(3.0)
+        first = (at(0), at(0) + MIN * 10)
+        second = (at(0.5), at(0.5) + MIN * 10)
+        got = _flows([first, second], at(0), at(2), tau=0.5)
+        assert got[0].end - got[0].start == MIN * 4
         # The rest runs from the first run's end.
         rest = (second[0] - first[1]).total_seconds() / 3600
-        share = cooled_share(rest, 0.5)
-        assert b.gallons == pytest.approx(3.0 * share)
-        # The flow is scaled with it: the run keeps its two minutes.
-        assert b.gpm == pytest.approx(1.5 * share)
-        assert b.gallons / b.gpm == pytest.approx(2.0)
+        warm = got[2]
+        assert warm.start == second[0]
+        assert (warm.end - warm.start) / MIN == pytest.approx(
+            4.0 * cooled_share(rest, 0.5)
+        )
         # A span holding the second alone still finds the first.
-        (only,) = run_draws(
-            [first, second], at(0.4), at(2), 6.0, 1.5, lambda _: 68.0, 0.5
-        )
-        assert only.gallons == b.gallons
+        assert _flows([first, second], at(0.4), at(2), tau=0.5)[0] == warm
 
-    def test_a_run_under_way_is_charged_whole(self) -> None:
-        (d,) = run_draws(
-            [(at(0), at(1))], at(0.5), at(2), 6.0, 1.5, lambda _: 68.0
-        )
-        assert d.at == at(0)
+    def test_a_run_under_way_is_returned_whole(self) -> None:
+        (cooled, _) = _flows([(at(0), at(1))], at(0.5), at(2))
+        assert cooled.start == at(0)
 
     def test_unknown_after_known_until_and_quiet_when_empty(self) -> None:
         c = Circulation(RUNS, known_until=at(2.0))
@@ -169,10 +184,9 @@ class TestThroughTheAPI:
     ) -> None:
         quiet = simulate(_scenario(loads=Loads()), params)
         circulated = simulate(_scenario(), params)
-        before = [p for p in circulated.points if p.at <= at(0.2)]
-        assert [p.lower_f for p in before] == [
-            p.lower_f for p in quiet.points if p.at <= at(0.2)
-        ]
+        lower = {p.at: p.lower_f for p in circulated.points}
+        before = [p for p in quiet.points if p.at <= at(0.2)]
+        assert [lower[p.at] for p in before] == [p.lower_f for p in before]
 
         def after_first(sim: Any) -> float:
             return next(p.lower_f for p in sim.points if p.at >= at(0.5))
@@ -234,7 +248,12 @@ class TestThroughTheAPI:
             ),
         )
         joined = simulate(_scenario(loads=_loads(runs)), wide)
-        assert joined.points[-1].lower_f > apart.points[-1].lower_f
+
+        def after(sim: Any) -> float:
+            # Past both runs, before any recovery they bring on.
+            return point_at(sim.points, at(0.8)).lower_f
+
+        assert after(joined) > after(apart)
 
     def test_runs_without_terms_take_the_example_terms(
         self, params: HeaterParams
@@ -299,9 +318,8 @@ class TestThroughTheAPI:
     def test_it_is_the_core_walked_with_the_runs(
         self, params: HeaterParams
     ) -> None:
-        """The API's runs are the core's flowing draws: the same walk
-        as ``TankPhysics`` with ``CirculationDraws`` by hand."""
-        from nwp500.sim.decay import AmbientSampler
+        """The API's runs are the core's: the same walk as
+        ``TankPhysics`` given the runs by hand."""
         from nwp500.sim.engine import Heater
         from nwp500.sim.engine import simulate as walk
         from nwp500.sim.tank_physics import TankPhysics
@@ -313,23 +331,12 @@ class TestThroughTheAPI:
             freq="10min",
         )
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
-        c = params.circulation
-        assert c is not None
-        air_at = AmbientSampler(frame).at
-        flowing = CirculationDraws(
-            Circulation(RUNS),
-            c.displaced_gal,
-            c.flow_gpm,
-            lambda t: air_at(t) + c.return_rest_offset_f,
-            cool_tau_h=c.return_cool_tau_h,
-        )
         physics = TankPhysics(
             params,
             frame,
             48.0,
             draws_on=False,
-            flowing_draws=flowing,
-            tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
+            circulation=Circulation(RUNS),
         )
         by_hand = walk(
             start=T0,
@@ -402,46 +409,33 @@ class TestASplitCoast:
         (at(0.0) + timedelta(minutes=10), at(0.0) + timedelta(minutes=15)),
     )
 
-    def test_each_coast_gets_the_merged_run(self) -> None:
-        draws = CirculationDraws(
-            Circulation(self.RUNS), 6.0, 1.5, lambda _: 68.0
-        )
+    def test_each_walk_gets_the_merged_run(self) -> None:
         cut = at(0.0) + timedelta(minutes=8)
-        (first,) = draws(at(0.0), cut)
-        (second,) = draws(cut, at(1.0))
+        first = _flows(list(self.RUNS), at(0.0), cut)
+        second = _flows(list(self.RUNS), cut, at(1.0))
         assert first == second
-        assert first.at == at(0.0) and first.gallons == 6.0
-        assert first.until == self.RUNS[1][1]
+        assert first[0].start == at(0.0)
+        assert first[-1].end == self.RUNS[1][1]
 
-    def test_one_coast_or_two_cool_the_tank_alike(
+    def test_one_walk_or_two_cool_the_tank_alike(
         self, params: HeaterParams
     ) -> None:
-        from nwp500.sim.tank_physics import TankPhysics, TwoZone
+        from nwp500.sim.tank_physics import TankPhysics
 
         stamps = pd.date_range(at(-1), at(4), freq="10min")
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
-
-        def physics() -> TankPhysics:
-            return TankPhysics(
-                params,
-                frame,
-                48.0,
-                draws_on=False,
-                flowing_draws=CirculationDraws(
-                    Circulation(self.RUNS), 6.0, 1.5, lambda _: 68.0
-                ),
-                tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
-            )
-
-        whole = physics().coast(
-            at(0), TwoZone(139.0, 132.0), at(1), [], heated_at=at(-1)
+        p = TankPhysics(
+            params,
+            frame,
+            48.0,
+            draws_on=False,
+            circulation=Circulation(self.RUNS),
         )
-        p = physics()
+        start = p.estimate(139.0, 132.0)
+        whole = p.advance(at(0), start, at(1))
         cut = at(0.0) + timedelta(minutes=8)
-        a = p.coast(at(0), TwoZone(139.0, 132.0), cut, [], heated_at=at(-1))
-        mid = a.points[-1]
-        assert mid.state is not None
-        b = p.coast(cut, mid.state, at(1), [], heated_at=at(-1))
+        a = p.advance(at(0), start, cut)
+        b = p.advance(cut, a.state, at(1))
         end, split = whole.points[-1], b.points[-1]
         assert split.lower_f == pytest.approx(end.lower_f, abs=0.05)
         assert split.upper_f == pytest.approx(end.upper_f, abs=0.05)

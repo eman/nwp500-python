@@ -381,7 +381,10 @@ def test_the_names_a_caller_matches_on_are_documented() -> None:
         names = {n.strip() for n in block.group(2).split(",") if n.strip()}
         listed[block.group(1)] = names
     wanted = {
-        "nwp500.sim.heat_pump_recovery": {"PHYSICS_TRUNCATED"},
+        "nwp500.sim.heat_pump_recovery": {
+            "PHYSICS_TRUNCATED",
+            "RATE_SCALE_RANGE",
+        },
         "nwp500.sim.tou_triggers": {
             "LOWER_TRIGGER_HELD",
             "Trigger",
@@ -389,12 +392,11 @@ def test_the_names_a_caller_matches_on_are_documented() -> None:
         },
         "nwp500.sim.physics.element": {"DEVICE_MODE", "HEATER_MODE"},
         "nwp500.sim.engine": {
-            "DRAW_LEAD",
             "HEATER_SETPOINT_MIN_F",
             "HEATER_SETPOINT_MAX_F",
         },
         "nwp500.sim.physics.compressor": {"MAX_MINUTES"},
-        "nwp500.sim.tank_physics": {"REFINE_TOL_MINUTES"},
+        "nwp500.sim.tank_physics": {"RECOVERY_BOUND"},
         "nwp500.sim.params": {
             "FITTED",
             "unknown_fields",

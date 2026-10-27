@@ -50,7 +50,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -63,6 +63,7 @@ from nwp500.sim import calibration as cal
 from nwp500.sim import tank_fit as tf
 from nwp500.sim.engine import SimulationError
 from nwp500.sim.params import HeaterParams, params_to_document
+from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import point_at
 from nwp500.sim_calibrate import Prepared
@@ -578,12 +579,54 @@ def _environment(
     )
 
 
+def _state(
+    params: HeaterParams,
+    record: tf.TankRecord | None,
+    at: datetime,
+    upper_f: float,
+    lower_f: float,
+    **kw: Any,
+) -> sim.HeaterState:
+    """The heater at an event's start: its probes, and with a
+    ``record``, the layers its replay leaves (``tank_fit.start_state``)."""
+    layers = None
+    if record is not None:
+        lay = st.layout(params)
+        layers = tf.start_state(
+            lay, params, record, at, upper_f, lower_f
+        ).layers_f
+    return sim.HeaterState(
+        upper_f=upper_f, lower_f=lower_f, layers_f=layers, **kw
+    )
+
+
+def _loads(
+    record: tf.TankRecord | None,
+    start: datetime,
+    end: datetime,
+    draws: tuple[sim.Draw, ...] = (),
+) -> sim.Loads:
+    """An event's loads: its ``draws``, and with a ``record``, the
+    circulation runs it recorded from ``start`` to ``end`` (an event
+    with none is known to have had none)."""
+    if record is None:
+        return sim.Loads(draws=draws)
+    i, j = record.minute(start), record.minute(end) + 1
+    runs = tuple(
+        sim.CirculationRun(start=record.instant(a), end=record.instant(b))
+        for a, b in record.circulating
+        if a < j and b > i
+    )
+    return sim.Loads(draws=draws, circulation=runs, circulation_known_until=end)
+
+
 def _recovery_score(
     e: Recovery,
     params: HeaterParams,
     inlet_f: float | None,
     tally: _Tally,
     day: int,
+    record: tf.TankRecord | None = None,
 ) -> bool:
     """The recovery predicted from its recorded start, with the hold
     ``params`` give a start after the time off it had; False when the
@@ -602,9 +645,12 @@ def _recovery_score(
                 start=e.start,
                 horizon=horizon,
                 tz="UTC",
-                state=sim.HeaterState(
-                    upper_f=e.upper_f,
-                    lower_f=e.lower_f,
+                state=_state(
+                    params,
+                    record,
+                    e.start,
+                    e.upper_f,
+                    e.lower_f,
                     compressor_running=True,
                 ),
                 settings=sim.Settings(
@@ -612,7 +658,7 @@ def _recovery_score(
                 ),
                 history=sim.History(compressor_stopped_at=e.stopped_at),
                 environment=_environment(e.air, e.humidity, inlet_f),
-                loads=sim.Loads(draws=draws),
+                loads=_loads(record, e.start, e.start + horizon, draws),
             ),
             params,
             running_hold=hold,
@@ -684,12 +730,13 @@ def _window_score(
     tally: _Tally,
     day: int,
     breaks: dict[str, int],
+    record: tf.TankRecord | None = None,
 ) -> bool:
     try:
         trace = sim.standby(
-            sim.HeaterState(upper_f=e.upper_f, lower_f=e.lower_f),
+            _state(params, record, e.start, e.upper_f, e.lower_f),
             _environment(e.air, 50.0, inlet_f),
-            sim.Loads(),
+            _loads(record, e.start, e.end),
             params,
             start=e.start,
             until=e.end,
@@ -713,12 +760,18 @@ def _draw_score(
     inlet_f: float | None,
     tally: _Tally,
     day: int,
+    record: tf.TankRecord | None = None,
 ) -> bool:
     try:
         trace = sim.standby(
-            sim.HeaterState(upper_f=e.upper_f, lower_f=e.lower_f),
+            _state(params, record, e.at, e.upper_f, e.lower_f),
             _environment(e.air, 50.0, inlet_f),
-            sim.Loads(draws=(sim.Draw(at=e.at, gallons=e.gallons),)),
+            _loads(
+                record,
+                e.at,
+                e.at + DRAW_FOLLOW,
+                (sim.Draw(at=e.at, gallons=e.gallons),),
+            ),
             params,
             start=e.at,
             until=e.at + DRAW_FOLLOW,
@@ -835,11 +888,15 @@ def score(
     *,
     inlet_f: float | None = None,
     tz: str = "UTC",
+    record: tf.TankRecord | None = None,
 ) -> Score:
     """``params`` scored on ``found``: each event predicted by the
     public simulator, its error against the record, and each metric
     over its events (``Stat``, days in ``tz``). ``inlet_f`` is the mains
-    the draws meet; None, the parameters'.
+    the draws meet; None, the parameters'. With the ``record``
+    (``tank_fit.tank_record``), each recovery, window and draw starts
+    from the layers its replay leaves (``HeaterState.layers_f``); with
+    none, from the two probes.
 
     The metrics, lower is better unless a bias:
 
@@ -871,15 +928,17 @@ def score(
     breaks = {"below_air": 0}
     over = 0
     for r in found.recoveries:
-        if not _recovery_score(r, params, inlet_f, tally, _day(r.start, zone)):
+        if not _recovery_score(
+            r, params, inlet_f, tally, _day(r.start, zone), record
+        ):
             failed["recoveries"].append(_iso(r.start))
     for w in found.windows:
         if not _window_score(
-            w, params, inlet_f, tally, _day(w.start, zone), breaks
+            w, params, inlet_f, tally, _day(w.start, zone), breaks, record
         ):
             failed["windows"].append(_iso(w.start))
     for d in found.draws:
-        if not _draw_score(d, params, inlet_f, tally, _day(d.at, zone)):
+        if not _draw_score(d, params, inlet_f, tally, _day(d.at, zone), record):
             failed["draws"].append(_iso(d.at))
     for c in found.deliveries:
         done, promised = _delivery_score(c, params, tally, _day(c.at, zone))
@@ -1051,40 +1110,23 @@ def fit_layers(
     record: tf.TankRecord | None,
     *,
     map_: Callable[..., Iterable[Any]] = map,
-    max_evaluations: int = 200,
+    max_evaluations: int = 300,
 ) -> tf.TankFit:
     """The stratified tank's terms fitted from ``params``' values
-    (``sim.tank_fit.fit``): ``TERMS`` on ``found``'s quiet windows and
-    draws, then, with a ``record``, where the condenser heats
-    (``CONDENSER_TERMS``) on its recoveries. Its terms are both
-    blocks', its RMSE the first's."""
+    (``sim.tank_fit.fit``) on ``found``'s quiet windows and draws, and
+    with a ``record``, on its recoveries too, where the condenser heats
+    (``CONDENSER_TERMS``) fitted with the rest: the condenser places
+    the heat the replay starts each window from, so fitted apart, the
+    span that times the recoveries leaves the windows' bottom wrong."""
     windows, draws = layer_coasts(found)
-    done = tf.fit(
+    climbs = [] if record is None else layer_recoveries(found, params, record)
+    return tf.fit(
         params,
         record,
-        windows + draws,
+        windows + draws + climbs,
+        terms=tf.TERMS + tf.CONDENSER_TERMS if climbs else tf.TERMS,
         map_=map_,
         max_evaluations=max_evaluations,
-    )
-    climbs = (
-        [] if record is None else layer_recoveries(found, done.params, record)
-    )
-    if not climbs:
-        return done
-    heats = tf.fit(
-        done.params,
-        record,
-        climbs,
-        terms=tf.CONDENSER_TERMS,
-        map_=map_,
-        max_evaluations=max_evaluations,
-    )
-    return replace(
-        done,
-        params=heats.params,
-        terms={**done.terms, **heats.terms},
-        on_bound=done.on_bound + heats.on_bound,
-        evaluations=done.evaluations + heats.evaluations,
     )
 
 

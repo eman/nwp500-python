@@ -46,10 +46,11 @@ from nwp500.sim.engine import (
 )
 from nwp500.sim.params import HeaterParams, params_from_document
 from nwp500.sim.tank_physics import (
-    Coast,
-    Heat,
     Physics,
     Point,
+    Running,
+    Stop,
+    Stretch,
     TankPhysics,
     TankState,
 )
@@ -95,7 +96,6 @@ def _physics(until: datetime, draws_on: bool) -> TankPhysics:
         _ambient(until),
         48.0,
         draws_on=draws_on,
-        tau_gap_hours=10.0,
         low_confidence_floor=0.6,
     )
 
@@ -131,7 +131,6 @@ CASES: dict[str, dict[str, Any]] = {
         lower_f=118.6,
         running=False,
         stopped_at=at(-3.2),
-        heated_at=at(-3.2),
     ),
     # Entries through every mode and back, and one repeating the state,
     # inside and outside the window.
@@ -152,8 +151,7 @@ CASES: dict[str, dict[str, Any]] = {
         ],
     ),
     # A running recovery, a shower in it, and one in the TOU window
-    # whose start waits for the window's close; the lead draws before
-    # the start, and a start hold.
+    # whose start waits for the window's close; and a start hold.
     "recovering_draws": _case(
         10.0,
         draws_on=True,
@@ -161,11 +159,7 @@ CASES: dict[str, dict[str, Any]] = {
         lower_f=101.3,
         running=True,
         stopped_at=at(-5.0),
-        heated_at=at(0.0),
         draws=[*_shower(0.4), *_shower(5.2, gal=3.0, n=15)],
-        lead_draws=[
-            (at(-0.2) + timedelta(seconds=10 * i), 0.13) for i in range(48)
-        ],
         running_hold=4.5,
         start_hold=_start_hold,
         marks=[at(0.4), at(5.2)],
@@ -196,7 +190,6 @@ CASES: dict[str, dict[str, Any]] = {
         lower_f=117.0,
         running=False,
         stopped_at=at(-3.0),
-        heated_at=at(-3.0),
         draws=[(at(1.0), 20.0), (at(9.0), 26.0)],
         withheld_windows=[(at(1.0), at(1.5)), (at(9.0), at(9.75))],
         start_hold=_start_hold,
@@ -387,23 +380,19 @@ class _SealedPhysics:
     def observe(self, state: TankState) -> tuple[float, float]:
         return self.inner.observe(self._open(state))
 
-    def coast(
+    def advance(
         self,
         start: datetime,
         state: TankState,
         end: datetime,
-        draws: Any,
-        heated_at: datetime | None = None,
-    ) -> Coast:
-        got = self.inner.coast(start, self._open(state), end, draws, heated_at)
-        return dataclasses.replace(got, points=self._seal(got.points))
-
-    def heat(
-        self, start: datetime, state: TankState, target_f: float, **kw: float
-    ) -> Heat | None:
-        got = self.inner.heat(start, self._open(state), target_f, **kw)
-        if got is None:
-            return None
+        draws: Any = (),
+        *,
+        running: Running = Running(),
+        stop: Stop | None = None,
+    ) -> Stretch:
+        got = self.inner.advance(
+            start, self._open(state), end, draws, running=running, stop=stop
+        )
         return dataclasses.replace(got, points=self._seal(got.points))
 
     def draw(self, at: datetime, state: TankState, gal: float) -> TankState:

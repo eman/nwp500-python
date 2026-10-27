@@ -145,6 +145,13 @@ Built by ``sim_adapters.heater_state(status)``.
      - degF
      - required
      - ``DeviceStatus.tank_lower_temperature_raw`` (0.1 degC).
+   * - ``layers_f``
+     - degF
+     - None
+     - The tank's layers, the bottom first, as its history left them
+       (``sim.tank_fit.start_state``), as many as
+       ``TankParams.layers``. With None, the simulator makes them of the
+       two probes, and ``reasons`` says ``tank_profile_estimated``.
    * - ``compressor_running``
      - bool
      - False
@@ -249,12 +256,6 @@ instants.
      - When ``comp_use`` last turned off. The compressor will not
        restart for 330 s after a stop; with None, no lockout is in
        force at the start.
-   * - ``heated_at``
-     - instant
-     - None
-     - When the tank last heated, by either source. Standby settling
-       after a recovery runs from it; with None, from
-       ``compressor_stopped_at``.
 
 
 Schedules: ``Schedules``
@@ -618,9 +619,9 @@ A loss the book does not model, water an installation circulates
 through its own plumbing say, comes in through ``sim.book.SpanLoss``:
 its ``edges`` (where it starts and stops), its ``loss`` over each span
 and whether that span disturbs the tank (no re-anchor across it), and
-its ``bound``. Build the ledger with it and pass that instead of the
-book: ``simulate(scenario, params,
-ledger=BookedHeatLedger(book, ambient_at, params.book, extra=loss))``.
+its ``bound``. Pass it to the book's walk along a simulation:
+``book.walk_booked(book, result.points, result.simulation.heating,
+draws, ambient_at, params.book_terms(), extra=loss)``.
 
 Once started, the walk re-anchors whenever the simulated tank comes
 back full: a recovery the heater ends itself, quiet after one with
@@ -782,13 +783,6 @@ what a simulation needs of it:
 
    * - Field
      - Without it
-   * - ``tank.stratification_gap_tau_h``
-     - A 60 h prior (history puts the constant near it on this
-       product), named in ``defaults_used``; with draws, which open a
-       gap that closes on it, ``reasons`` says ``tau_gap_prior``.
-   * - ``draw.observability``
-     - A scenario with draws is refused: ``SimulationError``
-       (``draw_model_unsupported``).
    * - ``loss.ua_btu_hr_f``
      - The jacket loss falls back to ``loss.ua_baseline_btu_hr_f``.
 
@@ -1143,9 +1137,11 @@ The ones about inputs and parameters:
        cabinet's, less 6.2 °F, the cabinet's mean warmth at one
        installation. Corrected so, it was within 2.2 °F of the air on
        average (5 to 9 °F warm raw, by season).
-   * - ``tau_gap_prior``
-     - Draws opened a gap that closes on a prior time constant, not one
-       fitted on this heater.
+   * - ``tank_profile_estimated``
+     - The tank's layers were made of its two probes
+       (``HeaterState.layers_f`` not given), not walked from its
+       history: the probes do not say how the water between and below
+       them is layered.
    * - ``circulation_unknown``
      - The installation circulates, and its runs are not known over
        the span: nothing was charged there.
@@ -1327,7 +1323,6 @@ Errors
    starts, an element mode that runs no element, an unknown ``volume_code``, or
    ``with_example_evidence`` at a line other than 105 degF.
 ``nwp500.sim.engine.SimulationError``
-   The walk could not be completed: most often a heat-pump recovery
-   the parameters cannot predict, or one past the integrator's
-   30-hour bound (the message names the bound), or draws the parameters
-   have no draw response for (``draw_model_unsupported``).
+   The walk could not be completed, or a recovery ``forecast`` or
+   ``active_cycle`` was asked for falls short of its target after 16
+   hours (``tank_physics.RECOVERY_BOUND``; the message names it).

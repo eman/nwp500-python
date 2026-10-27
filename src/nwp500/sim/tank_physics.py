@@ -1,30 +1,32 @@
 """The calibrated tank the engine runs on.
 
-The engine (``sim.engine``) takes its physics as a ``Physics``:
-a standby coast, a heat-pump recovery and a draw. ``TankPhysics`` is
-the core's, and the default: the standby coast (``sim.decay``), the
-heat-pump recovery (``sim.heat_pump_recovery``, through a ``RecoveryModel`` when
-one is given) and the delivered draw (``sim.decay.draw_step``), all on
-one ``HeaterParams`` and one ambient series, so every segment of a
-simulation reads the same world.
+The engine (``sim.engine``) takes its physics as a ``Physics``: the
+tank as a state it carries without reading it, which the physics
+walks forward under whatever runs (``advance``), takes a draw from
+(``draw``), and reads the probes of (``observe``); ``estimate`` makes
+a state of two probe readings. ``TankPhysics`` is the core's: the
+stratified tank (``physics.stratified``) its ``HeaterParams`` lay out,
+heated by the heat pump's map and the elements where they sit, losing
+through its jacket, drawn through the mixing valve and with the
+circulation's water through it, all on one ambient series, so every
+segment of a simulation reads the same world.
 
 It reaches no module state, cache or configuration for what it is not
 given. Each input is a value its client resolves before it builds one
-(the draws that flow over a coast, an inlet, the ambient frame and
-humidity, ``HeaterParams``), so the same inputs give the same answer on
-any thread.
+(the circulation's runs, an inlet, the ambient frame and humidity,
+``HeaterParams``), so the same inputs give the same answer on any
+thread.
 
-**Water moves through the tank only as draws** (``sim.decay.Draw``):
-the delivered draws the engine hands each coast, and the flowing draws
-the client's ``FlowingDraws`` gives for it, each with the temperature of
-the water replacing it. What a flowing draw stands for is the client's.
+**Water moves through the tank as draws and flows**: the delivered
+draws the engine hands each walk, through the valve, and the
+circulation's runs (``sim.circulation.Circulation``), whose cooled
+pipe water comes back first at its rest temperature and then the run's
+own, straight from the top.
 
-**The tank is the physics' state** (``TankState``), which the engine
-carries without reading it: the probes are what ``Physics.observe``
-reads from it, and ``Physics.estimate`` makes one from them. Each
-segment starts from a state and its points carry the state they reach.
-``TankPhysics``' is the two zones (``TwoZone``), each as its probe
-reads it.
+**A recovery is the walk** with the heat pump on until the lower
+probe reaches the target (``recovery``): the duration a
+``RecoveryModel`` is asked about, whose answer scales the heat pump's
+heat (``heat_pump_recovery.rate_scale``).
 
 **The ambient frame** (``t_amb_series``) is a ``pd.DataFrame`` with a
 tz-aware ``DatetimeIndex`` and an ``ambient_f`` column, °F: the air
@@ -36,119 +38,153 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import pairwise
-from typing import Protocol
+from typing import Literal, Protocol
 
 import pandas as pd
 
-from nwp500.sim.decay import (
-    AmbientSampler,
-    Draw,
-    Impulse,
-    draw_step,
-    project_decay,
-)
+from nwp500.sim.circulation import Circulation, cooled_share
+from nwp500.sim.decay import AmbientSampler, Impulse
 from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.heat_pump_recovery import (
+    RATE_SCALE_RANGE,
+    ModelDuration,
     PhysicsRecovery,
-    Recovery,
     RecoveryContext,
-    physics_recovery,
-    recovery,
+    Scaled,
+    rate_scale,
 )
-from nwp500.sim.heating_trajectory import build_heating_trajectory
-from nwp500.sim.params import HeaterParams
+from nwp500.sim.heating_trajectory import HeatingPoint, from_walk
+from nwp500.sim.params import CirculationParams, HeaterParams
+from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
     heat_air_outside,
-    power_w,
 )
 
 #: A delivered draw at the inlet: its onset, and the gallons the meter
-#: counts (``Draw(at, gallons)``).
+#: counts.
 Delivered = tuple[datetime, float]
-#: The flowing draws over a coast from ``start`` to ``end``: every one
-#: that flows in ``[start, end)``, whole, not clipped to it (the coast
-#: charges a draw already under way from its own start). The client's,
-#: called once per coast in the order the coasts are walked.
-FlowingDraws = Callable[[datetime, datetime], Sequence[Draw]]
-
 #: The tank as a ``Physics`` carries it: opaque to the engine, which
 #: reads it only through ``Physics.observe``.
 TankState = object
-
-#: The recovery's refinement: a recovery is predicted again with the
-#: air's mean over the duration the last pass found, until it moves no
-#: more than this, minutes.
-REFINE_TOL_MINUTES = 2.0
-
-
-@dataclass(frozen=True)
-class TwoZone:
-    """``TankPhysics``' state: the two zones, each as its probe reads
-    it."""
-
-    upper_f: float
-    lower_f: float
+#: What ends a walk early: a test of the probes, ``(upper, lower)``.
+Stop = Callable[[float, float], bool]
+#: The longest a recovery is walked for before it is called short of
+#: its target.
+RECOVERY_BOUND = timedelta(hours=16)
 
 
 @dataclass(frozen=True)
 class Point:
     """A state on the path: the probes, and the physics' state when it
-    gave one. ``input_wh`` is the electricity over the interval ending
-    here: 0.0 while coasting and on a segment's first element, None
-    when the recovery could not price it."""
+    gave one. ``input_wh`` is the compressor's electricity over the
+    interval ending here: 0.0 while it is off and on a segment's first
+    element; None where it could not be priced."""
 
     at: datetime
     upper_f: float
     lower_f: float
     input_wh: float | None = 0.0
-    #: The element's electricity over the same interval (the engine's;
-    #: the physics never sets it).
+    #: The elements' electricity over the same interval.
     element_wh: float = 0.0
     #: The physics' state here, whose observation ``upper_f`` and
-    #: ``lower_f`` are; None where the engine made the point (between
-    #: the physics' points, or under an element), when the engine
-    #: estimates one from the probes.
+    #: ``lower_f`` are; None where the engine made the point, when the
+    #: engine estimates one from the probes.
     state: TankState | None = field(default=None, compare=False)
 
 
+@dataclass(frozen=True, kw_only=True)
+class CompressorRun:
+    """The compressor on from ``on_at``, heating from ``heats_at`` (its
+    start's hold over), to ``off_at`` (None: past the walk), its heat
+    scaled by ``scale`` (a recovery model's, ``Scaled``)."""
+
+    on_at: datetime
+    heats_at: datetime
+    off_at: datetime | None = None
+    scale: float = 1.0
+
+
+@dataclass(frozen=True, kw_only=True)
+class ElementRun:
+    """An element on from ``on_at`` to ``off_at`` (None: past the
+    walk). Its heat reaches the water its dead time later, so a run
+    that has stopped still heats for that long."""
+
+    zone: Literal["upper", "lower"]
+    on_at: datetime
+    off_at: datetime | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class Running:
+    """What heats over a walk. Not ``credited`` (a withheld draw
+    window), each source is charged its electricity and the tank gets
+    none of its heat."""
+
+    compressor: CompressorRun | None = None
+    elements: tuple[ElementRun, ...] = ()
+    credited: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class Recovered:
+    """A recovery as served (``TankPhysics.recover``): its minutes, the
+    hold included, whether it reached its target within
+    ``RECOVERY_BOUND``, the model's confidence and the reasons, the
+    physics' own duration and the model's answer, the air at its start
+    and its mean over it, and its path."""
+
+    minutes: float
+    start_hold_minutes: float
+    reached: bool
+    confidence: float
+    reasons: tuple[str, ...]
+    physics: PhysicsRecovery
+    model: ModelDuration | None
+    ambient_start_f: float
+    ambient_mean_f: float
+    trajectory: tuple[HeatingPoint, ...]
+
+
 @dataclass(frozen=True)
-class Coast:
-    """A standby segment: the path and its extraction drops, and what
-    it took (``decay.DecayProjection``'s): the delivered gallons drawn
-    and the heat they carried off, the heat the flowing draws
-    (circulation) took, and the mean air over it."""
+class Stretch:
+    """A walk of the tank (``Physics.advance``): its points, the
+    start's first, each later one with the electricity over the
+    interval ending there; whether a stop ended it (at its last
+    point); the lower probe's drop at each instant draws were taken,
+    and at the end of each step the circulation cooled it over; the
+    delivered gallons drawn and the heat they took, the heat the
+    flows took, and the mean air over it; and the reasons it carries
+    (a heat pump heating outside its map's air)."""
 
     points: list[Point]
+    stopped: bool = False
     impulses: list[Impulse] = field(default_factory=list)
     draw_volume_gal: float = 0.0
     draw_heat_btu: float = 0.0
     flowing_heat_btu: float = 0.0
     ambient_mean_f: float | None = None
-
-
-@dataclass(frozen=True)
-class Heat:
-    """A recovery from a state to a target, draw-free, to its end.
-
-    ``points`` starts at the state asked for and ends where the lower
-    zone reaches the target. ``linear`` marks a path interpolated because
-    the physics had none; its energy is then None.
-    """
-
-    points: list[Point]
-    confidence: float
     reasons: tuple[str, ...] = ()
-    linear: bool = False
+
+    @property
+    def end(self) -> datetime:
+        return self.points[-1].at
+
+    @property
+    def state(self) -> TankState:
+        state = self.points[-1].state
+        assert state is not None
+        return state
 
 
 def point_at(points: Sequence[Point], at: datetime) -> Point:
     """The state at ``at`` on a path, linear between its elements, with
-    the interval's energy split in proportion to time (was
-    ``sim.engine._interp``). On one of its elements it keeps that
-    element's physics state; between two it has none."""
+    the interval's energy split in proportion to time. On one of its
+    elements it keeps that element's physics state; between two it has
+    none."""
     if at <= points[0].at:
-        return replace(points[0], at=at, input_wh=0.0)
+        return replace(points[0], at=at, input_wh=0.0, element_wh=0.0)
     for p0, p1 in pairwise(points):
         if p0.at <= at <= p1.at:
             span = (p1.at - p0.at).total_seconds()
@@ -158,6 +194,7 @@ def point_at(points: Sequence[Point], at: datetime) -> Point:
                 p0.upper_f + (p1.upper_f - p0.upper_f) * f,
                 p0.lower_f + (p1.lower_f - p0.lower_f) * f,
                 None if p1.input_wh is None else p1.input_wh * f,
+                p1.element_wh * f,
                 # A recorded path's points (``PathPoint``) carry none.
                 state=getattr(p1, "state", None) if at == p1.at else None,
             )
@@ -178,50 +215,25 @@ class Physics(Protocol):
         """The probes on ``state``: upper, lower, °F."""
         ...
 
-    def coast(
+    def advance(
         self,
         start: datetime,
         state: TankState,
         end: datetime,
-        draws: Sequence[Delivered | Draw],
-        heated_at: datetime | None = None,
-    ) -> Coast:
-        """Standby from ``start`` to ``end``: jacket loss, the flowing
-        draws the physics was given, and exactly ``draws`` (delivered
-        gallons at their onsets, all in ``[start, end)``; a pair is at
-        the inlet). ``heated_at`` is when the tank last heated, by the
-        compressor or an element, which a flowing draw's standby pool
-        is counted from; None when it is not known."""
-        ...
-
-    def heat(
-        self,
-        start: datetime,
-        state: TankState,
-        target_f: float,
+        draws: Sequence[Delivered] = (),
         *,
-        hold_minutes: float = 0.0,
-        draw_load: float = 0.0,
-    ) -> Heat | None:
-        """A heat-pump recovery to ``target_f`` (the lower zone), draw
-        free. None when it cannot be computed. The engine passes
-        ``draw_load`` only for a recovery from the recorded tank with
-        draws recorded in the ``DRAW_LEAD`` before it: the draw-free
-        model's input, as its training rows carried them. It passes
-        ``hold_minutes`` only when the recovery begins with a compressor
-        start whose hold has time left: the path is then flat for that
-        long, and climbs after."""
+        running: Running = Running(),
+        stop: Stop | None = None,
+    ) -> Stretch:
+        """The tank from ``start`` to ``end`` under ``running``, taking
+        exactly ``draws`` (delivered gallons at their onsets, all in
+        ``[start, end)``), with the circulation the physics was given.
+        ``stop`` ends it at the first instant it holds."""
         ...
 
     def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
         """The tank just after a delivered draw of ``gal`` at ``at``."""
         ...
-
-
-def _zones(state: TankState) -> TwoZone:
-    if not isinstance(state, TwoZone):
-        raise TypeError(f"not TankPhysics' state: {state!r}")
-    return state
 
 
 def ambient_window_mean(
@@ -233,8 +245,7 @@ def ambient_window_mean(
         return None
     index = t_amb_series.index
     if index.is_monotonic_increasing:
-        # The same rows the mask below takes, found by bisection: this
-        # runs for every recovery a simulation predicts.
+        # The same rows the mask below takes, found by bisection.
         lo = index.searchsorted(pd.Timestamp(start), side="left")  # pyright: ignore[reportCallIssue, reportArgumentType]
         hi = index.searchsorted(pd.Timestamp(end), side="right")  # pyright: ignore[reportCallIssue, reportArgumentType]
         window = t_amb_series["ambient_f"].iloc[lo:hi]
@@ -249,11 +260,56 @@ def ambient_window_mean(
     return value if not math.isnan(value) else None
 
 
+def circulation_flows(
+    circulation: Circulation,
+    terms: CirculationParams,
+    air_at: Callable[[datetime], float],
+    start: datetime,
+    end: datetime,
+) -> list[st.Flowing]:
+    """The circulation's runs overlapping ``[start, end)``, whole, as
+    the water they move through the tank: the pipe's cooled water first
+    (``displaced_gal`` times its ``cooled_share`` since the run before),
+    at the return's rest (the air plus ``return_rest_offset_f``), then
+    the run's own, straight from the top."""
+    if terms.flow_gpm <= 0.0:
+        return []
+    runs = circulation.over(start, end)
+    if not runs:
+        return []
+    out: list[st.Flowing] = []
+    every = sorted(circulation.runs)
+    for a, b in runs:
+        before = [r for r in every if r[1] <= a]
+        rest = (
+            None
+            if not before
+            else (a - max(r[1] for r in before)).total_seconds() / 3600.0
+        )
+        cooled = terms.displaced_gal * cooled_share(
+            rest, terms.return_cool_tau_h
+        )
+        turn = min(b, a + timedelta(minutes=cooled / terms.flow_gpm))
+        if turn > a:
+            out.append(
+                st.Flowing(
+                    start=a,
+                    end=turn,
+                    gpm=terms.flow_gpm,
+                    inflow_f=air_at(a) + terms.return_rest_offset_f,
+                )
+            )
+        if b > turn:
+            out.append(
+                st.Flowing(start=turn, end=b, gpm=terms.flow_gpm, inflow_f=None)
+            )
+    return out
+
+
 class TankPhysics:
-    """The calibrated tank, for ``sim.engine``: the standby coast,
-    the heat-pump recovery, and the delivered draw, all from one
-    ``HeaterParams`` and one ambient series, so every segment of a
-    simulation reads the same world.
+    """The calibrated tank, for ``sim.engine``: the stratified tank
+    ``params`` lay out (``physics.stratified.layout``), walked on one
+    ambient series.
 
     Every input is a value its client resolved:
 
@@ -262,26 +318,16 @@ class TankPhysics:
       ``humidity``, %, at the start (None: unknown);
     - ``draws_on``: whether delivered draws move the tank (a draw
       scenario);
-    - ``flowing_draws``: the draws that flow over each coast, whatever
-      ``draws_on`` says; None, none;
-    - ``tau_gap_hours``: the stratification gap's time constant, the
-      fitted one or the client's prior;
-    - ``draw_inlet_temp_f``: the inlet a draw is priced at; None, the
-      parameters' reference (``DrawParams.inlet_temp_f``);
-    - ``physics_usable``: whether the integrator's duration may be
-      served as an estimate; None, yes;
-    - ``recovery_model``: the correction to the physics recovery; None,
-      the physics alone;
+    - ``circulation``: the circulation's runs, on its terms
+      (``params.circulation``, else ``circulation_terms``); None, none;
+    - ``draw_inlet_temp_f``: the water replacing a draw; None, the
+      parameters' (``DrawParams.inlet_temp_f``);
+    - ``recovery_model``: the model of a recovery's duration; None, the
+      physics alone;
     - ``low_confidence_floor``: a recovery whose confidence is below it
-      carries ``recovery_low_confidence``.
-
-    It counts, as it goes, the recoveries whose integration stopped at
-    its bound short of the target (``truncated_recoveries``) and those
-    whose integrator raised (``failed_recoveries``, the last error in
-    ``last_failure``): what a caller outside the core reports, since the
-    core logs nothing. Counted once a recovery asked, from
-    its last refinement pass, served or not; nothing it answers depends
-    on them.
+      carries ``recovery_low_confidence``;
+    - ``air_readings``: the readings the air comes from, for where it
+      leaves the heat pump's range (``air_outside``); None, the series.
     """
 
     def __init__(
@@ -291,272 +337,362 @@ class TankPhysics:
         humidity: float | None,
         *,
         draws_on: bool,
-        tau_gap_hours: float,
-        flowing_draws: FlowingDraws | None = None,
+        circulation: Circulation | None = None,
+        circulation_terms: CirculationParams | None = None,
         draw_inlet_temp_f: float | None = None,
-        physics_usable: bool | None = None,
         recovery_model: RecoveryModel | None = None,
         low_confidence_floor: float = 0.0,
         air_readings: pd.DataFrame | None = None,
     ) -> None:
         self.params = params
-        #: The inlet a draw is priced at; None given: the parameters'
-        #: reference.
+        self.layout = st.layout(params)
+        #: The water replacing a draw.
         self.draw_inlet_temp_f = (
             params.draw.inlet_temp_f
             if draw_inlet_temp_f is None
             else draw_inlet_temp_f
         )
-        #: The draws that flow over a coast.
-        self.flowing_draws = flowing_draws
-        self.tau_gap_hours = tau_gap_hours
-        self.physics_usable = True if physics_usable is None else physics_usable
+        self.valve = (
+            params.draw.delivery_intercept_f,
+            params.draw.delivery_slope,
+        )
+        self.circulation = circulation
+        self.circulation_terms = (
+            params.circulation
+            if params.circulation is not None
+            else circulation_terms
+        )
         self.recovery_model = recovery_model
         self.low_confidence_floor = low_confidence_floor
         self.series = t_amb_series
         self.ambient = AmbientSampler(t_amb_series)
-        #: The readings the air comes from, for where it leaves the
-        #: heat pump's range (``air_outside``); None: the series.
         self.air_readings = (
             None if air_readings is None else AmbientSampler(air_readings)
         )
         self.humidity = humidity
         self.draws_on = draws_on
-        #: Recoveries served whose integration hit its bound.
-        self.truncated_recoveries = 0
-        #: Recoveries served whose integrator raised, and the last error.
-        self.failed_recoveries = 0
-        self.last_failure: str | None = None
 
-    def estimate(self, upper_f: float, lower_f: float) -> TwoZone:
-        return TwoZone(upper_f, lower_f)
+    def estimate(self, upper_f: float, lower_f: float) -> st.TankState:
+        return st.mix(st.estimate(self.layout, upper_f, lower_f))
+
+    def layers(self, layers_f: Sequence[float]) -> st.TankState:
+        """The tank of the layers ``layers_f``, °F, the bottom first:
+        as many as the parameters lay out (``TankParams.layers``)."""
+        if len(layers_f) != self.layout.layers:
+            raise ValueError(
+                f"{len(layers_f)} layers given, the parameters lay out "
+                f"{self.layout.layers}"
+            )
+        return st.mix(st.TankState(tuple(float(t) for t in layers_f)))
 
     def observe(self, state: TankState) -> tuple[float, float]:
-        z = _zones(state)
-        return z.upper_f, z.lower_f
+        return st.observe(self.layout, _layers(state))
 
-    def coast(
+    def _heating(self, running: Running) -> st.Heating:
+        c = running.compressor
+        el = self.params.element
+        return st.Heating(
+            compressor=None
+            if c is None
+            else st.Compressor(
+                params=self.params.compressor,
+                on_at=c.on_at,
+                heats_at=c.heats_at,
+                off_at=c.off_at,
+                scale=c.scale,
+            ),
+            elements=tuple(
+                st.Element(
+                    zone=e.zone,
+                    watts=el.element_w,
+                    on_at=e.on_at,
+                    off_at=e.off_at,
+                    lag=timedelta(
+                        minutes=el.upper_dead_time_min
+                        if e.zone == "upper"
+                        else 0.0
+                    ),
+                )
+                for e in running.elements
+            ),
+            credited=running.credited,
+        )
+
+    def _flows(self, start: datetime, end: datetime) -> list[st.Flowing]:
+        terms = self.circulation_terms
+        if self.circulation is None or terms is None:
+            return []
+        return circulation_flows(
+            self.circulation, terms, self.ambient.at, start, end
+        )
+
+    def advance(
         self,
         start: datetime,
         state: TankState,
         end: datetime,
-        draws: Sequence[Delivered | Draw],
-        heated_at: datetime | None = None,
-    ) -> Coast:
-        p = self.params
-        upper_f, lower_f = self.observe(state)
-        flowing = (
-            self.flowing_draws(start, end)
-            if self.flowing_draws is not None
-            else ()
-        )
-        decay = project_decay(
-            t_upper_now=upper_f,
-            t_lower_now=lower_f,
-            t_amb_series=self.series,
-            ua_btu_hr_f=(
-                p.loss.ua_btu_hr_f
-                if p.loss.ua_btu_hr_f is not None
-                else p.loss.ua_baseline_btu_hr_f
-            ),
-            ua_exponent=p.loss.ua_exponent,
-            ua_ref_delta_t=p.loss.ua_ref_delta_t_f,
-            bottom_loss_btu_hr=p.loss.bottom_loss_btu_hr,
-            bottom_gate_f=p.loss.bottom_gate_f,
-            tau_gap_hours=self.tau_gap_hours,
-            target_time=end,
-            now=start,
-            lower_gate_f=p.draw.lower_gate_f,
-            pool_f_per_hour=p.draw.pool_f_per_hour,
-            ungated_observability=p.draw.ungated_observability,
-            last_heated_at=heated_at,
-            draws=[*draws, *flowing],
-            draw_observability=(
-                p.draw.observability if self.draws_on else None
-            ),
-            draw_inlet_temp_f=self.draw_inlet_temp_f,
-            tmv_delivery_intercept_f=p.draw.delivery_intercept_f,
-            tmv_delivery_slope=p.draw.delivery_slope,
-            draw_reach_gate_f=p.draw.reach_gate_f,
-            draw_reach_offset_f=p.draw.reach_offset_f,
-            draw_reach_gal=p.draw.reach_gal,
-            draw_upper_f_per_gal=p.draw.upper_f_per_gal,
-            ambient=self.ambient,
-            tank=p.tank,
-        )
-        return Coast(
-            [
-                Point(at, up, lo, state=TwoZone(up, lo))
-                for at, up, lo in decay.trajectory
+        draws: Sequence[Delivered] = (),
+        *,
+        running: Running = Running(),
+        stop: Stop | None = None,
+    ) -> Stretch:
+        lay = self.layout
+        taken = list(draws) if self.draws_on else []
+        walked = st.walk(
+            lay,
+            _layers(state),
+            start,
+            end,
+            air_f=self.ambient.at,
+            heating=self._heating(running),
+            flowing=self._flows(start, end),
+            draws=[
+                st.Delivered(at=t, gal=g, inflow_f=self.draw_inlet_temp_f)
+                for t, g in taken
             ],
-            decay.impulses,
-            draw_volume_gal=decay.draw_volume_gal,
-            draw_heat_btu=decay.draw_heat_btu,
-            flowing_heat_btu=decay.flowing_heat_btu,
-            ambient_mean_f=decay.t_amb_mean,
+            valve=self.valve,
+            stop=None
+            if stop is None
+            else (lambda s: stop(*st.observe(lay, s))),
+        )
+        points: list[Point] = []
+        for k, (at, s) in enumerate(walked.path):
+            u, lo = st.observe(lay, s)
+            b = walked.steps[k - 1] if k else None
+            points.append(
+                Point(
+                    at,
+                    u,
+                    lo,
+                    0.0 if b is None else b.compressor_wh,
+                    0.0 if b is None else b.element_wh,
+                    state=s,
+                )
+            )
+        drawn = {at: after for at, _, after in walked.drops}
+        lower_drawn = {at: st.observe(lay, a)[1] for at, a in drawn.items()}
+        impulses = [
+            Impulse(at, st.observe(lay, before)[1], lower_drawn[at])
+            for at, before, _ in walked.drops
+        ]
+        # A step the circulation took heat over, the lower probe falling,
+        # is a drop too, at the step's end: Energy Saver's held lower
+        # trigger is released by one (``tou_triggers.heater_start``).
+        for (a, b), books in zip(pairwise(points), walked.steps, strict=True):
+            before = lower_drawn.get(a.at, a.lower_f)
+            if books.flowing_btu > 0.0 and b.lower_f < before:
+                impulses.append(Impulse(b.at, before, b.lower_f))
+        impulses.sort(key=lambda i: i.at)
+        # The path holds the tank just before a draw at its instant;
+        # the tank just after it is the next element there, as the
+        # engine's path carries a draw.
+        out: list[Point] = []
+        for k, p in enumerate(points):
+            out.append(p)
+            after = drawn.get(p.at)
+            last_there = k + 1 == len(points) or points[k + 1].at != p.at
+            if after is not None and p.state is not after and last_there:
+                u, lo = st.observe(lay, after)
+                out.append(Point(p.at, u, lo, 0.0, 0.0, state=after))
+        points = out
+        mean = ambient_window_mean(self.series, start, walked.end)
+        reasons: tuple[str, ...] = ()
+        if (
+            running.compressor is not None
+            and mean is not None
+            and heat_air_outside(self.params.compressor, mean)
+        ):
+            reasons = (HEAT_MAP_OUT_OF_DOMAIN,)
+        books = walked.books
+        return Stretch(
+            points,
+            stopped=walked.stopped,
+            impulses=impulses,
+            draw_volume_gal=sum(g for t, g in taken if start <= t < walked.end),
+            draw_heat_btu=books.drawn_btu,
+            flowing_heat_btu=books.flowing_btu,
+            ambient_mean_f=mean,
+            reasons=reasons,
         )
 
-    def _predict(
+    def draw(self, at: datetime, state: TankState, gal: float) -> st.TankState:
+        layers = _layers(state)
+        if not self.draws_on:
+            return layers
+        return st.draw(
+            self.layout, layers, gal, self.draw_inlet_temp_f, self.valve
+        ).state
+
+    def _climb(
         self,
         start: datetime,
-        upper_f: float,
-        lower_f: float,
+        layers: st.TankState,
         target_f: float,
-        hold_minutes: float = 0.0,
-        draw_load: float = 0.0,
-    ) -> Recovery | None:
-        """The recovery from an injected state: one pass with the air at
-        the heater at the start, a second with its mean over the recovery
-        the first found."""
-        amb = self.ambient.at(start)
-        prediction: Recovery | None = None
-        # The engine's walk takes every draw itself, so each recovery is
-        # a draw-free model's: one trained on all cycles carries the
-        # average draw time, which the walk would then count twice. The
-        # ``recovery_model`` given is expected to be draw-free.
-        heat_minutes = 0.0
-        physics: PhysicsRecovery | None = None
-        for _ in range(2):
-            mean = ambient_window_mean(
-                self.series, start, start + timedelta(minutes=heat_minutes)
-            )
-            t_amb_mean = mean if mean is not None else amb
-            prediction = recovery(
-                RecoveryContext(
-                    t_start_lower=lower_f,
-                    t_start_upper=upper_f,
-                    target_f=target_f,
-                    t_amb_start=amb,
-                    t_amb_mean=t_amb_mean,
-                    h_amb_start=self.humidity,
-                    start_hold_minutes=hold_minutes,
-                    draw_load=draw_load,
-                    physics=(
-                        physics := physics_recovery(
-                            t_start_lower=lower_f,
-                            t_start_upper=upper_f,
-                            target_f=target_f,
-                            t_amb_mean=t_amb_mean,
-                            compressor=self.params.compressor,
-                            loss=self.params.loss,
-                            usable=self.physics_usable,
-                            record_path=True,
-                            tank=self.params.tank,
-                        )
-                    ),
-                ),
-                model=self.recovery_model,
-            )
-            if prediction is None:
-                break
-            if abs(prediction.minutes - heat_minutes) <= REFINE_TOL_MINUTES:
-                break
-            heat_minutes = prediction.minutes
-        if physics is not None:
-            self._count(physics)
-        return prediction
+        hold_minutes: float,
+        scale: float = 1.0,
+    ) -> st.Walked:
+        """The heat pump on from ``start``, heating after
+        ``hold_minutes``, until the lower probe reaches ``target_f``,
+        within ``RECOVERY_BOUND``: nothing drawn, the circulation as
+        given."""
+        heats = start + timedelta(minutes=max(0.0, hold_minutes))
+        end = heats + RECOVERY_BOUND
+        lay = self.layout
+        return st.walk(
+            lay,
+            layers,
+            start,
+            end,
+            air_f=self.ambient.at,
+            heating=st.Heating(
+                compressor=st.Compressor(
+                    params=self.params.compressor,
+                    on_at=start,
+                    heats_at=heats,
+                    scale=scale,
+                )
+            ),
+            flowing=self._flows(start, end),
+            valve=self.valve,
+            stop=lambda s: st.observe(lay, s)[1] >= target_f,
+        )
 
-    def _count(self, physics: PhysicsRecovery) -> None:
-        """A recovery's integration, counted for the caller to report."""
-        if physics.truncated:
-            self.truncated_recoveries += 1
-        if physics.failed is not None:
-            self.failed_recoveries += 1
-            self.last_failure = physics.failed
-
-    def heat(
+    def recovery(
         self,
         start: datetime,
         state: TankState,
         target_f: float,
         *,
         hold_minutes: float = 0.0,
-        draw_load: float = 0.0,
-    ) -> Heat | None:
-        upper_f, lower_f = self.observe(state)
-        first = Point(start, upper_f, lower_f, 0.0, state=state)
-        if lower_f >= target_f:
-            return Heat([first], 1.0)
-        p = self._predict(
-            start, upper_f, lower_f, target_f, hold_minutes, draw_load
+    ) -> PhysicsRecovery:
+        """The heat pump's recovery from ``state`` until the lower probe
+        reaches ``target_f`` after a hold of ``hold_minutes``: its
+        climb's minutes."""
+        return _physics(
+            self._climb(start, _layers(state), target_f, hold_minutes),
+            start,
+            hold_minutes,
         )
-        if p is None:
-            return None
-        # The served recovery's own reasons (a truncated integration,
-        # a model's diagnostics), and this tank's confidence flag.
-        reasons: tuple[str, ...] = (
-            (*p.reasons,)
-            + (
-                ("recovery_low_confidence",)
-                if p.confidence < self.low_confidence_floor
-                else ()
-            )
-            + (
-                (HEAT_MAP_OUT_OF_DOMAIN,)
-                if heat_air_outside(
-                    self.params.compressor, p.context.t_amb_mean
-                )
-                else ()
-            )
+
+    def _ask(
+        self,
+        start: datetime,
+        layers: st.TankState,
+        target_f: float,
+        hold_minutes: float,
+        physics: PhysicsRecovery,
+    ) -> tuple[Scaled, float, float]:
+        """The ``recovery_model``'s answer for ``physics``, with this
+        tank's confidence reason, and the air at the start and its mean
+        over the recovery."""
+        upper, lower = self.observe(layers)
+        end = start + timedelta(minutes=hold_minutes + physics.minutes)
+        amb = self.ambient.at(start)
+        mean = ambient_window_mean(self.series, start, end)
+        air = amb if mean is None else mean
+        got = rate_scale(
+            RecoveryContext(
+                t_start_lower=lower,
+                t_start_upper=upper,
+                layers_f=layers.layers_f,
+                target_f=target_f,
+                t_amb_start=amb,
+                t_amb_mean=air,
+                h_amb_start=self.humidity,
+                start_hold_minutes=hold_minutes,
+                physics=physics,
+            ),
+            model=self.recovery_model,
         )
-        # When the physics path is not the served recovery: none at all,
-        # or the model clamped the duration
-        # (``sim.heat_pump_recovery._path_publishable`` leaves no path then).
-        if p.path is not None:
-            points = [
-                Point(
-                    pt.at,
-                    pt.t_upper_f,
-                    pt.t_lower_f,
-                    pt.input_energy_wh,
-                    state=TwoZone(pt.t_upper_f, pt.t_lower_f),
-                )
-                for pt in build_heating_trajectory(
-                    p.path,
-                    served_minutes=p.minutes,
-                    start_at=start,
-                    t_upper_start=upper_f,
-                    t_lower_start=lower_f,
-                    hold_minutes=p.start_hold_minutes,
-                    start_power_w=power_w(
-                        self.params.compressor, p.context.t_amb_start, lower_f
-                    ),
-                    tank=self.params.tank,
-                )
-            ]
-            points[0] = first
-            return Heat(points, p.confidence, reasons)
-        # No path to follow: the served duration, a straight line in the
-        # lower zone after the start's hold, and no energy rather than an
-        # invented one.
-        hold = min(max(p.start_hold_minutes, 0.0), max(p.minutes, 0.0))
-        minutes = max(p.minutes, 0.0) - hold
-        steps = max(1, math.ceil(minutes / 10.0))
-        points = [first]
-        if hold > 0.0:
-            points.append(
-                Point(
-                    start + timedelta(minutes=hold),
-                    upper_f,
-                    lower_f,
-                    None,
-                    state=state,
-                )
+        if (
+            self.recovery_model is not None
+            and got.confidence < self.low_confidence_floor
+        ):
+            got = replace(
+                got, reasons=(*got.reasons, "recovery_low_confidence")
             )
-        for i in range(1, steps + 1):
-            f = i / steps
-            lower = lower_f + (target_f - lower_f) * f
-            upper = max(upper_f, lower)
-            points.append(
-                Point(
-                    start + timedelta(minutes=hold + minutes * f),
-                    upper,
-                    lower,
-                    None,
-                    state=TwoZone(upper, lower),
-                )
+        return self._paced(start, layers, target_f, hold_minutes, got), amb, air
+
+    def _paced(
+        self,
+        start: datetime,
+        layers: st.TankState,
+        target_f: float,
+        hold_minutes: float,
+        got: Scaled,
+    ) -> Scaled:
+        """``got``'s scale corrected once, so the scaled climb takes the
+        model's: a slower heat loses more to the jacket on the way, so
+        the climb does not stretch exactly as the heat is scaled. The
+        correction takes the climb to be in inverse proportion to the
+        scale near the first."""
+        answer = got.model
+        if answer is None or got.scale == 1.0:
+            return got
+        want = answer.minutes - answer.start_hold_minutes
+        walked = self._climb(start, layers, target_f, hold_minutes, got.scale)
+        climb = _physics(walked, start, hold_minutes).estimate
+        if climb is None or want <= 0.0:
+            return got
+        low, high = RATE_SCALE_RANGE
+        return replace(got, scale=min(high, max(low, got.scale * climb / want)))
+
+    def scale(
+        self,
+        start: datetime,
+        state: TankState,
+        target_f: float,
+        *,
+        hold_minutes: float = 0.0,
+    ) -> Scaled:
+        """A recovery starting at ``start`` as served: the
+        ``recovery_model``'s scale on the heat pump's heat
+        (``heat_pump_recovery.rate_scale``), its confidence and its
+        reasons. Scale 1 and no reasons with no model."""
+        if self.recovery_model is None:
+            return Scaled()
+        layers = _layers(state)
+        physics = self.recovery(
+            start, layers, target_f, hold_minutes=hold_minutes
+        )
+        return self._ask(start, layers, target_f, hold_minutes, physics)[0]
+
+    def recover(
+        self,
+        start: datetime,
+        state: TankState,
+        target_f: float,
+        *,
+        hold_minutes: float = 0.0,
+    ) -> Recovered:
+        """The recovery from ``state`` to ``target_f`` as served: the
+        physics' walk at the pace the ``recovery_model`` gives it
+        (``scale``), its duration, the hold included, and its path."""
+        layers = _layers(state)
+        walked = self._climb(start, layers, target_f, hold_minutes)
+        physics = _physics(walked, start, hold_minutes)
+        scaled, amb, air = self._ask(
+            start, layers, target_f, hold_minutes, physics
+        )
+        if scaled.scale != 1.0:
+            walked = self._climb(
+                start, layers, target_f, hold_minutes, scaled.scale
             )
-        return Heat(points, p.confidence, reasons, linear=True)
+        reasons = scaled.reasons
+        if heat_air_outside(self.params.compressor, air):
+            reasons = (*reasons, HEAT_MAP_OUT_OF_DOMAIN)
+        return Recovered(
+            minutes=(walked.end - start).total_seconds() / 60.0,
+            start_hold_minutes=max(0.0, hold_minutes),
+            reached=walked.stopped,
+            confidence=scaled.confidence,
+            reasons=reasons,
+            physics=physics,
+            model=scaled.model,
+            ambient_start_f=amb,
+            ambient_mean_f=air,
+            trajectory=tuple(from_walk(self.layout, walked)),
+        )
 
     def air_outside(
         self, start: datetime, end: datetime, low: float, high: float
@@ -569,24 +705,20 @@ class TankPhysics:
         air = self.ambient if self.air_readings is None else self.air_readings
         return air.outside(start, end, low, high)
 
-    def draw(self, at: datetime, state: TankState, gal: float) -> TwoZone:
-        d = self.params.draw
-        z = _zones(state)
-        # As in ``coast``: with draws off, a draw does not move the tank.
-        if not self.draws_on or d.observability is None:
-            return z
-        return TwoZone(
-            *draw_step(
-                z.upper_f,
-                z.lower_f,
-                gal,
-                draw_observability=d.observability,
-                draw_inlet_temp_f=self.draw_inlet_temp_f,
-                tmv_delivery_intercept_f=d.delivery_intercept_f,
-                tmv_delivery_slope=d.delivery_slope,
-                draw_reach_gate_f=d.reach_gate_f,
-                draw_reach_offset_f=d.reach_offset_f,
-                draw_reach_gal=d.reach_gal,
-                draw_upper_f_per_gal=d.upper_f_per_gal,
-            )
-        )
+
+def _physics(
+    walked: st.Walked, start: datetime, hold_minutes: float
+) -> PhysicsRecovery:
+    heats = start + timedelta(minutes=max(0.0, hold_minutes))
+    minutes = max(0.0, (walked.end - heats).total_seconds() / 60.0)
+    return PhysicsRecovery(
+        minutes=minutes,
+        truncated=not walked.stopped,
+        estimate=minutes if walked.stopped and minutes > 0.0 else None,
+    )
+
+
+def _layers(state: TankState) -> st.TankState:
+    if not isinstance(state, st.TankState):
+        raise TypeError(f"not TankPhysics' state: {state!r}")
+    return state

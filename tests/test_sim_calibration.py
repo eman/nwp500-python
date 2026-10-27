@@ -338,7 +338,6 @@ class TestCalibrate:
             "physics_uncalibrated",
             "energy_uncalibrated",
             "standby_uncalibrated",
-            "tau_gap_prior",
             "draw_uncalibrated",
         ):
             assert reason in r.reasons

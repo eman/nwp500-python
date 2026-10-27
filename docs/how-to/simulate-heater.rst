@@ -893,16 +893,12 @@ Put them in a scenario with
 ``scenario.model_copy(update={"environment": environment, "loads": loads})``.
 
 **History.** Without it the simulator assumes no restart lockout is in
-force and that it does not know when the tank last heated. Track
-``comp_use`` (and ``heat_upper_use``, ``heat_lower_use``) in the status
-stream and record when each changed:
+force. Track ``comp_use`` in the status stream and record when it last
+turned off:
 
 .. code-block:: python
 
-   history = sim.History(
-       compressor_stopped_at=last_compressor_stop,
-       heated_at=last_heating_end,
-   )
+   history = sim.History(compressor_stopped_at=last_compressor_stop)
 
 **Circulation.** If your installation circulates hot water on a
 schedule, give the runs and what each takes
@@ -1166,7 +1162,7 @@ pinned on a bound), ``power``, ``standby`` (no quiet window) or
 ``gap_tau``. Every answer such a term reaches says so in its
 ``reasons``: ``physics_uncalibrated`` for a recovery's duration,
 ``energy_uncalibrated`` for its energy and COP, ``standby_uncalibrated``
-for the jacket's loss, and ``tau_gap_prior`` for a gap that draws open.
+for the jacket's loss.
 The base's record of the installation's book, readiness and draw terms
 is kept (``default_params`` names all three): they are fitted apart,
 from a meter's draws, and once you apply your own fits drop each from

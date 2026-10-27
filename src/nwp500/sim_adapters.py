@@ -1245,11 +1245,11 @@ def replay(
 
     - the tank, what is heating, the settings and the TOU switch: the
       status in force at ``at``, which must be within ``TANK_MAX_AGE``;
-    - when the compressor last stopped (for the restart lockout), and
-      when the tank last heated: its last off-edge within
-      ``COMPRESSOR_LOOKBACK``, and the elements' within
-      ``STATUS_LOOKBACK``, an edge being the first status after the
-      change (a sampled record knows no closer);
+    - when the compressor last stopped (for the restart lockout): its
+      last off-edge within ``COMPRESSOR_LOOKBACK``, and whether the
+      upper element is on and since when, within ``STATUS_LOOKBACK``,
+      an edge being the first status after the change (a sampled record
+      knows no closer);
     - the TOU switch's changes over the span (``Schedules.tou_switches``);
     - with ``writes``, every recorded change of the setpoint or the mode
       over the span as a write, but the heater's own drop to Heat Pump
@@ -1287,16 +1287,6 @@ def replay(
     upper_on, upper_edge = _last_edge(
         [(t, bool(s.heat_upper_use)) for t, s in recent]
     )
-    lower_on, lower_edge = _last_edge(
-        [(t, bool(s.heat_lower_use)) for t, s in recent]
-    )
-    heated: datetime | None = None
-    if running or upper_on or lower_on:
-        heated = at
-    elif stopped is not None:
-        heated = max(
-            [stopped, *(e for e in (upper_edge, lower_edge) if e is not None)]
-        )
     state = heater_state(now).model_copy(
         update={
             "compressor_running": running,
@@ -1328,7 +1318,7 @@ def replay(
         tz=tz,
         state=state,
         settings=settings(now),
-        history=History(compressor_stopped_at=stopped, heated_at=heated),
+        history=History(compressor_stopped_at=stopped),
         schedules=base.model_copy(
             update={
                 "tou_enabled": bool(now.tou_status),

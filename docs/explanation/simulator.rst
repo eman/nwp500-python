@@ -300,41 +300,30 @@ itself on the coast and why; every walk with draws says when a draw
 would fall outside the range the draw terms were fitted over
 (``draw_out_of_domain``).
 
-A ``RecoveryModel`` can replace each heat-pump recovery's duration with
-a learned one, and a ``HeatLedger`` can track booked heat from a flow
-meter; both are protocols in ``sim.extensions``. With neither, the
+A ``RecoveryModel`` (a protocol in ``sim.extensions``) can give each
+heat-pump recovery a learned duration. It is served as the pace of the
+heat pump's heat for that recovery (``heat_pump_recovery.rate_scale``):
+the tank walks the same layers, at the model's speed. With none, the
 physics alone is served.
 
-A model is asked about each recovery with its start state, its target,
-the air, the physics duration, the start's hold and the draw load
-(``RecoveryContext``). ``simulate`` takes what the model was trained
-with, beside ``recovery=``:
+A model is asked about each recovery with its start state (the probes
+and the layers), its target, the air, the physics duration and the
+start's hold (``RecoveryContext``). ``simulate`` takes what the model
+was trained with, beside ``recovery=``:
 
 ``start_hold``
-   How long a compressor start holds before the lower zone climbs,
-   minutes, by the minutes since the compressor last stopped (None when
-   that isn't known). The model is asked with the hold, and serves a
-   duration that includes it.
+   How long a compressor start holds before it heats, minutes, by the
+   minutes since the compressor last stopped (None when that isn't
+   known). The model is asked with the hold, and serves a duration that
+   includes it.
 
 ``running_hold``
    What is left, at the start, of a running compressor's own start's
    hold, minutes.
 
-``lead_draws``
-   Draws recorded before the start. Those within 30 minutes of the
-   first recovery's start are its ``draw_load``: what they took off the
-   tank, over the recovery's deficit.
-
-``physics_usable``
-   Whether the physics duration may be served; by default, when the
-   compressor is calibrated. A model may still answer from the
-   integrator's minutes when it isn't.
-
 With no model, or one that declines, the served duration is the hold
 (the parameters' by time off, unless ``start_hold`` or ``running_hold``
-is given) plus the physics' climb, and the lead draws are not read. A
-recovery placed again after a draw inside its hold counts from where
-the hold ends.
+is given) plus the physics' climb.
 
 
 Accuracy

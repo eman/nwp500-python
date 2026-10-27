@@ -21,7 +21,6 @@ EP = replace(
 )
 
 DEPLETION_THRESHOLD_F = _book.DEPLETION_THRESHOLD_F
-FALL_F_PER_GAL = _book.FALL_F_PER_GAL
 compressor_btu = _book.compressor_btu
 element_btu = _book.element_btu
 standby_btu = _book.standby_btu
@@ -80,30 +79,6 @@ def tank_max_btu(
     return _book.tank_max_btu(upper_f, lower_f, ep or EP)
 
 
-def zone_after_draw_f(
-    b: _book.Booked,
-    upper_f: float,
-    lower_f: float,
-    fall: float = FALL_F_PER_GAL,
-    ep: BookParams | None = None,
-    **kw: Any,
-) -> float:
-    return _book.zone_after_draw_f(b, upper_f, lower_f, fall, ep or EP, **kw)
-
-
-def zone_mixed_f(
-    b: _book.Booked,
-    gal: float,
-    upper_before_f: float,
-    upper_f: float,
-    lower_f: float,
-    ep: BookParams | None = None,
-) -> float:
-    return _book.zone_mixed_f(
-        b, gal, upper_before_f, upper_f, lower_f, ep or EP
-    )
-
-
 def walk_booked(
     start: _book.Booked,
     points: Any,
@@ -116,9 +91,3 @@ def walk_booked(
     return _book.walk_booked(
         start, points, heating, draws, ambient_at, p or EP, **kw
     )
-
-
-def BookedHeatLedger(
-    start: _book.Booked, ambient_at: Any, p: BookParams | None = None, **kw: Any
-) -> _book.BookedHeatLedger:
-    return _book.BookedHeatLedger(start, ambient_at, p or EP, **kw)

@@ -147,8 +147,7 @@ Extension points
 ================
 
 .. automodule:: nwp500.sim.extensions
-   :members: RecoveryModel, HeatLedger, Stand, LedgerZones, ZoneBound,
-      DrawTaken, AfterDraw, DrawsAhead, UpperAhead
+   :members: RecoveryModel
 
 .. automodule:: nwp500.sim.api
    :members: counter_measures_to_setpoint, tou_marked, marked_windows
@@ -163,8 +162,8 @@ Hot water and the heat book
       draw_domain_judgement, EXAMPLE_EVIDENCE, with_example_evidence
 
 .. automodule:: nwp500.sim.circulation
-   :members: Circulation, CirculationDraws, CirculationLoss, merge_runs,
-      run_draws, RUN_GAP, cooled_share
+   :members: Circulation, CirculationLoss, merge_runs, RUN_GAP,
+      cooled_share, displaced_gal
 
 .. automodule:: nwp500.sim.location_air
    :members: LocationAirModel, SITE_LOCATION_AIR, project, fit,
@@ -231,7 +230,7 @@ Hot water and the heat book
    :members: assess, Recovery, TankNow, showers_ready_for, whole_showers
 
 .. automodule:: nwp500.sim.book
-   :members: Booked, BookedHeatLedger, SpanLoss, full_tank_book,
+   :members: Booked, SpanLoss, full_tank_book,
       full_tank, walk_booked, loss_ceiling_btu, BookedPath, Step,
       book_steps, house_gpm, step_heat_btu, inlet_now_f, mains_f,
       draw_out
@@ -246,22 +245,23 @@ The pieces the entry points are built from.
    :members: simulate, Simulation, SimulationError, Heater, Entry,
       HeatingInterval, PathPoint, Write, RawWrite, ModeWrite,
       ModeInterval, quantise, floor_minute, energy_by_slot,
-      energy_by_source, DRAW_LEAD, HEATER_SETPOINT_MIN_F,
+      energy_by_source, HEATER_SETPOINT_MIN_F,
       HEATER_SETPOINT_MAX_F
 
 .. automodule:: nwp500.sim.controller
    :members:
 
 .. automodule:: nwp500.sim.tank_physics
-   :members: TankPhysics, Physics, TankState, TwoZone, Point, Coast,
-      Heat, point_at, ambient_window_mean, REFINE_TOL_MINUTES
+   :members: TankPhysics, Physics, TankState, Point, Stretch, Running,
+      CompressorRun, ElementRun, Recovered, Delivered, Stop, point_at,
+      ambient_window_mean, circulation_flows, RECOVERY_BOUND
 
 .. automodule:: nwp500.sim.heat_pump_recovery
-   :members: physics_recovery, PhysicsRecovery, recovery, Recovery,
-      RecoveryContext, ModelDuration, PHYSICS_TRUNCATED
+   :members: rate_scale, Scaled, PhysicsRecovery, RecoveryContext,
+      ModelDuration, PHYSICS_TRUNCATED, RATE_SCALE_RANGE
 
 .. automodule:: nwp500.sim.heating_trajectory
-   :members: build_heating_trajectory, HeatingPoint
+   :members: from_walk, HeatingPoint
 
 .. automodule:: nwp500.sim.decay
    :members: project_decay, DecayProjection, AmbientSampler, Draw,

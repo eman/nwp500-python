@@ -816,12 +816,14 @@ class Heating:
 @dataclass(frozen=True, kw_only=True)
 class Flowing:
     """Water flowing through the tank from ``start`` to ``end`` at
-    ``gpm``, coming in at ``inflow_f``."""
+    ``gpm``, coming in at ``inflow_f``; None, at the top layer's
+    temperature as each step starts (water leaving the top and coming
+    straight back, a circulation run's own)."""
 
     start: datetime
     end: datetime
     gpm: float
-    inflow_f: float
+    inflow_f: float | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -882,6 +884,9 @@ class Walked:
     books: Books
     path: tuple[tuple[datetime, TankState], ...]
     steps: tuple[Books, ...] = ()
+    #: The tank just before and just after the delivered draws at each
+    #: instant some were taken.
+    drops: tuple[tuple[datetime, TankState, TankState], ...] = ()
 
 
 def _overlap_h(
@@ -998,7 +1003,10 @@ class _Walk:
         for f in self.flowing:
             gal = f.gpm * 60.0 * _overlap_h(a, b, f.start, f.end)
             if gal > 0.0:
-                out = flow(lay, state, gal, f.inflow_f)
+                inflow = (
+                    state.layers_f[-1] if f.inflow_f is None else f.inflow_f
+                )
+                out = flow(lay, state, gal, inflow)
                 state = out.state
                 books += Books(flowing_btu=out.heat_btu)
         state, lost = lose(lay, state, air, hours)
@@ -1052,32 +1060,50 @@ def walk(
     books = Books()
     path: list[tuple[datetime, TankState]] = [(start, state)]
     steps: list[Books] = []
+    drops: list[tuple[datetime, TankState, TankState]] = []
     t = start
     if stop is not None and stop(state):
         return Walked(state, t, True, books, tuple(path))
     while t < end:
         step = active_step if w.active(t) else idle_step
         nxt = min([_grid_after(t, step), end, *(x for x in instants if x > t)])
-        if stop is not None:
+        if any(d.at == t for d in w.draws):
             taken, b = w.drawn(t, state)
-            if stop(taken):
+            drops.append((t, state, taken))
+            if stop is not None and stop(taken):
                 # A draw here meets it.
                 path.append((t, taken))
                 steps.append(b)
                 return Walked(
-                    taken, t, True, books + b, tuple(path), tuple(steps)
+                    taken,
+                    t,
+                    True,
+                    books + b,
+                    tuple(path),
+                    tuple(steps),
+                    tuple(drops),
                 )
         new, b = _step(w, t, nxt, state)
         if stop is not None and stop(new):
             at, new, b = _cut(w, t, nxt, state, stop)
             path.append((at, new))
             steps.append(b)
-            return Walked(new, at, True, books + b, tuple(path), tuple(steps))
+            return Walked(
+                new,
+                at,
+                True,
+                books + b,
+                tuple(path),
+                tuple(steps),
+                tuple(drops),
+            )
         books += b
         state, t = new, nxt
         path.append((t, state))
         steps.append(b)
-    return Walked(state, t, False, books, tuple(path), tuple(steps))
+    return Walked(
+        state, t, False, books, tuple(path), tuple(steps), tuple(drops)
+    )
 
 
 def _step(

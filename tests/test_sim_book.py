@@ -14,7 +14,6 @@ import pytest
 from _sim_site import (  # type: ignore[import-not-found]  # test helper
     EP,
     Booked,
-    BookedHeatLedger,
     compressor_btu,
     loss_ceiling_btu,
     standby_btu,
@@ -250,48 +249,6 @@ def busy_day() -> tuple[list[PathPoint], list[HeatingInterval], list[Draw]]:
     return points, heat, draws
 
 
-class TestTheWalkResumes:
-    """The engine walks the book at each draw, resuming
-    where the last walk stood rather than from the start; a resumed walk
-    is the whole walk from there on, element for element."""
-
-    def test_resumed_at_every_instant_it_is_the_whole_walk(self) -> None:
-        points, heat, draws = busy_day()
-        start = AFTER_BATH
-        whole = walk(points, heat=heat, draws=draws, start=start)
-        # It anchors somewhere in the day.
-        assert any(x.anchor_age_h == 0.0 for x in whole.states)
-        carry = None
-        for i, pt in enumerate(points):
-            prefix = [p for p in points if p.at <= pt.at]
-            first = walk_booked(
-                start,
-                prefix,
-                heat,
-                [d for d in draws if d[0] <= pt.at],
-                lambda _: 65.0,
-                carry=carry,
-                keep=pt.at,
-            )
-            assert first.carry is not None
-            assert first.carry.at == pt.at
-            carry = first.carry
-            rest = walk_booked(
-                start, points, heat, draws, lambda _: 65.0, carry=carry
-            )
-            j = next(k for k, p in enumerate(points) if p.at == pt.at)
-            assert rest.states == whole.states[j:], i
-
-    def test_without_a_carry_or_keep_it_is_the_walk_it_was(self) -> None:
-        points, heat, draws = busy_day()
-        a = walk(points, heat=heat, draws=draws)
-        b = walk_booked(
-            AFTER_BATH, points, heat, draws, lambda _: 65.0, keep=None
-        )
-        assert a == b
-        assert a.carry is None
-
-
 #: Both zones within the book's band, the compressor mixing the tank.
 FULL: dict[str, float] = {"upper": 133.0, "lower": 132.3}
 
@@ -361,30 +318,6 @@ class TestTheCompressorAnchors:
             heat=[heating(0, 60)],
         )
         assert not any(anchored(path.before(m(x))) for x in (20, 40))
-
-    def test_resumed_at_every_instant_it_is_the_whole_walk(self) -> None:
-        points = flat(0, 5, 12, 20, 26, 27, 28, 40, **FULL)
-        heat = [heating(0, 50)]
-        draws: list[Draw] = [(m(12), 1.0)]
-        whole = walk(points, heat=heat, draws=draws)
-        assert anchored(whole.before(m(27)))
-        carry = None
-        for pt in points:
-            first = walk_booked(
-                AFTER_BATH,
-                [p for p in points if p.at <= pt.at],
-                heat,
-                [d for d in draws if d[0] <= pt.at],
-                lambda _: 65.0,
-                carry=carry,
-                keep=pt.at,
-            )
-            carry = first.carry
-            rest = walk_booked(
-                AFTER_BATH, points, heat, draws, lambda _: 65.0, carry=carry
-            )
-            j = next(k for k, p in enumerate(points) if p.at == pt.at)
-            assert rest.states == whole.states[j:]
 
     @pytest.mark.parametrize(
         "rise_f", [0.5, 0.02], ids=["held", "uniform_late"]
@@ -561,38 +494,3 @@ class TestAClientsOwnLoss:
         assert loss_ceiling_btu(m(0), m(60), 140.0, extra=run) == pytest.approx(
             standby + 318.0 * 20
         )
-        ledger = BookedHeatLedger(AFTER_BATH, lambda _: 65.0, extra=run)
-        assert ledger.loss_bound(m(0), m(60), 140.0) == pytest.approx(
-            standby + 318.0 * 20
-        )
-
-    def test_resumed_at_every_instant_it_is_still_the_whole_walk(self) -> None:
-        points, heat, draws = busy_day()
-        run = Circulation([(m(a), m(a + 6)) for a in (100, 380, 610, 880)])
-        start = AFTER_BATH
-        whole = walk_with(points, run, heat=heat, draws=draws, start=start)
-        carry = None
-        for pt in points[::7]:
-            prefix = [p for p in points if p.at <= pt.at]
-            first = walk_booked(
-                start,
-                prefix,
-                heat,
-                [d for d in draws if d[0] <= pt.at],
-                lambda _: 65.0,
-                carry=carry,
-                keep=pt.at,
-                extra=run,
-            )
-            carry = first.carry
-            rest = walk_booked(
-                start,
-                points,
-                heat,
-                draws,
-                lambda _: 65.0,
-                carry=carry,
-                extra=run,
-            )
-            j = next(k for k, p in enumerate(points) if p.at == pt.at)
-            assert rest.states == whole.states[j:]

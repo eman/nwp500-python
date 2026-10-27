@@ -10,7 +10,6 @@ the library's has none, so ``P`` carries ``EXAMPLE_EVIDENCE`` and the
 wrappers below pass it as the source's defaults did.
 """
 
-import math
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -26,8 +25,6 @@ from _sim_site import (  # type: ignore[import-not-found]  # test helper
     full_tank,
     standby_btu,
     tank_max_btu,
-    zone_after_draw_f,
-    zone_mixed_f,
 )
 
 from nwp500.sim import delivery as rd
@@ -406,101 +403,6 @@ class TestWhenItRunsOut:
             gal = booked_deliverable(state, 138.0, 95.0).gal
             below = delivery_temp_f(state, 138.0) < DEPLETION_THRESHOLD_F
             assert below == (gal == 0.0), (tenth, gal)
-
-
-class TestTheZoneThroughADraw:
-    """The upper zone after a draw reads the book too, against the
-    zone's own empty point (12,636 BTU), which centres the crossings;
-    the delivery keeps the served one, which calls them early."""
-
-    @staticmethod
-    def _left(gal: float) -> Booked:
-        """``gal`` delivered gallons above the zone's empty point at a
-        140 °F zone."""
-
-        per_gal = 8.34 * (delivery_f(140.0) - 70.0)
-        return Booked(EP.zone_empty_btu + gal * per_gal, 1.0, 70.0)
-
-    def test_the_zone_point_is_the_refit_one_and_after_the_served(self) -> None:
-        assert EP.zone_empty_btu == 12636.0 < EP.empty_btu
-
-    def test_two_degrees_per_gallon_left_over_the_line(self) -> None:
-
-        assert zone_after_draw_f(self._left(5.0), 140.0, 90.0) == (
-            pytest.approx(105.0 + P.fall_f_per_gal * 5.0)
-        )
-        assert zone_after_draw_f(self._left(0.0), 140.0, 90.0) == (
-            pytest.approx(105.0)
-        )
-        assert zone_after_draw_f(self._left(-3.0), 140.0, 90.0) == (
-            pytest.approx(105.0 - P.fall_f_per_gal * 3.0)
-        )
-
-    def test_never_warmer_than_the_draw_left_it_nor_below_the_lower(
-        self,
-    ) -> None:
-
-        assert zone_after_draw_f(self._left(40.0), 140.0, 120.0) == 140.0
-        assert zone_after_draw_f(self._left(-40.0), 140.0, 92.0) == 92.0
-
-    def test_the_zone_mixes_down_faster_the_less_is_left(self) -> None:
-        """The water above the rising front mixes, so
-        the zone falls ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)``
-        °F per delivered gallon before the empty point, integrated over
-        the draw's gallons, from where the draw found it."""
-
-        s, lam = EP.zone_mix_f_per_gal, EP.zone_mix_gal
-
-        def fall(left: float, gal: float) -> float:
-            mixed: float = zone_mixed_f(
-                self._left(left), gal, 140.0, 140.0, 60.0
-            )
-            return 140.0 - mixed
-
-        assert fall(30.0, 4.0) == pytest.approx(
-            s * lam * (math.exp(-30.0 / lam) - math.exp(-34.0 / lam))
-        )
-        assert 0.0 < fall(40.0, 4.0) < fall(20.0, 4.0) < fall(5.0, 4.0)
-        # Past the empty point, the rate at it, per gallon.
-        assert fall(-6.0, 2.0) == pytest.approx(s * 2.0)
-        # Across it: its rate over the gallons before, ``s`` after.
-        assert fall(-1.0, 3.0) == pytest.approx(
-            s * lam * (1.0 - math.exp(-2.0 / lam)) + s * 1.0
-        )
-
-    def test_mixing_is_the_same_in_one_draw_or_several(self) -> None:
-        """The rate is integrated over the gallons, so a draw split into
-        pieces at one zone comes out where the whole of it does."""
-
-        whole = zone_mixed_f(self._left(10.0), 8.0, 140.0, 140.0, 60.0)
-        half = zone_mixed_f(self._left(14.0), 4.0, 140.0, 140.0, 60.0)
-        both = zone_mixed_f(self._left(10.0), 4.0, half, 140.0, 60.0)
-        assert both == pytest.approx(whole)
-
-    def test_mixing_never_warms_the_zone_nor_takes_it_below_the_lower(
-        self,
-    ) -> None:
-
-        # The draw's own response is colder than the mixing: it stands.
-        assert zone_mixed_f(self._left(40.0), 2.0, 140.0, 130.0, 60.0) == (
-            130.0
-        )
-        assert zone_mixed_f(self._left(-40.0), 30.0, 140.0, 141.0, 120.0) == (
-            120.0
-        )
-        assert zone_mixed_f(self._left(5.0), 0.0, 140.0, 141.0, 60.0) == (141.0)
-
-    def test_where_the_served_point_is_spent_it_is_still_over_the_line(
-        self,
-    ) -> None:
-
-        per_gal = 8.34 * (delivery_f(140.0) - 70.0)
-        spent = Booked(EP.empty_btu, 1.0, 70.0)
-        assert booked_deliverable(spent, 140.0, 90.0, P0).gal == 0.0
-        assert zone_after_draw_f(spent, 140.0, 90.0) == pytest.approx(
-            105.0
-            + P.fall_f_per_gal * (EP.empty_btu - EP.zone_empty_btu) / per_gal
-        )
 
 
 class TestTheDeliveredLine:

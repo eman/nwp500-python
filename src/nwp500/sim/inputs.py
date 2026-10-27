@@ -75,6 +75,11 @@ class HeaterState(_Value):
     #: The upper and lower tank thermistors, °F.
     upper_f: float
     lower_f: float
+    #: The tank's layers, °F, the bottom first, as its history left
+    #: them (``tank_fit.start_state``): as many as the parameters lay out
+    #: (``TankParams.layers``). None: the simulator makes them of the
+    #: two probes, and says ``tank_profile_estimated``.
+    layers_f: tuple[float, ...] | None = None
     #: Whether the compressor is running a recovery.
     compressor_running: bool = False
     #: Whether a heating element is on, and since when (None: unknown).
@@ -114,8 +119,6 @@ class History(_Value):
     #: When the compressor last stopped: the restart lockout runs from
     #: it. None: no lockout is in force at the start.
     compressor_stopped_at: Instant | None = None
-    #: When the tank last heated, by the compressor or an element.
-    heated_at: Instant | None = None
 
 
 class ReservationEntry(_Value):

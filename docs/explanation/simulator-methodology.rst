@@ -452,14 +452,10 @@ booked heat:
    D = \frac{\min\left(H, H_{\max}(T_U, T_L)\right) - H_{\text{empty}}}
    {8.34\left(T_{\text{del}}(T_U) - T_{\text{in}}\right)}
 
-Along a walk the book also moves the upper zone the probe would show
-as the tank empties, and re-anchors where the walk's tank
-is full: at the end of a recovery the heater stopped itself, quiet
-after one with the zones within the band, or with the compressor
-running alone past the hold.
-
-**From outside.** Any ``HeatLedger`` (``sim.extensions``) can stand in
-for the book.
+Along a walk the book re-anchors where the walk's tank is full: at the
+end of a recovery the heater stopped itself, quiet after one with the
+zones within the band, or with the compressor running alone past the
+hold. It reads the walk; the tank's probes are the layered tank's.
 
 
 Hot water at the tap

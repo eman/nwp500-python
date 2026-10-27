@@ -682,3 +682,41 @@ class TestTheWalk:
                 T0.replace(tzinfo=None) + timedelta(hours=1),
                 air_f=_air,
             )
+
+
+class TestTheWalksWater:
+    def test_water_back_from_the_top_takes_no_heat(self) -> None:
+        """A run's own water leaves the top and comes straight back:
+        it stirs the tank and takes nothing from it."""
+        state = S.mix(S.estimate(L, 135.0, 110.0))
+        end = T0 + timedelta(minutes=20)
+        w = S.walk(
+            L,
+            state,
+            T0,
+            end,
+            air_f=_air,
+            flowing=[S.Flowing(start=T0, end=end, gpm=2.0, inflow_f=None)],
+        )
+        assert w.books.flowing_btu == pytest.approx(0.0, abs=1e-6)
+        assert S.observe(L, w.state)[1] > S.observe(L, state)[1]
+        assert S.energy_btu(L, w.state) == pytest.approx(
+            S.energy_btu(L, state) - w.books.loss_btu, abs=1e-6
+        )
+
+    def test_its_drops_are_the_tank_either_side_of_a_draw(self) -> None:
+        state = S.TankState.uniform(12, 140.0)
+        at = T0 + timedelta(minutes=13)
+        w = S.walk(
+            L,
+            state,
+            T0,
+            T0 + timedelta(hours=1),
+            air_f=_air,
+            draws=[S.Delivered(at=at, gal=20.0, inflow_f=55.0)],
+        )
+        ((t, before, after),) = w.drops
+        assert t == at
+        assert (at, before) in w.path
+        assert S.energy_btu(L, after) < S.energy_btu(L, before)
+        assert S.observe(L, after)[1] < S.observe(L, before)[1]
