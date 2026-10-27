@@ -35,6 +35,12 @@ Each metric carries how many events it rests on and a 90 % interval
 from a bootstrap of local days: one day's events share a tank and the
 air, and are not independent.
 
+The stratified tank (``sim.physics.stratified``) is not yet the one
+the simulator runs; ``score_layers`` scores it on the same quiet
+windows and draws, each started from the layers the record's history
+leaves (``sim.tank_fit.replay``), with the same metrics, and
+``fit_layers`` fits its terms on a history's events.
+
 Nothing here reads a file, the network or the clock: the caller reads
 the history (``sim_calibrate.prepare``, ``prepare_changes``) and the
 metered draws.
@@ -54,6 +60,7 @@ import pandas as pd
 
 from nwp500 import sim
 from nwp500.sim import calibration as cal
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.engine import SimulationError
 from nwp500.sim.params import HeaterParams, params_to_document
 from nwp500.sim.physics.heat_pump import start_hold_min
@@ -894,6 +901,123 @@ def score(
     )
 
 
+# ── the stratified tank ───────────────────────────────────────────
+
+
+def layer_coasts(found: Events) -> tuple[list[tf.Coast], list[tf.Coast]]:
+    """``found``'s quiet windows and draws as the stratified tank's
+    events (``sim.tank_fit.Coast``)."""
+    windows = [
+        tf.Coast(e.start, e.end, e.upper_f, e.lower_f, e.air, e.observed)
+        for e in found.windows
+    ]
+    draws = [
+        tf.Coast(
+            e.at,
+            e.observed[-1][0],
+            e.upper_f,
+            e.lower_f,
+            e.air,
+            e.observed,
+            ((e.at, e.gallons),),
+        )
+        for e in found.draws
+    ]
+    return windows, draws
+
+
+def _layer_errors(
+    params: HeaterParams, record: tf.TankRecord | None, coast: tf.Coast
+) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
+    try:
+        return tf.errors(params, record, coast)
+    except ValueError:
+        return None
+
+
+def score_layers(
+    found: Events,
+    params: HeaterParams,
+    record: tf.TankRecord | None,
+    *,
+    tz: str = "UTC",
+    map_: Callable[..., Iterable[Any]] = map,
+) -> Score:
+    """The stratified tank ``params`` describe scored on ``found``'s
+    quiet windows and draws (``score``'s metrics of them), each started
+    from the ``record``'s replay (``sim.tank_fit.start_state``).
+    ``map_(function, a, b, c)`` maps over the events."""
+    zone = ZoneInfo(tz)
+    tally = _Tally()
+    windows, draws = layer_coasts(found)
+    failed: dict[str, list[str]] = {"windows": [], "draws": []}
+    breaks = {"below_air": 0}
+    for kind, coasts in (("windows", windows), ("draws", draws)):
+        n = len(coasts)
+        parts = [
+            None if record is None else record.before(c.start) for c in coasts
+        ]
+        got = map_(_layer_errors, [params] * n, parts, coasts)
+        for c, e in zip(coasts, got, strict=True):
+            if e is None:
+                failed[kind].append(_iso(c.start))
+                continue
+            du, dl = e
+            day = _day(c.start, zone)
+            name = "standby" if kind == "windows" else "draw"
+            tally.add(f"{name}_upper_rmse_f", tf.rmse(du), day)
+            tally.add(f"{name}_lower_rmse_f", tf.rmse(dl), day)
+            if kind == "draws":
+                continue
+            hours = (c.end - c.start).total_seconds() / 3600.0
+            tally.add(
+                "standby_fall_abs_f_h", abs(du[-1] + dl[-1]) / 2.0 / hours, day
+            )
+            tally.add("standby_gap_sq_f2", (du[-1] - dl[-1]) ** 2, day)
+            coldest = min(v for _, v in c.air)
+            if min(c.upper_f, c.lower_f) >= max(v for _, v in c.air) and any(
+                min(u + a, lo + b) < coldest - BELOW_AIR_F
+                for (_, u, lo), a, b in zip(c.observed, du, dl, strict=True)
+            ):
+                breaks["below_air"] += 1
+    return Score(
+        events={
+            "windows": [_iso(e.start) for e in found.windows],
+            "draws": [_iso(e.at) for e in found.draws],
+        },
+        metrics={
+            name: _stat(values, tally.days[name])
+            for name, values in sorted(tally.values.items())
+        },
+        failed={k: len(v) for k, v in failed.items()},
+        failed_events=failed,
+        breaks=breaks,
+        over_promised=0,
+        params_sha256=params_digest(params),
+    )
+
+
+def fit_layers(
+    found: Events,
+    params: HeaterParams,
+    record: tf.TankRecord | None,
+    *,
+    map_: Callable[..., Iterable[Any]] = map,
+    max_evaluations: int = 200,
+) -> tf.TankFit:
+    """The stratified tank's terms (``sim.tank_fit.TERMS``) fitted on
+    ``found``'s quiet windows and draws, from ``params``' values
+    (``sim.tank_fit.fit``)."""
+    windows, draws = layer_coasts(found)
+    return tf.fit(
+        params,
+        record,
+        windows + draws,
+        map_=map_,
+        max_evaluations=max_evaluations,
+    )
+
+
 # ── comparing two scores ──────────────────────────────────────────
 
 
@@ -923,15 +1047,17 @@ class Comparison:
     changes: tuple[Change, ...]
 
 
-def _failures(doc: Mapping[str, Any]) -> dict[str, list[str]]:
-    """A document's unanswered events, the kinds with any."""
+def _failures(doc: Mapping[str, Any], kinds: set[str]) -> dict[str, list[str]]:
+    """A document's unanswered events of ``kinds``, those with any."""
     named = cast(Mapping[str, list[str]], doc.get("failed_events") or {})
-    return {k: v for k, v in named.items() if v}
+    return {k: v for k, v in named.items() if v and k in kinds}
 
 
 def compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> Comparison:
     """Two score documents (``Score.document``) compared metric by
-    metric. Raises ``ValueError`` for a document of another schema."""
+    metric, on the kinds of event both carry (``score_layers`` scores
+    only the windows and the draws). Raises ``ValueError`` for a
+    document of another schema."""
     for doc in (before, after):
         if doc.get("schema") != SCHEMA:
             raise ValueError(f"not a {SCHEMA} document")
@@ -957,8 +1083,11 @@ def compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> Comparison:
                 clear,
             )
         )
+    ea = cast(Mapping[str, list[str]], before.get("events") or {})
+    eb = cast(Mapping[str, list[str]], after.get("events") or {})
+    kinds = set(ea) & set(eb)
     return Comparison(
-        same_events=before.get("events") == after.get("events")
-        and _failures(before) == _failures(after),
+        same_events=all(ea[k] == eb[k] for k in kinds)
+        and _failures(before, kinds) == _failures(after, kinds),
         changes=tuple(rows),
     )

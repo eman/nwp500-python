@@ -12,8 +12,8 @@ past what drives it:
 - ``mix``: an inversion (a layer warmer than the one above) turns over
   at once, pooling the layers to their mean (pool-adjacent-violators);
 - ``lose``: each layer relaxes toward the air, exactly, through its
-  share of the jacket's UA, and the bottom layer through the bottom's
-  too, so nothing cools below the air;
+  share of the sides' UA, the bottom layer through the bottom's too and
+  the top layer through the top's, so nothing cools below the air;
 - ``conduct``: conduction and the slow mixing between neighbours, sub-
   stepped so no layer passes its neighbours (the maximum principle);
 - ``add_heat``: heat into layers, then ``mix``, so heat put in low
@@ -26,13 +26,14 @@ past what drives it:
   (``physics.draw.delivery_temp_f``, ``hot_fraction``), the tank water
   it takes solved from the water leaving the top in turn.
 
-The probes are observations of the layers (``observe``), and a profile
-can be built from them (``estimate``) or corrected toward them
-(``assimilate``). ``deliverable_gal`` is how much the tap gets at the
-line before it runs under. ``walk`` steps the tank through time with
-the heat sources, flows and draws given, on a grid anchored to the
-clock, and cuts it exactly where a stop says; its ``Books`` close the
-energy.
+The probes are observations of the layers (``observe``): each reads
+the layers around its height, weighted by distance over its spread, and
+the lower one reads its offset above them. A profile can be built from
+them (``estimate``) or corrected toward them (``assimilate``).
+``deliverable_gal`` is how much the tap gets at the line before it runs
+under. ``walk`` steps the tank through time with the heat sources,
+flows and draws given, on a grid anchored to the clock, and cuts it
+exactly where a stop says; its ``Books`` close the energy.
 
 The layers are fixed, so a flow is remapped onto them: water moving a
 fraction of a layer carries each layer's water as a line through its
@@ -127,11 +128,19 @@ class Layout:
     lower_element: float
     condenser_span: tuple[float, float]
     inlet_mix_gal: float
-    #: The jacket's UA, the whole tank's, BTU/hr·°F, shared equally by
+    #: The sides' UA, the whole tank's, BTU/hr·°F, shared equally by
     #: the layers.
     ua_btu_hr_f: float
-    #: The bottom's, from the bottom layer alone.
+    #: The bottom's, from the bottom layer alone, and the top's, from
+    #: the top layer.
     ua_bottom_btu_hr_f: float
+    ua_top_btu_hr_f: float = 0.0
+    #: How far along the column each probe feels the water, gal
+    #: (``TankParams.upper_probe_spread_gal``): 0 reads the point.
+    upper_probe_spread_gal: float = 0.0
+    lower_probe_spread_gal: float = 0.0
+    #: What the lower probe reads above the water it feels, °F.
+    lower_probe_offset_f: float = 0.0
     #: The column's axial conductance, end to end, BTU/hr·°F.
     conductance_btu_hr_f: float
     #: Each layer's volume, gal, and its heat capacity, BTU/°F.
@@ -142,6 +151,9 @@ class Layout:
     #: The share of the condenser's heat each layer takes: its overlap
     #: with ``condenser_span``.
     condenser_weights: tuple[float, ...] = field(init=False, repr=False)
+    #: What each layer weighs in each probe's reading, summing to 1.
+    upper_weights: tuple[float, ...] = field(init=False, repr=False)
+    lower_weights: tuple[float, ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.layers < 2:
@@ -166,13 +178,21 @@ class Layout:
             "inlet_mix_gal",
             "ua_btu_hr_f",
             "ua_bottom_btu_hr_f",
+            "ua_top_btu_hr_f",
             "conductance_btu_hr_f",
+            "upper_probe_spread_gal",
+            "lower_probe_spread_gal",
         ):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"{name} must be finite, not negative")
         if not math.isfinite(self.volume_gal):
             raise ValueError("volume_gal must be finite")
+        if not math.isfinite(self.lower_probe_offset_f):
+            raise ValueError("lower_probe_offset_f must be finite")
+        for name in ("upper_probe_spread_gal", "lower_probe_spread_gal"):
+            if getattr(self, name) > self.volume_gal:
+                raise ValueError(f"{name} is more than the tank")
         n = self.layers
         gal = self.volume_gal / n
         set_ = object.__setattr__
@@ -190,6 +210,21 @@ class Layout:
         ]
         total = sum(overlap)
         set_(self, "condenser_weights", tuple(w / total for w in overlap))
+        set_(
+            self,
+            "upper_weights",
+            _weights(self, self.upper_probe, self.upper_probe_spread_gal),
+        )
+        set_(
+            self,
+            "lower_weights",
+            _weights(self, self.lower_probe, self.lower_probe_spread_gal),
+        )
+        s = _point_shape(self)
+        if not _dot(self.upper_weights, s) - _dot(self.lower_weights, s) > 1e-6:
+            # Spread so far the probes read alike: they could not tell
+            # a profile's lean either.
+            raise ValueError("the probes' spreads leave them reading alike")
 
     def element_layer(self, zone: Zone) -> int:
         """The layer the ``zone`` element heats: the one at its height."""
@@ -197,11 +232,69 @@ class Layout:
         return min(self.layers - 1, int(h * self.layers))
 
 
+def _point(lay: Layout, height: float) -> list[float]:
+    """The weights of the layers at ``height``: linear between the
+    layers' middles, the end layer's beyond them."""
+    n = lay.layers
+    w = [0.0] * n
+    c = lay.centers
+    if height <= c[0]:
+        w[0] = 1.0
+    elif height >= c[-1]:
+        w[-1] = 1.0
+    else:
+        i = min(n - 2, int(height * n - 0.5))
+        f = (height - c[i]) / (c[i + 1] - c[i])
+        w[i], w[i + 1] = 1.0 - f, f
+    return w
+
+
+def _weights(
+    lay: Layout, height: float, spread_gal: float
+) -> tuple[float, ...]:
+    """The weights a probe at ``height`` reads the layers with: the
+    point's, or, with a spread, the points' along the column weighted
+    by ``exp(-distance / spread)`` from its height, in gallons (sampled
+    every eighth of a layer to six spreads, the tank's ends held), so a
+    vanishing spread reads the point."""
+    if spread_gal <= 0.0:
+        return tuple(_point(lay, height))
+    step = 1.0 / (8 * lay.layers)
+    reach = math.ceil(6.0 * spread_gal / (step * lay.volume_gal))
+    total = [0.0] * lay.layers
+    mass = 0.0
+    for k in range(-reach, reach + 1):
+        w = math.exp(-abs(k) * step * lay.volume_gal / spread_gal)
+        at = min(1.0, max(0.0, height + k * step))
+        for i, v in enumerate(_point(lay, at)):
+            total[i] += w * v
+        mass += w
+    return tuple(t / mass for t in total)
+
+
+def _dot(weights: Sequence[float], layers: Sequence[float]) -> float:
+    return math.fsum(w * t for w, t in zip(weights, layers, strict=True))
+
+
+def _point_shape(lay: Layout) -> tuple[float, ...]:
+    """The lean ``estimate`` builds on: flat below the lower probe's
+    height and above the upper's, linear between, 0 to 1."""
+    lo, hi = lay.lower_probe, lay.upper_probe
+    return tuple(min(1.0, max(0.0, (c - lo) / (hi - lo))) for c in lay.centers)
+
+
 def layout(params: HeaterParams) -> Layout:
-    """The stratified tank ``params`` describe. The jacket's UA is its
-    reference value (``LossParams.ua_btu_hr_f``, else the baseline),
-    constant: the layers' loss stays linear in their temperatures."""
+    """The stratified tank ``params`` describe. The sides' UA is
+    ``LossParams.ua_side_btu_hr_f``, else the jacket's reference value
+    (``ua_btu_hr_f``, else the baseline), constant: the layers' loss
+    stays linear in their temperatures."""
     t, loss = params.tank, params.loss
+    if loss.ua_side_btu_hr_f is not None:
+        side = loss.ua_side_btu_hr_f
+    elif loss.ua_btu_hr_f is not None:
+        side = loss.ua_btu_hr_f
+    else:
+        side = loss.ua_baseline_btu_hr_f
     return Layout(
         volume_gal=t.volume_gal,
         layers=t.layers,
@@ -211,13 +304,13 @@ def layout(params: HeaterParams) -> Layout:
         lower_element=t.lower_element_height,
         condenser_span=t.condenser_span,
         inlet_mix_gal=t.inlet_mix_gal,
-        ua_btu_hr_f=(
-            loss.ua_btu_hr_f
-            if loss.ua_btu_hr_f is not None
-            else loss.ua_baseline_btu_hr_f
-        ),
+        ua_btu_hr_f=side,
         ua_bottom_btu_hr_f=loss.ua_bottom_btu_hr_f,
+        ua_top_btu_hr_f=loss.ua_top_btu_hr_f,
         conductance_btu_hr_f=t.conductance_btu_hr_f,
+        upper_probe_spread_gal=t.upper_probe_spread_gal,
+        lower_probe_spread_gal=t.lower_probe_spread_gal,
+        lower_probe_offset_f=t.lower_probe_offset_f,
     )
 
 
@@ -264,15 +357,20 @@ def lose(
 ) -> tuple[TankState, float]:
     """``state`` after ``hours`` losing heat to ``air_f``, and the heat
     lost, BTU: each layer relaxes toward the air exactly, through its
-    share of the jacket's UA, the bottom layer through the bottom's
-    too."""
+    share of the sides' UA, the bottom layer through the bottom's too
+    and the top layer through the top's."""
     layers = _layers(lay, state)
     if hours <= 0.0:
         return state, 0.0
     side = lay.ua_btu_hr_f / lay.layers
+    top = lay.layers - 1
     out: list[float] = []
     for i, t in enumerate(layers):
-        ua = side + (lay.ua_bottom_btu_hr_f if i == 0 else 0.0)
+        ua = side
+        if i == 0:
+            ua += lay.ua_bottom_btu_hr_f
+        if i == top:
+            ua += lay.ua_top_btu_hr_f
         out.append(
             air_f + (t - air_f) * math.exp(-ua * hours / lay.layer_btu_f)
         )
@@ -623,45 +721,32 @@ def deliverable_gal(
 # ── the probes ──
 
 
-def _read(lay: Layout, layers: Sequence[float], height: float) -> float:
-    """``layers`` at ``height``, linear between the layers' middles,
-    the end layers' beyond them."""
-    c = lay.centers
-    if height <= c[0]:
-        return layers[0]
-    if height >= c[-1]:
-        return layers[-1]
-    i = min(lay.layers - 2, int(height * lay.layers - 0.5))
-    f = (height - c[i]) / (c[i + 1] - c[i])
-    return layers[i] + (layers[i + 1] - layers[i]) * f
-
-
 def observe(lay: Layout, state: TankState) -> tuple[float, float]:
-    """What the upper and the lower probes read, °F."""
+    """What the upper and the lower probes read, °F: the layers through
+    each probe's weights, the lower's offset on it."""
     layers = _layers(lay, state)
-    return _read(lay, layers, lay.upper_probe), _read(
-        lay, layers, lay.lower_probe
+    return (
+        _dot(lay.upper_weights, layers),
+        _dot(lay.lower_weights, layers) + lay.lower_probe_offset_f,
     )
 
 
 def _shape(lay: Layout) -> tuple[float, ...]:
     """The profile ``estimate`` builds from, as a share of the way from
-    the lower probe's reading to the upper's: flat below the lower
-    probe and above the upper, linear between, scaled so the probes
-    read 0 and 1 exactly."""
-    lo, hi = lay.lower_probe, lay.upper_probe
-    s = tuple(min(1.0, max(0.0, (c - lo) / (hi - lo))) for c in lay.centers)
-    a, b = _read(lay, s, lo), _read(lay, s, hi)
+    what the lower probe feels to what the upper does: flat below the
+    lower probe's height and above the upper's, linear between, scaled
+    so the probes' weights read 0 and 1 exactly."""
+    s = _point_shape(lay)
+    a, b = _dot(lay.lower_weights, s), _dot(lay.upper_weights, s)
     return tuple((v - a) / (b - a) for v in s)
 
 
 def estimate(lay: Layout, upper_f: float, lower_f: float) -> TankState:
     """A profile the probes read as ``upper_f`` and ``lower_f``
-    (``observe``): the lower probe's reading below it, the upper's above
-    it, linear between."""
-    return TankState(
-        tuple(lower_f + (upper_f - lower_f) * s for s in _shape(lay))
-    )
+    (``observe``): level below the lower probe and above the upper,
+    linear between."""
+    felt = lower_f - lay.lower_probe_offset_f
+    return TankState(tuple(felt + (upper_f - felt) * s for s in _shape(lay)))
 
 
 def assimilate(

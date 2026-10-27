@@ -8,6 +8,32 @@ Unreleased
 Added
 -----
 
+- **The layered tank fitted to a history (``nwp500.sim.tank_fit``).**
+  Two probes do not say where the water below the lower one is, so
+  each event starts from the layers the history before it leaves
+  (``replay``): a day of the recorded heat pump, element, draws and
+  circulation walked through the layers, corrected to the probes every
+  ten minutes. ``fit`` fits the tank's terms (``TERMS``) by robust least
+  squares on the probes over the record's quiet coasts and the hours
+  after its draws; it takes a ``map_`` to spread the events over
+  processes. ``nwp500.sim_score.fit_layers`` and ``score_layers`` fit
+  and score it on a history's events with ``score``'s metrics.
+
+  On the held-out days, both models given the heater's mixing valve and
+  circulation, the fitted layered tank tracks a coast's upper probe to
+  0.189 °F (the two-zone model 0.299) and its lower to 0.519 °F
+  (0.630), each interval clear of the two-zone value, and the probes
+  after a draw to 0.310 and 2.379 °F (0.281 and 2.161, inside the
+  intervals). Nothing in the simulator runs it yet.
+
+- **The layered tank's probes and ends.** Each probe reads the layers
+  around its height, weighted by distance over its spread
+  (``TankParams.upper_probe_spread_gal``, ``lower_probe_spread_gal``),
+  and the lower one reads ``lower_probe_offset_f`` above them. The top
+  layer loses heat through ``LossParams.ua_top_btu_hr_f``, and the
+  sides through ``ua_side_btu_hr_f`` (unset: the jacket's UA). All
+  default to the earlier behaviour.
+
 - **``nwp500.sim.physics.stratified``: the tank as stacked layers.**
   Twelve layers by default (HPWHsim's model), the bottom first, each
   mixed within itself, with operators that conserve energy and never
