@@ -219,6 +219,50 @@ class TankParams:
         default=None, metadata=_p(FITTED, "h")
     )
 
+    #: The stratified tank's layers (``physics.stratified``), equal in
+    #: volume, the bottom first: HPWHsim's twelve.
+    layers: int = field(default=12, metadata=_p(DEFAULT, "1"))
+    #: Where the upper and the lower probes read, as a share of the
+    #: volume from the bottom. Priors, from where the record's draws
+    #: first move each probe; fitted on the clean draws.
+    upper_probe_height: float = field(
+        default=0.85, metadata=_p(DEFAULT, "fraction")
+    )
+    lower_probe_height: float = field(
+        default=0.2, metadata=_p(DEFAULT, "fraction")
+    )
+    #: Where the elements heat, the same way: the upper element with
+    #: 17.5 gal of the 63.2 above it, the lower near the bottom. Priors;
+    #: fitted on the element runs.
+    upper_element_height: float = field(
+        default=0.72, metadata=_p(DEFAULT, "fraction")
+    )
+    lower_element_height: float = field(
+        default=0.15, metadata=_p(DEFAULT, "fraction")
+    )
+    #: The span of the tank the condenser coil wraps, from the bottom.
+    #: A prior; fitted on stratified climbs.
+    condenser_span: tuple[float, float] = field(
+        default=(0.0, 0.45), metadata=_p(DEFAULT, "fraction")
+    )
+    #: The water an inflow mixes with as it enters at the bottom, gal:
+    #: the draw response's reach (``DrawParams.reach_gal``). A prior.
+    inlet_mix_gal: float = field(default=9.0, metadata=_p(DEFAULT, "gal"))
+    #: The water column's axial conductance, end to end, BTU/hr·°F:
+    #: conduction and the slow mixing between the layers. The prior
+    #: closes a two-zone gap on ``TAU_GAP_PRIOR_H`` (the column's
+    #: slowest mode, ``mass / (π² · τ)``), 10.7 between each pair of
+    #: twelve layers.
+    conductance_btu_hr_f: float = field(
+        default=63.2 * WATER_BTU_PER_GAL_F / (math.pi**2 * TAU_GAP_PRIOR_H),
+        metadata=_p(DEFAULT, "BTU/hr/°F"),
+    )
+
+    def __post_init__(self) -> None:
+        # A document carries the span as a list.
+        low, high = self.condenser_span
+        object.__setattr__(self, "condenser_span", (float(low), float(high)))
+
     @property
     def thermal_mass_btu_f(self) -> float:
         """Full-tank thermal mass, BTU/°F (≈ 527 at 63.2 gal)."""
@@ -272,6 +316,12 @@ class LossParams:
     #: The gap at which the lower probe sees ``1 - 1/e`` of the bottom
     #: loss, °F.
     bottom_gate_f: float = field(default=1.0, metadata=_p(FITTED, "°F"))
+    #: The stratified tank's loss through its bottom, from the bottom
+    #: layer, BTU/hr·°F (``physics.stratified.lose``): the bottom loss
+    #: above over a 50 °F gap to the air. A prior.
+    ua_bottom_btu_hr_f: float = field(
+        default=1.8, metadata=_p(DEFAULT, "BTU/hr/°F")
+    )
 
 
 #: The air and the water the heat pump's maps are quoted at, °F

@@ -8,6 +8,34 @@ Unreleased
 Added
 -----
 
+- **``nwp500.sim.physics.stratified``: the tank as stacked layers.**
+  Twelve layers by default (HPWHsim's model), the bottom first, each
+  mixed within itself, with operators that conserve energy and never
+  take a layer past what drives it:
+
+  - ``mix`` turns inversions over;
+  - ``lose`` relaxes each layer toward the air exactly, the bottom
+    layer through the bottom's UA too;
+  - ``conduct`` conducts between neighbours;
+  - ``add_heat``, with the condenser's heat spread over the span it
+    wraps and an element's into its layer;
+  - ``flow`` pushes water in at the bottom through a well-mixed inlet
+    zone and out of the top as a plug;
+  - ``draw`` takes a delivered draw through the mixing valve.
+
+  The probes read the layers (``observe``); ``estimate`` and
+  ``assimilate`` build or correct a profile from them, and
+  ``deliverable_gal`` is the tap's gallons to the line. ``walk`` steps
+  the tank through time on a clock-anchored grid, cuts it where a stop
+  holds, and books every term's energy, which closes. A coast never
+  falls below the air, an element's heat is its electricity, and 100
+  gal drawn in an hour empties the top. Its parameters are new
+  ``TankParams`` fields (``layers``, the probes' and elements'
+  heights, ``condenser_span``, ``inlet_mix_gal``,
+  ``conductance_btu_hr_f``) and ``LossParams.ua_bottom_btu_hr_f``,
+  priors for now; nothing reads them yet, and the held-out scores are
+  unchanged.
+
 - **The heat pump's operating range.** It runs only with the air at
   41-113 °F and the tank's lower zone at 50-149 °F
   (``ControllerParams.hp_air_range_f``, ``hp_water_range_f``, from the
