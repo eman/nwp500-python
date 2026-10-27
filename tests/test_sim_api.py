@@ -34,6 +34,7 @@ from nwp500.sim import (
     standby,
 )
 from nwp500.sim.api import LOW_CONFIDENCE_FLOOR
+from nwp500.sim.book import Booked
 from nwp500.sim.engine import (
     Entry,
     Heater,
@@ -835,6 +836,41 @@ class TestAnElementStopsAtItsOffPoint:
         at_end = [p for p in r.points if p.at == el.end]
         assert at_end and at_end[-1].lower_f == pytest.approx(122.0, abs=0.06)
         assert all(p.lower_f < 121.9 for p in r.points if p.at < el.end)
+
+    @pytest.mark.parametrize("mode", [3, 4])
+    def test_with_a_book_and_a_draw_after_its_off_point(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """A book walks to the next draw in one coast (``_nothing_before``),
+        which stops at the element's off point as any coast does."""
+
+        def run(book: Booked | None, draws: tuple[Draw, ...]) -> Any:
+            return simulate(
+                _scenario(
+                    horizon=timedelta(hours=1),
+                    state=HeaterState(
+                        upper_f=110.0, lower_f=135.0, element_running=True
+                    ),
+                    settings=Settings(
+                        setpoint_f=140.0, mode=mode, hp_lower_on_f=105.0
+                    ),
+                    environment=Environment(ambient_f=70.0, humidity=48.0),
+                    loads=Loads(draws=draws),
+                ),
+                params,
+                book=book,
+            )
+
+        late = (Draw(at=at(0.2), gallons=0.5),)
+        ends = [
+            next(h.end for h in r.heating if h.source == "element")
+            for r in (
+                run(None, ()),
+                run(Booked(30000.0, 1.0, 60.0), late),
+            )
+        ]
+        assert ends[0] < at(0.2)
+        assert abs((ends[1] - ends[0]).total_seconds()) < 1.0
 
     @pytest.mark.parametrize("mode", [3, 4])
     def test_an_inverted_tank_mixes_wherever_the_walk_is_cut(

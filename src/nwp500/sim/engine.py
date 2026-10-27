@@ -1677,7 +1677,8 @@ class _Engine:
         """The coast from now to ``limit`` when nothing on it acts before
         ``limit``: no start of the heater's own (``heater_start``, after
         ``_coast_until``'s own exceptions and the restart lockout), no
-        later element start, and no draw the book takes the upper zone
+        later element start, no element reaching its off point
+        (``_element_done``), and no draw the book takes the upper zone
         through (``_upper_cut``). None when something does: the caller
         then coasts as it always did. A trigger of its own on the coast
         that the lockout puts at or past ``limit`` is carried as a
@@ -1691,6 +1692,9 @@ class _Engine:
             return None
         water_at = self._water_crossing(coast.points)
         if water_at is not None and water_at < limit:
+            return None
+        done_at = self._element_done(coast.points)
+        if done_at is not None and self.t < done_at < limit:
             return None
         if self._upper_cut(coast.points, limit) is not None:
             return None

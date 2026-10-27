@@ -116,10 +116,13 @@ def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:
     comes ``now - then`` minutes late and the whole coast is charged
     again, though the book at ``now`` already holds what has happened:
     time to ready runs late by up to the age of the copy kept. The
-    remaining coast keeps its pro-rata share."""
+    remaining coast keeps its pro-rata share; one with the start at
+    ``then`` (a draw there tripping it) has none left."""
     elapsed = (now - then).total_seconds() / 60.0
-    if rec.outcome != "ok" or elapsed <= 0.0 or rec.start_minute <= 0.0:
+    if rec.outcome != "ok" or elapsed <= 0.0:
         return rec
+    if rec.start_minute <= 0.0:
+        return replace(rec, coast_btu=0.0, coast_draw_gal=0.0)
     remaining = max(0.0, rec.start_minute - elapsed)
     return replace(
         rec,

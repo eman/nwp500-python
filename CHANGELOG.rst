@@ -124,14 +124,15 @@ Fixed
   coast's first step: the upper element, on at 110 °F over a 135 °F
   lower zone, ran 6 min at the setpoint, and a write or a boundary
   mid-run moved its end. The walk now stops it where the zone reaches
-  its off point, taking an inverted tank's mix at once.
+  its off point, taking an inverted tank's mix at once, with a book
+  attached as without.
 
 - **``next_recovery`` takes the draw that trips the trigger.** A draw
   at the heater's own start was left out of both the tank the recovery
   starts from and ``coast_draw_gal``; one a second earlier was smeared
   across its coast step. The tank is now the one the draw leaves, from
   a coast run exactly to the start, and the draw's gallons are the
-  coast's.
+  coast's. ``recovery_as_of`` takes them off a copy kept past its start.
 
 Removed
 -------
