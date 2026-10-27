@@ -616,7 +616,11 @@ class TestTheAnswersOverTheTop:
                 upper_f=120.0, lower_f=100.0, compressor_running=True
             ),
             settings=sim.Settings(
-                setpoint_f=150.0, hp_lower_off_f=150.0, hp_lower_on_f=105.0
+                setpoint_f=150.0,
+                hp_lower_off_f=150.0,
+                hp_lower_on_f=105.0,
+                # Resting: outside a TOU window.
+                hp_upper_on_f=104.9,
             ),
             history=sim.History(compressor_stopped_at=at(-3)),
             environment=sim.Environment(ambient_f=70.0),
@@ -660,3 +664,109 @@ class TestTheAnswersOverTheTop:
             nxt.start_minute + from_there["electric"], abs=1.0
         )
         assert hp > nxt.start_minute + electric
+
+
+class TestInThePlaceOfTheHeatPump:
+    """Which elements heat in the heat pump's place, across mode
+    changes, and are handed back to it."""
+
+    AIR = (
+        (at(0), 30.0),
+        (at(0.5), 30.0),
+        (at(0.5) + timedelta(seconds=1), 70.0),
+    )
+
+    def test_a_write_out_of_electric_puts_its_element_in_place(self) -> None:
+        r = _run(
+            self.AIR,
+            upper=120.0,
+            lower=100.0,
+            mode=2,
+            hours=4,
+            element_running=True,
+            commands=sim.Commands(writes=(sim.Write(at=at(0.25), mode=1),)),
+        )
+        lower = [h for h in r.heating if h.zone == "lower"]
+        hp = [h for h in r.heating if h.source == "compressor"]
+        assert lower and hp
+        assert all(e.end <= c.start.at for e in lower for c in hp)
+
+    def test_a_write_into_electric_makes_it_electrics_own(self) -> None:
+        # An element starts in the heat pump's place; a write to
+        # Electric makes it Electric's, which a later write's start
+        # leaves running, as it does an element Electric started.
+        writes = (
+            sim.Write(at=at(5 / 60), mode=2),
+            sim.Write(at=at(35 / 60), mode=3),
+        )
+        r = _run(
+            self.AIR,
+            upper=139.0,
+            lower=90.0,
+            hours=4,
+            commands=sim.Commands(writes=writes),
+        )
+        lower = [h for h in r.heating if h.zone == "lower"]
+        assert lower and lower[-1].stop == "target"
+
+    def test_a_write_into_the_heat_pump_out_of_range_says_so(self) -> None:
+        r = _run(
+            30.0,
+            upper=141.0,
+            lower=140.5,
+            mode=2,
+            hours=2,
+            commands=sim.Commands(writes=(sim.Write(at=at(0.25), mode=1),)),
+        )
+        assert ctl.HEAT_PUMP_UNAVAILABLE in r.reasons
+
+    @pytest.mark.parametrize("mode", [3, 4])
+    def test_a_dip_hands_back_nothing_it_did_not_take(self, mode: int) -> None:
+        # The mode's own element, running before a 5-second dip, is not
+        # a recovery the heat pump owes.
+        s1 = timedelta(seconds=1)
+        air = (
+            (at(0), 70.0),
+            (at(2 / 60), 70.0),
+            (at(2 / 60) + s1, 30.0),
+            (at(2 / 60) + 5 * s1, 30.0),
+            (at(2 / 60) + 6 * s1, 70.0),
+        )
+        r = _run(
+            air,
+            upper=110.0,
+            lower=135.0,
+            mode=mode,
+            hours=3,
+            element_running=True,
+        )
+        assert not [h for h in r.heating if h.source == "compressor"]
+
+    def test_a_capped_recovery_is_not_over_the_top(self) -> None:
+        peak = sim.TouPeriod(
+            season=0xFFF,
+            week=0xFE,
+            start_hour=0,
+            start_minute=0,
+            end_hour=23,
+            end_minute=58,
+            price_max=5,
+        )
+        s = sim.Scenario(
+            start=T0,
+            horizon=timedelta(hours=12),
+            tz="UTC",
+            state=sim.HeaterState(
+                upper_f=120.0, lower_f=100.0, compressor_running=True
+            ),
+            settings=sim.Settings(
+                setpoint_f=149.0, hp_lower_off_f=149.0, hp_lower_on_f=105.0
+            ),
+            history=sim.History(compressor_stopped_at=at(-3)),
+            environment=sim.Environment(ambient_f=70.0),
+            schedules=sim.Schedules(tou_enabled=True, tou_periods=(peak,)),
+        )
+        params = sim.site_example_params()
+        assert sim.next_recovery(s, params).tou_capped
+        ready = sim.time_to_ready(s, params, bath_gal=60.0)
+        assert ctl.HEAT_PUMP_UNAVAILABLE not in ready.reasons

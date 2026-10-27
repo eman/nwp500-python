@@ -1552,14 +1552,12 @@ def time_to_ready(
             *(
                 [HEAT_PUMP_UNAVAILABLE]
                 if nxt.hp_unavailable
+                # A heat-pump recovery past the range's top, which the
+                # elements finish (a capped one stops short of it).
                 or (
                     nxt.outcome == "ok"
-                    and (
-                        s.settings.hp_lower_off_f
-                        if s.settings.hp_lower_off_f is not None
-                        else s.settings.setpoint_f
-                    )
-                    + params.controller.hp_stop_overshoot_f
+                    and bool(nxt.points)
+                    and nxt.points[-1][2]
                     > params.controller.hp_water_range_f[1]
                 )
                 else []

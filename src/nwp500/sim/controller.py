@@ -1301,6 +1301,16 @@ def _set_mode(s: _Step, mode: HeaterMode, ended_by: ModeEnd) -> None:
         s.pend(None)
     if s.state.element.running and s.heats_as not in ELEMENT_MODES:
         _stop_element(s, "mode")
+    if not s.state.hp_available and not s.disabled and mode != ELECTRIC:
+        s.note(HEAT_PUMP_UNAVAILABLE)
+    e = s.state.element
+    in_place = not s.state.hp_available and mode != ELECTRIC
+    if e.running and e.in_place != in_place:
+        # A running element is now in the heat pump's place, or now
+        # Electric's own (``_start_compressor``).
+        if in_place:
+            s.note(ENVELOPE_FALLBACK_UNVERIFIED)
+        s.state = replace(s.state, element=replace(e, in_place=in_place))
     if mode == ELECTRIC:
         # The model is the entry; what starts Electric's element later
         # in a stint is not measured.
@@ -1557,15 +1567,17 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
 
     Leaving it, a running compressor stops and the elements carry on
     its recovery (``_fallback``); a running element heats on to
-    Electric's off point. Back in it with an element still heating, the
-    recovery returns to the heat pump (3.13.4: "until the problematic
-    heat source returns to normal") when the compressor starts as it
-    does out of Electric (``_mode_write_starts``) with room to heat
-    before its top: it starts at once, and the element its mode would
-    not run stops (``_start_compressor``). With less left, the elements
-    finish the recovery as Electric, and the heat pump is back once
-    they stop. Without one heating, nothing starts: the heater's own
-    triggers decide. The record shows none of it."""
+    Electric's off point. Back in it with an element heating in its
+    place (``Element.in_place``), the recovery returns to the heat pump
+    (3.13.4: "until the problematic heat source returns to normal")
+    when the compressor starts as it does out of Electric
+    (``_mode_write_starts``) with room to heat before its top: it starts
+    at once, or as a pending start when its lockout ends, and the
+    element stops then if its mode would not run it
+    (``_start_compressor``). With less left, the elements finish the
+    recovery as Electric, and the heat pump is back once they stop.
+    Without one heating, nothing starts: the heater's own triggers
+    decide. The record shows none of it."""
     if ev.available == s.state.hp_available:
         return
     if not ev.available:
@@ -1581,6 +1593,7 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
     e = s.state.element
     carrying = (
         e.running
+        and e.in_place
         and not s.disabled
         and s.mode in COMPRESSOR_MODES
         and not s.state.compressor.running

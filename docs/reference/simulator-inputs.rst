@@ -1132,7 +1132,8 @@ The ones about inputs and parameters:
      - The heat pump was outside its operating range
        (``controller.hp_air_range_f``, ``hp_water_range_f``) in the
        walk, or is at the answer's start, in a mode that runs it; or
-       the answer's target is over its top, which the elements finish. A
+       the answer's stop (its target and run-on) is over its top, which the
+       elements finish. A
        ``forecast`` or ``active_cycle`` answer is still the heat pump's,
        which the heater will not run; ``next_recovery`` is
        ``unavailable``, and ``time_to_ready`` projects every mode as
