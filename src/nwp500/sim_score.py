@@ -50,7 +50,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -926,6 +926,54 @@ def layer_coasts(found: Events) -> tuple[list[tf.Coast], list[tf.Coast]]:
     return windows, draws
 
 
+#: How often a recovery's probes are compared, as the stratified
+#: tank's event (``layer_recoveries``).
+RECOVERY_EVERY = timedelta(minutes=5)
+
+
+def layer_recoveries(
+    found: Events, params: HeaterParams, record: tf.TankRecord
+) -> list[tf.Coast]:
+    """``found``'s recoveries as the stratified tank's events: the
+    compressor from its start, holding by its time off
+    (``start_hold_min``), to its stop, the circulation the ``record``
+    has through it, and the probes it recorded every
+    ``RECOVERY_EVERY``."""
+    out: list[tf.Coast] = []
+    for e in found.recoveries:
+        off = (
+            None
+            if e.stopped_at is None
+            else (e.start - e.stopped_at).total_seconds() / 60.0
+        )
+        hold = timedelta(minutes=start_hold_min(params.compressor, off))
+        observed: list[tf.Observed] = []
+        t = e.start + RECOVERY_EVERY
+        while t <= e.end:
+            m = record.minute(t)
+            if 0 <= m < len(record):
+                u, lo = float(record.upper_f[m]), float(record.lower_f[m])
+                if math.isfinite(u) and math.isfinite(lo):
+                    observed.append((t, u, lo))
+            t += RECOVERY_EVERY
+        if not observed:
+            continue
+        out.append(
+            tf.Coast(
+                e.start,
+                e.end,
+                e.upper_f,
+                e.lower_f,
+                e.air,
+                tuple(observed),
+                e.draws,
+                compressor=(e.start, e.start + hold, e.end),
+                flowing=tuple(tf.flows(params, record, e.start, e.end)),
+            )
+        )
+    return out
+
+
 def _layer_errors(
     params: HeaterParams, record: tf.TankRecord | None, coast: tf.Coast
 ) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
@@ -1005,16 +1053,38 @@ def fit_layers(
     map_: Callable[..., Iterable[Any]] = map,
     max_evaluations: int = 200,
 ) -> tf.TankFit:
-    """The stratified tank's terms (``sim.tank_fit.TERMS``) fitted on
-    ``found``'s quiet windows and draws, from ``params``' values
-    (``sim.tank_fit.fit``)."""
+    """The stratified tank's terms fitted from ``params``' values
+    (``sim.tank_fit.fit``): ``TERMS`` on ``found``'s quiet windows and
+    draws, then, with a ``record``, where the condenser heats
+    (``CONDENSER_TERMS``) on its recoveries. Its terms are both
+    blocks', its RMSE the first's."""
     windows, draws = layer_coasts(found)
-    return tf.fit(
+    done = tf.fit(
         params,
         record,
         windows + draws,
         map_=map_,
         max_evaluations=max_evaluations,
+    )
+    climbs = (
+        [] if record is None else layer_recoveries(found, done.params, record)
+    )
+    if not climbs:
+        return done
+    heats = tf.fit(
+        done.params,
+        record,
+        climbs,
+        terms=tf.CONDENSER_TERMS,
+        map_=map_,
+        max_evaluations=max_evaluations,
+    )
+    return replace(
+        done,
+        params=heats.params,
+        terms={**done.terms, **heats.terms},
+        on_bound=done.on_bound + heats.on_bound,
+        evaluations=done.evaluations + heats.evaluations,
     )
 
 

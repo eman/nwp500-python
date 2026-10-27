@@ -2,6 +2,7 @@
 the energy and the second law, the probes read what an estimate was
 built from, and a walk is the same however it is cut."""
 
+import dataclasses
 import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -522,6 +523,50 @@ class TestTheWalk:
             w.books.net_btu, abs=1e-6
         )
         assert _monotone(w.state)
+
+    def test_its_steps_are_its_books(self) -> None:
+        w = _day(S.estimate(L, 125.0, 100.0))
+        assert len(w.steps) == len(w.path) - 1
+        total = sum(w.steps, S.Books())
+        for f in dataclasses.fields(S.Books):
+            assert getattr(total, f.name) == pytest.approx(
+                getattr(w.books, f.name), abs=1e-6
+            )
+
+    def test_uncredited_heat_is_charged_and_not_given(self) -> None:
+        start = S.estimate(L, 125.0, 100.0)
+        heating = _heating(T0)
+        withheld = _day(
+            start, heating=dataclasses.replace(heating, credited=False)
+        )
+        none = _day(start, heating=S.Heating())
+        # Alike but for the grid: a walk steps finer while something
+        # runs.
+        assert withheld.state.layers_f == pytest.approx(
+            none.state.layers_f, abs=0.2
+        )
+        assert withheld.books.compressor_btu == 0.0
+        assert withheld.books.element_btu == 0.0
+        assert withheld.books.compressor_wh > 0.0
+        assert withheld.books.element_wh == pytest.approx(
+            P.element.element_w * 12 / 60
+        )
+
+    def test_a_compressors_heat_scales(self) -> None:
+        start = S.estimate(L, 125.0, 100.0)
+        c = _heating(T0).compressor
+        assert c is not None
+        one = _day(start, heating=S.Heating(compressor=c), draws=(), flowing=())
+        half = _day(
+            start,
+            heating=S.Heating(compressor=dataclasses.replace(c, scale=0.5)),
+            draws=(),
+            flowing=(),
+        )
+        assert half.books.compressor_wh == pytest.approx(
+            one.books.compressor_wh, rel=0.05
+        )
+        assert half.books.compressor_btu < 0.6 * one.books.compressor_btu
 
     def test_an_elements_heat_is_its_electricity(self) -> None:
         w = _day(S.estimate(L, 125.0, 100.0), draws=(), flowing=())
