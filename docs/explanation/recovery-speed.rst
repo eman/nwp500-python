@@ -371,7 +371,7 @@ reading from before the start and stayed above it for 5 minutes
    * - 3-12 hours
      - 14
      - 18 min
-     - 13.2-28.5 min
+     - 13.25-28.5 min
    * - Over 12 hours
      - 43
      - 22 min
