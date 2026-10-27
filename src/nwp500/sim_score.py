@@ -11,7 +11,8 @@ events taken from the record without any model:
 
 - **recoveries**: each heat-pump recovery ``sim.calibration.snapshots``
   keeps, from its recorded start, asked how long it runs and what it
-  uses;
+  uses; one with water in use only with a meter's draws, which it is
+  predicted with;
 - **quiet windows** (``sim.calibration.quiet_windows``): the tank
   coasting, against both probes every ``OBSERVE_EVERY``;
 - **draws**: each metered draw with nothing else moving or heating
@@ -23,8 +24,12 @@ events taken from the record without any model:
 
 The events are fixed by the record alone, so two parameter sets scored
 on the same history are scored on the same events (``Score.events``,
-``compare``). Split a history in time (``holdout_start``), fit on the
-part before, and score on the part after.
+``compare``). An event the simulator cannot answer, or a recovery still
+running at its horizon, is left out of the metrics and named
+(``Score.failed_events``): two scores that left out different events
+are not on the same events. Split a history in time
+(``holdout_start``), fit on the part before, and score on the part
+after.
 
 Each metric carries how many events it rests on and a 90 % interval
 from a bootstrap of local days: one day's events share a tank and the
@@ -344,6 +349,10 @@ def _recoveries(
         # takes: the compressor's fit leaves it out too.
         if not reached[k] or not _in_range(start, since, until):
             continue
+        # One with water in use is predicted with the meter's draws;
+        # without a meter, what it drew is unknown.
+        if not draw_free[k] and not draws:
+            continue
         # The air the run met, as the fits read it; the last reading
         # holds past its end, where the walk may run on.
         air: list[Reading] = []
@@ -410,10 +419,12 @@ def _windows(
             continue
         at = _grid(start, end)
         air = _readings(air_v, seconds, at)
+        # The start is the coast's own state, scored from the next
+        # reading on, as a draw's hour is.
         seen = _observed(upper, lower, seconds, at)
-        if air is None or seen is None:
+        if air is None or seen is None or len(seen) < 2:
             continue
-        out.append(Window(start, end, seen[0][1], seen[0][2], air, seen))
+        out.append(Window(start, end, seen[0][1], seen[0][2], air, seen[1:]))
     return out
 
 
@@ -438,11 +449,15 @@ def _draw_events(
         | _flag(frame, "excluded")
     )
     ordered = sorted(draws)
+    last = cast(datetime, pd.Timestamp(frame.index[-1]).to_pydatetime())
     out: list[DrawEvent] = []
     for k, (at, gal) in enumerate(ordered):
         if gal <= 0.0 or not _in_range(at, since, until):
             continue
         a, b = at - DRAW_CLEAR, at + DRAW_FOLLOW
+        # The hour after it is read from the history, not held past it.
+        if b > last:
+            continue
         others = [t for j, (t, _) in enumerate(ordered) if j != k and a < t < b]
         if others or _any_in(busy, seconds, a, b):
             continue
@@ -589,7 +604,8 @@ def _recovery_score(
     except SimulationError, ValueError:
         return False
     first = next((h for h in result.heating if h.source == "compressor"), None)
-    if first is None:
+    # Still running at the horizon: its end, and so its error, unknown.
+    if first is None or first.stop == "horizon":
         return False
     minutes = (first.end - first.start.at).total_seconds() / 60.0
     actual = (e.end - e.start).total_seconds() / 60.0
@@ -768,6 +784,8 @@ class Score:
     metrics: dict[str, Stat]
     #: Events the simulator could not answer, by kind.
     failed: dict[str, int]
+    #: Each of them, as ``events`` names it.
+    failed_events: dict[str, list[str]]
     #: Physics broken along the predictions, by law: ``below_air``.
     breaks: dict[str, int]
     #: Crossing deliveries whose prediction promised more than was
@@ -782,6 +800,7 @@ class Score:
             "params_sha256": self.params_sha256,
             "events": self.events,
             "failed": self.failed,
+            "failed_events": self.failed_events,
             "breaks": self.breaks,
             "over_promised": self.over_promised,
             "metrics": {k: v.document() for k, v in self.metrics.items()},
@@ -827,24 +846,29 @@ def score(
     """
     zone = ZoneInfo(tz)
     tally = _Tally()
-    failed = {"recoveries": 0, "windows": 0, "draws": 0, "deliveries": 0}
+    failed: dict[str, list[str]] = {
+        "recoveries": [],
+        "windows": [],
+        "draws": [],
+        "deliveries": [],
+    }
     breaks = {"below_air": 0}
     over = 0
     for r in found.recoveries:
         if not _recovery_score(r, params, inlet_f, tally, _day(r.start, zone)):
-            failed["recoveries"] += 1
+            failed["recoveries"].append(_iso(r.start))
     for w in found.windows:
         if not _window_score(
             w, params, inlet_f, tally, _day(w.start, zone), breaks
         ):
-            failed["windows"] += 1
+            failed["windows"].append(_iso(w.start))
     for d in found.draws:
         if not _draw_score(d, params, inlet_f, tally, _day(d.at, zone)):
-            failed["draws"] += 1
+            failed["draws"].append(_iso(d.at))
     for c in found.deliveries:
         done, promised = _delivery_score(c, params, tally, _day(c.at, zone))
         if not done:
-            failed["deliveries"] += 1
+            failed["deliveries"].append(_iso(c.at))
         over += promised
     metrics = {
         name: _stat(values, tally.days[name])
@@ -853,7 +877,8 @@ def score(
     return Score(
         events=found.keys(),
         metrics=metrics,
-        failed=failed,
+        failed={k: len(v) for k, v in failed.items()},
+        failed_events=failed,
         breaks=breaks,
         over_promised=over,
         params_sha256=params_digest(params),
@@ -882,10 +907,17 @@ class Change:
 class Comparison:
     """Two score documents side by side."""
 
-    #: Whether both were scored on the same events: otherwise their
-    #: metrics answer different questions.
+    #: Whether both were scored on the same events, and the simulator
+    #: answered the same of them: otherwise their metrics answer
+    #: different questions.
     same_events: bool
     changes: tuple[Change, ...]
+
+
+def _failures(doc: Mapping[str, Any]) -> dict[str, list[str]]:
+    """A document's unanswered events, the kinds with any."""
+    named = cast(Mapping[str, list[str]], doc.get("failed_events") or {})
+    return {k: v for k, v in named.items() if v}
 
 
 def compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> Comparison:
@@ -917,6 +949,7 @@ def compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> Comparison:
             )
         )
     return Comparison(
-        same_events=before.get("events") == after.get("events"),
+        same_events=before.get("events") == after.get("events")
+        and _failures(before) == _failures(after),
         changes=tuple(rows),
     )

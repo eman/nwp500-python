@@ -29,7 +29,7 @@ from nwp500 import sim_score as ss
 from nwp500.sim.params import params_to_document
 from nwp500.sim_calibrate import Calibrated, Term, report
 
-from .simulate import InputError, read_params
+from .simulate import InputError, local_zone, read_params
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -196,11 +196,13 @@ def holdout(
     except sc.CalibrationInputError as e:
         raise InputError(str(e)) from None
     found = ss.events(ready, since=start)
+    # Local days, as ``--holdout-from`` is read.
+    tz = local_zone() or "UTC"
     return HeldOutScore(
         start,
         done,
-        ss.score(found, base),
-        ss.score(found, done.calibration.params),
+        ss.score(found, base, tz=tz),
+        ss.score(found, done.calibration.params, tz=tz),
     )
 
 

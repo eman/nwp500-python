@@ -136,6 +136,34 @@ class TestTheEvents:
         assert [d.at for d in found.draws] == [T0 + timedelta(hours=2)]
         assert len(found.draws[0].observed) == 6
 
+    def test_a_draw_too_near_the_end_to_follow_is_not_one(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, _ = history
+        last = ready.frame.index[-1].to_pydatetime()
+        found = ss.events(ready, draws=[(last - timedelta(minutes=20), 5.0)])
+        assert found.draws == ()
+
+    def test_a_window_is_scored_after_its_start(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, _ = history
+        w = ss.events(ready).windows[0]
+        assert w.observed[0][0] > w.start
+
+    def test_a_recovery_with_water_in_use_needs_the_meter(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, start = history
+        frame = ready.frame.copy()
+        frame.loc[frame.index > start + timedelta(minutes=30), "dhw_in_use"] = (
+            True
+        )
+        wet = replace(ready, frame=frame)
+        assert ss.events(wet).recoveries == ()
+        metered = ss.events(wet, draws=[(start + timedelta(minutes=31), 3.0)])
+        assert [r.draw_free for r in metered.recoveries] == [False]
+
     def test_two_draws_close_together_are_neither(
         self, history: tuple[Prepared, datetime]
     ) -> None:
@@ -182,13 +210,32 @@ class TestTheScore:
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
     ) -> None:
         ready, _ = history
-        found = ss.events(ready)
         leaky = replace(site, loss=replace(site.loss, ua_btu_hr_f=9.0))
-        a = ss.score(found, site).document()
-        b = ss.score(found, leaky).document()
+        a = ss.score(ss.events(ready), site).document()
+        b = ss.score(ss.events(ready), leaky).document()
         assert a["events"] == b["events"]
         assert a["params_sha256"] != b["params_sha256"]
         assert ss.compare(a, b).same_events
+
+    def test_a_run_past_the_horizon_is_unanswered(
+        self,
+        history: tuple[Prepared, datetime],
+        site: sim.HeaterParams,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ready, start = history
+        found = ss.events(ready)
+        (r,) = found.recoveries
+        short = replace(
+            found, recoveries=(replace(r, end=start + 20 * MINUTE),)
+        )
+        monkeypatch.setattr(ss, "RECOVERY_SLACK", timedelta(0))
+        got = ss.score(short, site)
+        assert got.failed["recoveries"] == 1
+        assert got.failed_events["recoveries"] == [ss._iso(start)]  # pyright: ignore[reportPrivateUsage]
+        assert "recovery_minutes_abs.all" not in got.metrics
+        whole = ss.score(found, site).document()
+        assert not ss.compare(whole, got.document()).same_events
 
     def test_a_document_is_plain_json(
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
@@ -291,6 +338,13 @@ class TestTheComparison:
     def test_inside_the_interval_is_not_clear(self) -> None:
         got = ss.compare(self._doc(10, 8, 12), self._doc(9, 7, 11))
         assert not got.changes[0].clear
+
+    def test_other_failures_are_other_events(self) -> None:
+        a = self._doc(10, 8, 12)
+        b = {**self._doc(5, 4, 6), "failed_events": {"recoveries": ["a"]}}
+        assert not ss.compare(a, b).same_events
+        empty = {**a, "failed_events": {"recoveries": []}}
+        assert ss.compare(a, empty).same_events
 
     def test_another_schema_is_refused(self) -> None:
         with pytest.raises(ValueError, match="sim-score"):

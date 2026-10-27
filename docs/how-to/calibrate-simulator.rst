@@ -204,13 +204,14 @@ base and the fit on the recorded events after it:
 
 The events are taken from the record without any model, so each set of
 parameters is scored on the same events. Each recovery that reached its
-target is walked from its recorded start: ``recovery_minutes_abs`` is
+target with no water in use is walked from its recorded start (one with
+a draw needs a meter's draws, from Python below): ``recovery_minutes_abs`` is
 how far its predicted run is from the recorded one, and
 ``recovery_energy_abs_pct`` how far its electricity is from the
 meter's. Each quiet window is coasted from its start:
 ``standby_upper_rmse_f`` and ``standby_lower_rmse_f`` are each probe's
 error over it, every 10 minutes. Each metric gives its number of
-events and a 90 % interval from resampling whole days. Hold out at
+events and a 90 % interval from resampling whole local days. Hold out at
 least a week, or the intervals are wide.
 
 From Python, ``nwp500.sim_score`` scores any history the fits read
@@ -229,7 +230,9 @@ water meter's draws for the draw and deliverable-gallon metrics:
        rows.until(start), [t for t in observed if t < start], record=record
    )
    found = sim_score.events(ready, draws=draws, flow=flow, since=start)
-   score = sim_score.score(found, done.calibration.params)
+   score = sim_score.score(
+       found, done.calibration.params, tz="America/Los_Angeles"
+   )
    print(json.dumps(score.document(), indent=2))
 
 ``sim_score.compare`` reads two score documents and says, for each
