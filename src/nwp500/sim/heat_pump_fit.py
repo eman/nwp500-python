@@ -31,9 +31,10 @@ from nwp500.sim.calibration import (
     REACHED_TOLERANCE_F,
     heat_pump_cycles,
     water_in_use,
+    water_over,
 )
 from nwp500.sim.params import LossParams, TankParams
-from nwp500.sim.physics.tank import ua_at
+from nwp500.sim.physics.tank import bottom_loss_reach, ua_at
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 #: The grid a recovery is read on.
@@ -150,16 +151,19 @@ def recovery_frame(
     (the run's ``n``), ``at``, ``minute`` (since the start), ``phase``
     (``PHASES``), the probes as of the minute and ``gap_f`` (upper less
     lower), ``mixed`` (``MIXED_BELOW_F``, ``MIXED_ABOVE_F``), ``water``
-    (water in use, ``calibration.water_in_use``), the ``air`` column's reading
+    (``calibration.water_in_use``), the ``air`` column's reading
     (the sensor's by default) and ``humidity_pct``, ``power_w``,
     ``target_f``, the run's ``draw_free`` and ``start_clean`` (no water
     in use from ``calibration.DRAW_LEAD`` before it to the end of its
-    hold), and ``minutes_off`` (since the run before it stopped, NaN
-    for the history's first)."""
+    hold, read as ``draw_free`` is), and ``minutes_off`` (since the run
+    before it stopped; NaN for the history's first, or with the heater
+    unrecorded since). ``water`` is any sample in force over the minute
+    reading water in use."""
     cycles = heat_pump_cycles(history)
     if not cycles:
         return pd.DataFrame(columns=list(_FRAME_COLUMNS))
-    seconds = np.array([t.timestamp() for t in hf.instants(history)])
+    when = hf.instants(history)
+    seconds = np.array([t.timestamp() for t in when])
     lower_f = hf.floats(history, "lower_f")
     upper_f = hf.floats(history, "upper_f")
     columns = {
@@ -170,12 +174,22 @@ def recovery_frame(
         "power_w": hf.floats(history, "power_w"),
         "target_f": hf.floats(history, "target_f"),
     }
-    _, water = water_in_use(history)
+    index = pd.DatetimeIndex(history.index)
+    tier1, water = water_in_use(history)
+    # Water in use at any sample up to each one: a minute is wet with
+    # one inside it.
+    wet = np.concatenate(([0], np.cumsum(water)))
     parts: list[pd.DataFrame] = []
     for c in cycles:
         a, b = c.start.timestamp(), c.end.timestamp()
         step = GRID.total_seconds()
-        grid = a + step * np.arange(math.ceil((b - a) / step))
+        # The grid's instants from the start's own, to the nanosecond.
+        at = pd.date_range(
+            pd.Timestamp(c.start),
+            periods=math.ceil((b - a) / step),
+            freq=GRID,
+        )
+        grid = a + step * np.arange(len(at))
         bounds = _phases(lower_f, seconds, c.start, c.end, c.target_f)
         climb = math.inf if bounds.climb is None else bounds.climb
         reach = math.inf if bounds.reach is None else bounds.reach
@@ -186,14 +200,20 @@ def recovery_frame(
         held["target_f"] = np.where(
             np.isfinite(held["target_f"]), held["target_f"], c.target_f
         )
-        k = np.searchsorted(seconds, grid, side="right") - 1
-        lead = int(
-            np.searchsorted(
-                seconds, a - DRAW_LEAD.total_seconds(), side="right"
-            )
+        # The samples in force over each minute: the one at its start to
+        # the last before the next.
+        first = np.maximum(np.searchsorted(seconds, grid, side="right") - 1, 0)
+        last = np.searchsorted(seconds, grid + step, side="left")
+        minute_wet = wet[np.maximum(last, first + 1)] > wet[first]
+        # The climb's first sample, as the history holds its instant.
+        held_to = (
+            c.end
+            if math.isinf(climb)
+            else min(c.end, when[int(np.searchsorted(seconds, climb))])
         )
-        held_to = int(np.searchsorted(seconds, min(climb, b), side="right"))
-        start_clean = not water[max(lead - 1, 0) : held_to].any()
+        start_clean = not water_over(
+            index, water, tier1, c.start - DRAW_LEAD, held_to
+        )
         gap = held["upper_f"] - held["lower_f"]
         off = (
             math.nan
@@ -204,13 +224,13 @@ def recovery_frame(
             pd.DataFrame(
                 {
                     "cycle": c.n,
-                    "at": pd.to_datetime(grid, unit="s", utc=True),
+                    "at": at,
                     "minute": (grid - a) / 60.0,
                     "phase": phase,
                     **held,
                     "gap_f": gap,
                     "mixed": (gap >= -MIXED_BELOW_F) & (gap <= MIXED_ABOVE_F),
-                    "water": water[np.maximum(k, 0)],
+                    "water": minute_wet,
                     "draw_free": c.draw_free,
                     "start_clean": start_clean,
                     "minutes_off": off,
@@ -275,13 +295,16 @@ class RunOnFit:
       overshoot at the stop.
 
     ``*_mae_min``: the mean absolute error each puts on the stop,
-    minutes; None with under three recoveries."""
+    minutes, over the same recoveries; None with under three.
+    ``unstopped``: the recoveries the overshoot rule could not place a
+    stop on (a run-on that did not climb), left out of both."""
 
     n: int
     minutes: float | None
     overshoot_f: float | None
     minutes_mae_min: float | None
     overshoot_mae_min: float | None
+    unstopped: int = 0
 
 
 def _crossing_minute(
@@ -358,21 +381,26 @@ def run_ons(frame: pd.DataFrame) -> tuple[pd.DataFrame, RunOnFit]:
     targets = found["target_f"].to_numpy(dtype=float)[keep]
     by_minutes: list[float] = []
     by_over: list[float] = []
+    unstopped = 0
     for j, i in enumerate(keep):
         rest = np.delete(np.arange(len(keep)), j)
+        level = targets[j] + float(np.median(over[rest]))
+        stop = _crossing_minute(*traces[int(i)], level)
+        if stop is None:
+            # Both rules on the same recoveries, or neither.
+            unstopped += 1
+            continue
+        by_over.append(abs(stop + GRID_MINUTES - ends[j]))
         by_minutes.append(
             abs(reached[j] + float(np.median(runs[rest])) - ends[j])
         )
-        level = targets[j] + float(np.median(over[rest]))
-        stop = _crossing_minute(*traces[int(i)], level)
-        if stop is not None:
-            by_over.append(abs(stop + GRID_MINUTES - ends[j]))
     return found, RunOnFit(
         len(keep),
         fit_minutes,
         fit_over,
-        float(np.mean(by_minutes)),
+        float(np.mean(by_minutes)) if by_minutes else None,
         float(np.mean(by_over)) if by_over else None,
+        unstopped,
     )
 
 
@@ -424,8 +452,10 @@ def climb_heat(
     """The heat a recovery puts into the tank, from its draw-free climbs
     with the tank mixed (``recovery_frame``): the probes' mean is then
     the tank's, and the heat is its mass times the mean's rise (a
-    least-squares slope over at least ``min_minutes``) plus the jacket's
-    loss at the UA law (``loss``) against the air. A row a stretch:
+    least-squares slope over at least ``min_minutes``) plus the loss
+    ``loss`` prices against the air: the UA law's, and the bottom
+    loss's share at each minute's gap
+    (``physics.tank.bottom_loss_reach``). A row a stretch:
     ``cycle``, ``start``, ``minutes``, ``water_f`` (the mean's mean),
     ``lower_f``, ``air_f``, ``humidity_pct``, ``rise_f_h``,
     ``loss_btu_h``, ``heat_btu_h``, the metered ``power_w`` (NaN
@@ -455,9 +485,13 @@ def climb_heat(
             water = float(np.mean(mean))
             air = float(np.mean(s["air_f"].to_numpy(dtype=float)))
             dt = water - air
-            lost = (
-                ua_at(dt, ua_ref, loss.ua_exponent, loss.ua_ref_delta_t_f) * dt
-            )
+            reach = [
+                bottom_loss_reach(float(gap), loss.bottom_gate_f)
+                for gap in s["gap_f"].to_numpy(dtype=float)
+            ]
+            lost = ua_at(
+                dt, ua_ref, loss.ua_exponent, loss.ua_ref_delta_t_f
+            ) * dt + loss.bottom_loss_btu_hr * float(np.mean(reach))
             heat = mass * rise + lost
             power = _mean(s["power_w"].to_numpy(dtype=float))
             rows.append(

@@ -1122,14 +1122,43 @@ def water_in_use(history: pd.DataFrame) -> tuple[list[str], np.ndarray]:
     return tier1, water
 
 
+def water_over(
+    index: pd.DatetimeIndex,
+    water: np.ndarray,
+    tier1: Sequence[str],
+    start: datetime,
+    end: datetime,
+) -> bool:
+    """Whether water was in use from ``start`` to ``end``
+    (``water_in_use``'s columns and samples). A meter's or the
+    circulation's flag marks a sample's interval, to the next sample
+    (``sim_adapters.history``): the sample at ``end`` is the interval
+    after, and the one before the first inside can hold water moving
+    inside it. The heater's own flag is read at its instants."""
+    inside = (index >= start) & ((index < end) if tier1 else (index <= end))
+    if water[inside].any():
+        return True
+    first = int(np.argmax(inside)) if inside.any() else len(inside)
+    return (
+        bool(tier1)
+        and 0 < first < len(inside)
+        and bool(index[first] > start)
+        and bool(water[first - 1])
+    )
+
+
 def heat_pump_cycles(history: pd.DataFrame) -> list[HeatPumpCycle]:
     """The history's compressor runs with no element, no hybrid mode, no
     anti-legionella cycle and no error from ``PRE_RECOVERY_LOOKBACK``
     before them to their end, not cut short (``INTERRUPTED_WH``), and
-    with a sample inside them: the recoveries ``snapshots`` reads and
-    ``sim.heat_pump_fit`` measures. A run's target is the stop threshold
-    (``target_f``) in force at its start, else
-    ``UNRECORDED_TARGET_F``."""
+    with a sample inside them, and seen from start to stop (a run on at
+    the history's first sample or still on at its last is not): the
+    recoveries ``snapshots`` reads and ``sim.heat_pump_fit`` measures. A
+    run's target is the stop threshold (``target_f``) in force at its
+    start, else ``UNRECORDED_TARGET_F``. Its ``stopped_at`` is None when
+    the heater went unrecorded since the run before it
+    (``unrecorded``, ``heater_unobserved``): a run may have gone
+    unseen."""
     if history.empty:
         return []
     when = hf.instants(history)
@@ -1146,13 +1175,16 @@ def heat_pump_cycles(history: pd.DataFrame) -> list[HeatPumpCycle]:
         else np.zeros(len(history), dtype=bool)
     )
     tier1, water = water_in_use(history)
-    # A meter's or the circulation's flag marks a sample's interval, to
-    # the next sample (``sim_adapters.history``): the sample before a
-    # lead's first can hold water moving inside it.
-    interval_water = water if tier1 else np.zeros(len(history), dtype=bool)
+    unseen = np.zeros(len(history), dtype=bool)
+    for name in ("unrecorded", "heater_unobserved"):
+        if name in history.columns:
+            unseen |= history[name].fillna(False).astype(bool).to_numpy()
     runs = hf.on_intervals(when, on)
     out: list[HeatPumpCycle] = []
     for n, (start, end) in enumerate(runs):
+        # Not seen to start, or to stop.
+        if (on[0] and start == when[0]) or (on[-1] and end == when[-1]):
+            continue
         span = (index >= start - PRE_RECOVERY_LOOKBACK) & (index <= end)
         if element[span].any() or excluded[span].any():
             continue
@@ -1170,29 +1202,15 @@ def heat_pump_cycles(history: pd.DataFrame) -> list[HeatPumpCycle]:
         reached = bool(np.any(lower_f[inside] >= target - REACHED_TOLERANCE_F))
         if not ((index >= start) & (index < end)).any():
             continue
-        # A source flag on the sample at ``end`` is the interval after
-        # the recovery; the heater's own flag is read at its instant.
-        lead = (index >= start - DRAW_LEAD) & (
-            (index < end) if tier1 else (index <= end)
-        )
-        draw_free = not water[lead].any()
-        first = int(np.argmax(lead)) if lead.any() else len(lead)
+        draw_free = not water_over(index, water, tier1, start - DRAW_LEAD, end)
+        stopped_at = runs[n - 1][1] if n else None
         if (
-            0 < first < len(lead)
-            and bool(index[first] > start - DRAW_LEAD)
-            and bool(interval_water[first - 1])
+            stopped_at is not None
+            and unseen[(index >= stopped_at) & (index <= start)].any()
         ):
-            draw_free = False
+            stopped_at = None
         out.append(
-            HeatPumpCycle(
-                n,
-                start,
-                end,
-                target,
-                reached,
-                draw_free,
-                runs[n - 1][1] if n else None,
-            )
+            HeatPumpCycle(n, start, end, target, reached, draw_free, stopped_at)
         )
     return out
 

@@ -23,8 +23,9 @@ Summary
    * - Observation
      - Value
    * - Heat-pump output
-     - About **4,800-4,950 BTU/hr** into a mixed tank at 130-150 degF,
-       falling about 16 BTU/hr per degF of water.
+     - About **4,900 BTU/hr** into a mixed tank at 130-140 degF.
+       Fitted on the air and the water together, it falls about 16
+       BTU/hr per degF of water.
    * - Recovery time
      - A median **5.7-7.1 minutes per degF** the lower tank is short of
        the setpoint, so a deep recovery takes 250-400 minutes.
@@ -33,15 +34,15 @@ Summary
        70-95 degF to about **470 W** at 138-150 degF.
    * - Efficiency
      - Heat put into the tank per unit of electricity while it climbs,
-       about **3.1** at 130-140 degF and **3.0** at 140-150 degF. Over
+       about **3.1** at 130-140 degF and **2.8** at 140-150 degF. Over
        whole recoveries against an energy meter, hold included,
        **2.76** pooled.
    * - Each compressor start
      - About **160 Wh** of electricity before the tank gains anything,
        less when it restarts within about an hour of its last stop.
    * - The air beside the heater
-     - Warmer air speeds a recovery: about **51 BTU/hr per degF**, or
-       **1.27x** from 54 to 75 degF.
+     - Warmer air speeds a recovery: about **56 BTU/hr per degF**, or
+       **1.30x** from 54 to 75 degF.
    * - How much of the tank heats
      - About **0.44** of the tank's mass while it is stratified, and
        **0.96** once it has mixed.
@@ -50,9 +51,9 @@ Summary
        15 minutes of its last stop, and holds a median **22 minutes**
        before it climbs after more than 12 hours off.
    * - The end of a recovery
-     - Outside a TOU window, the compressor ran a median **10 minutes**
-       past the lower tank reaching the setpoint, and the lower tank
-       ended a median **0.9 degF past it**. A stop at that overshoot
+     - The compressor ran a median **10 minutes** past the lower tank
+       reaching the setpoint, and the lower tank ended a median
+       **0.9 degF past it**. A stop at that overshoot
        predicts the stop better than a fixed run-on.
 
 The figures come from the unit's recorded status history and, for
@@ -72,9 +73,9 @@ Heat output and power
 tank mixed (the upper probe within 1 degF above to 5 degF below the
 lower) and no water in use, at least 20 minutes long: the probes' mean
 is then the tank's, and the heat is the tank's mass (63.2 gal) times
-the mean's rise, plus the jacket's loss at the fitted UA (4.48
-BTU/hr per degF). 56 stretches, 2,432 minutes, 2025-12-28 to
-2026-10-26:
+the mean's rise, plus the loss the fitted parameters price (a UA of
+4.48 BTU/hr per degF, and the bottom loss's share at the gap). 38
+stretches, 3,059 minutes, 2025-12-28 to 2026-10-26:
 
 .. list-table::
    :header-rows: 1
@@ -86,20 +87,20 @@ BTU/hr per degF). 56 stretches, 2,432 minutes, 2025-12-28 to
      - Compressor power
      - Heat per unit of electricity
    * - 130-140 degF
-     - 47
-     - 4,841 BTU/hr
-     - 451 W
-     - 3.09
+     - 33
+     - 4,878 BTU/hr
+     - 457 W
+     - 3.14
    * - 140-150 degF
      - 4
-     - 4,949 BTU/hr
-     - 479 W
-     - 2.99
+     - 4,557 BTU/hr
+     - 483 W
+     - 2.77
 
 A tank only mixes once a recovery has run a while, so below 130 degF
-there are five stretches in all. Fitted over all 56, weighted by their
-minutes: **4,589 + 51.5 x (air - 65) - 16.0 x (water - 120) BTU/hr**,
-with the air between 60.5 and 88.7 degF.
+there is one stretch. Fitted over all 38, weighted by their minutes:
+**4,499 + 55.5 x (air - 65) - 15.9 x (water - 120) BTU/hr**, with the
+air between 61.2 and 88.7 degF.
 
 The figure closes on the meter. Over the 28 draw-free recoveries mixed
 at both ends, the heat the tank kept plus its loss, against the
@@ -260,8 +261,8 @@ How much of the tank heats
 ==========================
 
 The lower probe climbs fast at first and then slows, because the heat
-is spread over more water as the tank mixes. Measured over the same 269
-recoveries, as the share of the tank's full mass the heat goes into:
+is spread over more water as the tank mixes. Measured over 269
+recoveries from 2025-12-28 to 2026-08-12, as the share of the tank's full mass the heat goes into:
 
 .. list-table::
    :header-rows: 1
@@ -296,8 +297,8 @@ The air beside the heater
 =========================
 
 **Warmer air speeds a recovery.** On the mixed climbs above, the heat
-rose 51.5 BTU/hr per degF of air, about 1.1 % per degF: **1.27x** from
-54 to 75 degF, the lower end extrapolated from 60.5 degF. Over 217
+rose 55.5 BTU/hr per degF of air, about 1.2 % per degF: **1.30x** from
+54 to 75 degF, the lower end extrapolated from 61.2 degF. Over 217
 recoveries with the lower tank 10 degF or more short, the lower tank's
 heating rate, stratified tank included, rose about 0.75 % per degF of
 air (1.18x from 53.6 to 75.1 degF). The compressor's power mid-cycle
@@ -363,17 +364,17 @@ its reading from before the start and stayed above it for 5 minutes
      - 5 min
      - 3-5 min
    * - 1-3 hours
-     - 8
-     - 10.5 min
-     - 7-13 min
+     - 7
+     - 10 min
+     - 7-11.5 min
    * - 3-12 hours
      - 14
      - 18 min
      - 13-29 min
    * - Over 12 hours
-     - 51
+     - 46
      - 22 min
-     - 15-27 min
+     - 15.5-28 min
 
 A probe at rest flips a 0.18 degF step and back, so a climb counts
 only once it holds for 5 minutes. Counting the first step instead, as
@@ -388,16 +389,17 @@ and the start-up energy above goes into the same warming.
 The end of a recovery
 =====================
 
-Outside a TOU window, the compressor stops after the lower tank has
-passed the setpoint, not when it reaches it. Over the 31 draw-free
-recoveries to 2026-10-26 that reached an unchanged setpoint
-(``heat_pump_fit.run_ons``), it ran on for a median **10 minutes**
-after the lower tank first read the setpoint, 2-15 minutes across
-them, and the lower tank ended a median **0.9 degF past the setpoint**,
--0.5 to 1.4 degF. Judged leaving each recovery out of its own median,
-a stop at that overshoot puts the stop 2.4 minutes from the recorded
-one on average, and a fixed 10-minute run-on 3.4 minutes: the stop
-follows the tank, not the clock. A setpoint lowered to within
+The compressor stops after the lower tank has passed the setpoint,
+not when it reaches it. Over the 31 draw-free recoveries to 2026-10-26
+that reached an unchanged setpoint (``heat_pump_fit.run_ons``), it ran
+on for a median **10 minutes** after the lower tank first read the
+setpoint, 2-15 minutes across them, and the lower tank ended a median
+**0.9 degF past the setpoint**, -0.5 to 1.4 degF. Judged leaving each
+recovery out of its own median, on the 30 whose run-on climbed, a stop
+at that overshoot puts the stop 2.4 minutes from the recorded one on
+average, and a fixed 10-minute run-on 3.3 minutes: the stop follows the
+tank, not the clock. The record does not mark TOU windows, so a run-on
+a window cut short counts too. A setpoint lowered to within
 that margin of the lower tank during a recovery did not stop it (one
 run, 2026-09-21; see :doc:`what-starts-a-recovery`).
 

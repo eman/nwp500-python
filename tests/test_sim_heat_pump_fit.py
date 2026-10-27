@@ -168,6 +168,60 @@ class TestTheFrame:
         assert math.isnan(off[0])
         assert off[1:] == pytest.approx([c[0] for c in CYCLES[1:]], abs=0.2)
 
+    def test_each_minute_is_the_cycle_s_own(self, frame: pd.DataFrame) -> None:
+        starts = {c.start for c in heat_pump_cycles(planted(CYCLES))}
+        firsts = frame.drop_duplicates("cycle")["at"]
+        assert set(firsts.dt.to_pydatetime()) == starts
+
+    def test_a_draw_inside_a_minute_wets_it(self) -> None:
+        history = planted(CYCLES[3:5])
+        start = heat_pump_cycles(history)[1].start
+        # One sample, past the minute's start.
+        inside = history.index[
+            history.index > start + timedelta(minutes=40, seconds=20)
+        ][0]
+        history.loc[inside, "dhw_in_use"] = True
+        f = hpf.recovery_frame(history)
+        wet = f.loc[f["water"], "at"]
+        assert len(wet) >= 1
+        assert (wet - pd.Timestamp(inside)).abs().min() < timedelta(minutes=1)
+
+
+class TestTheRuns:
+    def test_a_run_open_at_either_end_is_none(self) -> None:
+        history = planted(CYCLES[:3])
+        cycles = heat_pump_cycles(history)
+        # Cut inside the last run, and from inside the first.
+        cut = history.loc[
+            (history.index > cycles[0].start + timedelta(minutes=30))
+            & (history.index < cycles[2].end - timedelta(minutes=5))
+        ]
+        assert [c.start for c in heat_pump_cycles(cut)] == [cycles[1].start]
+
+    def test_a_gap_since_the_last_stop_is_no_time_off(self) -> None:
+        history = planted(CYCLES[3:5])
+        first, _ = heat_pump_cycles(history)
+        history["unrecorded"] = False
+        between = (history.index > first.end) & (
+            history.index < first.end + timedelta(minutes=10)
+        )
+        history.loc[between, "unrecorded"] = True
+        assert heat_pump_cycles(history)[1].stopped_at is None
+        f = hpf.recovery_frame(history)
+        assert f.drop_duplicates("cycle")["minutes_off"].isna().all()
+
+    def test_a_flag_before_the_lead_leaves_a_start_clean(self) -> None:
+        history = planted(CYCLES[3:5])
+        start = heat_pump_cycles(history)[1].start
+        early = (history.index > start - timedelta(minutes=40)) & (
+            history.index < start - timedelta(minutes=31)
+        )
+        history.loc[early, "dhw_in_use"] = True
+        (cycle,) = [c for c in heat_pump_cycles(history) if c.start == start]
+        holds = hpf.start_holds(hpf.recovery_frame(history))
+        assert cycle.draw_free
+        assert holds["start_clean"].tolist() == [True, True]
+
 
 class TestTheHold:
     def test_each_hold_by_its_minutes_off(self, frame: pd.DataFrame) -> None:
@@ -217,6 +271,20 @@ class TestTheRunOn:
         assert fit.minutes_mae_min is not None
         assert fit.overshoot_mae_min < fit.minutes_mae_min
 
+    def test_a_run_on_that_never_climbs_is_left_out_of_both(
+        self, frame: pd.DataFrame
+    ) -> None:
+        flat = frame.copy()
+        one = (flat["cycle"] == flat["cycle"].iloc[0]) & (
+            flat["phase"] == "run_on"
+        )
+        flat.loc[one, "lower_f"] = flat.loc[one, "lower_f"].iloc[0]
+        _, fit = hpf.run_ons(flat)
+        _, whole = hpf.run_ons(frame)
+        assert fit.unstopped == 1
+        assert whole.unstopped == 0
+        assert fit.minutes_mae_min != whole.minutes_mae_min
+
     def test_too_few_to_judge(self) -> None:
         _, fit = hpf.run_ons(hpf.recovery_frame(planted(CYCLES[:2])))
         assert fit.n == 2
@@ -238,6 +306,16 @@ class TestTheHeat:
             assert r.cop == pytest.approx(  # type: ignore[attr-defined]
                 r.heat_btu_h / (r.power_w * 3.412141633),  # type: ignore[attr-defined]
             )
+
+    def test_the_bottom_loss_is_priced(self, frame: pd.DataFrame) -> None:
+        bottom = LossParams(
+            ua_btu_hr_f=4.4, bottom_loss_btu_hr=100.0, bottom_gate_f=1.0
+        )
+        plain = hpf.climb_heat(frame, TANK, LOSS)
+        more = hpf.climb_heat(frame, TANK, bottom)
+        # A 0.5 °F gap: 1 - e^-0.5 of it.
+        added = more["heat_btu_h"] - plain["heat_btu_h"]
+        assert added.to_numpy() == pytest.approx(100.0 * 0.39, abs=8.0)
 
     def test_the_air_raises_the_heat(self, frame: pd.DataFrame) -> None:
         got = hpf.climb_heat(frame, TANK, LOSS)
