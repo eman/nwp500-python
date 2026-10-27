@@ -288,6 +288,13 @@ The pieces the entry points are built from.
 .. automodule:: nwp500.sim.physics.tank
    :members: ua_at, bottom_loss_reach, bottom_loss_drop_f
 
+.. automodule:: nwp500.sim.physics.stratified
+   :members: TankState, Layout, layout, energy_btu, mix, lose, conduct,
+      add_heat, condenser_water_f, condenser_heat, element_heat, flow,
+      Flowed, draw, Drawn, deliverable_gal, observe, estimate,
+      assimilate, walk, Walked, Books, Heating, Compressor, Element,
+      Flowing, Delivered, IDLE_STEP, ACTIVE_STEP, CUT_RESOLUTION, NO_VALVE
+
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
       ElementInterval, entry_deficit_f, entry_bracket_f,

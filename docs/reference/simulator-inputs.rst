@@ -1042,6 +1042,46 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
 fallback (5.0 BTU/hr per degF) and the maps' cross terms (0: the record
 does not place them). ``CompressorParams()`` is this fit, rounded.
 
+**The stratified tank's priors** (``sim.physics.stratified``; nothing
+reads them yet, and calibration fits them). Heights are shares of the
+volume from the bottom.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 18 52
+
+   * - Field
+     - Value
+     - Where it comes from
+   * - ``tank.layers``
+     - 12
+     - HPWHsim's layer count.
+   * - ``tank.upper_probe_height``, ``tank.lower_probe_height``
+     - 0.85, 0.2
+     - Where the record's draws first move each probe; the clean draws
+       fit them.
+   * - ``tank.upper_element_height``, ``tank.lower_element_height``
+     - 0.72, 0.15
+     - The upper element with 17.5 gal of the 63.2 above it; the lower
+       near the bottom. The element runs fit them.
+   * - ``tank.condenser_span``
+     - 0-0.45
+     - The coil wraps the lower stratum: recoveries heat 0.44-0.48 of
+       the tank while it is stratified.
+   * - ``tank.inlet_mix_gal``
+     - 9 gal
+     - The water an inflow mixes with as it enters: the draw
+       response's reach (``draw.reach_gal``).
+   * - ``tank.conductance_btu_hr_f``
+     - 0.89 BTU/hr per degF
+     - The water column's, end to end (10.7 between each pair of twelve
+       layers): its slowest mode closes a two-zone gap on the 60 h
+       prior, ``mass / (pi^2 tau)``.
+   * - ``loss.ua_bottom_btu_hr_f``
+     - 1.8 BTU/hr per degF
+     - The bottom loss (``loss.bottom_loss_btu_hr``, 90.8 BTU/hr) over a
+       50 degF gap to the air, from the bottom layer alone.
+
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document
 (schema ``heater-params/2``; a ``heater-params/1`` document is refused,
