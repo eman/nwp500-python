@@ -392,6 +392,10 @@ Fixed
   the same instant changes the mode at once: the new mode's rule
   decides; a mode write held to a TOU window's end decides nothing
   then.
+- A setpoint raise in Energy Saver written with a mode that a TOU window
+  holds to its end starts the upper element, as a raise alone does: the
+  held mode leaves Energy Saver in force. It started nothing until the
+  window closed.
 - An element heating in the heat pump's place stops with
   ``HeatingInterval.stop`` ``heat_pump`` when the heat pump takes the
   recovery back, not ``mode``, so ``element_mode`` does not count that

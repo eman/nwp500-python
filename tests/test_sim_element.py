@@ -536,6 +536,38 @@ class TestWhatEndsTheRecovery:
         assert lower and lower[0].start.at == T0 + timedelta(minutes=5)
         assert lower[0].start.trigger == "electric_lower_after_upper"
 
+    @pytest.mark.parametrize("mode", [2, 4])
+    def test_a_held_mode_leaves_energy_savers_raise_its_start(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """Energy Saver in force inside a TOU window, raised to 140 °F
+        with an element mode the window holds: the raise starts the
+        upper element, as it does alone."""
+        s = _scenario(
+            110.0,
+            105.0,
+            mode=3,
+            setpoint_f=120.0,
+            given={
+                "schedules": _tou_opening_at(11, 30),
+                "commands": Commands(
+                    writes=(
+                        Write(
+                            at=T0 + timedelta(minutes=5),
+                            setpoint_f=140.0,
+                            mode=mode,
+                        ),
+                    )
+                ),
+            },
+        )
+        upper = [
+            h
+            for h in _walk(s, params)
+            if h.zone == "upper" and h.start.at == T0 + timedelta(minutes=5)
+        ]
+        assert upper
+
     def test_a_setpoint_write_the_compressor_has_reached_is_not_a_cut(
         self, params: HeaterParams
     ) -> None:
