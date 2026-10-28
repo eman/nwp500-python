@@ -721,30 +721,29 @@ an underestimate.
 Try an element mode
 ===================
 
-``element_mode`` projects one recovery in Energy Saver (3), High
-Demand (4) or Electric (2): how fast the upper zone comes up, the
-element's running time and energy, and the tank when you switch back.
+``element_mode`` walks a stint in Energy Saver (3), High Demand (4) or
+Electric (2): the scenario with the mode written at its start, to the
+end of the recovery that write sets off, or to the switch-back. It
+gives how fast the upper zone comes up, the elements' and the heat
+pump's energy, slot by slot, and the tank when the stint ends.
 
 .. code-block:: python
 
    e = sim.element_mode(
-       sa.heater_state(status),
-       sa.settings(status),
+       scenario,
        params,
        mode=4,                      # High Demand
-       at=scenario.start,
        switch_back_after_minutes=30,
    )
    print(e.reachable, e.unreachable_reason)
-   print(e.plan.upper_setpoint_minutes, e.plan.element_kwh)
+   print(e.upper_setpoint_minutes, e.element_kwh, e.heat_pump_kwh)
 
 ``reachable`` is False inside a TOU window, where a mode write may not
 take, and while heating is disabled. The heater's own marker
 (``Settings.hp_upper_on_f``) decides, and an unknown marker counts as
-in force. ``setpoint_f=`` projects to another setpoint without moving
-that test. To see the whole day with the
-mode in force, simulate a mode write instead (`Evaluate a change before
-sending it`_).
+in force. ``setpoint_f=`` writes another setpoint with the mode
+without moving that test. To see the whole day with the mode in force,
+simulate a mode write instead (`Evaluate a change before sending it`_).
 
 
 Have it ready by a time
@@ -1249,19 +1248,19 @@ change rows (``sim_adapters.record``):
    record = sim_adapters.record(readings)
    stints = cal.element_stints(record, draws=meter_draws,
                                circulation=circulation_runs, tz=tz)
-   lag = cal.fit_element_lag(stints)          # upper_dead_time_min, upper_f_per_min
+   lag = cal.fit_element_lag(stints)          # upper_dead_time_min
    off = cal.element_off_points(record, tz=tz)  # where each element stops
    power = cal.element_power(record, off)       # W per metered stint
-   rates = cal.fit_element_rates(cal.element_grid(record, draws=meter_draws))
+   watts = cal.fit_element_w(cal.element_grid(record, draws=meter_draws))
 
 ``meter_draws`` and ``circulation_runs`` are ``(start, end)`` spans
 from your meter and your circulation. A stint is left out when a draw
 or a circulation run falls within 5 minutes before it, up to its
 first rise. Without a meter no stint counts as draw-free, and the lag
 fit is left with the stints that ended cleanly. The upper probe's lag
-and rate are fitted as one line, run minutes = lag + rise / rate. The
-rate taken end to end on the grid (``fit_element_rates``) comes out
-lower because the lag is inside it. ``day_ci`` is the 90 % interval
+and rise are fitted as one line, run minutes = lag + rise / rate; the
+layers take the element's heat after that lag. ``fit_element_w`` is the
+element's power, from the minutes it ran without the compressor. ``day_ci`` is the 90 % interval
 the measurements report, bootstrapped over local days.
 ``cal.energy_saver_off_deficit(off)`` reduces the off-edges to Energy
 Saver's stop short of the setpoint, and

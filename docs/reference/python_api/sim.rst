@@ -119,6 +119,9 @@ Results
 .. autoclass:: nwp500.sim.ElementModeResult
    :members:
 
+.. autoclass:: nwp500.sim.ElementInterval
+   :members:
+
 
 Parameters
 ==========
@@ -174,7 +177,7 @@ Hot water and calibration
       recent_flow_gpm,
       flow_lookup, element_stints, fit_element_lag, ElementLagFit,
       element_off_points, element_power, element_grid, element_runs,
-      fit_element_rates, ElementRateFit, day_ci,
+      fit_element_w, ElementPowerFit, day_ci,
       energy_saver_off_deficit, upper_start_edge, snapshots, recoveries, quiet_windows,
       busy_intervals, DRAW_LEAD,
       heat_pump_cycles, HeatPumpCycle, water_in_use
@@ -283,10 +286,8 @@ The pieces the entry points are built from.
       with_terms, ASSIMILATE_EVERY, MINUTE
 
 .. automodule:: nwp500.sim.physics.element
-   :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
-      ElementInterval, entry_deficit_f, entry_bracket_f,
-      upper_off_deficit_f, coast_f, upper_rise_f, is_heater_mode,
-      DEVICE_MODE, HEATER_MODE
+   :members: entry_deficit_f, entry_bracket_f, upper_off_deficit_f,
+      is_heater_mode, DEVICE_MODE, HEATER_MODE
 
 .. automodule:: nwp500.sim.physics.draw
    :members: delivery_temp_f, hot_fraction, withdrawn_gal,

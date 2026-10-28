@@ -22,7 +22,7 @@ from nwp500.sim.engine import (
     energy_by_slot,
     energy_by_source,
 )
-from nwp500.sim.physics.element import ModePlan
+from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import Point
 
 
@@ -234,15 +234,53 @@ class Trace:
 
 
 @dataclass(frozen=True)
+class ElementInterval:
+    """One slot of an element-mode stint's electricity."""
+
+    #: Minutes from the stint's start to the slot's end.
+    end_minute: float
+    #: The elements' input over the slot, Wh.
+    element_wh: float
+    #: The heat pump's, Wh (High Demand and Energy Saver run it
+    #: alongside).
+    heat_pump_wh: float
+
+
+@dataclass(frozen=True)
 class ElementModeResult:
-    """A recovery projected in an element mode from an instant
-    (``physics.element.mode_plan``), and whether a mode write can take
-    then."""
+    """A stint in an element mode from an instant (``api.element_mode``):
+    the scenario walked with the mode written then, and whether a mode
+    write can take then. Minutes are from ``starts_at``; a time the
+    stint does not reach is None."""
 
     starts_at: datetime
-    plan: ModePlan
+    mode: HeaterMode
     #: False while heating is disabled (Vacation, Power Off) or a TOU
     #: window is in force, when a mode write may not take effect.
     reachable: bool
     #: Why not, when not.
-    unreachable_reason: str | None = None
+    unreachable_reason: str | None
+    #: When the upper probe reaches the ready level, and the setpoint
+    #: (0 when it already has).
+    upper_ready_minutes: float | None
+    upper_setpoint_minutes: float | None
+    #: When the recovery the write set off ends: every element and the
+    #: heat pump stopped. None when the switch-back comes first, or it
+    #: does not end within the walk.
+    full_minutes: float | None
+    #: The stint's end, and the tank then: the probes and the layers
+    #: (``HeaterState.layers_f``).
+    end_minute: float
+    end_upper_f: float
+    end_lower_f: float
+    end_layers_f: tuple[float, ...] | None
+    #: The elements' running time and energy over the stint.
+    element_minutes: float
+    element_kwh: float
+    #: The heat pump's energy over the stint; None when a recovery could
+    #: not price it.
+    heat_pump_kwh: float | None
+    profile: tuple[ElementInterval, ...]
+    #: Why the answer may be less than it seems: the walk's own reasons,
+    #: and always ``element_model_small_n``.
+    reasons: tuple[str, ...]

@@ -293,8 +293,13 @@ Entry points
    heat pump the tank coasts to the heater's own trigger and recovers
    from there, with the TOU cap judged where it ends.
 
-``element_mode(state, settings, params, mode=..., at=...)``
-   One recovery in an element mode, from the element model.
+``element_mode(scenario, params, mode=...)``
+   "What if I switch to Energy Saver, High Demand or Electric?": the
+   scenario walked with that mode written at its start, to the end of
+   the recovery the write sets off or a switch-back. The elements and,
+   in High Demand and Energy Saver, the heat pump heat the layers
+   together, so the times, the energy and the tank at the end are one
+   walk's.
 
 ``standby`` with ``settings`` also says when the heater would start
 itself on the coast and why; every walk with draws says when a draw

@@ -76,6 +76,11 @@ FITTED_DOC = (
 )
 
 
+#: What the document carries that the parameters no longer have: the
+#: element-mode planner's rates, the layers' element heat in their place.
+REMOVED = {"element.upper_f_per_min", "element.lower_f_per_min"}
+
+
 def test_a_fitted_document_reads_to_its_values_bit_for_bit() -> None:
     doc = json.loads(FITTED_DOC.read_text())
     p = params_from_document(doc)
@@ -83,29 +88,43 @@ def test_a_fitted_document_reads_to_its_values_bit_for_bit() -> None:
         if part == "schema":
             continue
         for name, value in values.items():
+            if f"{part}.{name}" in REMOVED:
+                continue
             got = getattr(getattr(p, part), name)
             # A document holds a tuple as a list.
             if isinstance(got, tuple):
                 got = list(got)  # pyright: ignore[reportUnknownArgumentType]
             assert got == value and repr(got) == repr(value), (part, name)
-    assert unknown_fields(doc) == []
+    assert set(unknown_fields(doc)) == REMOVED
 
 
 def test_a_fitted_document_writes_back_as_it_was() -> None:
-    """What it carries is written back unchanged; the parts and fields
-    added since it was written are their defaults."""
+    """What it carries is written back unchanged, but for the fields
+    removed since; the parts and fields added since it was written are
+    their defaults."""
     doc = json.loads(FITTED_DOC.read_text())
     written = json.loads(
         json.dumps(params_to_document(params_from_document(doc)))
     )
     assert {
         part: (
-            {k: written[part][k] for k in values}
+            {
+                k: written[part][k]
+                for k in values
+                if f"{part}.{k}" not in REMOVED
+            }
             if isinstance(values, dict)
             else written[part]
         )
         for part, values in doc.items()
-    } == doc
+    } == {
+        part: (
+            {k: v for k, v in values.items() if f"{part}.{k}" not in REMOVED}
+            if isinstance(values, dict)
+            else values
+        )
+        for part, values in doc.items()
+    }
     assert params_from_document(written) == params_from_document(doc)
 
 
@@ -179,7 +198,7 @@ def test_without_a_valve_every_gallon_is_tank_water() -> None:
     [
         ("tank", "volume_gal", HEATER),
         ("controller", "restart_lockout_s", HEATER),
-        ("element", "upper_f_per_min", HEATER),
+        ("element", "upper_dead_time_min", HEATER),
         ("draw", "delivery_intercept_f", INSTALLATION),
         ("draw", "inlet_temp_f", INSTALLATION),
         ("draw", "delivery_slope", INSTALLATION),
