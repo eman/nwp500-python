@@ -88,7 +88,8 @@
     "domain_volume_gal": [
       1.0,
       41.6
-    ]
+    ],
+    "draw_gpm": 0.3
   },
   "controller": {
     "write_start_lag_s": 30.0,
@@ -110,33 +111,8 @@
   },
   "readiness": {
     "line_f": 105.0,
-    "delivered_lag_gal": 5.0,
-    "fall_f_per_gal": 2.0,
     "probe_resolution_f": 1.0,
     "bath_gal": 28.7,
-    "shower_gal": 12.0,
-    "evidence": []
-  },
-  "book": {
-    "tank_gal": 63.2,
-    "hp_btu_per_h": 4338.0,
-    "hp_btu_per_h_per_f": 66.0,
-    "element_w": 5148.0,
-    "ua_btu_per_h_f": 2.88,
-    "reference_f": 70.0,
-    "inlet_default_f": 70.0,
-    "delivery_intercept_f": 0.0,
-    "delivery_slope": 1.0,
-    "empty_btu": 16169.0,
-    "zone_empty_btu": 12636.0,
-    "zone_mix_f_per_gal": 1.25,
-    "zone_mix_gal": 14.0,
-    "error_btu": 3000.0,
-    "aged_error_btu": 4100.0,
-    "uniform_band_f": 1.5,
-    "anchor_run_min": 15.0,
-    "max_anchor_age_h": 18.0,
-    "history_h": 72.0,
-    "draw_gpm": 0.3
+    "shower_gal": 12.0
   }
 }

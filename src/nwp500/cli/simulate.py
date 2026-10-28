@@ -11,7 +11,6 @@ This module needs the ``sim`` extra; ``__main__`` imports it only when a
 """
 
 import csv
-import dataclasses
 import json
 import logging
 import os
@@ -43,7 +42,7 @@ if TYPE_CHECKING:
     from nwp500.api_client import NavienAPIClient
     from nwp500.models import Device
     from nwp500.mqtt import NavienMqttClient
-    from nwp500.sim_home_assistant import HomeAssistantBook
+    from nwp500.sim_home_assistant import HomeAssistantTank
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -278,18 +277,18 @@ async def compose_live(
     return composed
 
 
-async def read_book(inputs: Inputs, now: datetime) -> HomeAssistantBook | None:
-    """The heat book's keeper (``sim_home_assistant.HomeAssistantBook``)
-    with the history read to ``now``, when the sources name the heater's
-    entities and the draw flow; None otherwise. Its ``book`` makes no
-    request, so it books after the client is closed."""
+async def read_tank(inputs: Inputs, now: datetime) -> HomeAssistantTank | None:
+    """The tank's keeper (``sim_home_assistant.HomeAssistantTank``) with
+    the history read to ``now``, when the sources name the heater's
+    entities and the draw flow; None otherwise. Its ``layers`` makes no
+    request, so it replays after the client is closed."""
     src = inputs.sources
     if src is None or src.heater is None or src.entities.draw_flow is None:
         return None
     from nwp500 import sim_home_assistant as ha
 
     async with ha.HomeAssistantClient(src.url, src.token) as client:
-        keeper = ha.HomeAssistantBook(
+        keeper = ha.HomeAssistantTank(
             client,
             src.heater,
             src.entities.draw_flow,
@@ -300,54 +299,27 @@ async def read_book(inputs: Inputs, now: datetime) -> HomeAssistantBook | None:
     return keeper
 
 
-def booked(
-    keeper: HomeAssistantBook | None, built: Built, now: datetime
-) -> sim.Booked | None:
-    """The tank's booked heat at the scenario's start, from ``keeper``
-    (``read_book``): only for a scenario that starts ``now``, whose
-    state is the heater's now. Its gallons convert at the scenario's
-    inlet where one is given, as the walk takes it. Its notes are
-    logged."""
-    if keeper is None:
-        return None
-    start = built.scenario.start
-    if start != now:
-        _logger.warning(
-            "book: the scenario starts at %s, not now: walked without "
-            "the heat book",
-            start.isoformat(),
-        )
-        return None
-    answer = keeper.book(now, built.params)
-    for note in answer.notes:
-        if answer.booked is None:
-            _logger.warning(note)
-        else:
-            _logger.info(note)
-    inlet = built.scenario.environment.inlet_f
-    if answer.booked is None or inlet is None:
-        return answer.booked
-    return dataclasses.replace(answer.booked, inlet_f=inlet)
-
-
 def layered(
-    keeper: HomeAssistantBook | None, built: Built, now: datetime
+    keeper: HomeAssistantTank | None, built: Built, now: datetime
 ) -> Built:
     """``built`` starting from the tank's layers its history leaves
-    (``HomeAssistantBook.layers``), the scenario's probes laid over
+    (``HomeAssistantTank.layers``), the scenario's probes laid over
     them: only for a scenario that starts ``now``, whose state is the
     heater's now, and gives no layers of its own. Without them, ``built``
-    as it is, which the simulator starts from the two probes. Its own
-    notes are logged (``booked`` logs the history's)."""
+    as it is, which the simulator starts from the two probes. The notes
+    are logged."""
     state = built.scenario.state
-    if (
-        keeper is None
-        or built.scenario.start != now
-        or state.layers_f is not None
-    ):
+    if keeper is None or state.layers_f is not None:
+        return built
+    if built.scenario.start != now:
+        _logger.warning(
+            "layers: the scenario starts at %s, not now: walked from "
+            "the two probes",
+            built.scenario.start.isoformat(),
+        )
         return built
     answer = keeper.layers(now, built.params, (state.upper_f, state.lower_f))
-    for note in (n for n in answer.notes if n.startswith("layers:")):
+    for note in answer.notes:
         if answer.layers_f is None:
             _logger.warning(note)
         else:
@@ -443,7 +415,6 @@ def energy_totals(
 
 def hot_water_lines(
     built: Built,
-    book: sim.Booked | None,
     bath_gal: float | None = None,
     shower_gal: float | None = None,
 ) -> list[str]:
@@ -455,7 +426,6 @@ def hot_water_lines(
         r = sim.time_to_ready(
             built.scenario,
             built.params,
-            book=book,
             bath_gal=bath_gal,
             shower_gal=shower_gal,
         )
@@ -483,23 +453,24 @@ def print_table(
     built: Built,
     result: sim.SimulationResult,
     console: Console,
-    book: sim.Booked | None = None,
     bath_gal: float | None = None,
     shower_gal: float | None = None,
 ) -> None:
-    """The heating intervals, the energy by source, the readiness (from
-    ``book`` when given) with the bath and the showers, the draw windows
+    """The heating intervals, the energy by source, the readiness with
+    the bath and the showers, the draw windows
     (and which ran cold), the reasons and the defaults."""
     s = built.scenario
     tz = s.tz
-    ready = sim.readiness(s.state, s.settings, built.params, book=book)
+    ready = sim.readiness(
+        s.state, s.settings, built.params, inlet_f=s.environment.inlet_f
+    )
     console.print(
         f"[bold]{_local(s.start, tz)} to {_local(s.until, tz)}[/bold] ({tz}): "
         f"tank {_temp(s.state.upper_f)} upper, {_temp(s.state.lower_f)} "
         f"lower, setpoint {_temp(s.settings.setpoint_f)}; "
         f"{_volume(ready.gal)} deliverable now ({ready.basis})"
     )
-    for line in hot_water_lines(built, book, bath_gal, shower_gal):
+    for line in hot_water_lines(built, bath_gal, shower_gal):
         console.print(line)
 
     heating = Table(title="Heating")
@@ -595,17 +566,15 @@ def run(
     now: datetime,
     output_format: str,
     out: TextIO | None = None,
-    keeper: HomeAssistantBook | None = None,
+    keeper: HomeAssistantTank | None = None,
 ) -> sim.SimulationResult:
     """Build the scenario, walk it and print the result: from the tank's
-    layers and its booked heat when ``keeper`` (``read_book``) gives
-    them."""
+    layers when ``keeper`` (``read_tank``) gives them."""
     built = layered(keeper, build(inputs, live, now), now)
     for note in built.notes:
         _logger.warning(note)
-    book = booked(keeper, built, now)
     try:
-        result = sim.simulate(built.scenario, built.params, book=book)
+        result = sim.simulate(built.scenario, built.params)
     except SimulationError as e:
         raise InputError(f"the scenario cannot be simulated: {e}") from None
     stream = out or sys.stdout
@@ -619,7 +588,6 @@ def run(
             built,
             result,
             Console(file=stream),
-            book,
             None if inputs.bath is None else sa.to_sim_volume(inputs.bath),
             None if inputs.shower is None else sa.to_sim_volume(inputs.shower),
         )

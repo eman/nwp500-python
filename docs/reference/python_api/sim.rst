@@ -31,8 +31,6 @@ Entry points
 
 .. autofunction:: nwp500.sim.default_params
 
-.. autofunction:: nwp500.sim.full_tank_book
-
 .. autofunction:: nwp500.sim.recovery_as_of
 
 
@@ -131,11 +129,11 @@ Parameters
 .. automodule:: nwp500.sim.params
    :members: TankParams, LossParams, CompressorParams, MAP_REF_AIR_F,
       MAP_REF_WATER_F, ElementParams, DrawParams, ControllerParams,
-      ReadinessParams, BookParams, Provenance, provenance_of, unit_of,
+      ReadinessParams, Provenance, provenance_of, unit_of,
       params_to_document, params_from_document, unknown_fields,
       PARAMS_SCHEMA, RETIRED_SCHEMAS, FITTED,
       MEASURED, DEFAULT, HEATER, INSTALLATION, UNFITTED_TERMS,
-      INSTALLATION_TERMS, CirculationParams
+      INSTALLATION_TERMS, RETIRED_TERMS, CirculationParams
 
 .. automodule:: nwp500.sim.defaults
    :members: site_example_params, with_valve, SITE_VALVE, NO_VALVE,
@@ -149,20 +147,20 @@ Extension points
    :members: RecoveryModel
 
 .. automodule:: nwp500.sim.api
-   :members: counter_measures_to_setpoint, tou_marked, marked_windows
+   :members: counter_measures_to_setpoint, tou_marked, marked_windows,
+      READY_HORIZON
 
 
-Hot water and the heat book
-===========================
+Hot water and calibration
+=========================
 
 .. automodule:: nwp500.sim.delivery
-   :members: deliverable, probes_gal, booked_deliverable, delivery_temp_f,
-      zone_delivery_f, delivery_along, depletion, draw_windows,
-      draw_domain_judgement, EXAMPLE_EVIDENCE, with_example_evidence
+   :members: deliverable, within_resolution, delivery_f, delivery_along,
+      depletion, Depletion, draw_windows, draw_domain_judgement
 
 .. automodule:: nwp500.sim.circulation
-   :members: Circulation, CirculationLoss, merge_runs, RUN_GAP,
-      cooled_share, displaced_gal
+   :members: Circulation, merge_runs, RUN_GAP, cooled_share,
+      displaced_gal
 
 .. automodule:: nwp500.sim.location_air
    :members: LocationAirModel, SITE_LOCATION_AIR, project, fit,
@@ -170,11 +168,7 @@ Hot water and the heat book
 
 .. automodule:: nwp500.sim.calibration
    :members: calibrate, Calibration, clean_draws, CleanDraw, crossing,
-      demonstrated, frontier, capacity, held_out, fit_evidence,
-      EvidenceFit, RecordedBook, fit_book_terms, BookFit,
-      fit_terms_l1, BOOK_TERMS, BOOK_TERM_BOUNDS, BOOK_CIRCUIT_GAL_BOUNDS,
-      book_error_bands, book_error_btu, empty_point, book_walk, long_draws,
-      mixing_frame, fit_zone_mix, ZoneMixFit, MeasuredRun,
+      demonstrated, MeasuredRun,
       measure_runs, run_heat_btu, fit_return, fit_displaced_gal,
       REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS, MIN_TERM_INDEPENDENCE,
       recent_flow_gpm,
@@ -208,7 +202,7 @@ Hot water and the heat book
       draws_first, forecast_loads, shower_gal
 
 .. automodule:: nwp500.sim.cold_supply
-   :members: plateau_t_cold, ColdSupply, ColdSupplyParams, on_the_mains
+   :members: plateau_t_cold, ColdSupply, ColdSupplyParams
 
 .. automodule:: nwp500.sim.record
    :members: Record, RecordedWrite, Recorded, RecordedStarts, corroborator
@@ -222,16 +216,12 @@ Hot water and the heat book
       SourceInterval, Start, Slot, Gap, count_starts, effective
 
 .. automodule:: nwp500.sim.ready
-   :members: assess, Recovery, TankNow, showers_ready_for, whole_showers
+   :members: assess, Recovery, TankNow, ModeRun, MODES, showers_ready_for,
+      whole_showers
 
 .. automodule:: nwp500.sim.history
    :members: Step, house_gpm, drawn_gal, record, replay, REPLAY,
       FlowVolume, AMBIENT_DEFAULT_F
-
-.. automodule:: nwp500.sim.book
-   :members: Booked, SpanLoss, full_tank_book,
-      full_tank, walk_booked, loss_ceiling_btu, BookedPath,
-      book_steps, step_heat_btu, inlet_now_f, mains_f, draw_out
 
 
 The engine and the physics
@@ -337,9 +327,7 @@ Recorded history
 .. automodule:: nwp500.sim_calibrate
    :members: calibrate, calibrate_changes, Calibrated, TankCalibration,
       MIN_TANK_EVENTS, MIN_TANK_RECOVERIES, TANK_EVALUATIONS, prepare,
-      prepare_changes, Prepared, report, Term,
-      fit_book, BookTermsFit, MIN_BOOK_PAIRS, MIN_RUN_PAIRS,
-      score, Judged, HeldOut, GROUPS, air_unread_note,
+      prepare_changes, Prepared, report, Term, score, Judged, HeldOut, GROUPS, air_unread_note,
       CalibrationInputError, DEFAULT_HUMIDITY_PCT,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
 
@@ -354,7 +342,7 @@ Home Assistant sources
 
 .. automodule:: nwp500.sim_home_assistant
    :members: HomeAssistantEnvironment, HomeAssistantClient, fit_location_air,
-      Run, inline, HomeAssistantBook, BookAnswer, BOOK_WINDOW,
+      Run, inline, HomeAssistantTank, LayersAnswer, TANK_WINDOW,
       mains_plateau, known_runs,
       record_inputs,
       RecordInputs, INLET_LOOKBACK, PROBE_STEP, held, LOCATION_AIR_WINDOW,

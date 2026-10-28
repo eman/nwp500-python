@@ -186,27 +186,21 @@ give:
   draws hot water, with the circulation's water not among its draws. A
   circulation pump with no speed reading leaves no estimate, and a draw
   before its first reading is skipped;
-- **the heat book:** with the ``[home_assistant.heater]`` table and a
-  ``draw_flow`` entity (the household's hot water draw flow, the
+- **the tank's layers:** with the ``[home_assistant.heater]`` table and
+  a ``draw_flow`` entity (the household's hot water draw flow, the
   circulation's water not in it; ``draw_flow_volume`` says whether its
   gallons are ``"delivered"`` through the mixing valve, the default, or
-  the ``"tank"``'s own water), the tank's heat booked from the last
-  72 hours of the heater's readings and the draws
-  (``sim_home_assistant.HomeAssistantBook``). The run walks from it,
-  and "deliverable now" reads it (``energy``), whatever the gap between
-  the two probes. Without it, the probes answer from the heat they
-  place in the tank, apart or not (``probes``). With no full
-  tank in the 72 hours, or a scenario that doesn't start now, the run
-  walks without the book, and a warning says why;
-- **the tank's layers:** with the same entities, the layers the last
-  24 hours leave (``HomeAssistantBook.layers``): the heat pump's runs,
+  the ``"tank"``'s own water), the layers the last 24 hours leave
+  (``sim_home_assistant.HomeAssistantTank``): the heat pump's runs,
   the elements', the draws and the circulation's walked through the
   tank, corrected to the probes as they were read, the probes now laid
   over them. The run starts from them, so the water below the lower
   probe is where the history left it: cold after a draw, hot after a
-  recovery. Without them, or for a scenario that doesn't start now, it
-  starts from the two probes, and ``reasons`` says
-  ``tank_profile_estimated``.
+  recovery, and "deliverable now" reads them (``layers``). Without
+  them, or for a scenario that doesn't start now, it starts from the
+  profile the two probes stand for, "deliverable now" says
+  ``probes``, ``reasons`` says ``tank_profile_estimated``, and a
+  warning says why.
 
 Under "deliverable now", the table gives the bath and the showers the
 tank is ready for (``sim.time_to_ready``): the bath ready with its
@@ -654,29 +648,28 @@ the water falls below the line (105 degF by default).
    d = sim.readiness(sa.heater_state(status), sa.settings(status), params)
    print(f"{sa.volume(d.gal):.0f} {sa.volume_unit()} ({d.basis})")
 
-Without more to go on, the answer is the tank's heat as its two probes
-place it (``basis`` ``probes``), heating or not. Give it more:
+Without more to go on, the answer is the profile the two probes stand
+for (``basis`` ``probes``), heating or not. The probes can't see the
+water below the lower one: after a draw the bottom is the inlet's, which
+they read as no different from a tank that coasted. Give it the tank's
+layers as its history left them (**The tank's layers**, under `Improve
+accuracy`_) and
+it reads those (``basis`` ``layers``):
 
-- **A heat book**, if you know the tank is full: quiet since a recovery
-  ended, or the heat pump running with the probes within the book's
-  band and nothing drawn in its last 15 minutes (``basis`` becomes
-  ``energy``):
+.. code-block:: python
 
-  .. code-block:: python
+   state = sa.heater_state(status).model_copy(update={"layers_f": layers})
+   d = sim.readiness(state, sa.settings(status), params, inlet_f=inlet)
 
-     book = sa.full_tank_book(status, params)  # nothing drawn since it heated
-     d = sim.readiness(
-         sa.heater_state(status), sa.settings(status), params, book=book
-     )
-
-- **Evidence**: draws from your own record of how much a tank in a
-  given state delivered (``ReadinessParams.evidence``,
-  :doc:`/reference/simulator-inputs`).
-
-The gallons include the tank water above the upper probe, which still
-leaves hot after the probe crosses the line
-(``ReadinessParams.delivered_lag_gal``, 5 gal, from one bath on an
-NWP500-65). The water standing in your pipe is not in them.
+The tank's water leaves the top in turn, each gallon tempered by the
+mixing valve, until what the valve delivers falls below the line; the
+gallons include the water above the upper probe, which still leaves hot
+after the probe crosses the line. ``inlet_f`` is the mains the draw
+meets, else ``DrawParams.inlet_temp_f``: through a valve, a colder
+inlet takes more tank water a gallon. The water standing in your pipe is
+not in them. ``delivery.within_resolution`` says whether a probe error
+of ``ReadinessParams.probe_resolution_f`` would take the answer across a
+volume.
 
 
 Ask when a bath will be ready
@@ -693,7 +686,6 @@ showers it is ready for.
        scenario,
        params,
        bath_gal=sa.to_sim_volume(40.0),  # your bath, in your unit
-       book=book,                        # if you have one
    )
    print(r.bath.ready, r.bath.margin_gal, r.bath.ready_in_minutes)
    for m in r.bath.by_mode:
@@ -701,13 +693,23 @@ showers it is ready for.
              f"{'' if m.reachable_now else ' (not reachable now)'}")
    print(r.showers.ready_for_whole, "showers;", r.reasons)
 
-The heat pump's time follows the recovery the heater runs next
-(``r.recovery``): from now if the compressor runs, else from its own
-trigger on the coast to it, under the scenario's draws, with the TOU
-cap applied where the recovery ends. An element mode is not reachable
-inside a TOU window, nor anything while heating is disabled. The bath
-defaults to ``ReadinessParams.bath_gal`` (28.7 gal, one household's),
-the shower to 12 gal; ``defaults_used`` says when they were used.
+The gallons now are ``readiness``'s, from the scenario's state (its
+``layers_f`` when given) at its inlet. When the bath isn't ready, each
+mode's time is the scenario walked with that mode written at its start,
+as the heater takes a mode write (an element mode runs its entry rule),
+for up to 24 hours (``READY_HORIZON``), to the first instant its layers
+deliver the bath; its energy is the walk's electricity to then. The
+heat pump's row is the heater's own walk: from now if the compressor
+runs, else from its own trigger on the coast to it, under the scenario's
+draws and the TOU windows the heater keeps (an unknown marker with an
+unknown schedule counts as in force); ``r.recovery`` is the next
+recovery with the TOU cap judged where it ends. A mode the scenario
+writes at its start is replaced by each row's own; its later writes
+still take. An element mode's row carries the reasons its walk adds to
+the answer's. An element mode is not reachable inside a TOU
+window, nor anything while heating is disabled. The bath defaults to
+``ReadinessParams.bath_gal`` (28.7 gal, one household's), the shower to
+12 gal; ``defaults_used`` says when they were used.
 
 The recovery is the core's physics alone. It runs short on long
 recoveries (:doc:`/explanation/simulator`), so a long time to ready is
@@ -788,18 +790,17 @@ the tank could supply it:
        [(start + timedelta(minutes=i), 2.5) for i in range(16)],  # 40 gal
        windows=[(start, start + timedelta(minutes=20), 40.0)],
    )})
-   r = sim.simulate(bath, params, book=book)
+   r = sim.simulate(bath, params)
    w = r.windows[0]
    print(w.deliverable_gal, w.margin_gal, w.depleted, w.delivery_min_f)
 
-``deliverable_gal`` and ``margin_gal`` are the tank at the window's
-onset against the gallons expected; ``depleted`` says the delivered
-water fell below the line.
-
-Without a ``book``, the delivery is the upper probe's as the tank's
-layers carry it through each draw, and ``reasons`` says
-``no_heat_book``. ``result.delivery`` and ``sa.path(result)`` give the
-delivered temperature along the whole walk.
+``deliverable_gal`` and ``margin_gal`` are the tank's layers at the
+window's onset against the gallons expected; ``depleted`` says the
+delivered water fell below the line. Both read the same layers, so they
+agree on whether the tank runs out. The delivery is the top layer's
+water through the mixing valve (``delivery.delivery_f``);
+``result.delivery`` and ``sa.path(result)`` give it along the whole
+walk.
 
 
 Improve accuracy
@@ -873,7 +874,7 @@ draws it expects instead:
        loads, withheld = draw_forecast.forecast_loads(
            profile, scenario.start, worst_case=True)
        result = sim.simulate(scenario.model_copy(update={"loads": loads}),
-                             params, book=book, withheld_windows=withheld)
+                             params, withheld_windows=withheld)
 
 ``draw_forecast.shower_gal(profile)`` over the next 24 hours is the
 long draw the household expects, the rate-weighted mean of the long
@@ -923,7 +924,7 @@ schedule, give the runs and what each takes
    circulating = scenario.model_copy(update={"loads": sim.Loads(
        circulation=runs)})
    mine = replace(params, circulation=sim.CirculationParams(
-       displaced_gal=5.0, flow_gpm=1.5, loss_btu_per_gal=150.0))
+       displaced_gal=5.0, flow_gpm=1.5))
 
 **The tank's layers.** Two probes don't say where the water below the
 lower one is: a tank coasting after a draw and one coasting after a
@@ -944,35 +945,16 @@ walks the last 24 hours of it:
    )
    state = sa.heater_state(status).model_copy(update={"layers_f": layers})
 
-``sa.layers_from_changes`` takes the history as changes, with the same
-arguments as ``book_from_changes`` below, and refuses the same way: None
-while the heater isn't heard now or the flow is unknown now. The replay
-starts no earlier than the flow's first reading, and a meter that is
-silent for an hour (``layers_from_history``), or has no reading at all,
-raises a ValueError: it would replay as no draw. Either
-lays the record's last probe readings over the layers; ``probes=(upper,
+The deliverable gallons, the delivery and the draw windows then read
+them (``basis`` ``layers``). A meter that is silent for an hour in the
+span raises a ValueError: it would replay as no draw. The replay lays
+the record's last probe readings over the layers; ``probes=(upper,
 lower)`` lays others, such as the state's. A None leaves ``layers_f``
-None, and the simulator starts from the two probes.
-
-**The heat book.** With a hot-water flow meter and a record of the
-heater's statuses, book the tank's heat from the record and pass it as
-``book=``: the delivery and the draw windows then read the heat
-booked as the tank empties.
-
-.. code-block:: python
-
-   book = sa.book_from_history(
-       recorded,              # [(instant, DeviceStatus), ...]
-       params,
-       at=now,
-       flow=meter_flow,       # [(instant, flow per minute), ...]
-       circulation=runs,      # [(start, end), ...], if you circulate
-       circulation_flow=pump_flow,
-   )
-   readiness = sim.time_to_ready(scenario, params, book=book)
+None, and the simulator starts from the two probes. A flow below
+``DrawParams.draw_gpm`` (0.3 gal/min) is no draw.
 
 With the heater's values recorded as changes instead (Home Assistant's
-entity history, which ``read_heater_history`` reads), book from those,
+entity history, which ``read_heater_history`` reads), replay those,
 with the instants the heater was heard from:
 
 .. code-block:: python
@@ -980,7 +962,7 @@ with the instants the heater was heard from:
    from nwp500 import sim_home_assistant as ha
 
    history = await ha.read_heater_history(client, entities, start, now)
-   book = sa.book_from_changes(
+   layers = sa.layers_from_changes(
        history.rows,
        history.observed,
        params,
@@ -993,139 +975,128 @@ with the instants the heater was heard from:
 
 ``flow`` is the household's draws. If your meter also carries the
 circulation's water, separate the household's draws from it yourself
-and pass those, with ``CirculationParams.meter_share`` 0, so the book
+and pass those, with ``CirculationParams.meter_share`` 0, so the replay
 takes nothing off them again. Clean up the loop's flow before passing it
 too (drop readings below the pump's floor, or one taken mid-ramp): while
 a run is on, each step takes the last reading in force (a run before
 any reading takes ``CirculationParams.flow_gpm``).
 
-Like the history's rows, its ``flow``, ``circulation_flow``, ``inlet``
-and ``air`` are changes: each value holds until the next, so a steady
-draw is one row and an hour at 0 gal/min none. They are gal/min and °F,
-whatever the preferred units. Across a span the heater wasn't heard
-from (an outage, or a silence much longer than its usual reporting), or
-the flow was unknown (``flow_outages``, from the history's
-``outages``), such as a Home Assistant restart's few minutes, the book
-holds each value from before it and walks on. The flow holds only
-``FLOW_HOLD`` (a minute), as a reading does, and is 0 after: a draw
-going in most likely ended within minutes, and holding it would charge
-a draw nobody made. On one installation's meter, February to October
-2026, a draw was running at 4 of its silences (each 3 to 5 minutes);
-2 had ended by the next report and 2 ran on. ``HomeAssistantBook`` holds the pump's speed across
-its outages for ``PUMP_STALE`` (five minutes) the same way. The book is None while
-the heater isn't heard now or the flow is unknown now. A record that
-keeps no instant for each of the heater's responses passes ``heard=``,
-the spans the heater was heard over, and an empty ``observed``: the
-book walks across a gap between two spans the same way, and the heater
-is heard now only inside a span. With no flow reading in force
-at the start of the window it books over, it raises ``ValueError``.
-An inlet reading holds except through ``inlet_outages``.
+Like the history's rows, its ``flow``, ``circulation_flow`` and ``air``
+are changes: each value holds until the next, so a steady draw is one
+row and an hour at 0 gal/min none. They are gal/min and °F, whatever
+the preferred units. Across a span the heater wasn't heard from (an
+outage, or a silence much longer than its usual reporting), or the flow
+was unknown (``flow_outages``, from the history's ``outages``), such as
+a Home Assistant restart's few minutes, the replay holds each value from
+before it and walks on. The flow holds only ``FLOW_HOLD`` (a minute),
+as a reading does, and is 0 after: a draw going in most likely ended
+within minutes, and holding it would charge a draw nobody made. On one
+installation's meter, February to October 2026, a draw was running at 4
+of its silences (each 3 to 5 minutes); 2 had ended by the next report
+and 2 ran on. ``HomeAssistantTank`` holds the pump's speed across its
+outages for ``PUMP_STALE`` (five minutes) the same way. The layers are
+None while the heater isn't heard now or the flow is unknown now. A
+record that keeps no instant for each of the heater's responses passes
+``heard=``, the spans the heater was heard over, and an empty
+``observed``: the replay walks across a gap between two spans the same
+way, and the heater is heard now only inside a span. The replay starts
+no earlier than the flow's first reading, as the draws before it are
+unknown; with no flow reading at all, it raises ``ValueError``.
 
-To keep a book current as you walk every few minutes, keep the history
-rather than the book. Read only what is new since your last read,
-extend what you hold with it, trim it to the book's window, and book
-again from memory:
+To keep the layers current as you walk every few minutes, keep the
+history rather than the layers. Read only what is new since your last
+read, extend what you hold with it, trim it to the replay's span, and
+replay again from memory:
 
 .. code-block:: python
 
+   from nwp500.sim.history import REPLAY
+
    newer = await ha.read_heater_history(client, entities, last_read, now)
-   history = history.extended(newer).since(now - timedelta(hours=72))
+   history = history.extended(newer).since(now - REPLAY)
    flows = flows.extended(
        await client.read_history([FLOW], last_read, now)
-   ).since(now - timedelta(hours=72))
+   ).since(now - REPLAY)
    last_read = now
 
 ``HeaterHistory`` and ``History`` both take ``extended`` and ``since``.
 A read opens with the value in force at its start; as each value holds
 until the next change, that row changes nothing. Where both reads have
 a row at one instant, the later read's is kept. ``since`` keeps each
-value in force at the cut. 72 hours is ``BookParams.history_h``, the
-oldest anchor a book reads.
+value in force at the cut. ``REPLAY`` (24 hours) is the span a replay
+walks.
 
-``sim_home_assistant.HomeAssistantBook`` does all of that from Home
+``sim_home_assistant.HomeAssistantTank`` does all of that from Home
 Assistant's entities:
 
 .. code-block:: python
 
-   keeper = ha.HomeAssistantBook(
+   keeper = ha.HomeAssistantTank(
        client,
        heater_entities,                 # ha.HeaterEntities
        "sensor.hot_water_draw_flow",   # the household's draws
-       ha.Entities(
-           circulation_speed="sensor.circulation_pump_speed",
-           inlet="sensor.cold_supply_temperature",
-           demand="binary_sensor.hot_water_demand",
-       ),
+       ha.Entities(circulation_speed="sensor.circulation_pump_speed"),
    )
 
-   await keeper.read(now)       # all 72 h the first time, then what's new
-   answer = await hass.async_add_executor_job(keeper.book, now, params)
-   readiness = sim.time_to_ready(
-       scenario, params, book=answer.booked,
-       inlet_measured=answer.inlet_measured,
+   await keeper.read(now)       # all 24 h the first time, then what's new
+   probes = (state.upper_f, state.lower_f)
+   answer = await hass.async_add_executor_job(
+       keeper.layers, now, params, probes
    )
+   state = state.model_copy(update={"layers_f": answer.layers_f})
 
 ``read`` reads the history since the last read and holds it; a read
 that fails is noted, and the next one reads from where it would have
-started. Until then, ``book`` takes the flow as unknown since the last
-read that worked, rather than holding its last value, and after a
-failed read of the heater it gives no book. An optional
-entity whose unit can't be read is left out of the book. With no air
-entity, or one that gives no reading, the book takes the heater's own
-air reading (``HeaterEntities.ambient``) once its compressor has run 5
-minutes, and holds it until the next run, and a note says so. Idle, that
-sensor reads the cabinet, about 6 °F warm, so an idle reading is never
-taken. Before the first run, and while an air entity that gives readings
-is unavailable or reads in a unit the book doesn't read, the book takes
-the default air (65 °F). ``book`` books from what it holds, with no
-request, so it can run in an executor. ``answer.notes`` say what the book rests on, or why
-there is none.
+started. Until then, ``layers`` takes the flow as unknown since the
+last read that worked, rather than holding its last value, and after a
+failed read of the heater it gives no layers. An optional entity whose
+unit can't be read is left out of the replay. With no air entity, or
+one that gives no reading, the replay takes the heater's own air
+reading (``HeaterEntities.ambient``) once its compressor has run 5
+minutes, and holds it until the next run, and a note says so. Idle,
+that sensor reads the cabinet, about 6 °F warm, so an idle reading is
+never taken. Before the first run, and while an air entity that gives
+readings is unavailable or reads in a unit the replay doesn't read, the
+replay takes the default air (65 °F). ``layers`` replays what it holds,
+with no request, so it can run in an executor. ``answer.notes`` say
+what the layers rest on, or why there are none.
 
 The flow is the household's hot water draws, without the circulation's
 water, in gal/min or any unit ``to_gpm`` reads. Say which water its
 gallons count with ``flow_volume``:
 
 - ``"delivered"`` (the default): the water at the taps, through the
-  mixing valve. The book prices a gallon at the valve's delivery line
-  (``DrawParams.delivery_intercept_f`` and ``delivery_slope``), and
-  takes only its hot share from the tank.
+  mixing valve (``DrawParams.delivery_intercept_f`` and
+  ``delivery_slope``). The replay draws them through the valve, taking
+  only their hot share from the tank.
 - ``"tank"``: the tank's own water, as a meter or a draw detector on
-  the heater's hot outlet counts it. The book prices a gallon at the
-  upper probe less the inlet, and the inlet replaces every gallon.
+  the heater's hot outlet counts it. Every gallon leaves the tank, and
+  the inlet replaces it.
 
-Read as delivered, a tank-water flow books about a quarter of each
-draw's heat too little (a 141 degF tank behind a valve delivering 122
-degF), and the book promises hot water that isn't there. The shipped
-empty points (``BookParams.empty_btu`` and ``zone_empty_btu``) were
-booked as delivered gallons, so with ``"tank"`` refit ``empty_btu`` on
-your record (``calibration.empty_point``, below) and keep
-``zone_empty_btu`` as far below it; booked as tank water, the same
-drawdown leaves less heat at the line. As none of the flow is circulation,
-``book`` takes ``CirculationParams.meter_share`` as 0. A flow entity that reports a draw late
-reaches the book late: the book holds what the history holds at
+Read as delivered, a tank-water flow draws about a quarter of each
+draw's water too little from the tank (a 141 degF tank behind a valve
+delivering 122 degF), and the layers hold hot water that isn't there.
+As none of the flow is circulation, ``layers`` takes
+``CirculationParams.meter_share`` as 0. A flow entity that reports a
+draw late reaches the replay late: it replays what the history holds at
 ``read``. Each of the other entities is optional:
-``circulation_speed`` gives the circulation's runs, ``inlet`` the inlet
-the book converts at, ``inlet`` with ``demand`` the mains, and ``air``
-the air beside the heater.
+``circulation_speed`` gives the circulation's runs, and ``air`` the air
+beside the heater.
 
-Without a meter, start one only when you know the tank is full
-(``sa.full_tank_book``).
-
-The book reads the mains from the long draws in its own record
-(``book.mains_f``), or uses ``params.book.inlet_default_f`` without
-one. With
-an inlet probe on the cold supply, convert its gallons at the probe's
-plateau over a longer window instead:
+**The inlet.** Without one, a draw meets ``DrawParams.inlet_temp_f``.
+With an inlet probe on the cold supply, take the mains from its plateau
+over the long draws, and give it as the scenario's inlet:
 
 .. code-block:: python
 
-   from nwp500.sim.cold_supply import on_the_mains
-
    cold = sa.cold_supply(inlet_probe, at=now, draws=draws,
                          circulation=runs)
-   book, measured = on_the_mains(book, cold)
-   readiness = sim.time_to_ready(scenario, params, book=book,
-                                 inlet_measured=measured)
+   if cold.t_cold_f is not None:
+       scenario = scenario.model_copy(update={"environment": (
+           scenario.environment.model_copy(update={"inlet_f": cold.t_cold_f})
+       )})
+   readiness = sim.time_to_ready(scenario, params,
+                                 inlet_measured=cold.t_cold_f is not None)
 
 ``draws`` are the (start, end) spans the household drew hot water,
 without the circulation's water. ``sa.cold_supply`` takes the probe in
@@ -1136,10 +1107,11 @@ runs.
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each
 draw, once the probe has passed the stagnant pipe. There is none
-without such a draw, and the book keeps its own inlet.
+without such a draw. Without ``inlet_measured``, ``time_to_ready``
+says ``inlet_temp_modelled``.
 
 **Your installation's readiness terms.** The line you call hot, the
-tank water the tap still gets past it, your own draws: ``ReadinessParams``
+probes' resolution, your bath and your shower: ``ReadinessParams``
 (:doc:`/reference/simulator-inputs`).
 
 **Your heater's own parameters.** The defaults are one NWP500-65's.
@@ -1192,10 +1164,10 @@ draws, or no air). Every answer such a term reaches says so in its
 ``reasons``: ``physics_uncalibrated`` for a recovery's duration,
 ``energy_uncalibrated`` for its energy and COP, ``tank_uncalibrated``
 for the tank's.
-The base's record of the installation's book, readiness and draw terms
-is kept (``default_params`` names all three): they are fitted apart,
-from a meter's draws, and once you apply your own fits drop each from
-``unfitted`` (``replace(params, unfitted=...)``). A meter's draws
+The base's record of the installation's draw terms is kept
+(``default_params`` names them): they are fitted apart, from a meter's
+draws, and once you apply your own fit drop them from ``unfitted``
+(``replace(params, unfitted=...)``). A meter's draws
 and the circulation's runs, where you record them, make the quiet test
 exact (``record=``): the heater's own "hot water in use" flag also
 fires on circulation.
@@ -1203,71 +1175,21 @@ fires on circulation.
 Save the parameters (``nwp500.sim.params.params_to_document``) and load
 them with ``params_from_document``.
 
-**With a hot-water meter**, fit the readiness evidence and the heat
-book's own terms from the record too. The evidence comes from the
-clean draws: circulation and both elements off, and a settled start.
-Each draw's volume delivered before the upper probe crossed 105 degF
-becomes a point, and the points another beats from a no-better state
-are dropped:
+**With a hot-water meter**, give its draws to the tank's fit
+(``draws=``): the probes' heights and the inlet's mixing come from them.
+The clean draws (circulation and both elements off, and a settled
+start) and where each one's upper probe crossed the line are what the
+deliverable gallons are checked against:
 
 .. code-block:: python
-
-   from dataclasses import replace
 
    frame = sa.draw_frame(recorded, start=since, end=until, flow=meter_flow,
                          circulation=runs)
    draws = calibration.clean_draws(frame)
-   evidence = calibration.fit_evidence(draws)
-   print(evidence.n_quiet, evidence.held_out_crossed, evidence.held_out_over)
+   crossed = [calibration.crossing(d, 105.0) for d in draws]
 
-The book's terms are fitted on pairs of anchors on full tanks an hour
-to a day apart. Each pair's booked heat is checked against the probes':
-
-.. code-block:: python
-
-   p = params.book_terms()
-   steps = sa.book_steps_from_history(
-       recorded, start=since, end=until, flow=meter_flow, air=air,
-       circulation=runs, circulation_flow=pump_flow, params=params,
-   )
-   book = calibration.RecordedBook(steps, p, params.circulation, start=since)
-   fit = calibration.fit_book_terms(book, book.reanchors(), p, circuit=True)
-   p = replace(p, hp_btu_per_h=fit.hp_btu_per_h,
-               hp_btu_per_h_per_f=fit.hp_btu_per_h_per_f,
-               ua_btu_per_h_f=fit.ua_btu_per_h_f)
-   v = fit.book_circuit_gal
-   bands = calibration.book_error_bands(book, p, 0.0, v)
-   empty, crossings = calibration.empty_point(book, p, 0.0, circuit_gal=v)
-
-The steps read the meter as delivered gallons, as the readiness fit
-above does. For a flow that counts tank water, book it with
-``flow_volume="tank"`` here, so ``empty`` comes out in that frame, and
-set ``zone_empty_btu`` as far below it as the shipped pair are (3,533
-BTU).
-
-With ``circuit=True`` the runs are priced at a circuit volume
-(``CirculationParams.book_circuit_gal``) fitted in place of a loss per
-gallon. ``book_error_btu(book, p, 0.0, v)`` gives the book's
-error bands: the 90th percentile of its error pooled over re-anchors an
-hour to ``max_anchor_age_h`` apart, and the 18 to 24 h band's past it,
-each rounded up to 100 BTU. The bath's volume is yours to set:
-measure a bath by filling one to your usual level at the hot side's
-meter.
-
-How a draw moves the upper zone is fitted on the record's long draws
-too, the book walked continuously over it (``book_walk``):
-
-.. code-block:: python
-
-   walk = calibration.book_walk(book, zone_empty_btu=p.zone_empty_btu)
-   draws = calibration.long_draws(walk)
-   split = since + (until - since) * 0.7   # the later draws are held out
-   mix = calibration.fit_zone_mix(
-       calibration.mixing_frame(walk, draws, split=split))
-
-``mix`` is how the upper zone falls through a long draw
-(``zone_mix_f_per_gal``, ``zone_mix_gal``). It reports its error on the
-training and held-out draws and a day bootstrap's interval.
+The bath's volume is yours to set: measure a bath by filling one to
+your usual level at the hot side's meter.
 
 With circulation's own telemetry (its running samples, flow and return
 line temperature), fit its terms too:
@@ -1296,10 +1218,6 @@ fits the volume alone, the return at the air.
 ``recent_flow_gpm`` is the median run flow over the last 14 days, since
 the flow is a setting that moves in steps. ``fit_return`` and
 ``recent_flow_gpm`` are None when the runs cannot say.
-
-The mixing fit reads gallons left before ``zone_empty_btu``, so set
-that first. The delivered water's lag (one bath's measurement) is the
-tank's, and no fit here moves it.
 
 
 Fit the elements

@@ -32,7 +32,6 @@ from nwp500.sim.api import (
     standby,
     time_to_ready,
 )
-from nwp500.sim.book import Booked, full_tank_book
 from nwp500.sim.defaults import (
     NO_VALVE,
     SITE_VALVE,
@@ -58,7 +57,6 @@ from nwp500.sim.inputs import (
     Write,
 )
 from nwp500.sim.params import (
-    BookParams,
     CirculationParams,
     HeaterParams,
     ReadinessParams,
@@ -85,8 +83,6 @@ __all__ = (
     "NO_VALVE",
     "SITE_VALVE",
     "BathReady",
-    "BookParams",
-    "Booked",
     "Deliverable",
     "Draw",
     "DrawWindow",
@@ -115,7 +111,6 @@ __all__ = (
     "Write",
     "default_params",
     "element_mode",
-    "full_tank_book",
     "active_cycle",
     "forecast",
     "next_recovery",

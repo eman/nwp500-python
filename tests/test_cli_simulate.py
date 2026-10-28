@@ -529,24 +529,12 @@ class TestTheSourcesWindow:
 
 
 class _Keeper:
-    """A ``HomeAssistantBook`` that books ``booked`` and gives
-    ``layers_f`` without a request."""
+    """A ``HomeAssistantTank`` that gives ``layers_f`` without a
+    request."""
 
-    def __init__(
-        self,
-        booked: sim.Booked | None,
-        layers_f: tuple[float, ...] | None = None,
-    ) -> None:
-        self.booked = booked
+    def __init__(self, layers_f: tuple[float, ...] | None = None) -> None:
         self.layers_f = layers_f
-        self.asked: list[tuple[datetime, sim.HeaterParams]] = []
         self.probes: list[tuple[float, float] | None] = []
-
-    def book(self, at: datetime, params: sim.HeaterParams) -> Any:
-        from nwp500 import sim_home_assistant as ha
-
-        self.asked.append((at, params))
-        return ha.BookAnswer(self.booked, False, ("book: a note",))
 
     def layers(
         self,
@@ -560,10 +548,15 @@ class _Keeper:
         return ha.LayersAnswer(self.layers_f, ("layers: a note",))
 
 
-class TestTheHeatBook:
+def _drawn(n: int) -> tuple[float, ...]:
+    """A tank whose bottom a draw left cold: what the probes miss."""
+    return (60.0,) * (n // 2) + (130.0,) * (n - n // 2)
+
+
+class TestTheTanksLayers:
     """With the sources' heater entities and draw flow, the run walks
-    from the tank's booked heat, and readiness reads it with the probes
-    apart."""
+    from the tank's layers its history leaves, and readiness reads
+    them."""
 
     def _run(
         self, keeper: Any, start: datetime = NOW, **given: Any
@@ -581,39 +574,45 @@ class TestTheHeatBook:
         )
         return " ".join(out.getvalue().split()), result
 
-    def test_without_a_book_the_probes_apart_read_their_heat(self) -> None:
-        text, result = self._run(None)
-        assert "12.7 gal deliverable now (probes)" in text
-        assert "no_heat_book" in result.reasons
+    def _gal(self, layers: tuple[float, ...] | None = None) -> float:
+        s = _scenario()
+        state = s.state.model_copy(update={"layers_f": layers})
+        p = sim.default_params(2)
+        return sim.readiness(
+            state, s.settings, p, inlet_f=s.environment.inlet_f
+        ).gal
 
-    def test_the_book_answers(self) -> None:
-        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
-        text, result = self._run(keeper)
-        assert "deliverable now (energy)" in text
-        assert "no_heat_book" not in result.reasons
-        assert keeper.asked[0][0] == NOW
+    def test_without_layers_the_probes_answer(self) -> None:
+        text, result = self._run(None)
+        assert f"{self._gal():.1f} gal deliverable now (probes)" in text
+        assert "tank_profile_estimated" in result.reasons
+
+    def test_the_layers_answer(self) -> None:
+        n = sim.default_params(2).tank.layers
+        text, result = self._run(_Keeper(_drawn(n)))
+        gal = self._gal(_drawn(n))
+        assert gal != self._gal()
+        assert f"{gal:.1f} gal deliverable now (layers)" in text
+        assert "tank_profile_estimated" not in result.reasons
 
     def test_the_bath_and_the_showers(self) -> None:
         text, _ = self._run(None)
-        assert "Bath (28.7 gal): not ready, 16.0 gal short" in text
-        assert "Showers (12.0 gal): 1 ready" in text
-        text, _ = self._run(_Keeper(sim.full_tank_book(130.0, 130.0)))
-        assert (
-            "Bath (28.7 gal): not ready, 0.9 gal short; the heat pump" in text
+        gal = self._gal()
+        assert f"Bath (28.7 gal): not ready, {28.7 - gal:.1f} gal short" in (
+            text
         )
-        assert "Showers (12.0 gal): 2 ready" in text
+        assert f"Showers (12.0 gal): {int(gal // 12.0)} ready" in text
 
     def test_the_bath_and_shower_volumes_given(self) -> None:
-        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
-        text, _ = self._run(keeper, bath=20.0, shower=9.0)
-        assert "Bath (20.0 gal): ready, 7.8 gal to spare" in text
-        assert "Showers (9.0 gal): 3 ready" in text
+        text, _ = self._run(None, bath=5.0, shower=4.0)
+        gal = self._gal()
+        assert f"Bath (5.0 gal): ready, {gal - 5.0:.1f} gal to spare" in text
+        assert f"Showers (4.0 gal): {int(gal // 4.0)} ready" in text
 
     def test_the_volumes_are_in_the_preferred_unit(self) -> None:
         set_unit_system("metric")
-        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
-        text, _ = self._run(keeper, shower=34.0679)
-        assert "Showers (34.1 L): 3 ready" in text
+        text, _ = self._run(None, shower=15.14164)
+        assert f"Showers (15.1 L): {int(self._gal() // 4.0)} ready" in text
 
     @pytest.mark.parametrize("name", ["bath", "shower"])
     def test_a_volume_is_positive(self, name: str) -> None:
@@ -621,46 +620,29 @@ class TestTheHeatBook:
             given: dict[str, Any] = {name: 0.0}
             sim_cli.Inputs(**given)
 
-    def test_the_table_reads_the_book_at_the_scenarios_inlet(self) -> None:
-        """At a 50 °F inlet, as the walk takes it: not the book's own."""
-        import dataclasses
+    def test_the_table_reads_the_scenarios_inlet(self) -> None:
+        """At a 50 °F inlet, as the walk takes it: through a mixing
+        valve, a colder inlet takes more tank water a gallon."""
+        from nwp500.sim.params import params_to_document
 
-        book = sim.full_tank_book(130.0, 130.0)
+        p = sim.site_example_params()
         s = _scenario(environment=sim.Environment(ambient_f=62.0, inlet_f=50.0))
         out = io.StringIO()
         sim_cli.run(
-            sim_cli.Inputs(scenario=scenario_to_document(s)),
+            sim_cli.Inputs(
+                scenario=scenario_to_document(s),
+                params=params_to_document(p),
+            ),
             None,
             NOW,
             "table",
             out,
-            keeper=cast(Any, _Keeper(book)),
         )
-        p = sim.default_params(2)
-        at_50 = sim.readiness(
-            s.state, s.settings, p, book=dataclasses.replace(book, inlet_f=50.0)
-        ).gal
-        own = sim.readiness(s.state, s.settings, p, book=book).gal
-        assert at_50 != own
+        at_50 = sim.readiness(s.state, s.settings, p, inlet_f=50.0).gal
+        assert at_50 != sim.readiness(s.state, s.settings, p).gal
         assert f"{at_50:.1f} gal deliverable now" in " ".join(
             out.getvalue().split()
         )
-
-    def test_no_anchor_walks_without_it(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        _, result = self._run(_Keeper(None))
-        assert "no_heat_book" in result.reasons
-        assert "book: a note" in caplog.text
-
-    def test_a_scenario_not_starting_now_is_not_booked(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
-        _, result = self._run(keeper, start=NOW + timedelta(hours=1))
-        assert not keeper.asked
-        assert "no_heat_book" in result.reasons
-        assert "not now" in caplog.text
 
     def test_the_walk_starts_from_the_layers_given(
         self, caplog: pytest.LogCaptureFixture
@@ -669,7 +651,7 @@ class TestTheHeatBook:
         the simulator no longer makes them of the two probes."""
         caplog.set_level("INFO")
         n = sim.default_params(2).tank.layers
-        keeper = _Keeper(None, tuple(70.0 + 5.0 * k for k in range(n)))
+        keeper = _Keeper(tuple(70.0 + 5.0 * k for k in range(n)))
         _, result = self._run(keeper)
         s = _scenario()
         assert keeper.probes == [(s.state.upper_f, s.state.lower_f)]
@@ -679,7 +661,7 @@ class TestTheHeatBook:
     def test_without_layers_the_probes_are_the_tank(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        keeper = _Keeper(None)
+        keeper = _Keeper()
         _, result = self._run(keeper)
         assert "tank_profile_estimated" in result.reasons
         assert "layers: a note" in caplog.text
@@ -687,7 +669,7 @@ class TestTheHeatBook:
     def test_the_scenarios_own_layers_are_kept(self) -> None:
         n = sim.default_params(2).tank.layers
         own = tuple(90.0 + 3.0 * k for k in range(n))
-        keeper = _Keeper(None, (120.0,) * n)
+        keeper = _Keeper((120.0,) * n)
         out = io.StringIO()
         s = _scenario()
         s = s.model_copy(
@@ -704,12 +686,15 @@ class TestTheHeatBook:
         assert not keeper.probes
         assert "tank_profile_estimated" not in result.reasons
 
-    def test_a_scenario_not_starting_now_takes_no_layers(self) -> None:
+    def test_a_scenario_not_starting_now_takes_no_layers(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         n = sim.default_params(2).tank.layers
-        keeper = _Keeper(None, (120.0,) * n)
+        keeper = _Keeper((120.0,) * n)
         _, result = self._run(keeper, start=NOW + timedelta(hours=1))
         assert not keeper.probes
         assert "tank_profile_estimated" in result.reasons
+        assert "not now" in caplog.text
 
     def test_the_keeper_takes_the_draw_flows_volume(
         self, monkeypatch: pytest.MonkeyPatch
@@ -738,7 +723,7 @@ class TestTheHeatBook:
                 pass
 
         monkeypatch.setattr(ha, "HomeAssistantClient", Client)
-        monkeypatch.setattr(ha, "HomeAssistantBook", Keeper)
+        monkeypatch.setattr(ha, "HomeAssistantTank", Keeper)
         heater = ha.HeaterEntities(
             heard="sensor.heard", upper="sensor.u", lower="sensor.l"
         )
@@ -749,7 +734,7 @@ class TestTheHeatBook:
             heater=heater,
             draw_flow_volume="tank",
         )
-        asyncio.run(sim_cli.read_book(sim_cli.Inputs(sources=src), NOW))
+        asyncio.run(sim_cli.read_tank(sim_cli.Inputs(sources=src), NOW))
         assert made == [{"flow_volume": "tank"}]
 
     def test_no_keeper_without_the_heater_or_the_flow(self) -> None:
@@ -766,6 +751,6 @@ class TestTheHeatBook:
         ):
             src = ha.Sources("http://ha.local", "t", entities, heater=h)
             got = asyncio.run(
-                sim_cli.read_book(sim_cli.Inputs(sources=src), NOW)
+                sim_cli.read_tank(sim_cli.Inputs(sources=src), NOW)
             )
             assert got is None

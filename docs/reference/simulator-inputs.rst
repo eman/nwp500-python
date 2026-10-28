@@ -479,167 +479,100 @@ nothing is charged.
        scaled by that share.
    * - ``flow_gpm``
      - The flow a run is priced at.
-   * - ``loss_btu_per_gal``
-     - The heat book's loss per gallon circulated while a run is on: the
-       pipe's own loss. The book's form without ``book_circuit_gal``.
-   * - ``book_circuit_gal``
-     - The heat book's circuit volume: with it, a run costs the book its
-       first gallons up to this volume, each at the upper probe less the
-       air. An effective volume fitted on the book's re-anchors
-       (``fit_book``), smaller than ``displaced_gal``, and kept apart
-       from it.
    * - ``meter_share``
      - The share of a run's own flow a household flow meter also reads
-       (default 0, a meter the circulation does not pass). A book from
-       a recorded history takes it off the meter to find the draws.
+       (default 0, a meter the circulation does not pass). A replay of a
+       recorded history takes it off the meter to find the draws.
    * - ``run_gap_min``
      - Runs closer than this are one run (default 10 minutes), merged
-       once over the whole input before both the zone draws and the
-       book's loss. ``displaced_gal`` is fitted on runs merged at this
-       gap, so change them together.
+       once over the whole input. ``displaced_gal`` is fitted on runs
+       merged at this gap, so change them together.
 
 Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
 gallons times the share of the pipe cooled since the last run ended,
 its water returning at the air where the heater stands plus
 ``return_rest_offset_f``; runs closer than ``run_gap_min`` are one run,
 as ``displaced_gal`` was fitted.
-With a heat book, a run also costs the book its first
-``book_circuit_gal`` gallons, each at the tank's upper probe less the
-air (``loss_btu_per_gal`` per gallon circulated without it), and the
-book does not re-anchor across it. A projection takes the upper probe
-at the setpoint.
 None of these has a default: they
 describe one installation's plumbing. ``site_example_params`` carries
 one installation's (19.36 gal, a return resting 7.84 degF above the air
-and cooling on 0.464 h, 1.397 gal/min, 159 BTU/gal, a 1.47 gal book
-circuit).
+and cooling on 0.464 h, 1.397 gal/min).
 
 
-The heat book: ``book``
-=======================
+The tank's layers from a recorded history
+=========================================
 
-``simulate(scenario, params, book=...)`` takes the tank's booked heat at
-the start (``sim.Booked``): how much heat the tank holds above a 70 degF
-reference. With it, a draw that
-spends the booked heat takes the upper zone down; without it, the upper
-zone takes each draw's calibrated response only, which holds it up
-through a draw that empties the tank, and ``reasons`` says
-``no_heat_book``. The lower zone takes each draw's calibrated response
-either way.
-
-The heater cannot tell you the starting book: two probes read a full
-tank over the cold water of a recent draw. Start one only from what you know:
+The heater cannot tell you how the water under its two probes lies:
+they read a full tank over the cold water of a recent draw.
+``HeaterState.layers_f`` carries the tank's layers when you know them;
+these build them from what was recorded over the day before
+(``sim.history.REPLAY``, 24 hours), walked through the layered tank
+(``sim.history.replay``) with the probes laid over the result:
 
 .. list-table::
    :header-rows: 1
    :widths: 40 60
 
-   * - Start
+   * - From
      - When
-   * - ``sim.full_tank_book(upper_f, lower_f, params.book)``, or
-       ``sim_adapters.full_tank_book(status, params)``
-     - The tank is full: quiet since a recovery ended (it finished, and
-       nothing has been drawn since), or the heat pump running alone
-       with the probes within ``book.uniform_band_f``, nothing drawn in
-       its last ``book.anchor_run_min``. The book's own anchors.
-   * - ``sim_adapters.book_from_history(recorded, params, at=...,
+   * - ``sim_adapters.layers_from_history(recorded, params, at=...,
        flow=...)``
-     - You record the heater's statuses and meter the hot water: the
-       book is walked from the last time the record shows the tank
-       full (below).
-   * - ``sim_adapters.book_from_changes(rows, observed, params, at=...,
-       flow=...)``
+     - You record the heater's statuses and meter the hot water.
+   * - ``sim_adapters.layers_from_changes(rows, observed, params,
+       at=..., flow=...)``
      - The same, from the heater's values' changes (``ChangeRows``) and
        the instants it was heard from, as Home Assistant records them,
-       with the flows in gal/min and the temperatures in °F.
-       A span the heater wasn't heard from is walked across, its values
-       held.
-   * - A ``Booked`` from your own record
-     - You keep a book of the tank's heat some other way.
+       with the flows in gal/min and the temperatures in °F. A span the
+       heater wasn't heard from is walked across, its values held.
+   * - ``sim_home_assistant.HomeAssistantTank``
+     - The same, kept current from Home Assistant: ``read`` reads the
+       history once over ``TANK_WINDOW``, then only what is new;
+       ``layers`` replays what it holds (``LayersAnswer``, its layers and
+       notes).
 
-``book_from_history`` grids the record onto 10-second steps: the
-statuses (the probes, the compressor, either element) held until the
-next; the meter's ``flow`` and the circulation's own
-``circulation_flow`` held 60 s; an ``inlet`` probe's readings held an
-hour; the ``air`` held until the next. It anchors on the latest step
-the tank reads full (``book.uniform_band_f``) with nothing drawn or
-circulated in it: with nothing heating, after a recovery and before
-anything was drawn or circulated, or with the heat pump running alone.
-After a draw, the heat pump must first run ``book.anchor_run_min``
-(15 minutes of its running time) for its anchor, since until then the
-probes show only part of a draw's heat;
-with no anchor in the record, that run counts from its start. A
-quiet full-looking tank after a draw is no anchor, for the same
-reason. A recovery that ends during a draw anchors at its end. Then it
-books every step from the anchor: the heat pump's and the elements' heat in,
-standby and circulation out, and each draw (the meter less
+``steps_from_history`` grids the record onto 10-second steps
+(``STEP_GRID_S``): the statuses (the probes, the compressor, either
+element) held until the next; the meter's ``flow`` and the circulation's
+own ``circulation_flow`` held 60 s (``FLOW_HOLD``); an ``inlet`` probe's
+readings held an hour; the ``air`` held until the next, and without an
+air reading the heater's own while its compressor runs. The replay
+takes the heat pump's and the elements' heat in, standby and
+circulation out, and each draw: the meter less
 ``CirculationParams.meter_share`` of a run's flow, above
-``book.draw_gpm``). With ``flow_volume="delivered"``, the default, a
-gallon is the water at the taps, priced at the mixing valve's delivery,
-its hot share drawn from the tank; with ``flow_volume="tank"``, it is
-the tank's own water (a meter or a detector on the heater's hot
-outlet), priced at the upper probe less the inlet. The book's empty
-points (``book.empty_btu``, ``book.zone_empty_btu``) were booked as
-delivered gallons, so a tank-water flow takes ``empty_btu`` refit on
-its own record and ``zone_empty_btu`` as far below it. It reads the last
-18 hours (``book.max_anchor_age_h``) and, without an anchor there, the last 72
-(``book.history_h``), aged. The inlet it converts gallons at is the
-mains read from the long draws in those hours, as ``cold_supply`` reads
-it (the probe's median over the last 2 minutes of each household draw
-of 11 minutes or more with circulation off), and
-``book.inlet_default_f`` without one. The probe's readings at rest
-track the air around the pipe, not the mains. The meter must
-report at rest too: a silence over an hour in the window is refused,
-since it would read as a quiet full tank. A missing reading (None or
-NaN) is skipped, and the value before it holds; it doesn't count as the
-meter reporting.
+``DrawParams.draw_gpm`` (``sim.history.drawn_gal``). With
+``flow_volume="delivered"``, the default, a gallon is the water at the
+taps through the mixing valve, its hot share drawn from the tank; with
+``flow_volume="tank"``, it is the tank's own water (a meter or a
+detector on the heater's hot outlet). ``probes`` (upper, lower) are laid
+over the replayed layers, by default the record's last. The answer is
+None when the record reads both probes at no instant of the span. The
+meter must report at rest too: a silence over an hour
+(``METER_MAX_GAP``) in the span is a ``ValueError``, since it would
+replay as no draw. A missing reading (None or NaN) is skipped, and the
+value before it holds.
 
-``book_from_changes`` grids the changes the same way, each value held
-until its next change, the flows, the inlet and the air too; without a
-compressor flag, the heat source says when the compressor runs. A value
-that holds writes no change, so only ``observed`` says the heater was
-heard. A silence between those instants longer than ``max_gap`` of them
-(4 times their usual spacing, and at least 5 minutes), one of
-``rows.outages``, or one of ``flow_outages`` is a span nobody saw. The
-book walks across it, each value held from before it, the flow for
-``FLOW_HOLD`` (60 s) and then none, and is None when such a span is
-still open at ``at``. No flow reading in force at the start of
-the window it books over is a ``ValueError``. An inlet reading holds
-except through ``inlet_outages``.
+``steps_from_changes`` grids the changes the same way, each value held
+until its next change, the flows and the air too; without a compressor
+flag, the heat source says when the compressor runs. A value that holds
+writes no change, so only ``observed`` says the heater was heard. A
+silence between those instants longer than ``max_gap`` of them (4 times
+their usual spacing, and at least 5 minutes), one of ``rows.outages``,
+or one of ``flow_outages`` is a span nobody saw. The replay walks
+across it, each value held from before it, the flow for ``FLOW_HOLD``
+and then none, and ``layers_from_changes`` is None when such a span is
+still open at ``at``. With no flow reading at all it is a
+``ValueError``; the replay starts no earlier than the flow's first
+reading.
 
-To build the steps yourself, pass them to ``book.book_steps``.
-``BookStep.circulation_in_meter_gpm`` is
-the circulation's flow the meter's figure still holds (a meter
-reporting a trailing net holds a run's flow after it stops), and a
-``Draw``'s ``per_draw_gal`` is the size a recorded draw is judged by
-for ``draw_out_of_domain``.
-
-A loss the book does not model, water an installation circulates
-through its own plumbing say, comes in through ``sim.book.SpanLoss``:
-its ``edges`` (where it starts and stops), its ``loss`` over each span
-and whether that span disturbs the tank (no re-anchor across it), and
-its ``bound``. Pass it to the book's walk along a simulation:
-``book.walk_booked(book, result.points, result.simulation.heating,
-draws, ambient_at, params.book_terms(), extra=loss)``.
-
-Once started, the walk re-anchors whenever the simulated tank comes
-back full: a recovery the heater ends itself, quiet after one with
-the zones within ``book.uniform_band_f``, or the heat pump running
-alone with the zones within it, past the same hold. The book carries
-the hold (``Booked.hold_s``), so a book from a record goes on with
-its own. A ``Booked`` whose ``anchor_age_h`` is past ``book.max_anchor_age_h`` is aged:
-``reasons`` says ``heat_book_aged`` and a window's margin comes off by
-the book's error band.
+To build the steps yourself, pass them to ``sim.history.replay``.
 
 
 Readiness: ``ReadinessParams``
 ==============================
 
-``params.readiness`` says what counts as hot water at the tap and how
-the delivered water follows the upper probe. Most of it describes the
-**installation**, not the heater: the mixing valve and the household's
-draws. ``delivered_lag_gal`` is the tank's. The defaults were measured at one
-NWP500-65's installation; measure your own where you can.
+``params.readiness`` says what counts as hot water at the tap and the
+volumes readiness is judged against: choices an installation makes, not
+the heater's terms.
 
 .. list-table::
    :header-rows: 1
@@ -650,27 +583,7 @@ NWP500-65's installation; measure your own where you can.
      - What it is, and how it was measured
    * - ``line_f``
      - 105 degF
-     - Delivered water below this is not hot. A choice. ``book.empty_btu``
-       and any ``evidence`` were measured at their line, so move it and
-       measure them again.
-   * - ``delivered_lag_gal``
-     - 5.0 gal
-     - Gallons the tap still gets at or above the line after the upper
-       probe has crossed it: the tank water above the probe. The pipe to
-       the fixture is not in it. **Provisional, n = 1**: one bath on an
-       NWP500-65, 7.3 gal at the tub spout and 5.3 at a gauge on the
-       valve outlet, each net of its pipe run, the lower kept. The two
-       differ by calibration (the spout read 2.74 degF above the gauge).
-       To measure yours: draw a bath from a full tank, logging the upper
-       probe and the water at the tap; it is the gallons between the
-       two crossing the line, less the gallons from the tank to the
-       thermometer. 0 answers at the probe.
-   * - ``fall_f_per_gal``
-     - 2.0 degF/gal
-     - How fast the delivered water falls per gallon once it has
-       crossed the line; also the rate the book's upper zone falls past
-       its empty point. Two crossings, 1.6 at the probe and 1.83-2.07 at
-       a spout; the faster kept.
+     - Delivered water below this is not hot. A choice.
    * - ``probe_resolution_f``
      - 1.0 degF
      - A round figure between the probe's jitter (about 0.36 degF
@@ -686,35 +599,24 @@ NWP500-65's installation; measure your own where you can.
    * - ``shower_gal``
      - 12.0 gal
      - A shower, when none is given. Assumed, not measured.
-   * - ``evidence``
-     - none (``site_example_params``: the site's 19)
-     - Draws from your own record: ``(upper_f, lower_f, gallons)``, the
-       probes before a draw with the heat pump and elements off and the
-       gallons it delivered before the upper probe crossed the line,
-       reduced to its frontier. Without a book, the answer where it
-       shows more than the probes. ``sim.delivery.EXAMPLE_EVIDENCE`` is one
-       installation's 19-draw frontier, which
-       ``with_example_evidence`` sets (at a 105 degF line only).
 
-Without a book, ``readiness`` reads the tank's heat from its two
-probes, as the book's anchor does (``sim.delivery.probes_gal``), for any
-state with the upper probe at or above ``line_f``, whether the probes
-agree or not and whether the heater runs or not, with
-``delivered_lag_gal`` on it. With evidence, the answer is the larger of
-that and the evidence's. An upper probe below the line reads 0.
-``site_example_params`` carries the site's evidence; ``default_params``,
-which has no mixing valve, carries none.
+The deliverable gallons (``sim.delivery.deliverable``) are the water
+the tap gets at the line or warmer: the water leaving the top in turn,
+each tank gallon delivering ``1 / hot_fraction`` through the mixing
+valve, to the first that the valve delivers under the line
+(``stratified.deliverable_gal``). The mains it meets is the scenario's
+inlet, else ``DrawParams.inlet_temp_f``. The tank is its layers
+(``HeaterState.layers_f``, ``Deliverable.basis`` ``layers``), else the
+profile its two probes stand for (``basis`` ``probes``, and
+``tank_profile_estimated`` in the reasons). The outlet is above the
+upper probe, so a probe just under the line still leaves the water
+above it.
 
-A parameters document that still carries ``cold_lower_cutoff_f``,
-``cold_lower_cap_gal``, ``full_setpoint_band_f`` or ``full_hidden_gal``
-under ``readiness`` loads without them (``params.RETIRED_FIELDS``).
-
-``params.book`` (``BookParams``) holds the book's own terms, fitted on
-the re-anchors of one NWP500-65's metered record: its compressor,
-element and standby heat, the empty point and how the upper zone mixes
-down through a draw.
-Its ``delivery_intercept_f`` and ``delivery_slope`` are the mixing
-valve's line, which the simulator takes from ``draw``'s.
+A parameters document that still carries ``delivered_lag_gal``,
+``fall_f_per_gal`` or ``evidence`` under ``readiness``, or a ``book``
+part, loads without them, and ``params.unknown_fields`` names them.
+``book`` and ``readiness`` in its ``unfitted`` are dropped
+(``params.RETIRED_TERMS``).
 
 
 The draw range
@@ -739,14 +641,13 @@ whether it was ``measured``, ``fitted`` or an engineering ``default``
 
 ``default_params(volume_code)`` takes ``DeviceFeature.volume_code``
 (``sim_adapters.params(feature)`` passes it). It has **no mixing
-valve**, and names the installation's book, readiness and draw terms
+valve**, and names the installation's draw terms
 in ``unfitted`` (``INSTALLATION_TERMS``: one installation's fits stand
 in for them); ``site_example_params`` is the installation the values were
 fitted at, its valve included, and ``with_valve(params, (intercept_f,
 slope))`` sets a valve's delivery line, delivered water at ``intercept +
 slope x upper zone``, never above the tank. ``NO_VALVE`` is ``(0, 1)``;
-``SITE_VALVE`` that installation's ``(53.56, 0.485)``. The book reads
-the same line (``HeaterParams.book_terms``). Each field says whether it
+``SITE_VALVE`` that installation's ``(53.56, 0.485)``. Each field says whether it
 describes the heater or the installation (``params.scope_of``) and,
 where it matters, the frame it was fitted in (``params.note_of``):
 
@@ -759,7 +660,7 @@ where it matters, the frame it was fitted in (``params.note_of``):
      - Parameters
    * - 1
      - NWP500-50
-     - The 65's, with the tank volume (``tank`` and ``book``) scaled by
+     - The 65's, with the tank volume (``tank``) scaled by
        rated storage, 45.2 gal against the 65's 63.2.
    * - 2
      - NWP500-65
@@ -767,7 +668,7 @@ where it matters, the frame it was fitted in (``params.note_of``):
        installation; without its mixing valve.
    * - 3
      - NWP500-80
-     - The 65's, with the tank volume (``tank`` and ``book``) scaled by
+     - The 65's, with the tank volume (``tank``) scaled by
        rated storage, 76.1 gal against the 65's 63.2.
 
 Any other code raises ``ValueError``. The defaults belong to one tank
@@ -960,38 +861,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 72.4 degF, (53.56, 0.485)
      - Long-draw plateaus on the cold supply, and five plateaus at the
        valve outlet (:doc:`/explanation/draws`).
-   * - ``book.hp_btu_per_h``, ``book.hp_btu_per_h_per_f``, ``book.ua_btu_per_h_f``
-     - 4,338, 66.0, 2.88
-     - The book's heat-pump rate and standby, refitted on 2026-10-23
-       with the circulation at a 1.47 gal circuit volume
-       (``CirculationParams.book_circuit_gal``), on 284 pairs of
-       moments when the tank read full from 2026-02-14, its air a room
-       sensor beside the heater; against those anchors its mean absolute
-       error was 2,207 BTU (2,403 with the loss per gallon). Fitted on
-       a 63.2 gal book (``book.tank_gal``).
-   * - ``book.empty_btu``, ``book.zone_empty_btu``
-     - 16,169, 12,636 BTU
-     - The heat left at four recorded drawdowns to the line
-       (14,219-19,590 BTU). ``zone_empty_btu`` is where a draw takes the
-       upper zone across the line, 3,533 BTU lower so the zone centres
-       the crossings: their median when the book held back the heat in
-       a draw's cold water. Booked as delivered gallons: a flow that
-       counts tank water (``flow_volume="tank"``) books less heat left
-       at the line, so refit ``empty_btu`` on your record and keep
-       ``zone_empty_btu`` as far below it.
-   * - ``book.zone_mix_f_per_gal``, ``book.zone_mix_gal``
-     - 1.25 degF/gal, 14 gal
-     - 112 draws. A refit on the full record gave 0.65 degF/gal over
-       16 gal, on fewer draws and with three times its fit error held
-       out; the shipped pair is unchanged.
-   * - ``book.error_btu``, ``book.aged_error_btu``
-     - 3,000, 4,100 BTU
-     - The book's drift from the anchors, fresh and after 18 h. A refit
-       on the full record gave 3,000 and 3,900.
    * - ``readiness``
      - the Readiness section above
-     - The bath tests, the outlet lag and the readiness evidence
-       (:doc:`/explanation/draws`).
+     - The bath tests (:doc:`/explanation/draws`).
 
 **Engineering values**, not measured on the heater: the maps' cross
 terms (0: the record does not place them). ``CompressorParams()`` is
@@ -1079,13 +951,12 @@ The ones about inputs and parameters:
      - A term calibration could not fit on this heater (a recovery's
        duration; its energy and COP; the tank's losses, probes and
        condenser) is the base's (``HeaterParams.unfitted``).
-   * - ``book_uncalibrated``, ``readiness_uncalibrated``,
-       ``draw_uncalibrated``
-     - The installation's heat book terms, readiness terms or draw
-       terms (its valve's line and inlet) are another installation's (``default_params()`` marks
-       all three, ``INSTALLATION_TERMS``), not fitted from this one's
-       meter. The readiness answer says the first two, whether or not a
-       recovery was needed; any answer with draws, the third. Fit them and drop each from
+   * - ``draw_uncalibrated``
+     - The installation's draw terms (its valve's line and inlet) are
+       another installation's (``default_params()`` marks them,
+       ``INSTALLATION_TERMS``), not fitted from this one's meter. Any
+       answer with draws says it, and the readiness answer always: its
+       gallons are drawn through them. Fit them and drop ``draw`` from
        ``HeaterParams.unfitted``.
    * - ``ambient_defaulted``
      - No usable air reading was given (``Environment.ambient_f`` missing,
@@ -1118,8 +989,8 @@ The ones about inputs and parameters:
      - The lower trigger was held (the upper zone at the setpoint, or a
        window), which moved or dropped a start.
    * - ``inlet_temp_modelled``
-     - Draws' cold water, or a book's gallons, are priced at an inlet
-       nobody measured at the mains.
+     - The readiness answer's gallons meet an inlet nobody measured at
+       the mains (``time_to_ready`` without ``inlet_measured``).
    * - ``draw_out_of_domain``
      - A draw lies outside the range the draw terms were fitted over.
    * - ``write_mode_not_modelled``, ``reservation_mode_not_modelled``
@@ -1131,9 +1002,6 @@ The ones about inputs and parameters:
      - The integrator raised on a recovery the walk went without.
    * - ``recovery_low_confidence``
      - A recovery model served a duration under 0.6 confidence.
-   * - ``no_heat_book``, ``heat_book_aged``
-     - Without a book the delivery is the upper zone's; an aged one
-       carries its error band.
    * - ``recovery_path_linear``
      - A recovery's path is a straight line from start to end, with its
        energy unknown: a recovery model gave the duration and the
@@ -1150,8 +1018,8 @@ The ones about inputs and parameters:
        elements finish. A
        ``forecast`` or ``active_cycle`` answer is still the heat pump's,
        which the heater will not run; ``next_recovery`` is
-       ``unavailable``, and ``time_to_ready`` projects every mode as
-       Electric (Heat Pump mode from the heater's own trigger).
+       ``unavailable``, and ``time_to_ready``'s walks heat every mode as
+       Electric does (Heat Pump mode from the heater's own trigger).
    * - ``envelope_fallback_unverified``
      - The elements heated in the heat pump's place, outside its range,
        by Electric's rule (the upper element, then the lower): the
@@ -1244,30 +1112,47 @@ The ones about readiness:
 
    * - Reason
      - What it says
-   * - ``capped_at_observed_volume``
-     - The answer is the evidence's largest recorded volume: the tank
-       may hold more than anyone drew from it.
-   * - ``bath_ready_within_estimate_error``
-     - The deliverable gallons are within the heat book's error band of
-       the bath.
+   * - ``tank_profile_estimated``
+     - The gallons are the profile the two probes stand for: the
+       scenario gave no layers (``HeaterState.layers_f``).
+   * - ``bath_ready_within_probe_resolution``
+     - A probe error of ``ReadinessParams.probe_resolution_f`` either
+       way would flip whether the bath is ready now
+       (``delivery.within_resolution``).
    * - ``draw_in_progress``
      - Hot water is being drawn now: the probes are moving.
+   * - ``element_running``
+     - An element runs now.
    * - ``heating_not_scheduled``
      - Not ready, and heating is disabled (Vacation or Power Off).
    * - ``heating_not_triggered``
      - Not ready, and the heater would not start itself within 24 h.
    * - ``time_to_ready_unavailable``
-     - Not ready, and the next recovery couldn't be worked out.
+     - Not ready, and the heat pump's walk couldn't be completed.
    * - ``bath_waits_for_tou_window_end``
-     - Not ready, and the TOU cap stops the recovery short of the bath
-       until the window ends.
+     - Not ready, and the TOU cap stops the next recovery short of the
+       bath: the heat pump's walk gets there after the window ends.
    * - ``bath_not_reached_by_full_recovery``
-     - Not ready, and even a full recovery doesn't cover the bath.
+     - Not ready, and the heat pump's walk does not cover the bath
+       within ``READY_HORIZON`` (24 h).
+
+Each mode's time is the scenario walked with that mode written at its
+start (``simulate``, the mode's entry rule run as on a write; a mode the
+scenario writes there is replaced, its later writes still take) to the
+first instant its layers deliver the bath, and its energy the walk's
+electricity to then. The walks keep the TOU windows the heater does
+(``marked_windows``); with TOU on and neither its periods nor the
+heater's marker known, a window is taken as in force throughout, and
+the answer says ``tou_schedule_unknown``. The heat pump's walk's
+reasons, to the bath, are the answer's; an element mode's row carries
+the reasons its walk gives beyond the answer's (``ModeReady.reasons``).
+A setpoint written outside the heater's range is a ``ValueError``, as
+for ``simulate``.
 
 A bath or shower volume not given is named in ``defaults_used``
 (``bath_gal=``, ``shower_gal=``), not in ``reasons``. The readiness
-model's standing caveats (the outlet lag rests on one measurement, the
-line is a choice, and the upper probe stands in for the outlet) are
+model's standing caveats (the deliverable volume rests on the layered
+tank's draws, checked on few drawdowns, and the line is a choice) are
 left out of ``Readiness.reasons``.
 
 
@@ -1280,8 +1165,9 @@ Errors
    reservation whose setpoint is outside the range the simulation runs
    (104.9-149.9 degF; the device's own limits are its
    ``DeviceFeature``'s), a draw window that does not end after it
-   starts, an element mode that runs no element, an unknown ``volume_code``, or
-   ``with_example_evidence`` at a line other than 105 degF.
+   starts, an element mode that runs no element, an unknown
+   ``volume_code``, or layers (``HeaterState.layers_f``) other than the
+   parameters lay out.
 ``nwp500.sim.engine.SimulationError``
    The walk could not be completed, or a recovery ``forecast`` or
    ``active_cycle`` was asked for falls short of its target after 16

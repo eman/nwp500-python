@@ -400,7 +400,6 @@ class TestTheCirculation:
         displaced_gal=4.0,
         return_rest_offset_f=5.0,
         return_cool_tau_h=1.0,
-        loss_btu_per_gal=0.0,
     )
 
     def test_the_cooled_water_comes_back_first(self) -> None:

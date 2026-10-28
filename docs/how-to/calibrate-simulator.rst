@@ -179,9 +179,9 @@ fitted or kept the base's value, and why:
 
 ``Unfitted`` lists every term that kept the base's value. The answers
 those terms reach say so in their ``reasons`` (for example
-``tank_uncalibrated``). The ``book``, ``readiness`` and ``draw``
-terms are always listed, because they are fitted only from a hot-water
-meter's draws, which the command does not take (see below).
+``tank_uncalibrated``). The ``draw`` terms are always listed, because
+they are fitted only from a hot-water meter's draws, which the command
+does not take (see below).
 
 
 Score on held-out days
@@ -353,9 +353,9 @@ without ``keep_better``.
 ``sim_adapters.history`` builds; ``sim_adapters.add_inputs`` adds the
 air, the humidity, the household's draws and the circulation's runs to it.
 From there you can also give the draws that price the heat each
-cycle's draws took. The fits for the readiness terms, the heat book,
-the draw response and the elements also run there: see "Improve
-accuracy" and "Fit the elements" in :doc:`simulate-heater`.
+cycle's draws took. The fits for the draw response, the circulation
+and the elements also run there: see "Improve accuracy" and "Fit the
+elements" in :doc:`simulate-heater`.
 
 
 Calibrate from Home Assistant's history
@@ -445,26 +445,29 @@ Assistant's own queries, in about 180 MB; the fit takes as long as
 above.
 
 
-Fit the heat book
-=================
+Start from the tank's layers
+============================
 
-The heat book (``book_from_changes``) counts the heat the tank holds
-from the compressor's heat rate and its slope with the air, the standby
-UA, and, with a circulation pump, what each run takes: its first
-gallons, up to the book's circuit volume
-(``CirculationParams.book_circuit_gal``), each at the tank's upper
-probe less the air, the loop having cooled to the air since the last
-run. ``fit_book`` fits them
-together from the heater's history, the household's draws, and the
-pump's runs with the loop's flow. The draws and the loop's flow are
-yours to give, apart from each other: the fit takes every gallon of the
-draws as hot water drawn, and each run at the loop's flow.
+With the parameters fitted, the tank's layers now
+(``layers_from_changes``) are the heater's history replayed over the
+last 24 hours (``sim.history.REPLAY``): the compressor's and the
+elements' runs, the household's draws and, with a circulation pump, its
+runs, walked through the tank and corrected to the probes as they were
+read. The draws and the loop's flow are yours to give, apart from each
+other: the replay takes every gallon of the draws as hot water drawn,
+and each run at the loop's flow. Runs are priced in a
+``CirculationParams`` of your installation's with ``meter_share`` 0,
+since the draws hold none of the loop's water; without one, one
+installation's are taken and a note says so. ``sa.run_readings`` gives
+each run's flow: its own readings, the first from its start, and none
+read outside the runs.
 
 .. code-block:: python
 
    from dataclasses import replace
 
    from nwp500 import sim_adapters as sa
+   from nwp500.sim.params import CirculationParams
 
    async with ha.HomeAssistantClient(url, token) as client:
        history = await ha.read_heater_history(client, entities, start, end)
@@ -473,83 +476,20 @@ draws as hot water drawn, and each run at the loop's flow.
    params = sim_calibrate.calibrate_changes(
        history.rows, history.observed, record=record, notes=history.notes
    ).calibration.params
-   fit = sim_calibrate.fit_book(
-       history.rows, history.observed, params,
-       flow=draws, runs=runs, circulation_flow=loop_flow,
+   loop = CirculationParams(displaced_gal=..., flow_gpm=..., meter_share=0.0)
+   layers = sa.layers_from_changes(
+       history.rows, history.observed, replace(params, circulation=loop),
+       at=end, flow=draws, circulation=runs,
+       circulation_flow=sa.run_readings(runs, loop_flow),
        air=record.air or (),
    )
-   params = replace(params, book=fit.book)
 
 ``draws`` and ``loop_flow`` are (instant, gal/min) readings and ``runs``
-the pump's (start, end) spans; ``record_inputs``' air is °F, as the fit
-takes it. ``fit.book_circuit_gal`` is the circuit volume for your
-``CirculationParams`` (None without a loop).
-
-The fit reads the pairs of quiet full tanks up to
-``book.max_anchor_age_h`` apart, and fits each term for the least mean
-absolute error between the book and the probes at the second of each
-pair:
-
-- **The book's terms:** the compressor's heat rate and slope, and the
-  standby UA, on every pair. A term the pairs can't tell apart from
-  the others (the slope, with the air never off one temperature) stays
-  at ``params.book``. The rest of the book (its draw line, the anchors'
-  age, the valve's line) is ``params``'.
-- **The book's circuit volume:** on 10 pairs with a run between, with
-  the book's terms fitted at each volume tried. Runs closer than
-  ``run_gap_min`` are one run. It is an effective volume, smaller than
-  the loop's own (``displaced_gal``): at one installation 1.47 gal
-  against 19.36. Fit and keep them apart. Its runs are priced as cooled
-  to the air: at that installation, pricing them at the loop's return
-  (``fit_return``: the pipe resting 7.84 degF over the air and cooling
-  on 0.464 h) booked the 87 pairs the fit takes no better, a mean
-  absolute error of 17,018 BTU against 16,991, on 109 pairs with 51
-  runs. With fewer pairs, the loop is
-  priced as ``params.circulation`` prices it, and without one, the
-  pairs with a run are left out. A pair with a run that has no flow
-  reading is left out.
-
-The fit needs 10 pairs. It holds out the latest fifth and replaces the
-base only when it books them no worse. A term on its bound
-(``sim.calibration.BOOK_TERM_BOUNDS``) is no fit: the book misses
-something between those anchors that the term is standing in for. The
-circuit volume on its bound (``sim.calibration.BOOK_CIRCUIT_GAL_BOUNDS``)
-leaves the loop at the base's; any other term on its bound keeps the
-base. ``fit.kept`` says which it
-kept and ``fit.why`` why. A span the heater wasn't heard from, a probe
-read nothing, or the draws were silent over an hour, breaks the book.
-
-A pair with a run needs a quiet full tank on each side of it, so they
-come slowly. With a pump running about once a day, one installation had
-5 in 14 days and 19 in 42: fit on four weeks or more, and raise Home
-Assistant's ``purge_keep_days`` to keep them.
-
-Book with the same inputs. Runs are priced at the circuit volume, in a
-``CirculationParams`` of your installation's with ``meter_share`` 0,
-since the draws hold none of the loop's water; without one, they can't
-be booked. ``sa.run_readings`` gives the book each run's flow as
-the fit takes it: its own readings, the first from its start, and none
-read outside the runs.
-
-.. code-block:: python
-
-   from nwp500.sim.params import CirculationParams
-
-   book = None
-   volume = fit.book_circuit_gal
-   if volume is not None or not runs:
-       loop = None
-       if volume is not None:
-           loop = CirculationParams(
-               displaced_gal=..., flow_gpm=..., loss_btu_per_gal=...,
-               book_circuit_gal=volume, meter_share=0.0,
-           )
-       book = sa.book_from_changes(
-           history.rows, history.observed, replace(params, circulation=loop),
-           at=end, flow=draws, circulation=runs,
-           circulation_flow=sa.run_readings(runs, loop_flow),
-           air=record.air or (),
-       )
+the pump's (start, end) spans; ``record_inputs``' air is °F, as the
+replay takes it. Give the layers as the scenario's
+``HeaterState.layers_f``: the simulation starts from them, and the
+deliverable gallons read them. None, when the heater isn't heard at
+``end`` or the flow is unknown then, starts it from the two probes.
 
 
 Limitations
@@ -557,8 +497,8 @@ Limitations
 
 - **The draws.** The heater reports no draw volume, and in recorded
   statuses its inlet and flow readings read 0. The draw terms
-  (``book``, ``readiness``, ``draw``) need a hot-water meter and an
-  inlet probe.
+  (``draw``) and the tank's layers need a hot-water meter, and the
+  draws' mains an inlet probe.
 - **Circulation the heater does not run.** The quiet test is the
   heater's own "hot water in use" flag, which also fires on
   circulation. A loop's heat that does not trip the flag is invisible

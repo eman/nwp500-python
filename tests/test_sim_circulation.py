@@ -1,5 +1,5 @@
 """An installation's circulation (``nwp500.sim.circulation``): its runs
-as water through the tank and its loss to the book, through the API.
+as water through the tank, through the API.
 
 The terms are held to their source by the parity check run with the
 port; these hold the API to the core and the runs to their schedule.
@@ -28,7 +28,6 @@ from nwp500.sim import (
     Scenario,
     Settings,
     default_params,
-    full_tank_book,
     simulate,
     site_example_params,
     standby,
@@ -36,7 +35,6 @@ from nwp500.sim import (
 from nwp500.sim.circulation import (
     RUN_GAP,
     Circulation,
-    CirculationLoss,
     cooled_share,
     merge_runs,
 )
@@ -44,7 +42,6 @@ from nwp500.sim.codec import (
     scenario_from_document,
     scenario_to_document,
 )
-from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.params import (
     CirculationParams,
     params_from_document,
@@ -100,7 +97,6 @@ TERMS = CirculationParams(
     flow_gpm=1.5,
     return_rest_offset_f=2.0,
     return_cool_tau_h=0.0,
-    loss_btu_per_gal=0.0,
 )
 
 
@@ -168,14 +164,6 @@ class TestTheRuns:
         assert c.over(at(0), at(1.2)) == list(RUNS[:2])
         assert c.over(at(3), at(5)) is None
         assert Circulation(()).over(at(0), at(1)) == []
-
-    def test_the_books_loss_is_per_gallon_circulated(self) -> None:
-        loss = CirculationLoss(RUNS, 1.4, 159.0)
-        btu, disturbed = loss.loss(at(1.0), at(1.25))
-        assert disturbed and btu == pytest.approx(159.0 * 1.4 * 15.0)
-        assert loss.loss(at(2.0), at(3.0)) == (0.0, False)
-        assert loss.bound(at(0), at(2)) == pytest.approx(159.0 * 1.4 * 36.0)
-        assert at(1.0) in loss.edges(at(0), at(2))
 
 
 class TestThroughTheAPI:
@@ -268,25 +256,6 @@ class TestThroughTheAPI:
             d.startswith("circulation=")
             for d in simulate(_scenario(), params).defaults_used
         )
-
-    def test_with_a_book_the_runs_are_its_loss(
-        self, params: HeaterParams
-    ) -> None:
-        book = full_tank_book(139.0, 138.5, params.book_terms())
-        quiet = simulate(_scenario(loads=Loads()), params, book=book)
-        circulated = simulate(_scenario(), params, book=book)
-        assert circulated.booked is not None and quiet.booked is not None
-        # After the first run, before the runs' heat brings on a
-        # recovery.
-        runs = _loads().circulation
-        assert runs is not None
-        after = runs[0].end
-
-        def heat_at(walk: Any) -> float:
-            k = next(i for i, t in enumerate(walk.instants) if t >= after)
-            return float(walk.states[k].heat_btu)
-
-        assert heat_at(circulated.booked) < heat_at(quiet.booked)
 
     def test_standby_charges_them_too(self, params: HeaterParams) -> None:
         s = _scenario()
@@ -439,108 +408,3 @@ class TestASplitCoast:
         end, split = whole.points[-1], b.points[-1]
         assert split.lower_f == pytest.approx(end.lower_f, abs=0.05)
         assert split.upper_f == pytest.approx(end.upper_f, abs=0.05)
-
-
-class TestTheBooksCircuitVolume:
-    TERMS = replace(SITE_CIRCULATION, book_circuit_gal=1.5)
-
-    def test_a_run_takes_its_first_gallons_at_the_tank_less_the_air(
-        self,
-    ) -> None:
-        from nwp500.sim.book import circulated_btu
-
-        def take(gal: float, before: float) -> float:
-            return circulated_btu(
-                gal,
-                self.TERMS,
-                before_gal=before,
-                upper_f=140.0,
-                ambient_f=65.0,
-            )
-
-        assert take(1.0, 0.0) == pytest.approx(1.0 * 8.34 * 75.0)
-        # Only the half gallon left before the circuit is hot.
-        assert take(1.0, 1.0) == pytest.approx(0.5 * 8.34 * 75.0)
-        assert take(1.0, 2.0) == 0.0
-        # Without the volume, the loss per gallon.
-        flat = replace(self.TERMS, book_circuit_gal=None)
-        assert circulated_btu(1.0, flat) == SITE_CIRCULATION.loss_btu_per_gal
-
-    def test_the_ledger_prices_projected_runs_so(self) -> None:
-        from nwp500.sim.circulation import CirculationLoss
-
-        run = (at(0.0), at(1.0))
-        loss = CirculationLoss(
-            [run],
-            flow_gpm=1.0,
-            loss_btu_per_gal=159.0,
-            circuit_gal=1.5,
-            upper_f=140.0,
-            air_at=lambda _: 65.0,
-        )
-        first, on = loss.loss(at(0.0), at(0.0) + timedelta(minutes=1))
-        assert on and first == pytest.approx(1.0 * 8.34 * 75.0)
-        later, on = loss.loss(at(0.5), at(0.6))
-        assert on and later == 0.0
-        whole = loss.bound(at(0.0), at(1.0))
-        assert whole == pytest.approx(1.5 * 8.34 * (140.0 + 20.0))
-
-    def test_runs_in_a_group_share_the_circuit(self) -> None:
-        """Two one-minute runs at 1 gal/min, 5 minutes apart, one group:
-        the first takes 1 gal of the 1.5 gal circuit, the second the
-        half left, and the gap between them circulates nothing."""
-        from nwp500.sim.circulation import CirculationLoss
-
-        a = at(0.0)
-        m = timedelta(minutes=1)
-        runs = [(a, a + m), (a + 6 * m, a + 7 * m)]
-        loss = CirculationLoss(
-            runs,
-            flow_gpm=1.0,
-            loss_btu_per_gal=159.0,
-            circuit_gal=1.5,
-            upper_f=140.0,
-            air_at=lambda _: 65.0,
-        )
-        assert loss.loss(a + m, a + 6 * m) == (0.0, False)
-        got = [loss.loss(r0, r1)[0] for r0, r1 in runs]
-        assert got == pytest.approx([1.0 * 8.34 * 75.0, 0.5 * 8.34 * 75.0])
-
-    def test_the_air_is_the_charged_gallons(self) -> None:
-        """A 10 minute run at 1 gal/min, a 1 gal circuit, the air rising
-        from 50 to 70 °F: the gallon flows in the first minute, at its
-        51 °F."""
-        from nwp500.sim.circulation import CirculationLoss
-
-        a = at(0.0)
-        loss = CirculationLoss(
-            [(a, a + timedelta(minutes=10))],
-            flow_gpm=1.0,
-            loss_btu_per_gal=159.0,
-            circuit_gal=1.0,
-            upper_f=140.0,
-            air_at=lambda t: 50.0 + 2.0 * (t - a).total_seconds() / 60.0,
-        )
-        got, on = loss.loss(a, a + timedelta(minutes=10))
-        assert on and got == pytest.approx(1.0 * 8.34 * 89.0)
-
-    def test_overlapping_runs_circulate_once(self) -> None:
-        from nwp500.sim.circulation import CirculationLoss
-
-        a = at(0.0)
-        s30 = timedelta(seconds=30)
-
-        def total(runs: list[tuple[datetime, datetime]]) -> float:
-            loss = CirculationLoss(
-                runs,
-                flow_gpm=1.0,
-                loss_btu_per_gal=159.0,
-                circuit_gal=5.0,
-                upper_f=140.0,
-                air_at=lambda _: 65.0,
-            )
-            return loss.loss(a, a + 3 * s30)[0]
-
-        both = total([(a, a + 2 * s30), (a + s30, a + 3 * s30)])
-        assert both == pytest.approx(total([(a, a + 3 * s30)]))
-        assert both == pytest.approx(1.5 * 8.34 * 75.0)

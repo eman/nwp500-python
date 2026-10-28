@@ -1174,7 +1174,7 @@ def simulate_run(ctx: click.Context, output_format: str, **given: Any) -> None:
             live = await sim_cli.compose_live(
                 mqtt, ctx.obj["api"], device, inputs, now
             )
-            keeper = await sim_cli.read_book(inputs, now)
+            keeper = await sim_cli.read_tank(inputs, now)
         except sim_cli.InputError as e:
             raise click.UsageError(str(e)) from None
         walk(live, keeper)

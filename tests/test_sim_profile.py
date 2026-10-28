@@ -76,20 +76,12 @@ class TestTheProfile:
 
 class TestAKeptRecovery:
     def test_aged_to_now(self) -> None:
-        rec = Recovery(
-            "ok", start_minute=30.0, coast_btu=900.0, coast_draw_gal=4.0
-        )
+        rec = Recovery("ok", start_minute=30.0)
         later = recovery_as_of(rec, T0, T0 + timedelta(minutes=10))
         assert later.start_minute == pytest.approx(20.0)
-        assert later.coast_btu == pytest.approx(600.0)
-        assert later.coast_draw_gal == pytest.approx(8.0 / 3.0)
         assert recovery_as_of(rec, T0, T0) is rec
 
-    def test_a_start_at_once_has_no_coast_left(self) -> None:
-        """A draw at the instant it was computed that trips the start is
-        the coast's (``next_recovery``): a later look has taken it."""
-        rec = Recovery("ok", start_minute=0.0, coast_draw_gal=20.0)
+    def test_a_start_at_once_stays_at_once(self) -> None:
+        rec = Recovery("ok", start_minute=0.0)
         later = recovery_as_of(rec, T0, T0 + timedelta(minutes=30))
         assert later.start_minute == 0.0
-        assert later.coast_draw_gal == 0.0
-        assert later.coast_btu == 0.0

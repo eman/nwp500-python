@@ -14,10 +14,8 @@ or a module constant:
   mixing valve or flowing from it, and its inflow;
 - ``ControllerParams``: the numbers of the firmware's rules for when
   the compressor starts and stops (``sim/controller.py``).
-- ``ReadinessParams``: what counts as hot water at the tap, and how
-  the delivered water follows the upper probe (``sim.delivery``);
-- ``BookParams``: the heat book, the tank's heat by bookkeeping
-  (``sim.book``).
+- ``ReadinessParams``: what counts as hot water at the tap, and the
+  volumes readiness is judged against (``sim.delivery``).
 
 Every field carries its ``Provenance`` and the unit it is in, in the
 dataclass field's ``metadata`` (``provenance_of``, ``unit_of``).
@@ -40,7 +38,7 @@ This module imports only the standard library and one leaf of the core
 
 import math
 from collections.abc import Mapping
-from dataclasses import MISSING, dataclass, field, fields, replace
+from dataclasses import MISSING, dataclass, field, fields
 from datetime import timedelta
 from enum import StrEnum
 from itertools import pairwise
@@ -110,7 +108,6 @@ _MAINS = (
     "one installation's September mains, the median plateau of a "
     "probe's long draws over 2026-09-19..26"
 )
-_PER_DELIVERED = "per gallon delivered through one installation's mixing valve"
 
 
 def _p(
@@ -421,6 +418,11 @@ class DrawParams:
     )
     domain_volume_gal: tuple[float, float] | None = field(
         default=(1.0, 41.6), metadata=_p(MEASURED, "gal", INSTALLATION)
+    )
+    #: The household flow that is a draw, gal/min: a meter's reading
+    #: under it is its noise (``history.drawn_gal``).
+    draw_gpm: float = field(
+        default=0.3, metadata=_p(DEFAULT, "gal/min", INSTALLATION)
     )
 
     def __post_init__(self) -> None:
@@ -875,50 +877,16 @@ class ElementParams:
             )
 
 
-#: An evidence draw (``ReadinessParams.evidence``): the upper and lower
-#: probes before it, °F, and the delivered gallons it gave before the
-#: upper probe crossed the line.
-EvidenceDraw = tuple[float, float, float]
-
-
 @dataclass(frozen=True, kw_only=True)
 class ReadinessParams:
-    """What counts as hot water at the tap, and how the delivered water
-    follows the upper probe (``sim.delivery``).
-
-    Most of these describe an installation, not the heater: the line
-    the household calls hot, the mixing valve and the household's
-    draws. The defaults were measured at one NWP500-65's installation;
-    each field says on how much. Measure your own where you can
-    (the simulator reference's *Readiness* section says how).
-    """
+    """What counts as hot water at the tap (``sim.delivery``), and the
+    volumes readiness is judged against: choices an installation makes,
+    not the heater's terms."""
 
     #: Delivered water below this is not hot, °F: the line every answer
-    #: is drawn at. A choice, not a measurement. ``book.empty_btu`` and
-    #: an ``evidence`` set were measured at their line, so changing it
-    #: means measuring them again.
+    #: is drawn at. A choice, not a measurement.
     line_f: float = field(
         default=105.0, metadata=_p(DEFAULT, "°F", INSTALLATION)
-    )
-    #: Delivered gallons the tap still gets at or above the line once
-    #: the upper probe has crossed it: the tank water above the probe,
-    #: which leaves hot until the rising cold front reaches the tank's
-    #: outlet. The valve passes that water through near the line, so
-    #: tank and delivered gallons agree over it. Measured once (n = 1),
-    #: on one NWP500-65 bath: 7.3 gal on a thermometer at the tub spout
-    #: and 5.3 on a gauge at the valve outlet, each net of its own pipe
-    #: run. They differ by calibration (the spout read 2.74 °F above the
-    #: gauge), not by place; the lower, rounded down, is kept. The pipe
-    #: to the fixture is not in it. 0 answers at the probe itself.
-    delivered_lag_gal: float = field(
-        default=5.0, metadata=_p(MEASURED, "gal", HEATER)
-    )
-    #: How fast the delivered water falls per delivered gallon once it
-    #: has crossed the line, °F/gal; also the rate the heat book's
-    #: upper zone falls at past its empty point. From two crossings,
-    #: 1.6 at the probe and 1.83-2.07 at a spout; the faster kept.
-    fall_f_per_gal: float = field(
-        default=2.0, metadata=_p(MEASURED, "°F/gal", INSTALLATION)
     )
     #: How far a probe reading can be off and still describe the same
     #: tank: a round 1 °F, between the probe's jitter of about 0.36 °F
@@ -938,153 +906,6 @@ class ReadinessParams:
     #: its own. Assumed, not measured.
     shower_gal: float = field(
         default=12.0, metadata=_p(DEFAULT, "gal", INSTALLATION)
-    )
-    #: Draws that show how much a tank in a given state delivers before
-    #: the upper probe crosses ``line_f``: without a heat book, the
-    #: readiness answer where they show more than the probes
-    #: (``sim.delivery.probes_gal``). Each is ``(upper_f, lower_f,
-    #: gallons)``, reduced to its
-    #: frontier. None by default: they are a household's own record.
-    #: ``sim.delivery.EXAMPLE_EVIDENCE`` is one installation's.
-    evidence: tuple[EvidenceDraw, ...] = field(
-        default=(),
-        metadata=_p(
-            MEASURED,
-            "°F, °F, gal",
-            INSTALLATION,
-            "metered gallons delivered through a mixing valve; over-promises "
-            "on an installation without one",
-        ),
-    )
-
-    def __post_init__(self) -> None:
-        # A document carries the draws as lists; the value holds tuples,
-        # so one read back equals the one written.
-        object.__setattr__(
-            self,
-            "evidence",
-            tuple(
-                (float(u), float(lo), float(g)) for u, lo, g in self.evidence
-            ),
-        )
-
-
-@dataclass(frozen=True, kw_only=True)
-class BookParams:
-    """The heat book (``sim.book``): the tank's heat by bookkeeping, and
-    where in the tank it lies, which a draw reads to move the zones.
-
-    Its own parameter set, fitted on the re-anchors of one NWP500-65's
-    metered record (where the tank became full again and its booked heat
-    could be checked against the probes), and not a copy of the other
-    parts: it carries its own compressor, element and standby terms.
-    """
-
-    #: The tank, gallons, as the book counts it.
-    tank_gal: float = field(
-        default=63.2, metadata=_p(DEFAULT, "gal", INSTALLATION)
-    )
-    #: Compressor heat into the tank at a 65 °F ambient, and its slope.
-    #: With the standby UA, fitted together on one installation's 284
-    #: re-anchors with its circulation at a circuit volume
-    #: (``CirculationParams.book_circuit_gal``).
-    hp_btu_per_h: float = field(
-        default=4338.0, metadata=_p(FITTED, "BTU/h", INSTALLATION)
-    )
-    hp_btu_per_h_per_f: float = field(
-        default=66.0, metadata=_p(FITTED, "BTU/h/°F", INSTALLATION)
-    )
-    element_w: float = field(
-        default=5148.0, metadata=_p(MEASURED, "W", INSTALLATION)
-    )
-    #: Standby loss per °F of tank mean over the ambient.
-    ua_btu_per_h_f: float = field(
-        default=2.88, metadata=_p(FITTED, "BTU/h/°F", INSTALLATION)
-    )
-    #: The reference the book counts heat above, and the inlet it
-    #: assumes where none is given; ``empty_btu`` was fitted in this
-    #: frame.
-    reference_f: float = field(
-        default=70.0, metadata=_p(DEFAULT, "°F", INSTALLATION)
-    )
-    inlet_default_f: float = field(
-        default=70.0, metadata=_p(DEFAULT, "°F", INSTALLATION)
-    )
-    #: The mixing valve's delivery line, intercept + slope × upper zone:
-    #: ``DrawParams.delivery_intercept_f`` and ``delivery_slope``, which
-    #: the simulator copies here (``HeaterParams.book_terms``). Intercept
-    #: 0 and slope 1, the default, is no valve.
-    delivery_intercept_f: float = field(
-        default=0.0, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_LINE)
-    )
-    delivery_slope: float = field(
-        default=1.0, metadata=_p(FITTED, "1", INSTALLATION, _VALVE_LINE)
-    )
-    #: Booked heat above the reference when the upper probe reaches the
-    #: line (``ReadinessParams.line_f``): the median of four drawdowns,
-    #: 14,219-19,590 BTU. It and ``zone_empty_btu`` are in the frame of
-    #: the debit they were booked with, delivered gallons through the
-    #: valve: a book whose flow counts tank water (``flow_volume``)
-    #: debits more and needs both refit on its own record
-    #: (``calibration.empty_point``, and ``zone_empty_btu`` as far below
-    #: it).
-    empty_btu: float = field(
-        default=16169.0, metadata=_p(FITTED, "BTU", INSTALLATION)
-    )
-    #: Where a draw takes the upper zone across the line: 3,533 BTU
-    #: below ``empty_btu``, so the zone centres those crossings rather
-    #: than catching them all early. Fitted as the median of the same
-    #: crossings' booked heat on an earlier book; refit on 144 draws
-    #: against the current one, no other value or zone law does better
-    #: on both halves of the record. Readiness and the delivery keep
-    #: ``empty_btu``.
-    zone_empty_btu: float = field(
-        default=12636.0, metadata=_p(FITTED, "BTU", INSTALLATION)
-    )
-    #: How the upper zone falls through a draw before that point, as the
-    #: water above the rising front mixes:
-    #: ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)`` °F per
-    #: delivered gallon, ``left`` the gallons before ``zone_empty_btu``.
-    #: Fitted on 112 draws of 15 gal or more.
-    zone_mix_f_per_gal: float = field(
-        default=1.25,
-        metadata=_p(FITTED, "°F/gal", INSTALLATION, _PER_DELIVERED),
-    )
-    zone_mix_gal: float = field(
-        default=14.0, metadata=_p(FITTED, "gal", INSTALLATION, _PER_DELIVERED)
-    )
-    #: The book's 90th-percentile error within ``max_anchor_age_h`` of
-    #: its anchor, and past it.
-    error_btu: float = field(
-        default=3000.0, metadata=_p(FITTED, "BTU", INSTALLATION)
-    )
-    aged_error_btu: float = field(
-        default=4100.0, metadata=_p(FITTED, "BTU", INSTALLATION)
-    )
-    #: Both probes within this of each other: a full tank, the book's
-    #: anchor, once it has been quiet since a heating ended, or as the
-    #: compressor runs (``anchor_run_min``).
-    uniform_band_f: float = field(
-        default=1.5, metadata=_p(FITTED, "°F", INSTALLATION)
-    )
-    #: The compressor's run since the last draw before a full tank
-    #: anchors the book as it runs: sooner, the probes still show only
-    #: part of the draw's heat.
-    anchor_run_min: float = field(
-        default=15.0, metadata=_p(FITTED, "min", INSTALLATION)
-    )
-    #: An anchor younger than this is fresh.
-    max_anchor_age_h: float = field(
-        default=18.0, metadata=_p(FITTED, "h", INSTALLATION)
-    )
-    #: How old an anchor a book from a recorded history still carries,
-    #: aged: a coverage bound, not a fit.
-    history_h: float = field(
-        default=72.0, metadata=_p(DEFAULT, "h", INSTALLATION)
-    )
-    #: The household flow that is a draw, gal/min.
-    draw_gpm: float = field(
-        default=0.3, metadata=_p(DEFAULT, "gal/min", INSTALLATION)
     )
 
 
@@ -1115,24 +936,8 @@ class CirculationParams:
     return_cool_tau_h: float = field(
         default=0.0, metadata=_p(FITTED, "h", INSTALLATION)
     )
-    #: The book's loss per gallon circulated while a run is on, BTU/gal:
-    #: the pipe's own loss, unsaturated. The book's form without
-    #: ``book_circuit_gal``.
-    loss_btu_per_gal: float = field(
-        metadata=_p(FITTED, "BTU/gal", INSTALLATION)
-    )
-    #: The book's circuit volume, gal: with it, the book prices a run as the
-    #: water it circulates up to this volume, each gallon at the upper
-    #: probe less the air (``book.circulated_btu``), the circuit having
-    #: cooled to the air since the last run; without it,
-    #: ``loss_btu_per_gal`` per gallon. An effective volume, fitted on
-    #: the book's re-anchors: not the circuit's own (``displaced_gal``),
-    #: and not to be fed from or into it.
-    book_circuit_gal: float | None = field(
-        default=None, metadata=_p(FITTED, "gal", INSTALLATION)
-    )
     #: The share of a run's own flow a household flow meter also reads,
-    #: for the heat book from a recorded history (``book.house_gpm``):
+    #: for the draws of a recorded history (``history.house_gpm``):
     #: 0 for a meter the circulation does not pass. Re-measure it when
     #: the plumbing or the meter changes.
     meter_share: float = field(
@@ -1151,21 +956,14 @@ class CirculationParams:
 #: ``power`` (the power map: its energy and COP) and ``tank`` (the
 #: layered tank's probes, mixing, conduction, losses and condenser,
 #: ``sim.tank_fit``); and the installation's terms fitted from a meter's
-#: draws, ``book`` (``BookParams``: the heat book's terms and error
-#: bands), ``readiness`` (``ReadinessParams``: the delivered lag,
-#: evidence and volumes) and ``draw`` (``DrawParams``: the delivery line
-#: and the inlet).
-UNFITTED_TERMS: tuple[str, ...] = (
-    "compressor",
-    "power",
-    "tank",
-    "book",
-    "readiness",
-    "draw",
-)
+#: draws, ``draw`` (``DrawParams``: the delivery line and the inlet).
+UNFITTED_TERMS: tuple[str, ...] = ("compressor", "power", "tank", "draw")
 #: The installation's terms another installation's values stand in for
 #: until its own meter fits them (``defaults.default_params``).
-INSTALLATION_TERMS: tuple[str, ...] = ("book", "readiness", "draw")
+INSTALLATION_TERMS: tuple[str, ...] = ("draw",)
+#: Term groups a document may name unfitted that this code no longer
+#: has: the heat book's and the readiness evidence's, read and left out.
+RETIRED_TERMS = frozenset({"book", "readiness"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1179,7 +977,6 @@ class HeaterParams:
     draw: DrawParams
     controller: ControllerParams
     readiness: ReadinessParams = field(default_factory=ReadinessParams)
-    book: BookParams = field(default_factory=BookParams)
     #: None: no circulation, or none described.
     circulation: CirculationParams | None = None
     #: The term groups (``UNFITTED_TERMS``) whose values were not fitted
@@ -1203,15 +1000,6 @@ class HeaterParams:
             tuple(t for t in UNFITTED_TERMS if t in set(self.unfitted)),
         )
 
-    def book_terms(self) -> BookParams:
-        """``book`` with the mixing valve's line taken from ``draw``: one
-        valve, whichever model prices a draw."""
-        return replace(
-            self.book,
-            delivery_intercept_f=self.draw.delivery_intercept_f,
-            delivery_slope=self.draw.delivery_slope,
-        )
-
 
 #: The document's schema: its name, and a version that moves only when
 #: a reader of the previous one would misread it.
@@ -1230,7 +1018,6 @@ PARTS: Mapping[str, type] = MappingProxyType(
         "draw": DrawParams,
         "controller": ControllerParams,
         "readiness": ReadinessParams,
-        "book": BookParams,
         "circulation": CirculationParams,
     }
 )
@@ -1335,7 +1122,9 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     (its ``loss.ua_btu_hr_f``, or ``standby`` or ``gap_tau`` unfitted)
     carries none of the layered tank's fitted terms, so its tank reads
     as the priors (a loss it leaves null included), with ``tank``
-    unfitted. A schema other than
+    unfitted. A document fitted with the heat book has its book's
+    ``draw_gpm`` read as ``DrawParams.draw_gpm`` where the draw part
+    carries none. A schema other than
     ``PARAMS_SCHEMA`` is a ``ValueError``, and so are a ``doc`` that is
     not an object and a value of the wrong type (a number where a list
     goes, a string where a number goes).
@@ -1353,7 +1142,7 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         raise ValueError(f"not a {PARAMS_SCHEMA} document: schema {schema!r}")
     unfitted = doc.get("unfitted", ())
     _check("unfitted", tuple[str, ...], unfitted)
-    names = set(unfitted)
+    names = set(unfitted) - RETIRED_TERMS
     loss = doc.get("loss")
     two_zone = bool(names & _TWO_ZONE_TERMS) or (
         isinstance(loss, Mapping) and _TWO_ZONE_LOSS in loss
@@ -1368,6 +1157,15 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         if not isinstance(given, Mapping):
             raise ValueError(f"part {name!r} is not an object")
         values = {}
+        book = doc.get("book")
+        if (
+            name == "draw"
+            and "draw_gpm" not in given
+            and isinstance(book, Mapping)
+            and "draw_gpm" in book
+        ):
+            # The flow that is a draw was the heat book's term.
+            given = {**given, "draw_gpm": book["draw_gpm"]}
         hints = get_type_hints(cls)
         for f in fields(cls):
             if two_zone and name == "loss" and given.get(f.name) is None:

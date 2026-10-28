@@ -9,6 +9,7 @@ could not be modelled is named in the result's ``reasons``, and every
 default used in its ``defaults_used``.
 """
 
+import contextlib
 import dataclasses
 import itertools
 import math
@@ -21,27 +22,17 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from nwp500.sim.book import (
-    Booked,
-    hp_btu_per_h,
-    standby_btu,
-    walk_booked,
-)
-from nwp500.sim.circulation import (
-    RUN_GAP,
-    Circulation,
-    CirculationLoss,
-)
+from nwp500.sim.circulation import RUN_GAP, Circulation
 from nwp500.sim.controller import HEAT_PUMP_UNAVAILABLE
 from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
     Deliverable,
-    booked_deliverable,
     deliverable,
     delivery_along,
     draw_domain_judgement,
     draw_windows,
+    within_resolution,
 )
 from nwp500.sim.engine import (
     HEATER_SETPOINT_MAX_F,
@@ -69,6 +60,7 @@ from nwp500.sim.inputs import (
     Scenario,
     Schedules,
     Settings,
+    Write,
 )
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.element import (
@@ -83,6 +75,8 @@ from nwp500.sim.physics.heat_pump import (
     start_hold_min,
 )
 from nwp500.sim.ready import (
+    MODES,
+    ModeRun,
     Readiness,
     Recovery,
     TankNow,
@@ -173,18 +167,6 @@ def _ambient_frame(
     return pd.DataFrame({"ambient_f": values}, index=stamps)
 
 
-def _at_the_inlet(
-    book: Booked | None, environment: Environment
-) -> Booked | None:
-    """``book`` converting heat to gallons at the scenario's inlet
-    (``Environment.inlet_f``) where one is given, as the walk's draws
-    take it (``cold_supply.on_the_mains`` for a plateau): the book's own
-    is the mains from the long draws in its hours, or the default."""
-    if book is None or environment.inlet_f is None:
-        return book
-    return dataclasses.replace(book, inlet_f=environment.inlet_f)
-
-
 #: No usable air reading was given: the answer ran at the default air.
 AMBIENT_DEFAULTED = "ambient_defaulted"
 #: The air is the heater's idle cabinet reading, about 6 °F warm
@@ -205,8 +187,8 @@ def _ambient_reasons(environment: Environment) -> list[str]:
 def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:
     """The scenario's circulation as the core's, or None: its runs
     merged once, over the whole input, at the circulation's own gap
-    (``CirculationParams.run_gap_min``), so the zone draws and the book's
-    loss see the same runs wherever a walk is cut."""
+    (``CirculationParams.run_gap_min``), so the tank sees the same runs
+    wherever a walk is cut."""
     if loads.circulation is None:
         return None
     gap = (
@@ -399,7 +381,6 @@ def simulate(
     params: HeaterParams,
     *,
     recovery: RecoveryModel | None = None,
-    book: Booked | None = None,
     tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
     withheld_windows: Sequence[tuple[datetime, datetime]] = (),
     inlet_measured: bool = False,
@@ -408,8 +389,10 @@ def simulate(
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
-    The tank starts as the physics makes it of the probes
-    (``TankPhysics.estimate``; ``tank_profile_estimated``).
+    The tank starts from its layers (``HeaterState.layers_f``), or as
+    the physics makes it of the probes (``TankPhysics.estimate``;
+    ``tank_profile_estimated``). The delivery and the draw windows read
+    the layers along the path (``sim.delivery``).
 
     ``recovery`` paces each heat-pump recovery by its own duration
     (``extensions.RecoveryModel``, served as a scale on the heat pump's
@@ -424,13 +407,6 @@ def simulate(
       compressor's own start's hold, minutes; ignored when it is not
       running.
 
-    ``book`` is the tank's booked heat at the start (``sim.book``): from
-    the caller's own record, or ``book.full_tank_book`` when they know
-    the tank has been quiet since a recovery ended. With it, the
-    delivery and the draw windows read the book walked along the path
-    (``book.walk_booked``); without it, the delivery is the upper
-    probe's, and ``reasons`` says ``no_heat_book``.
-
     ``inlet_measured``: the scenario's inlet (``Environment.inlet_f``) is
     the mains as measured (``cold_supply``); without it, a scenario with
     draws says ``inlet_temp_modelled``.
@@ -438,7 +414,7 @@ def simulate(
     ``withheld_windows`` are spans over which a recovery is credited no
     heat, as the worst case of a draw window's long draws coming first
     (``draw_forecast.draws_first``): the engine runs a recovery out
-    uncredited over them, and the book holds them back.
+    uncredited over them.
 
     ``tou_windows_in_force`` are the TOU windows the heater keeps, in
     place of the schedule's (``marked_windows``: the heater's own marker
@@ -449,7 +425,6 @@ def simulate(
     """
     s = scenario
     _check_setpoints(s)
-    book = _at_the_inlet(book, s.environment)
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
@@ -501,10 +476,6 @@ def simulate(
     _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
-    if book is None:
-        reasons.append("no_heat_book")
-    elif book.aged(params.book_terms()):
-        reasons.append("heat_book_aged")
     draws = [(d.at, d.gallons) for d in s.loads.draws]
     tank, estimated = _tank(physics, s.state)
     reasons += estimated
@@ -544,38 +515,7 @@ def simulate(
         ),
         running_hold=running_hold,
     )
-    walked = None
-    if book is not None:
-        terms = params.circulation or SITE_CIRCULATION
-        walked = walk_booked(
-            book,
-            sim.points,
-            sim.heating,
-            draws,
-            physics.ambient.at,
-            params.book_terms(),
-            withheld=sorted(withheld_windows),
-            extra=(
-                CirculationLoss(
-                    # The runs as given: a gap merged into a run
-                    # circulates nothing.
-                    [(r.start, r.end) for r in s.loads.circulation or ()],
-                    terms.flow_gpm,
-                    terms.loss_btu_per_gal,
-                    circuit_gal=terms.book_circuit_gal,
-                    # The tank's upper zone over the projection, as the
-                    # heater holds it.
-                    upper_f=s.settings.setpoint_f,
-                    air_at=physics.ambient.at,
-                    gap=circulation.gap,
-                )
-                if circulation is not None
-                else None
-            ),
-        )
-    delivery = delivery_along(
-        sim.points, draws, walked, params.readiness, params.book_terms()
-    )
+    delivery = delivery_along(sim.points, params)
     out_of_domain_at: datetime | None = None
     if draws:
         any_out, out_of_domain_at = draw_domain_judgement(
@@ -588,8 +528,6 @@ def simulate(
     reasons += _unfitted(params, "tank")
     if s.loads.draws:
         reasons += _unfitted(params, "draw")
-    if s.loads.windows:
-        reasons += _unfitted(params, "book", "readiness")
     if any(h.source == "compressor" for h in sim.heating):
         reasons += _unfitted(params, "compressor", "power")
     reasons += _ambient_reasons(s.environment)
@@ -605,20 +543,13 @@ def simulate(
                 sim,
                 [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
                 delivery,
-                booked=walked,
-                band_btu=(
-                    book.error_band_btu(params.book_terms())
-                    if book is not None and book.aged(params.book_terms())
-                    else 0.0
-                ),
-                p=params.readiness,
-                ep=params.book_terms(),
+                params,
+                inlet_f=s.environment.inlet_f,
                 forecast=[
                     (w.expected_count, w.draws_until) for w in s.loads.windows
                 ],
             )
         ),
-        booked=walked,
         draw_out_of_domain_at=out_of_domain_at,
     )
 
@@ -628,28 +559,16 @@ def readiness(
     settings: Settings,
     params: HeaterParams,
     *,
-    book: Booked | None = None,
+    inlet_f: float | None = None,
 ) -> Deliverable:
     """How much hot water the tank can deliver now, in delivered gallons
     at the line (``ReadinessParams.line_f``), and what the answer rests
-    on (``sim.delivery``).
-
-    With ``book``, the tank's booked heat answers (``basis`` ``energy``).
-    Without it, the tank's heat as its two probes place it
-    (``delivery.probes_gal``, ``probes``), or the evidence in
-    ``params.readiness.evidence`` (none by default) where it shows more
-    (``evidence``).
-    """
-    if book is not None:
-        return booked_deliverable(
-            book,
-            state.upper_f,
-            state.lower_f,
-            params.readiness,
-            params.book_terms(),
-        )
+    on (``sim.delivery``): the tank's layers (``HeaterState.layers_f``,
+    ``basis`` ``layers``), else the profile its two probes stand for
+    (``probes``). The mains is ``inlet_f``, else
+    ``DrawParams.inlet_temp_f``."""
     return deliverable(
-        state.upper_f, state.lower_f, params.readiness, ep=params.book_terms()
+        params, state.upper_f, state.lower_f, state.layers_f, inlet_f=inlet_f
     )
 
 
@@ -660,8 +579,6 @@ UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
         "compressor": "physics_uncalibrated",
         "power": "energy_uncalibrated",
         "tank": "tank_uncalibrated",
-        "book": "book_uncalibrated",
-        "readiness": "readiness_uncalibrated",
         "draw": "draw_uncalibrated",
     }
 )
@@ -1035,24 +952,15 @@ def _scheduled(
 
 
 def _to_start(
-    s: Scenario, params: HeaterParams, start: datetime, air: float
-) -> tuple[float, float, float, float]:
-    """The tank the heater's own start at ``start`` heats from, coasting
-    from now under ``s.loads``, and what the coast loses in the book's
-    frame: standby to the air now (the book's own term), the heat
-    circulation's runs take over exactly the coast, and the delivered
-    gallons drawn on it, which the book takes through the valve and puts
-    back cold. A draw at ``start`` itself, the one that trips the
-    trigger, is taken before the recovery: its tank is the one the draw
-    leaves, and its gallons are the coast's.
-
-    Returns ``(upper_f, lower_f, coast_btu, coast_gal)``."""
+    s: Scenario, params: HeaterParams, start: datetime
+) -> tuple[float, float]:
+    """The probes of the tank the heater's own start at ``start`` heats
+    from, coasting from now under ``s.loads``. A draw at ``start``
+    itself, the one that trips the trigger, is taken before the
+    recovery: its tank is the one the draw leaves."""
     now = s.start
     upper, lower = s.state.upper_f, s.state.lower_f
-    lost = gal = 0.0
     if start > now:
-        hours = (start - now).total_seconds() / 3600.0
-        lost = standby_btu(hours, upper, lower, air, params.book_terms())
         to_start = standby(
             s.state,
             s.environment,
@@ -1062,8 +970,6 @@ def _to_start(
             until=start,
             history=s.history,
         )
-        lost += (to_start.circulation_heat_wh or 0.0) * BTU_PER_WH
-        gal = to_start.draw_volume_gal or 0.0
         if to_start.points:
             upper, lower = (
                 to_start.points[-1].upper_f,
@@ -1085,8 +991,7 @@ def _to_start(
             upper, lower = physics.observe(
                 physics.draw(start, physics.estimate(upper, lower), g)
             )
-        gal += sum(at_start)
-    return upper, lower, lost, gal
+    return upper, lower
 
 
 def next_recovery(
@@ -1107,22 +1012,13 @@ def next_recovery(
     tank is ready); ``active_cycle`` gives its run-on.
     ``recovery`` serves its duration (``extensions.RecoveryModel``).
     ``not_scheduled`` while heating is disabled; ``unavailable`` when
-    it cannot be computed.
-
-    The coast's loss, in the book's frame, is standby to the air now,
-    the heat circulation takes over the coast, and the draws up to the
-    start, one at the start itself included (``_to_start``); the
-    recovery's heat into the book is the book's compressor term by the
-    air now."""
+    it cannot be computed."""
     s = scenario
     mode, disabled = _engine_mode(s.settings.mode)
     if disabled:
         return Recovery("not_scheduled")
     now = s.start
-    air = _ambient_at(s.environment, now)
-    bp = params.book_terms()
     start, upper, lower = now, s.state.upper_f, s.state.lower_f
-    coast_btu = coast_gal = 0.0
     try:
         if not s.state.compressor_running:
             # The household's expected draws cool the tank to its
@@ -1144,9 +1040,7 @@ def next_recovery(
             if coast.starts_at is None:
                 return Recovery("idle")
             start = max(now, coast.starts_at)
-            upper, lower, coast_btu, coast_gal = _to_start(
-                s, params, start, air
-            )
+            upper, lower = _to_start(s, params, start)
         if mode != "electric" and _out_of_range(
             params, [_ambient_at(s.environment, start)], lower
         ):
@@ -1156,8 +1050,6 @@ def next_recovery(
                 "unavailable",
                 [(start, upper, lower)],
                 start_minute=(start - now).total_seconds() / 60.0,
-                coast_btu=coast_btu,
-                coast_draw_gal=coast_gal,
                 hp_unavailable=True,
             )
         starting = HeaterState(
@@ -1200,9 +1092,6 @@ def next_recovery(
         tou_capped=capped,
         input_wh=[pt.input_energy_wh or 0.0 for pt in trajectory],
         start_minute=(start - now).total_seconds() / 60.0,
-        coast_btu=coast_btu,
-        coast_draw_gal=coast_gal,
-        hp_btu_per_h=hp_btu_per_h(air, bp),
         trajectory=tuple(trajectory),
     )
 
@@ -1336,16 +1225,98 @@ def _until(points: list[HeatingPoint], at: datetime) -> list[HeatingPoint]:
     return kept
 
 
-#: The share of a book's steps that measured the inlet for its
-#: conversion to count as measured.
-INLET_MEASURED_SHARE = 0.9
+#: How far ahead ``time_to_ready`` walks each mode for the bath.
+READY_HORIZON = timedelta(hours=24)
+
+#: Each mode ``time_to_ready`` walks, by the setting that selects it.
+_MODE_SETTING: Mapping[HeaterMode, int] = MappingProxyType(
+    {name: code for code, name in ENGINE_MODE.items()}
+)
+
+
+def _mode_walk(
+    s: Scenario,
+    params: HeaterParams,
+    mode: HeaterMode,
+    horizon: timedelta,
+    windows: Sequence[tuple[datetime, datetime]],
+    recovery: RecoveryModel | None,
+) -> SimulationResult:
+    """``s`` walked for ``horizon`` with ``mode`` written at its start:
+    in place of a mode the scenario writes there (its setpoint kept),
+    and before its later writes, which still take."""
+    write = Write(at=s.start, mode=_MODE_SETTING[mode])
+    at_start = [
+        w.model_copy(update={"mode": None})
+        for w in s.commands.writes
+        if w.at <= s.start and w.setpoint_f is not None
+    ]
+    commands = s.commands.model_copy(
+        update={
+            "writes": (
+                *at_start,
+                write,
+                *(w for w in s.commands.writes if w.at > s.start),
+            )
+        }
+    )
+    walked = s.model_copy(update={"commands": commands, "horizon": horizon})
+    return simulate(
+        walked, params, recovery=recovery, tou_windows_in_force=windows
+    )
+
+
+def _mode_run(
+    s: Scenario,
+    params: HeaterParams,
+    mode: HeaterMode,
+    bath_gal: float,
+    windows: Sequence[tuple[datetime, datetime]],
+    recovery: RecoveryModel | None,
+) -> ModeRun:
+    """The scenario walked with ``mode`` written at its start (the mode's
+    entry rule run, as the heater runs it on a write) to the first
+    instant its layers deliver ``bath_gal`` (``delivery.deliverable``),
+    within ``READY_HORIZON``, under the TOU ``windows``. Its reasons are
+    the walk's to that instant, or over the whole horizon when it does
+    not get there."""
+    try:
+        result = _mode_walk(s, params, mode, READY_HORIZON, windows, recovery)
+    except SimulationError:
+        return ModeRun(mode, None, None, ("time_to_ready_unavailable",))
+    wh = 0.0
+    for pt in result.simulation.points:
+        wh += (pt.input_wh or 0.0) + pt.element_wh
+        got = deliverable(
+            params,
+            pt.upper_f,
+            pt.lower_f,
+            pt.layers_f,
+            inlet_f=s.environment.inlet_f,
+        )
+        if got.gal < bath_gal:
+            continue
+        span = pt.at - s.start
+        reasons = result.reasons
+        if span > timedelta(0):
+            # What the walk rests on up to the bath, not past it.
+            with contextlib.suppress(SimulationError):
+                reasons = _mode_walk(
+                    s, params, mode, span, windows, recovery
+                ).reasons
+        return ModeRun(
+            mode,
+            round(span.total_seconds() / 60.0, 1),
+            round(wh / 1000.0, 2),
+            tuple(reasons),
+        )
+    return ModeRun(mode, None, None, tuple(result.reasons))
 
 
 def time_to_ready(
     scenario: Scenario,
     params: HeaterParams,
     *,
-    book: Booked | None = None,
     bath_gal: float | None = None,
     shower_gal: float | None = None,
     shower_from_forecast: bool = False,
@@ -1359,33 +1330,41 @@ def time_to_ready(
     get there, and how many showers of ``shower_gal`` it is ready for
     (``sim.ready``).
 
-    ``book`` is the tank's booked heat now, as for ``simulate``;
-    without it the answer is the probes' or the evidence's.
+    The gallons are the tank's layers' (``HeaterState.layers_f``, else
+    the profile the probes stand for: ``tank_profile_estimated``) at the
+    scenario's inlet (``sim.delivery``). Each mode's time is the
+    scenario walked with that mode written at its start (``simulate``;
+    the scenario's later writes still take) to the first instant its
+    layers deliver the bath, within ``READY_HORIZON``, under the TOU
+    windows the heater keeps (``marked_windows``: an unknown marker
+    counts as in force); its recovery's duration served by ``recovery``
+    when given (``extensions.RecoveryModel``) and by physics alone
+    otherwise, which runs short on long recoveries (the simulator
+    explanation's *Accuracy*). The heat pump's walk's reasons, to the
+    bath, are the answer's; an element mode's row says what its own walk
+    adds to them.
+
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
     ``defaults_used``. ``shower_from_forecast``: the
     ``shower_gal`` given is a draw forecast's
     (``draw_forecast.shower_gal``). ``drawing``: water is being drawn
-    now.
-    ``inlet_measured``: the book converts heat to gallons at an inlet
-    measured at the mains (a probe's plateau over a long draw); without
-    it, or a book whose steps measured the inlet at least
-    ``INLET_MEASURED_SHARE`` of the time, a booked answer says
-    ``inlet_temp_modelled``. The
-    recovery is the next one (``next_recovery``), its duration served
-    by ``recovery`` when given (``extensions.RecoveryModel``) and by
-    physics alone otherwise, which runs short on long recoveries (the
-    simulator explanation's *Accuracy*).
+    now. ``inlet_measured``: the scenario's inlet is the mains as
+    measured; without it the answer says ``inlet_temp_modelled``.
+
+    Raises ``ValueError`` for a setpoint written outside the heater's
+    range, as ``simulate`` does.
     """
     s = scenario
+    _check_setpoints(s)
     p = params.readiness
-    book = _at_the_inlet(book, s.environment)
     defaults: list[str] = []
     bath_source: Literal["configured", "request"] = "request"
     if bath_gal is None:
         bath_gal = p.bath_gal
         bath_source = "configured"
         defaults.append(f"bath_gal={bath_gal}")
+    bath_gal = round(bath_gal, 1)
     shower_source: Literal["weekly_forecast", "default", "request"] = (
         "weekly_forecast" if shower_from_forecast else "request"
     )
@@ -1409,48 +1388,76 @@ def time_to_ready(
         ambient_f=_ambient_at(s.environment, s.start),
         compressor_on=s.state.compressor_running,
     )
-    now_gal = (
-        booked_deliverable(
-            book, tank.upper_f, tank.lower_f, p, params.book_terms()
-        )
-        if book is not None
-        else deliverable(tank.upper_f, tank.lower_f, p, ep=params.book_terms())
+    inlet = s.environment.inlet_f
+    now_gal = deliverable(
+        params, tank.upper_f, tank.lower_f, s.state.layers_f, inlet_f=inlet
     )
-    # The recovery is only needed when the bath is not ready now.
+    # The recovery and the modes' walks are only needed when the bath is
+    # not ready now.
     nxt = Recovery("unavailable")
-    if now_gal.gal < round(bath_gal, 1):
+    runs: list[ModeRun] = []
+    hp_reasons: tuple[str, ...] = ()
+    schedule_unknown = False
+    if now_gal.gal < bath_gal:
         nxt = next_recovery(s, params, recovery=recovery)
+        if nxt.outcome != "not_scheduled":
+            end = s.start + READY_HORIZON
+            scheduled = _scheduled(s, s.start, end)
+            marker = tou_marked(s.settings)
+            if marker is None and scheduled is None:
+                # TOU on, neither its periods nor the heater's marker
+                # known: in force, as for the counter test.
+                marker = True
+            windows = marked_windows(s.start, marker, s.start, end, scheduled)
+            schedule_unknown = scheduled is None
+            walked = [
+                _mode_run(s, params, mode, bath_gal, windows, recovery)
+                for mode in MODES
+            ]
+            # The heat pump's walk's reasons are the answer's; each
+            # element mode's row says what its own walk adds to them.
+            hp_reasons = walked[0].reasons
+            runs = [
+                replace(
+                    r,
+                    reasons=(
+                        tuple(
+                            x
+                            for x in r.reasons
+                            if x == "time_to_ready_unavailable"
+                        )
+                        if r.mode == "heat_pump"
+                        else tuple(x for x in r.reasons if x not in hp_reasons)
+                    ),
+                )
+                for r in walked
+            ]
     answer = assess(
         s.start,
         tank,
         nxt,
-        bath_gal=round(bath_gal, 1),
+        now_gal,
+        runs,
+        bath_gal=bath_gal,
         bath_source=bath_source,
         shower_gal=shower_gal,
         shower_source=shower_source,
         valid_s=0.0,
-        setpoint_f=s.settings.setpoint_f,
-        booked=book,
-        inlet_measured=book is not None
-        and (
-            inlet_measured
-            # The book's own measured share, only while its own inlet
-            # converts: a scenario's inlet replaces it (``_at_the_inlet``).
-            or (
-                s.environment.inlet_f is None
-                and book.inlet_measured_share >= INLET_MEASURED_SHARE
-            )
+        within_resolution=within_resolution(
+            params,
+            tank.upper_f,
+            tank.lower_f,
+            s.state.layers_f,
+            bath_gal,
+            inlet_f=inlet,
         ),
         params=p,
-        element_params=params.element,
-        book_params=params.book_terms(),
     )
-    # The gallons now rest on the book's and readiness's terms whether
-    # or not a recovery was needed; the rest only on the recovery.
     answer["reasons"] = _unique(
         [
             *answer["reasons"],
-            *_unfitted(params, "book", "readiness"),
+            *([] if inlet_measured else ["inlet_temp_modelled"]),
+            *_unfitted(params, "tank", "draw"),
             *_ambient_reasons(s.environment),
             *(
                 [HEAT_PUMP_UNAVAILABLE]
@@ -1467,21 +1474,27 @@ def time_to_ready(
             ),
         ]
     )
-    if nxt.outcome == "ok":
+    if runs:
         answer["reasons"] = _unique(
             [
                 *answer["reasons"],
-                *_unfitted(params, "compressor", "power", "tank"),
-                *(_unfitted(params, "draw") if s.loads.draws else []),
+                *hp_reasons,
+                *(["tou_schedule_unknown"] if schedule_unknown else []),
+                *_unfitted(params, "compressor", "power"),
                 *(
                     [CIRCULATION_UNKNOWN]
                     if _circulation_unknown(
-                        params, s.loads, s.start + TRIGGER_HORIZON
+                        params, s.loads, s.start + READY_HORIZON
                     )
                     else []
                 ),
             ]
         )
+    # A mode's row says only what the answer does not.
+    for row in answer["bath"]["by_mode"]:
+        row["reasons"] = [
+            r for r in row["reasons"] if r not in answer["reasons"]
+        ]
     return typed(answer, s.start, nxt, defaults)
 
 

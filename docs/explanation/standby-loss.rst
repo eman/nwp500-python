@@ -203,9 +203,8 @@ A run first displaces the water standing in the loop, which has cooled
 toward the air, and then recirculates water it has already warmed. The
 cooled water it returns to the tank is at most about one loop volume,
 fitted from the runs themselves. After that, the warmed pipe keeps
-losing heat for as long as the pump runs: on this installation the heat
-book charges 159 BTU for each gallon circulated. Runs less than 10
-minutes apart count as one, because the loop has not cooled in between.
+losing heat for as long as the pump runs. Runs less than 10 minutes
+apart count as one, because the loop has not cooled in between.
 
 The loop's water does not cool all the way to the air beside the
 heater, and a run soon after another finds it still warm. On 123 runs

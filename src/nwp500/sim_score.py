@@ -787,16 +787,22 @@ def _draw_score(
 
 
 def _delivery_score(
-    e: Delivery, params: HeaterParams, tally: _Tally, day: int
+    e: Delivery,
+    params: HeaterParams,
+    inlet_f: float | None,
+    tally: _Tally,
+    day: int,
+    record: tf.TankRecord | None = None,
 ) -> tuple[bool, bool]:
     """Scored, and whether it promised more than a crossing delivered.
     A draw that did not cross delivered at least its gallons: only a
     prediction under them is an error, an under-promise."""
     try:
         got = sim.readiness(
-            sim.HeaterState(upper_f=e.upper_f, lower_f=e.lower_f),
+            _state(params, record, e.at, e.upper_f, e.lower_f),
             sim.Settings(setpoint_f=e.setpoint_f),
             params,
+            inlet_f=inlet_f,
         )
     except SimulationError, ValueError:
         return False, False
@@ -943,7 +949,9 @@ def score(
         if not _draw_score(d, params, inlet_f, tally, _day(d.at, zone), record):
             failed["draws"].append(_iso(d.at))
     for c in found.deliveries:
-        done, promised = _delivery_score(c, params, tally, _day(c.at, zone))
+        done, promised = _delivery_score(
+            c, params, inlet_f, tally, _day(c.at, zone), record
+        )
         if not done:
             failed["deliveries"].append(_iso(c.at))
         over += promised

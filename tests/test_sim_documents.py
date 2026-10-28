@@ -102,11 +102,7 @@ class TestToDocument:
         }
 
     def test_a_number_that_is_not_finite_is_null(self) -> None:
-        deliverable = sim.Deliverable(
-            gal=math.nan,
-            basis="energy",
-            at_observed_max=False,
-        )
+        deliverable = sim.Deliverable(gal=math.nan, basis="layers")
         assert codec.to_document(deliverable)["gal"] is None
 
     def test_no_value_is_left_unconverted(

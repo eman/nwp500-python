@@ -25,11 +25,10 @@ raw series.
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from statistics import median
 
-from nwp500.sim.book import Booked
 from nwp500.sim.circulation import merge_runs
 
 
@@ -110,18 +109,3 @@ def plateau_t_cold(
     if not plateaus:
         return ColdSupply(None)
     return ColdSupply(float(median(plateaus)), len(plateaus), newest)
-
-
-def on_the_mains(
-    book: Booked | None, cold: ColdSupply
-) -> tuple[Booked | None, bool]:
-    """``book`` converting heat to gallons at the mains (``cold``'s
-    plateau), and whether it does: a book reads the mains from the
-    long draws in its own hours (``book.mains_f``), and this one from
-    ``window_s``. Unchanged with no plateau or no book. Pass the flag to
-    ``time_to_ready``'s ``inlet_measured``."""
-    if book is None:
-        return None, False
-    if cold.t_cold_f is None:
-        return book, False
-    return replace(book, inlet_f=cold.t_cold_f), True
