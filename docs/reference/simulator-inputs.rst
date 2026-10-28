@@ -1086,14 +1086,23 @@ The ones ``element_mode`` adds about its own answer:
    * - Reason
      - What it says
    * - ``upper_element_does_not_start``
-     - The upper zone is short of the setpoint, but not by the mode's
-       entry deficit: the upper element does not start.
+     - The upper zone is short of the setpoint, and no element starts on
+       the write: the deficit is under the mode's entry deficit, the
+       mode is already in force, the write is held in a TOU window, or
+       heating is disabled.
+   * - ``mode_already_in_force``
+     - The mode asked about is the heater's own: the write changes
+       nothing, and the stint is what the heater does in it anyway.
    * - ``ready_target_above_setpoint``
      - The ready temperature asked for is above the setpoint, where the
-       element stops: it is never reached.
+       element stops, and the stint does not reach it.
    * - ``truncated_by_switch_back``
      - ``switch_back_after_minutes`` ends the stint before its recovery
        does: a time it does not reach by then is None.
+   * - ``recovery_cut_short``
+     - A later write or the heater dropping the mode at a window
+       (``element_mode_dropped_projected``) ended the recovery before
+       its targets: there is no ``full_minutes``.
    * - ``tou_schedule_unknown``
      - TOU is on and its periods are not known: the stint's walk counts
        the heater's marker, or a window in force when that is unknown

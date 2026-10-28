@@ -265,8 +265,9 @@ class ElementModeResult:
     upper_ready_minutes: float | None
     upper_setpoint_minutes: float | None
     #: When the recovery the write set off ends: every element and the
-    #: heat pump stopped. None when the switch-back comes first, or it
-    #: does not end within the walk.
+    #: heat pump stopped at its target. None when the switch-back comes
+    #: first, a later write or the heater dropping the mode at a window
+    #: cuts it short, or it does not end within the walk.
     full_minutes: float | None
     #: The stint's end, and the tank then: the probes and the layers
     #: (``HeaterState.layers_f``).

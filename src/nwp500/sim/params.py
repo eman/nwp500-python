@@ -811,10 +811,9 @@ class ElementParams:
     #: Where **Energy Saver's** upper element switches off: this far
     #: below the setpoint, not at it (2026-10-02, a held-out re-run).
     #: The element runs, and is charged, until the upper zone is this
-    #: short; the zone then coasts on with no input, by at most
-    #: this much and at most the heat in transit (``coast_f``), so
-    #: ``upper_setpoint_minutes`` and time to ready keep the fitted rate
-    #: and only the element's run and energy stop here.
+    #: short; the zone then coasts on with no input, the heat still in
+    #: transit after the dead time (``upper_dead_time_min``), so only the
+    #: element's run and energy stop here.
     #:
     #: **Measured from raw rows**: every upper-element off-edge on the
     #: device's record against the upper probe and the setpoint as of the edge,

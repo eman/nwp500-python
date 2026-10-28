@@ -370,7 +370,10 @@ Changed
   carries the walk's times, the elements' minutes and kWh, the heat
   pump's kWh (``heat_pump_kwh``), a ``profile`` of ``ElementInterval``
   slots with both, the tank at the end with its layers, and
-  ``reasons``; ``plan`` is gone. From 125/110 °F at a 140.9 °F
+  ``reasons``; ``plan`` is gone. A recovery a later write or the
+  heater's drop at a window ends has no ``full_minutes``
+  (``recovery_cut_short``), and a write of the mode already in force
+  says ``mode_already_in_force``. From 125/110 °F at a 140.9 °F
   setpoint the High Demand and Energy Saver recoveries end 127 and 128
   minutes out, with the heat pump's, which the element model left
   unknown; Electric's in 45.

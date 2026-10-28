@@ -873,20 +873,23 @@ MAX_PROFILE_SLOTS = 2000
 
 def _stint_end(
     simulation: Simulation, start: datetime, opens: timedelta
-) -> datetime | None:
+) -> tuple[datetime, bool] | None:
     """When the recovery a mode write at ``start`` sets off ends: the
     heating that begins within ``opens`` of it (the write's lag and the
     compressor's lockout), and all that begins before that has ended (an
-    element handing over, the heat pump alongside). ``start`` when none
-    begins; None when it is still heating at the walk's end."""
-    end = start
+    element handing over, the heat pump alongside); and whether a write
+    or the heater dropping the mode ended it rather than its targets.
+    ``start`` when none begins; None when it is still heating at the
+    walk's end."""
+    end, cut = start, False
     for h in sorted(simulation.heating, key=lambda h: h.start.at):
         if h.start.at > max(end, start + opens):
             break
         if h.stop == "horizon":
             return None
-        end = max(end, h.end)
-    return end
+        if h.end >= end:
+            end, cut = h.end, h.stop in ("mode", "write")
+    return end, cut
 
 
 def _first_reach(
@@ -921,7 +924,7 @@ def _profile(
             f"{span / slot_minutes:.0f} intervals, over the "
             f"{MAX_PROFILE_SLOTS} cap; widen slot_minutes"
         )
-    n = math.ceil(span / slot_minutes - 1e-9)
+    n = max(1, math.ceil(span / slot_minutes - 1e-9)) if span > 0 else 0
     element = [0.0] * n
     heat_pump = [0.0] * n
     for p0, p1 in itertools.pairwise(points):
@@ -967,7 +970,12 @@ def element_mode(
     counts as in force), its heat pump's recovery served by ``recovery``
     when given. It ends when the recovery the write sets off does (every
     element and the heat pump stopped), within ``READY_HORIZON``, or at
-    the switch-back, whichever is first.
+    the switch-back, whichever is first. A recovery a later write or the
+    heater dropping the mode at a window ends has no ``full_minutes``
+    (``recovery_cut_short``); a write of the mode already in force
+    changes nothing, and the stint is what the heater does in it anyway
+    (``mode_already_in_force``). The ready level and the setpoint are
+    the setpoint in force once the start's writes have taken.
 
     ``setpoint_f`` is a setpoint written with the mode instead of the
     heater's (``settings.setpoint_f``), which still decides the
@@ -995,49 +1003,63 @@ def element_mode(
             f"mode {mode} runs no element: 2 Electric, 3 Energy Saver or "
             "4 High Demand"
         )
-    if not slot_minutes > 0.0:
+    if not (math.isfinite(slot_minutes) and slot_minutes > 0.0):
         raise ValueError("slot_minutes must be positive")
-    back: datetime | None = None
-    if switch_back_after_minutes is not None:
-        if not (
-            math.isfinite(switch_back_after_minutes)
-            and switch_back_after_minutes >= 0.0
-        ):
-            raise ValueError("switch_back_after_minutes must not be negative")
-        back = s.start + timedelta(minutes=switch_back_after_minutes)
-    target = s.settings.setpoint_f if setpoint_f is None else setpoint_f
-    windows, schedule_unknown = _windows(s, s.start + READY_HORIZON)
-    walked = _mode_walk(
-        s,
-        params,
-        named,
-        READY_HORIZON,
-        windows,
-        recovery,
-        setpoint_f=setpoint_f,
-        back_at=back,
+    if switch_back_after_minutes is not None and not (
+        math.isfinite(switch_back_after_minutes)
+        and switch_back_after_minutes >= 0.0
+    ):
+        raise ValueError("switch_back_after_minutes must not be negative")
+    # The setpoint in force once the start's writes have taken, as the
+    # device holds it.
+    written = next(
+        (
+            w.setpoint_f
+            for w in reversed(s.commands.writes)
+            if w.at <= s.start and w.setpoint_f is not None
+        ),
+        None,
     )
+    if setpoint_f is not None:
+        written = setpoint_f
+    target = s.settings.setpoint_f if written is None else quantise(written)
+    windows, schedule_unknown = _windows(s, s.start + READY_HORIZON)
+
+    def stint_walk(horizon: timedelta) -> SimulationResult:
+        return _mode_walk(
+            s, params, named, horizon, windows, recovery, setpoint_f=setpoint_f
+        )
+
+    # The mode's own recovery, to its end or the walk's: where the
+    # switch-back, if any, falls against it.
+    walked = stint_walk(READY_HORIZON)
     c = params.controller
     opens = c.write_start_lag + c.restart_lockout
-    done = _stint_end(walked.simulation, s.start, opens)
-    truncated = back is not None and (done is None or done > back)
-    end = back if truncated else done
-    if end is None:
-        end = walked.until
+    found = _stint_end(walked.simulation, s.start, opens)
+    done, cut = (None, False) if found is None else found
+    end = walked.until if done is None else done
+    truncated = False
+    if switch_back_after_minutes is not None:
+        back = s.start + timedelta(minutes=switch_back_after_minutes)
+        truncated = back < end
+        end = min(end, back)
     reasons = list(BASE_REASONS)
-    stint: SimulationResult | None = None
-    if end > s.start:
-        stint = _mode_walk(
-            s,
-            params,
-            named,
-            end - s.start,
-            windows,
-            recovery,
-            setpoint_f=setpoint_f,
-            back_at=back,
-        )
-        reasons += stint.reasons
+    # The stint itself, its times, energy and end all from the one
+    # walk; one with nothing to heat is walked as far as a write could
+    # start something, for what it rests on.
+    stint = stint_walk(end - s.start if end > s.start else opens)
+    reasons += stint.reasons
+    # The heater dropping the mode at a window that opens as the stint
+    # ends is the first walk's to see.
+    if any(at <= end for at, _ in walked.simulation.drops):
+        reasons.append("element_mode_dropped_projected")
+    sim = stint.simulation
+    path = sim.points if end > s.start else []
+    heating = sim.heating if end > s.start else []
+    if s.settings.mode == _MODE_SETTING[named]:
+        # A write of the mode in force changes nothing: the stint is
+        # what the heater does in it anyway.
+        reasons.append("mode_already_in_force")
     if s.state.upper_f < target - ELEMENT_DONE_F and not any(
         h.source == "element" and h.start.at <= s.start + opens
         for h in walked.simulation.heating
@@ -1047,17 +1069,22 @@ def element_mode(
         reasons.append("truncated_by_switch_back")
     if schedule_unknown:
         reasons.append("tou_schedule_unknown")
-
-    def minutes(when: datetime | None) -> float | None:
-        if when is None or when > end:
-            return None
-        return round((when - s.start).total_seconds() / 60.0, 2)
+    # The recovery ends with every element and the heat pump stopped,
+    # not cut by a write or the heater's drop; read off the stint's own
+    # walk, whose last stop may land a little sooner than the first's.
+    full: float | None = None
+    if not truncated and done is not None and not cut:
+        again = _stint_end(sim, s.start, opens) if path else None
+        full = _minutes(s.start, end if again is None else again[0])
+    if cut:
+        reasons.append("recovery_cut_short")
 
     def upper_at(level: float) -> float | None:
-        return minutes(
+        return _minutes(
+            s.start,
             _first_reach(
-                walked.simulation.points, s.start, level, lambda p: p.upper_f
-            )
+                path or sim.points[:1], s.start, level, lambda p: p.upper_f
+            ),
         )
 
     # Reached as the elements reach their off point (``ELEMENT_DONE_F``).
@@ -1065,10 +1092,8 @@ def element_mode(
     ready = to_setpoint
     if ready_upper_f is not None:
         ready = upper_at(ready_upper_f)
-        if ready_upper_f > target:
+        if ready is None and ready_upper_f > target:
             reasons.append("ready_target_above_setpoint")
-    path = stint.simulation.points if stint is not None else []
-    heating = stint.simulation.heating if stint is not None else []
     last = path[-1] if path else None
     unpriced = any(
         h.source == "compressor" and h.input_wh is None for h in heating
@@ -1088,7 +1113,7 @@ def element_mode(
         unreachable_reason=reason,
         upper_ready_minutes=ready,
         upper_setpoint_minutes=to_setpoint,
-        full_minutes=None if truncated or done is None else minutes(done),
+        full_minutes=full,
         end_minute=round((end - s.start).total_seconds() / 60.0, 3),
         end_upper_f=round(s.state.upper_f if last is None else last.upper_f, 2),
         end_lower_f=round(s.state.lower_f if last is None else last.lower_f, 2),
@@ -1109,6 +1134,13 @@ def element_mode(
         profile=_profile(path, s.start, slot_minutes),
         reasons=tuple(_unique(reasons)),
     )
+
+
+def _minutes(start: datetime, when: datetime | None) -> float | None:
+    """``when`` as minutes from ``start``, to 0.01; None for None."""
+    if when is None:
+        return None
+    return round((when - start).total_seconds() / 60.0, 2)
 
 
 def _instant(at: datetime) -> datetime:
@@ -1460,13 +1492,11 @@ def _mode_walk(
     recovery: RecoveryModel | None,
     *,
     setpoint_f: float | None = None,
-    back_at: datetime | None = None,
 ) -> SimulationResult:
     """``s`` walked for ``horizon`` with ``mode`` written at its start:
     in place of a mode the scenario writes there (its setpoint kept, or
     ``setpoint_f`` written with the mode), and before its later writes,
-    which still take. ``back_at``: the mode in force at the start is
-    written back then."""
+    which still take."""
     write = Write(at=s.start, mode=_MODE_SETTING[mode], setpoint_f=setpoint_f)
     early = [w for w in s.commands.writes if w.at <= s.start]
     at_start = [
@@ -1474,15 +1504,7 @@ def _mode_walk(
         for w in early
         if w.setpoint_f is not None
     ]
-    later: list[Write] = [w for w in s.commands.writes if w.at > s.start]
-    if back_at is not None:
-        was = next(
-            (w.mode for w in reversed(early) if w.mode is not None),
-            s.settings.mode,
-        )
-        later = sorted(
-            [*later, Write(at=back_at, mode=was)], key=lambda w: w.at
-        )
+    later = [w for w in s.commands.writes if w.at > s.start]
     commands = s.commands.model_copy(
         update={"writes": (*at_start, write, *later)}
     )
