@@ -196,7 +196,7 @@ class TestTheFrame:
 
 
 class TestTheFits:
-    def test_the_standby_loss_from_the_changes(
+    def test_the_changes_calibrate_as_the_statuses(
         self, device_status_dict: dict[str, Any]
     ) -> None:
         readings = quiet(device_status_dict)
@@ -204,12 +204,10 @@ class TestTheFits:
         done = sc.calibrate_changes(
             changes_of(readings), heard, ambient=AIR_F, notes=("read: a note",)
         )
-        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
         assert done.notes[0] == "read: a note"
         same = sc.calibrate(readings, ambient=AIR_F)
-        assert done.calibration.standby.ua_ref == pytest.approx(
-            same.calibration.standby.ua_ref
-        )
+        assert done.tank == same.tank and done.tank.n_windows == 1
+        assert done.calibration.params == same.calibration.params
         assert done.n_statuses == same.n_statuses
 
     def test_a_silence_is_a_gap(
@@ -221,7 +219,9 @@ class TestTheFits:
         rows = changes_of(readings)
         done = sc.calibrate_changes(rows, heard, ambient=AIR_F)
         assert done.n_gaps == 1
-        assert done.calibration.standby.n_quiet == 2
+        # The quiet after it; the one before ends on the silence, where
+        # the score's windows end only on what was heard.
+        assert done.tank.n_windows == 1
 
     def test_nothing_heard_is_refused(self) -> None:
         rows = sa.ChangeRows(upper_f=[(T0, 130.0)], lower_f=[(T0, 120.0)])

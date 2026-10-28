@@ -227,7 +227,10 @@ class TestTheScore:
         ready, _ = history
         found = ss.events(ready)
         leaky = replace(
-            site, loss=replace(site.loss, ua_btu_hr_f=3 * site.loss.ua_btu_hr_f)
+            site,
+            loss=replace(
+                site.loss, ua_side_btu_hr_f=3 * site.loss.ua_side_btu_hr_f
+            ),
         )
         own = ss.score(found, site).metrics["standby_lower_rmse_f"].value
         other = ss.score(found, leaky).metrics["standby_lower_rmse_f"].value
@@ -237,7 +240,7 @@ class TestTheScore:
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
     ) -> None:
         ready, _ = history
-        leaky = replace(site, loss=replace(site.loss, ua_btu_hr_f=9.0))
+        leaky = replace(site, loss=replace(site.loss, ua_side_btu_hr_f=9.0))
         a = ss.score(ss.events(ready), site).document()
         b = ss.score(ss.events(ready), leaky).document()
         assert a["events"] == b["events"]

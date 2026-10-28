@@ -4,17 +4,17 @@ The history is the statuses the heater reported, with when
 (``nwp500.status_history``). ``calibrate`` builds the frame
 ``sim.calibration.calibrate`` takes (``sim_adapters.history``), marks
 the spans nobody observed, adds the air where the heater stands and its
-humidity, and runs the fits; ``report`` says what each fit found, or why
-a term kept the base's value.
+humidity, and runs the fits: the layered tank's (``sim.tank_fit``), then
+the heat pump's on it; ``report`` says what each fit found, or why a
+term kept the base's value.
 
-The standby fit needs the air where the heater stands: an air
-sensor's readings beside it, a constant for a heater in conditioned
-space, or what a Home Assistant source recorded
+The tank's fit needs the air where the heater stands: an air sensor's
+readings beside it, a constant for a heater in conditioned space, or
+what a Home Assistant source recorded
 (``sim_home_assistant.record_inputs``). Without it, the fit reads the
 heater's own reading while its compressor is idle, the cabinet's, less
-``sim_adapters.IDLE_CABINET_WARM_F``, and fits only the loss's level;
-with no such reading, the standby loss keeps the base's value. Given,
-the same air is the recoveries' too.
+``sim_adapters.IDLE_CABINET_WARM_F``; with no such reading, the tank
+keeps the base's terms. Given, the same air is the recoveries' too.
 
 The statuses are taken one at a time, so a long recording read through
 ``status_history.iter_read`` needs memory for the frame, not for its
@@ -47,9 +47,11 @@ from scipy.optimize import OptimizeResult, minimize_scalar
 
 from nwp500 import sim
 from nwp500 import sim_adapters as sa
+from nwp500 import sim_score as ss
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim import heat_pump_fit as hpf
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.book import FlowVolume
 from nwp500.sim.params import (
     UNFITTED_TERMS,
@@ -57,8 +59,6 @@ from nwp500.sim.params import (
     CirculationParams,
     CompressorParams,
     HeaterParams,
-    LossParams,
-    TankParams,
     params_from_document,
 )
 from nwp500.sim_adapters import GAP_SAMPLES, MIN_GAP, max_gap, silences
@@ -80,6 +80,10 @@ __all__ = (
     "NO_AIR_NOTE",
     "CalibrationInputError",
     "Calibrated",
+    "MIN_TANK_EVENTS",
+    "MIN_TANK_RECOVERIES",
+    "TANK_EVALUATIONS",
+    "TankCalibration",
     "BookTermsFit",
     "MIN_BOOK_PAIRS",
     "MIN_RUN_PAIRS",
@@ -108,7 +112,15 @@ DEFAULT_BASE_NOTE = (
 )
 #: The note when no air was given and the heater read none while its
 #: compressor ran.
-NO_AIR_NOTE = "no air given: the standby loss is not fitted"
+NO_AIR_NOTE = "no air given: the tank is not fitted"
+
+#: The fewest quiet windows and draws the tank's terms are fitted on,
+#: and the fewest recoveries where the condenser heats is fitted on with
+#: them (``tank_fit.CONDENSER_TERMS``).
+MIN_TANK_EVENTS = 10
+MIN_TANK_RECOVERIES = 5
+#: The tank's fit's most trials (``sim.tank_fit.fit``).
+TANK_EVALUATIONS = 300
 
 
 class CalibrationInputError(ValueError):
@@ -143,13 +155,33 @@ def _unobserved(
 
 
 @dataclass(frozen=True)
+class TankCalibration:
+    """The layered tank fitted on a history (``sim.tank_fit.fit``): the
+    fit, None where there was none, and why; what it was fitted on, the
+    quiet windows, the draws and the recoveries (``sim_score.events``,
+    as the stratified tank's events), each started from the history's
+    replay; and with ``keep_better``, how many of them were held out of
+    it."""
+
+    fit: tf.TankFit | None
+    n_windows: int
+    n_draws: int
+    n_recoveries: int
+    why: str = ""
+    n_held: int = 0
+
+
+@dataclass(frozen=True)
 class Calibrated:
     """A calibration, and what ``calibrate`` chose along the way."""
 
     calibration: cal.Calibration
+    #: The layered tank's fit, before the heat pump's, which prices its
+    #: heat against the tank's loss.
+    tank: TankCalibration
     #: How the air where the heater stands was given (``readings``,
     #: ``constant`` or ``source``), ``heater`` for the heater's own
-    #: reading (no air given: the cabinet's for the standby loss, the
+    #: reading (no air given: the cabinet's for the tank's fit, the
     #: running one for the recoveries), or None.
     air: str | None
     n_statuses: int
@@ -172,7 +204,7 @@ class Calibrated:
 
 #: The groups of terms ``keep_better`` judges, each kept or replaced
 #: whole: the terms one fit fits together.
-GROUPS = ("standby", "gap_tau", "heat_map", "power_map", "start_hold", "run_on")
+GROUPS = ("tank", "heat_map", "power_map", "start_hold", "run_on")
 
 
 @dataclass(frozen=True)
@@ -192,16 +224,13 @@ class Judged:
 @dataclass(frozen=True)
 class HeldOut:
     """The latest of each group's evidence, held out of its refit: the
-    quiet windows the loss is fitted on (``sim.calibration.
-    loss_windows``), the windows that open a gap, and the heat pump's
+    tank's quiet windows, draws and recoveries, with the record they
+    start from (``sim.tank_fit.TankRecord``), and the heat pump's
     climbs, blocks, starts and run-ons (``heat_pump_fit.Evidence``)."""
 
-    windows: tuple[cal.StandbyWindow, ...]
-    gap_windows: tuple[cal.StandbyWindow, ...]
+    tank: tuple[tf.Coast, ...]
+    record: tf.TankRecord | None
     heat_pump: hpf.Evidence
-    #: The gap's constant the standby loss was fitted and judged on,
-    #: hours: the one the gap's judgement kept.
-    standby_tau_h: float | None = None
 
 
 def _split(n: int) -> int:
@@ -212,53 +241,20 @@ def _split(n: int) -> int:
     return max(cal.MIN_HELDOUT, round(n * cal.HELDOUT_FRACTION))
 
 
-def _loss_error(
-    windows: Sequence[cal.StandbyWindow],
-    loss: LossParams,
-    tau_gap_hours: float,
-    tank: TankParams,
-) -> float | None:
-    """The standby loss's error on ``windows``: the probes' mean absolute
-    error in each window's fall, °F/h, walked on ``tau_gap_hours``
-    (``sim.calibration.standby_error``)."""
-    return cal.standby_error(windows, loss, tau_gap_hours, tank)
-
-
-def _gap_error(
-    windows: Sequence[cal.StandbyWindow],
-    loss: LossParams,
-    tank: TankParams,
-    tau_hours: float | None,
-) -> float | None:
-    """The gap's mean squared error on ``windows``, °F², relaxing on
-    ``tau_hours`` and opened by ``loss``' bottom loss
-    (``sim.calibration.gap_error``)."""
-    return cal.gap_error(windows, tau_hours, loss, tank)
-
-
-def _gap_windows(
-    windows: Sequence[cal.StandbyWindow],
-) -> list[cal.StandbyWindow]:
-    """The windows ``fit_gap_tau`` fits on: opening with a gap."""
-    return [
-        w
-        for w in windows
-        if len(w.gap_f) >= 2
-        and bool(np.isfinite(w.gap_f).all())
-        and w.gap_f[0] >= cal.MIN_GAP_FIT_START_F
-    ]
-
-
-def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
+def score(
+    done: Calibrated,
+    params: HeaterParams,
+    *,
+    map_: Callable[..., Iterable[Any]] = map,
+) -> dict[str, float | None]:
     """Each group's error for ``params`` on the evidence ``done`` held
     out of its refits (``keep_better``), by ``GROUPS``; None where none
     was held out, or ``params`` cannot model all of it. Lower is better;
-    each group's error is its own fit's, or the walk's:
+    each group's error is its own fit's:
 
-    - ``standby``: the probes' mean absolute error in each window's
-      fall, °F/h, walked on ``HeldOut.standby_tau_h``;
-    - ``gap_tau``: the gap's mean squared error, °F², relaxing on the
-      constant and opened by ``params``' bottom loss;
+    - ``tank``: the probes' RMSE over the held-out quiet windows, draws
+      and recoveries, each started from the history's replay, °F
+      (``sim.tank_fit.event_rmse``; ``map_`` maps over the events);
     - ``heat_map``: the heat's RMS error on the mixed climbs, weighted by
       their minutes, BTU/h (``heat_pump_fit.heat_map_error``);
     - ``power_map``: the power's RMS error on the climbs' metered
@@ -273,20 +269,8 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
         raise CalibrationInputError(
             "nothing was held out: calibrate with keep_better=True"
         )
-    loss = params.loss
     return {
-        "standby": _loss_error(
-            held.windows,
-            loss,
-            cal.walk_tau(params.tank, held.standby_tau_h),
-            params.tank,
-        ),
-        "gap_tau": _gap_error(
-            held.gap_windows,
-            params.loss,
-            params.tank,
-            params.tank.stratification_gap_tau_h,
-        ),
+        "tank": tf.event_rmse(params, held.record, held.tank, map_=map_),
         "heat_map": hpf.heat_map_error(held.heat_pump.heat, params.compressor),
         "power_map": hpf.power_map_error(
             held.heat_pump.power, params.compressor
@@ -351,162 +335,194 @@ def _judge(
     return Judged(group, "refit", base, refit, n_held, "")
 
 
-def _keep_better(
-    frame: pd.DataFrame,
+#: A meter's draw: its onset, and the gallons it delivered.
+MeterDraw = tuple[datetime, float]
+
+
+@dataclass(frozen=True)
+class _TankEvents:
+    """A history's events as the stratified tank's (``sim_score``),
+    each in time order, and the record they start from; None, and why,
+    where the tank cannot be replayed."""
+
+    record: tf.TankRecord | None
+    windows: list[tf.Coast]
+    draws: list[tf.Coast]
+    recoveries: list[tf.Coast]
+    why: str = ""
+
+
+def _tank_events(
+    ready: Prepared, params: HeaterParams, draws: Sequence[MeterDraw]
+) -> _TankEvents:
+    """``ready``'s quiet windows, a meter's ``draws`` and its recoveries
+    as the stratified tank's events (``sim_score.layer_coasts``,
+    ``layer_recoveries``), on its replay (``sim.tank_fit.tank_record``),
+    which needs the air where the heater stands."""
+    frame = ready.frame
+    if "air_f" not in frame.columns:
+        return _TankEvents(None, [], [], [], "no air given")
+    if not bool(frame["air_f"].notna().any()):
+        return _TankEvents(
+            None, [], [], [], "no reading of the air where the heater stands"
+        )
+    found = ss.events(ready, draws=draws)
+    record = tf.tank_record(frame, draws)
+    windows, drawn = ss.layer_coasts(found)
+    climbs = ss.layer_recoveries(found, params, record)
+
+    def ordered(coasts: list[tf.Coast]) -> list[tf.Coast]:
+        return sorted(coasts, key=lambda c: c.start)
+
+    return _TankEvents(
+        record, ordered(windows), ordered(drawn), ordered(climbs)
+    )
+
+
+def _fit_tank(
+    params: HeaterParams,
+    found: _TankEvents,
+    map_: Callable[..., Iterable[Any]],
+) -> tuple[tf.TankFit | None, str]:
+    """The tank's terms (``tank_fit.TERMS``) fitted from ``params``' on
+    ``found``'s quiet windows and draws, and with enough recoveries,
+    where the condenser heats (``CONDENSER_TERMS``) with them on those
+    too: the condenser places the heat each window's replay starts
+    from. None, and why, with too few events."""
+    if found.record is None:
+        return None, found.why
+    coasts = [*found.windows, *found.draws]
+    if len(coasts) < MIN_TANK_EVENTS:
+        return None, (
+            f"{len(coasts)} quiet windows and draws; {MIN_TANK_EVENTS} needed"
+        )
+    terms = tf.TERMS
+    if len(found.recoveries) >= MIN_TANK_RECOVERIES:
+        coasts += found.recoveries
+        terms = tf.TERMS + tf.CONDENSER_TERMS
+    fit = tf.fit(
+        params,
+        found.record,
+        coasts,
+        terms=terms,
+        map_=map_,
+        max_evaluations=TANK_EVALUATIONS,
+    )
+    return fit, ""
+
+
+def _tank_calibration(
+    fit: tf.TankFit | None, found: _TankEvents, why: str, n_held: int = 0
+) -> TankCalibration:
+    return TankCalibration(
+        fit,
+        len(found.windows),
+        len(found.draws),
+        len(found.recoveries),
+        why,
+        n_held,
+    )
+
+
+def _keep_better_tank(
+    ready: Prepared,
     base: HeaterParams,
-    recovery_air: str,
-    ua_exponent: float | None = None,
-) -> tuple[cal.Calibration, tuple[Judged, ...], HeldOut]:
-    """``sim.calibration.calibrate``'s fits in its order, each group's
-    latest evidence held out of its refit, and the refit kept only where
-    it scores better there than ``base``. A group ``base`` lists as
-    unfitted takes its refit as ``calibrate`` would."""
-    unfitted = set(base.unfitted)
-    judged: list[Judged] = []
-    standby = cal.fit_standby(
-        frame,
-        base.tank.thermal_mass_btu_f,
-        tank=base.tank,
-        loss=base.loss,
-        ua_exponent=ua_exponent,
+    draws: Sequence[MeterDraw],
+    unfitted: set[str],
+    judged: list[Judged],
+    map_: Callable[..., Iterable[Any]],
+) -> tuple[
+    HeaterParams, TankCalibration, tuple[tf.Coast, ...], tf.TankRecord | None
+]:
+    """The tank's terms refitted on all but the latest of its events
+    (its quiet windows, draws and recoveries together, ``_split``), and
+    kept only where they score better on those (``score``'s ``tank``).
+    With too few events to hold any out, the base is kept without a
+    fit. With the tank unfitted in ``base``, the refit is taken
+    unjudged, on every event. Returns the parameters, the fit (its
+    counts the events it was fitted on), the events held out and the
+    record they start from; ``unfitted`` and ``judged`` are updated in
+    place."""
+    found = _tank_events(ready, base, draws)
+    open_tank = "tank" in unfitted
+    what = "quiet windows, draws and recoveries"
+    events = sorted(
+        [*found.windows, *found.draws, *found.recoveries],
+        key=lambda c: c.start,
     )
-    windows = sorted(standby.windows, key=lambda w: w.start)
+    n = 0 if open_tank else _split(len(events))
+    held = events[len(events) - n :]
+    out = {id(c) for c in held}
+
+    def kept(kind: list[tf.Coast]) -> list[tf.Coast]:
+        return [c for c in kind if id(c) not in out]
+
+    train = replace(
+        found,
+        windows=kept(found.windows),
+        draws=kept(found.draws),
+        recoveries=kept(found.recoveries),
+    )
+    if found.record is not None and not open_tank and not held:
+        # Nothing to judge a refit by: not worth the fit's minutes.
+        j = _judge("tank", what, 0, None, None)
+        judged.append(j)
+        return base, _tank_calibration(None, train, j.why), (), found.record
+    fit, why = _fit_tank(base, train, map_)
     params = base
-    # The gap's constant is judged first, its gaps opened by the base's
-    # bottom loss, and the standby loss is then fitted and judged on the
-    # constant kept, so a loss that wins does so on the gaps the
-    # parameters returned will relax on. A group the base has not
-    # fitted takes its refit unjudged, on all its evidence.
-    gap_all = _gap_windows(windows)
-    n_gap_held = 0 if "gap_tau" in unfitted else _split(len(gap_all))
-    gap_train = gap_all[: len(gap_all) - n_gap_held]
-    held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
-    both_unfitted = {"gap_tau", "standby"} <= unfitted
-    # The gaps are opened by the loss the parameters will carry: the
-    # base's, or where the base has not fitted one, the refit's, which
-    # is taken unjudged. The constant is fitted and scored on it alike.
-    opening = (
-        cal.with_standby(base, standby).loss
-        if "standby" in unfitted
-        else base.loss
-    )
-    if both_unfitted:
-        # Neither is judged: the joint fit ``calibrate`` takes, the
-        # constant and the loss fitted in turn (``fit_standby``).
-        tau, n_gap = standby.tau_gap_hours, standby.n_gap_windows
-    else:
-        tau, n_gap = cal.fit_gap_tau(
-            [(w.gap_hours, w.gap_f) for w in gap_train],
-            loss=opening,
-            tank=base.tank,
-        )
-    if tau is None and "gap_tau" not in unfitted:
-        judged.append(
-            _judge(
-                "gap_tau",
-                "windows that open a gap",
-                n_gap_held,
-                _gap_error(
-                    held_gaps,
-                    opening,
-                    base.tank,
-                    base.tank.stratification_gap_tau_h,
-                ),
-                None,
-                refit_exists=False,
-                needed=cal.MIN_GAP_FIT_WINDOWS,
-            )
-        )
-    elif tau is not None:
-        if "gap_tau" in unfitted:
-            params = replace(
-                params,
-                tank=replace(params.tank, stratification_gap_tau_h=tau),
-            )
-            unfitted.discard("gap_tau")
-        else:
-            j = _judge(
-                "gap_tau",
-                "windows that open a gap",
-                n_gap_held,
-                _gap_error(
-                    held_gaps,
-                    opening,
-                    base.tank,
-                    base.tank.stratification_gap_tau_h,
-                ),
-                _gap_error(held_gaps, opening, base.tank, tau),
-            )
-            judged.append(j)
-            if j.kept == "refit":
-                params = replace(
-                    params,
-                    tank=replace(params.tank, stratification_gap_tau_h=tau),
+    if fit is None:
+        if not open_tank:
+            judged.append(
+                Judged(
+                    "tank",
+                    "base",
+                    None,
+                    None,
+                    len(held),
+                    f"kept the base: {why}",
                 )
-    walk_tau = cal.walk_tau(params.tank)
-    # The windows the loss can use (``loss_windows``), split.
-    law = cal.loss_windows(windows)
-    n_held = 0 if "standby" in unfitted else _split(len(law))
-    train = law[: len(law) - n_held]
-    held_windows = tuple(law[len(law) - n_held :])
-    loss_fit = (
-        cal.fit_loss(train, walk_tau, base.tank, ua_exponent)
-        if train and not both_unfitted
-        else None
-    )
-    refit_standby = (
-        (None if standby.ua_ref is None else standby)
-        if both_unfitted
-        else None
-        if loss_fit is None
-        else replace(
-            standby,
-            ua_ref=loss_fit.ua_ref,
-            ua_exponent=loss_fit.ua_exponent,
-            bottom_loss_btu_hr=loss_fit.bottom_loss_btu_hr,
-            bottom_gate_f=loss_fit.bottom_gate_f,
-            n_stratified=loss_fit.n_stratified,
-            tau_gap_hours=None,
-        )
-    )
-    if "standby" not in unfitted and refit_standby is None:
-        judged.append(
-            Judged(
-                "standby",
-                "base",
-                None,
-                None,
-                0,
-                "kept the base: no quiet window to refit on",
             )
-        )
-    elif refit_standby is not None and "standby" in unfitted:
-        params = cal.with_standby(params, refit_standby)
-        unfitted.discard("standby")
-    elif refit_standby is not None:
+    elif open_tank:
+        params = fit.params
+        unfitted.discard("tank")
+    else:
         j = _judge(
-            "standby",
-            "quiet windows",
-            n_held,
-            _loss_error(held_windows, base.loss, walk_tau, base.tank),
-            _loss_error(
-                held_windows,
-                cal.with_standby(base, refit_standby).loss,
-                walk_tau,
-                base.tank,
-            ),
+            "tank",
+            what,
+            len(held),
+            tf.event_rmse(base, found.record, held, map_=map_),
+            tf.event_rmse(fit.params, found.record, held, map_=map_),
         )
         judged.append(j)
         if j.kept == "refit":
-            params = cal.with_standby(params, refit_standby)
-    fitted_standby = replace(
-        standby if refit_standby is None else refit_standby,
-        tau_gap_hours=tau,
-        n_gap_windows=n_gap,
+            params = fit.params
+    return (
+        params,
+        _tank_calibration(fit, train, why, len(held)),
+        tuple(held),
+        found.record,
+    )
+
+
+def _keep_better(
+    ready: Prepared,
+    base: HeaterParams,
+    draws: Sequence[MeterDraw],
+    map_: Callable[..., Iterable[Any]],
+) -> tuple[cal.Calibration, TankCalibration, tuple[Judged, ...], HeldOut]:
+    """The fits in ``calibrate``'s order, the tank's then the heat
+    pump's, each group's latest evidence held out of its refit, and the
+    refit kept only where it scores better there than ``base``. A group
+    ``base`` lists as unfitted takes its refit as ``calibrate`` would."""
+    frame, recovery_air = ready.frame, ready.recovery_air
+    unfitted = set(base.unfitted)
+    judged: list[Judged] = []
+    params, tank, held_tank, record = _keep_better_tank(
+        ready, base, draws, unfitted, judged, map_
     )
     found = cal.recoveries(frame, air=recovery_air)
     params, pump, held_pump = _keep_better_heat_pump(
-        hpf.evidence(frame, params.tank, params.loss, air=recovery_air),
+        hpf.evidence(frame, params, air=recovery_air),
         params,
         unfitted,
         judged,
@@ -515,16 +531,11 @@ def _keep_better(
         params,
         unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),
     )
-    held = HeldOut(
-        held_windows,
-        held_gaps,
-        held_pump,
-        standby_tau_h=walk_tau,
-    )
     return (
-        cal.Calibration(params, fitted_standby, pump, found),
+        cal.Calibration(params, pump, found),
+        tank,
         tuple(judged),
-        held,
+        HeldOut(held_tank, record, held_pump),
     )
 
 
@@ -802,23 +813,31 @@ def calibrate(
     humidity: Sequence[Reading] | None = None,
     params: HeaterParams | Any = None,
     record: RecordInputs | None = None,
+    draws: Sequence[MeterDraw] = (),
     keep_better: bool = False,
+    map_: Callable[..., Iterable[Any]] = map,
 ) -> Calibrated:
     """``params`` (``HeaterParams`` or a parameters document; default
     the 65 gal defaults) refitted on ``readings``, the statuses the
-    heater reported and when, taken once, in any order.
+    heater reported and when, taken once, in any order: the layered
+    tank first (``TankCalibration``), then the heat pump, its heat
+    priced against the tank's loss.
 
     The air where the heater stands is ``air`` (a sensor's readings) or
     ``ambient`` (a constant), in the preferred unit, and ``humidity``
-    that air's, %. Given, the air is both the standby fit's and the
-    recoveries'; without it, the standby loss is fitted on the heater's
-    idle reading less ``sim_adapters.IDLE_CABINET_WARM_F`` (its level
-    only), and recoveries use the heater's own reading while its
-    compressor runs.
+    that air's, %. Given, the air is both the tank's and the
+    recoveries'; without it, the tank is fitted on the heater's idle
+    reading less ``sim_adapters.IDLE_CABINET_WARM_F``, and recoveries
+    use the heater's own reading while its compressor runs.
     ``record`` (``sim_home_assistant.RecordInputs``) is what a live
     source recorded over the history, °F: its air and humidity where
     none was given, and its draws and circulation runs, which make the
     quiet test exact. Its air is used only over the span it covers.
+    ``draws`` are a meter's, ``(onset, delivered gallons)``: the tank's
+    replay takes them, and its terms are fitted on the hours after them
+    too. ``map_(function, a, b, c)`` maps the tank's fit over its
+    events: a process pool's ``map`` spreads it (a fit on months of
+    history takes minutes on one).
 
     Readings further apart than ``max_gap`` of them are a span nobody
     observed, and no fit spans one. Raises ``CalibrationInputError``
@@ -847,7 +866,9 @@ def calibrate(
         ambient,
         humidity,
         record,
+        draws=draws,
         keep_better=keep_better,
+        map_=map_,
     )
 
 
@@ -861,7 +882,9 @@ def calibrate_changes(
     params: HeaterParams | Any = None,
     record: RecordInputs | None = None,
     notes: Iterable[str] = (),
+    draws: Sequence[MeterDraw] = (),
     keep_better: bool = False,
+    map_: Callable[..., Iterable[Any]] = map,
 ) -> Calibrated:
     """``calibrate`` on a heater's values' changes (``rows``) instead of
     its statuses, with ``observed`` the instants it was heard from
@@ -869,8 +892,8 @@ def calibrate_changes(
     read_heater_history`` reads both from Home Assistant). ``notes``
     open the result's (a reader's). The rows are counted in
     ``n_statuses``. Raises ``CalibrationInputError`` as ``calibrate``
-    does, or for no ``observed`` instants. ``keep_better`` as for
-    ``calibrate``.
+    does, or for no ``observed`` instants. ``draws``, ``keep_better``
+    and ``map_`` as for ``calibrate``.
     """
     base, more = _begin(air, ambient, params)
     frame, gaps = _change_frame(rows, observed)
@@ -883,7 +906,9 @@ def calibrate_changes(
         humidity,
         record,
         gaps=gaps,
+        draws=draws,
         keep_better=keep_better,
+        map_=map_,
     )
 
 
@@ -894,7 +919,7 @@ def _air_from_cabinet(
     quiet windows: its reading while the compressor is idle, the
     cabinet's, less ``sim_adapters.IDLE_CABINET_WARM_F``. A quiet window
     with no such reading throughout is marked ``air_unobserved``, out of
-    the standby fit. How many windows were read, of how many, and their
+    the tank's fit. How many windows were read, of how many, and their
     share of the quiet hours; None with no such reading."""
     if "heater_cabinet_f" not in frame.columns:
         return None
@@ -1004,27 +1029,39 @@ def _fit(
     humidity: Sequence[Reading] | None,
     record: RecordInputs | None,
     gaps: tuple[timedelta, int] | None = None,
+    draws: Sequence[MeterDraw] = (),
     keep_better: bool = False,
+    map_: Callable[..., Iterable[Any]] = map,
 ) -> Calibrated:
     """The fits on ``frame`` (``history``'s or ``change_history``'s),
     prepared (``_prepare``)."""
     ready = _prepare(frame, notes, air, ambient, humidity, record, gaps)
     frame, how, recovery_air = ready.frame, ready.air, ready.recovery_air
     gap, n_gaps = ready.max_gap, ready.n_gaps
-    # On the cabinet's air, whose warmth rises with the tank's, the law's
-    # shape bends: its level only, on the base's exponent.
-    exponent = base.loss.ua_exponent if how == "heater" else None
     n_runs, unread = _runs_without_air(frame, recovery_air)
     judged: tuple[Judged, ...] = ()
     held: HeldOut | None = None
     if keep_better:
-        fitted, judged, held = _keep_better(frame, base, recovery_air, exponent)
+        fitted, tank, judged, held = _keep_better(ready, base, draws, map_)
     else:
-        fitted = cal.calibrate(
-            frame, base, recovery_air=recovery_air, ua_exponent=exponent
+        found = _tank_events(ready, base, draws)
+        fit, why = _fit_tank(base, found, map_)
+        tank = _tank_calibration(fit, found, why)
+        start = base if fit is None else fit.params
+        fitted = cal.calibrate(frame, start, recovery_air=recovery_air)
+        unfitted = set(fitted.params.unfitted) - {"tank"}
+        if fit is None:
+            unfitted.add("tank")
+        fitted = replace(
+            fitted,
+            params=replace(
+                fitted.params,
+                unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),
+            ),
         )
     done = Calibrated(
         fitted,
+        tank,
         how,
         len(frame),
         gap,
@@ -1112,7 +1149,7 @@ def _prepare(
     if covers is not None and record is not None:
         unseen = _unobserved(index, covers, record.air_outages)
         frame.loc[unseen, "air_f"] = float("nan")
-        # And out of the standby fit, which would interpolate across.
+        # And out of the tank's fit, which would interpolate across.
         frame["air_unobserved"] = unseen
         if "heater_air_f" in frame.columns and bool(
             frame["heater_air_f"].notna().any()
@@ -1142,11 +1179,11 @@ def _prepare(
             how = "heater"
             n, of, share = read
             notes.append(
-                "no air given: the standby loss is fitted on the heater's "
-                "own reading while its compressor is idle, less "
-                f"{sa.IDLE_CABINET_WARM_F:g} °F for the cabinet's warmth, "
-                f"on the base's exponent ({n} of {of} quiet windows, "
-                f"{share:.0%} of their hours, have it throughout)"
+                "no air given: the tank is fitted on the heater's own "
+                "reading while its compressor is idle, less "
+                f"{sa.IDLE_CABINET_WARM_F:g} °F for the cabinet's warmth "
+                f"({n} of {of} quiet windows, {share:.0%} of their hours, "
+                "have it throughout)"
             )
     return Prepared(frame, how, recovery_air, gap, n_gaps, tuple(notes))
 
@@ -1175,13 +1212,19 @@ def _num(value: float | None, digits: int = 3) -> str:
 
 #: The report's terms of each group ``keep_better`` judges.
 _GROUP_TERMS = {
-    "standby": (
-        "Standby loss (UA at ref ΔT, BTU/h·°F)",
-        "Standby loss exponent",
-        "Bottom loss (BTU/h)",
-        "Bottom loss gate (°F)",
+    "tank": (
+        "Sides' loss (UA, BTU/h·°F)",
+        "Bottom's loss (UA, BTU/h·°F)",
+        "Top's loss (UA, BTU/h·°F)",
+        "Column conductance (BTU/h·°F)",
+        "Lower probe height (share)",
+        "Lower probe spread (gal)",
+        "Lower probe offset (°F)",
+        "Upper probe height (share)",
+        "Upper probe spread (gal)",
+        "Inlet mixing (gal)",
+        "Condenser span (share)",
     ),
-    "gap_tau": ("Zone gap time constant (h)",),
     "heat_map": (
         "Heat at 65 °F air, 120 °F water (BTU/h)",
         "Heat per °F of air (BTU/h)",
@@ -1204,13 +1247,9 @@ def _holds(values: Sequence[float]) -> str:
 def _values(params: HeaterParams) -> dict[str, str]:
     """The value each judged term holds in ``params``, by report name,
     as the report shows it."""
-    loss, c = params.loss, params.compressor
+    c = params.compressor
     values = (
-        _num(loss.ua_btu_hr_f),
-        _num(loss.ua_exponent),
-        _num(loss.bottom_loss_btu_hr),
-        _num(loss.bottom_gate_f),
-        _num(params.tank.stratification_gap_tau_h),
+        *_tank_values(params),
         _num(c.heat_btu_h, 4),
         _num(c.heat_btu_h_per_air_f),
         _num(c.heat_btu_h_per_water_f),
@@ -1222,6 +1261,83 @@ def _values(params: HeaterParams) -> dict[str, str]:
     )
     names = [n for group in _GROUP_TERMS.values() for n in group]
     return dict(zip(names, values, strict=True))
+
+
+def _tank_values(params: HeaterParams) -> tuple[str, ...]:
+    """The tank's terms in ``params``, as the report shows them."""
+    t, loss = params.tank, params.loss
+    low, high = t.condenser_span
+    return (
+        _num(loss.ua_side_btu_hr_f),
+        _num(loss.ua_bottom_btu_hr_f),
+        _num(loss.ua_top_btu_hr_f),
+        _num(t.conductance_btu_hr_f),
+        _num(t.lower_probe_height),
+        _num(t.lower_probe_spread_gal),
+        _num(t.lower_probe_offset_f),
+        _num(t.upper_probe_height),
+        _num(t.upper_probe_spread_gal),
+        _num(t.inlet_mix_gal),
+        f"{low:.3g}-{high:.3g}",
+    )
+
+
+#: Each report line of the tank's (``_GROUP_TERMS``), by the fit's
+#: term (``tank_fit.TERMS``, ``CONDENSER_TERMS``).
+_TANK_TERM_LINES = {
+    "ua_side_btu_hr_f": 0,
+    "ua_bottom_btu_hr_f": 1,
+    "ua_top_btu_hr_f": 2,
+    "conductance_btu_hr_f": 3,
+    "lower_probe_height": 4,
+    "lower_probe_spread_gal": 5,
+    "lower_probe_offset_f": 6,
+    "upper_probe_height": 7,
+    "upper_probe_spread_gal": 8,
+    "inlet_mix_gal": 9,
+    "condenser_low": 10,
+    "condenser_width": 10,
+}
+
+
+def _tank_terms(done: Calibrated) -> list[Term]:
+    """The report's lines of the tank's fit (``TankCalibration``)."""
+    t = done.tank
+    fit = t.fit
+    names = _GROUP_TERMS["tank"]
+    values = _tank_values(done.calibration.params)
+    fitted = (
+        set() if fit is None else {_TANK_TERM_LINES[name] for name in fit.terms}
+    )
+    bound = (
+        set()
+        if fit is None
+        else {_TANK_TERM_LINES[name] for name in fit.on_bound}
+    )
+    samples = (
+        f"{t.n_windows} windows, {t.n_draws} draws, {t.n_recoveries} recoveries"
+    )
+    error = (
+        "-"
+        if fit is None
+        else f"{fit.rmse_before:.2f} → {fit.rmse_after:.2f} °F rms"
+    )
+    if fit is None:
+        why = t.why
+    else:
+        why = f"{t.n_recoveries} recoveries; {MIN_TANK_RECOVERIES} needed"
+    return [
+        Term(
+            name,
+            values[i],
+            samples,
+            error if i == 0 else "-",
+            i in fitted,
+            "" if i in fitted else why,
+            note="on its bound" if i in bound else "",
+        )
+        for i, name in enumerate(names)
+    ]
 
 
 def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
@@ -1267,85 +1383,7 @@ def report(done: Calibrated) -> list[Term]:
     """What each fit found, in the order they run, and with
     ``keep_better`` which of base and refit each group kept."""
     c = done.calibration
-    s = c.standby
-    kept = len(s.windows)
-    if s.ua_ref is not None:
-        why = ""
-    elif done.air is None:
-        why = "no air given"
-    elif done.air == "heater" and s.n_quiet == 0:
-        why = "no quiet window has the heater's idle reading throughout"
-    elif not s.n_quiet:
-        why = f"no quiet window of {cal.MIN_QUIET_HOURS:g} h or more"
-    else:
-        why = (
-            f"none of {s.n_quiet} quiet windows tracked the probes within "
-            f"{cal.MAX_WINDOW_RMSE_F:g} °F"
-        )
-    rmse = (
-        f"{max(w.rmse_f for w in s.windows):.2f} °F max rmse"
-        if s.windows
-        else "-"
-    )
-    bottom_why = (
-        ""
-        if s.bottom_gate_f is not None
-        else f"{s.n_stratified} windows open stratified (a gap of "
-        f"{cal.MIN_BOTTOM_FIT_GAP_F:g} °F or more); "
-        f"{cal.MIN_BOTTOM_FIT_WINDOWS} needed"
-    )
-    terms = [
-        Term(
-            "Standby loss (UA at ref ΔT, BTU/h·°F)",
-            _num(s.ua_ref),
-            f"{kept} of {s.n_quiet} quiet windows",
-            rmse,
-            s.ua_ref is not None,
-            why,
-        ),
-        Term(
-            "Standby loss exponent",
-            _num(s.ua_exponent),
-            f"{kept} windows",
-            "-",
-            s.ua_exponent is not None,
-            why,
-            note=""
-            if s.ua_exponent != 0.0
-            else "0, a constant loss: under 4 windows, under two 20 °F "
-            "bands, or the fit clamped to 0",
-        ),
-        Term(
-            "Bottom loss (BTU/h)",
-            _num(s.bottom_loss_btu_hr if s.bottom_gate_f is not None else None),
-            f"{s.n_stratified} stratified windows",
-            "-",
-            s.bottom_gate_f is not None,
-            why or bottom_why,
-            note="heat leaving the lower zone, which the lower probe "
-            "sees only while the tank is stratified",
-        ),
-        Term(
-            "Bottom loss gate (°F)",
-            _num(s.bottom_gate_f),
-            f"{s.n_stratified} stratified windows",
-            "-",
-            s.bottom_gate_f is not None,
-            why or bottom_why,
-        ),
-        Term(
-            "Zone gap time constant (h)",
-            _num(s.tau_gap_hours),
-            f"{s.n_gap_windows} windows",
-            "-",
-            s.tau_gap_hours is not None,
-            ""
-            if s.tau_gap_hours is not None
-            else why
-            or f"{s.n_gap_windows} windows open a gap; "
-            f"{cal.MIN_GAP_FIT_WINDOWS} needed",
-        ),
-    ]
+    terms = _tank_terms(done)
     pump = c.heat_pump
     cp = c.params.compressor
 

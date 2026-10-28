@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
@@ -13,9 +14,11 @@ import pytest
 from nwp500 import sim, status_history
 from nwp500 import sim_adapters as sa
 from nwp500 import sim_calibrate as sc
+from nwp500 import sim_score as ss
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim import heat_pump_fit as hpf
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.params import params_to_document
 from nwp500.temperature import DeciCelsius
 from nwp500.unit_system import reset_unit_system, set_unit_system
@@ -30,6 +33,19 @@ MASS = sim.default_params().tank.thermal_mass_btu_f
 def _units() -> Iterator[None]:
     yield
     reset_unit_system()
+
+
+#: The sides' UA, the tank's one term these fits fit: the planted coasts
+#: lose through the jacket alone (``_fitted``).
+SIDES = "Sides' loss (UA, BTU/h·°F)"
+
+
+@pytest.fixture(autouse=True)
+def _quick_tank(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tank's fit on its sides' UA alone, in few trials: its other
+    terms are ``tank_fit``'s to test."""
+    monkeypatch.setattr(tf, "TERMS", tf.TERMS[:1])
+    monkeypatch.setattr(sc, "TANK_EVALUATIONS", 20)
 
 
 def _deci_c(f: float) -> int:
@@ -76,36 +92,48 @@ def _terms(done: sc.Calibrated) -> dict[str, sc.Term]:
 
 
 class TestTheFits:
-    def test_a_constant_air_fits_the_standby_loss(self, history: str) -> None:
-        done = sc.calibrate(_read(history), ambient=AIR_F)
-        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
-        assert "standby" not in done.calibration.params.unfitted
-        loss = _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"]
-        assert loss.fitted
-        assert loss.samples == "1 of 1 quiet windows"
-
-    def test_the_air_in_the_preferred_unit(self, history: str) -> None:
-        set_unit_system("metric")
-        done = sc.calibrate(_read(history), ambient=(AIR_F - 32) / 1.8)
-        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
-
-    def test_without_air_the_standby_loss_is_fitted_on_the_cabinet(
-        self, history: str
+    def test_a_constant_air_fits_the_tank(
+        self, device_status_dict: dict[str, Any]
     ) -> None:
-        done = sc.calibrate(_read(history))
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        done = sc.calibrate(readings, ambient=AIR_F, params=_fitted(12.0))
+        assert done.tank.fit is not None
+        assert done.tank.n_windows == 12
+        loss = done.calibration.params.loss
+        assert loss.ua_side_btu_hr_f == pytest.approx(UA, rel=0.1)
+        assert "tank" not in done.calibration.params.unfitted
+        sides = _terms(done)[SIDES]
+        assert sides.fitted
+        assert sides.samples == "12 windows, 0 draws, 0 recoveries"
+        assert sides.error.endswith("°F rms")
+
+    def test_the_air_in_the_preferred_unit(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        set_unit_system("metric")
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        done = sc.calibrate(
+            readings, ambient=(AIR_F - 32) / 1.8, params=_fitted(12.0)
+        )
+        loss = done.calibration.params.loss
+        assert loss.ua_side_btu_hr_f == pytest.approx(UA, rel=0.1)
+
+    def test_without_air_the_tank_is_fitted_on_the_cabinet(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        done = sc.calibrate(readings)
         assert done.air == "heater"
-        assert "standby" not in done.calibration.params.unfitted
-        assert _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"].fitted
+        assert done.tank.fit is not None
+        assert "tank" not in done.calibration.params.unfitted
+        assert _terms(done)[SIDES].fitted
         assert any("compressor is idle" in n for n in done.notes)
 
     def test_each_fit_without_evidence_says_why(self, history: str) -> None:
         terms = _terms(sc.calibrate(_read(history), ambient=AIR_F))
-        exponent = terms["Standby loss exponent"]
-        # Applied, not kept: the fit replaces the base's exponent with 0.
-        assert exponent.fitted and exponent.value == "0"
-        assert "a constant loss" in exponent.note
-        assert "two 20 °F bands" in exponent.note
-        assert "20 needed" in terms["Zone gap time constant (h)"].why
+        sides = terms[SIDES]
+        assert not sides.fitted
+        assert sides.why == "1 quiet windows and draws; 10 needed"
         heat = terms["Heat at 65 °F air, 120 °F water (BTU/h)"]
         assert not heat.fitted
         assert heat.why == ("0 draw-free climbs with the tank mixed; 10 needed")
@@ -190,12 +218,10 @@ class TestTheFits:
         readings = _read(path)
         done = sc.calibrate(readings, ambient=AIR_F)
         assert done.n_gaps == 1
-        s = done.calibration.standby
-        assert (s.n_quiet, len(s.windows)) == (2, 2)
-        assert s.ua_ref == pytest.approx(UA, rel=0.05)
+        assert done.tank.n_windows == 2
         # Taken as observed, the gap joins them into one window.
-        joined = cal.fit_standby(sa.history(readings, air=[(T0, AIR_F)]), MASS)
-        assert joined.n_quiet == 1
+        joined = cal.quiet_windows(sa.history(readings, air=[(T0, AIR_F)]))
+        assert len(joined) == 1
 
     @pytest.mark.parametrize(
         ("spacing_s", "expected"),
@@ -223,9 +249,7 @@ class TestTheFits:
         )
         done = sc.calibrate(readings, record=record)
         assert done.air == "source"
-        s = done.calibration.standby
-        assert s.ua_ref == pytest.approx(UA, rel=0.05)
-        assert s.quiet_by == "meter"
+        assert done.tank.n_windows == 1
         assert "humidity: a note" in done.notes
         # Only what it covers: from 12 h in, half the window is left.
         late = replace(
@@ -235,11 +259,11 @@ class TestTheFits:
                 (T0 + timedelta(days=1), AIR_F),
             ],
         )
-        half = sc.calibrate(readings, record=late).calibration.standby
+        (whole,) = ss.events(sc.prepare(readings, record=record)).windows
+        (half,) = ss.events(sc.prepare(readings, record=late)).windows
         # The later half, the tank nearer the air, and only it.
-        assert half.windows
-        assert half.windows[0].start >= T0 + timedelta(hours=12)
-        assert half.windows[0].delta_t_mean_f < s.windows[0].delta_t_mean_f
+        assert half.start >= T0 + timedelta(hours=12)
+        assert half.upper_f < whole.upper_f
 
     @pytest.mark.parametrize(
         ("drawing", "circulating"), [(None, []), ([], None)]
@@ -264,7 +288,6 @@ class TestTheFits:
         record = RecordInputs([(T0, AIR_F)], None, drawing, circulating)
         done = sc.calibrate(_read(history), record=record)
         assert not {"drawing", "circulating"} & set(seen[0].columns)
-        assert done.calibration.standby.quiet_by == "dhw_in_use"
         assert any("together or not at all" in n for n in done.notes)
 
     def test_unobserved_air_and_humidity(
@@ -312,9 +335,8 @@ class TestTheFits:
             circulating=[],
             air_outages=(gap,),
         )
-        done = sc.calibrate(_read(history), record=record)
-        windows = done.calibration.standby.windows
-        assert len(windows) == 2
+        windows = ss.events(sc.prepare(_read(history), record=record)).windows
+        assert windows
         assert all(w.end <= gap[0] or w.start >= gap[1] for w in windows)
 
     def test_a_later_reading_does_not_reach_back_over_an_outage(
@@ -497,7 +519,6 @@ class TestTheFits:
         record = RecordInputs([(T0, 30.0)], None, None, None)
         done = sc.calibrate(_read(history), ambient=AIR_F, record=record)
         assert done.air == "constant"
-        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
     def test_the_base_is_the_one_given(self, history: str) -> None:
         base = replace(sim.default_params(1), unfitted=())
@@ -574,9 +595,7 @@ class TestTheInputs:
         done = sc.calibrate(readings(), ambient=AIR_F)
         assert taken == done.n_statuses == len(lines)
         whole = sc.calibrate(_read(days[0]) + _read(days[1]), ambient=AIR_F)
-        assert done.calibration.standby.ua_ref == pytest.approx(
-            whole.calibration.standby.ua_ref
-        )
+        assert done.calibration.params == whole.calibration.params
 
 
 class TestTheFrame:
@@ -640,21 +659,24 @@ def days_of_quiet(
 
 
 def _fitted(ua: float) -> sim.HeaterParams:
-    """The defaults with a standby loss of ``ua``, taken as fitted, no
-    bottom loss and a gap that relaxes on 60 h."""
+    """The defaults with the tank losing ``ua`` through its sides alone,
+    taken as fitted."""
     base = sim.default_params()
     return replace(
         base,
-        tank=replace(base.tank, stratification_gap_tau_h=60.0),
         loss=replace(
             base.loss,
-            ua_btu_hr_f=ua,
-            ua_exponent=0.0,
-            bottom_loss_btu_hr=0.0,
-            bottom_gate_f=1.0,
+            ua_side_btu_hr_f=ua,
+            ua_bottom_btu_hr_f=0.0,
+            ua_top_btu_hr_f=0.0,
         ),
-        unfitted=tuple(t for t in base.unfitted if t != "standby"),
+        unfitted=tuple(t for t in base.unfitted if t != "tank"),
     )
+
+
+def _ready(frame: Any) -> sc.Prepared:
+    """``frame`` as ``prepare`` leaves it, its air a constant's."""
+    return sc.Prepared(frame, "constant", "air_f", timedelta(minutes=5), 0, ())
 
 
 class TestKeepBetter:
@@ -665,16 +687,16 @@ class TestKeepBetter:
         done = sc.calibrate(
             readings, ambient=AIR_F, params=_fitted(12.0), keep_better=True
         )
-        (standby,) = [j for j in done.judged if j.group == "standby"]
-        assert standby.kept == "refit"
-        assert standby.n_held == 2
-        assert standby.refit_error is not None
-        assert standby.base_error is not None
-        assert standby.refit_error < standby.base_error
+        (tank,) = [j for j in done.judged if j.group == "tank"]
+        assert tank.kept == "refit"
+        assert tank.n_held == 2 == done.tank.n_held
+        assert tank.refit_error is not None
+        assert tank.base_error is not None
+        assert tank.refit_error < tank.base_error
         loss = done.calibration.params.loss
-        assert loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
-        assert "standby" not in done.calibration.params.unfitted
-        term = _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"]
+        assert loss.ua_side_btu_hr_f == pytest.approx(UA, rel=0.1)
+        assert "tank" not in done.calibration.params.unfitted
+        term = _terms(done)[SIDES]
         assert term.fitted
         assert "against the base's" in term.note
 
@@ -687,16 +709,16 @@ class TestKeepBetter:
         done = sc.calibrate(
             readings, ambient=AIR_F, params=base, keep_better=True
         )
-        (standby,) = [j for j in done.judged if j.group == "standby"]
-        assert standby.kept == "base"
+        (tank,) = [j for j in done.judged if j.group == "tank"]
+        assert tank.kept == "base"
         assert done.calibration.params.loss == base.loss
-        term = _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"]
+        term = _terms(done)[SIDES]
         assert not term.fitted
         assert term.value == "6"
         assert term.why.startswith("kept the base: it scores ")
-        assert "on the 2 latest quiet windows" in term.why
+        assert "on the 2 latest quiet windows, draws and recoveries" in term.why
         scores = sc.score(done, base)
-        assert scores["standby"] == pytest.approx(standby.base_error)
+        assert scores["tank"] == pytest.approx(tank.base_error)
 
     def test_too_little_evidence_keeps_the_base(
         self, device_status_dict: dict[str, Any]
@@ -706,25 +728,69 @@ class TestKeepBetter:
         done = sc.calibrate(
             readings, ambient=AIR_F, params=base, keep_better=True
         )
-        (standby,) = [j for j in done.judged if j.group == "standby"]
-        assert standby.kept == "base"
-        assert "under 10 quiet windows" in standby.why
-        assert done.calibration.params.loss.ua_btu_hr_f == 12.0
-        assert sc.score(done, base)["standby"] is None
+        (tank,) = [j for j in done.judged if j.group == "tank"]
+        assert tank.kept == "base"
+        assert tank.why == (
+            "kept the base: under 10 quiet windows, draws and recoveries "
+            "to judge a refit by"
+        )
+        # Not fitted at all: nothing to judge it by.
+        assert done.tank.fit is None
+        assert done.calibration.params.loss.ua_side_btu_hr_f == 12.0
+        assert sc.score(done, base)["tank"] is None
+
+    def test_the_tanks_events_are_held_out_together(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Under 10 of each kind, 13 in all: the latest 3, whatever their
+        # kind, are held out, and the fit sees the rest.
+        def at(hours: float) -> Any:
+            return SimpleNamespace(start=T0 + timedelta(hours=hours))
+
+        windows = [at(24 * d) for d in range(9)]
+        recoveries = [at(24 * d + 12) for d in range(4, 8)]
+        record = cast("tf.TankRecord", object())
+        found = sc._TankEvents(record, windows, [], recoveries)
+        seen: list[Any] = []
+
+        def fit(_: Any, train: Any, __: Any) -> tuple[Any, str]:
+            seen.append(train)
+            return SimpleNamespace(params=_fitted(UA)), ""
+
+        monkeypatch.setattr(sc, "_tank_events", lambda *_: found)
+        monkeypatch.setattr(sc, "_fit_tank", fit)
+        monkeypatch.setattr(
+            tf, "event_rmse", lambda p, *_, **__: p.loss.ua_side_btu_hr_f
+        )
+        judged: list[sc.Judged] = []
+        params, tank, held, _ = sc._keep_better_tank(
+            _ready(recovery_days(1)), _fitted(12.0), (), set(), judged, map
+        )
+        assert [c.start for c in held] == [
+            windows[7].start,
+            recoveries[3].start,
+            windows[8].start,
+        ]
+        (train,) = seen
+        assert (len(train.windows), len(train.recoveries)) == (7, 3)
+        assert (tank.n_windows, tank.n_recoveries, tank.n_held) == (7, 3, 3)
+        (j,) = judged
+        assert (j.kept, j.n_held) == ("refit", 3)
+        assert params.loss.ua_side_btu_hr_f == UA
 
     def test_an_unfitted_base_takes_the_refit(
         self, device_status_dict: dict[str, Any]
     ) -> None:
-        readings = days_of_quiet(device_status_dict, [UA] * 4)
-        base = sim.default_params()
-        base = replace(base, unfitted=(*base.unfitted, "standby"))
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        base = _fitted(12.0)
+        base = replace(base, unfitted=(*base.unfitted, "tank"))
         done = sc.calibrate(
             readings, ambient=AIR_F, params=base, keep_better=True
         )
-        assert not [j for j in done.judged if j.group == "standby"]
+        assert not [j for j in done.judged if j.group == "tank"]
         loss = done.calibration.params.loss
-        assert loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
-        assert "standby" not in done.calibration.params.unfitted
+        assert loss.ua_side_btu_hr_f == pytest.approx(UA, rel=0.1)
+        assert "tank" not in done.calibration.params.unfitted
 
     def test_a_score_needs_keep_better(self, history: str) -> None:
         done = sc.calibrate(_read(history), ambient=AIR_F)
@@ -825,9 +891,26 @@ class TestKeepBetterEveryGroup:
     def test_each_judgement_follows_its_scores(self) -> None:
         frame = recovery_days(14)
         base = sim.default_params()
-        fitted, judged, held = sc._keep_better(frame, base, "air_f")
+        # A meter's draw before each day's recovery: without one, a
+        # recovery with water in use is not the tank's evidence.
+        draws = [(T0 + timedelta(days=d, hours=16), 15.0) for d in range(14)]
+        fitted, tank, judged, held = sc._keep_better(
+            _ready(frame), base, draws, map
+        )
         groups = {j.group: j for j in judged}
-        assert {"standby", "heat_map", "power_map"} <= set(groups)
+        assert {"tank", "heat_map", "power_map"} <= set(groups)
+        # Each day's quiet decay and recovery: the condenser is fitted
+        # too. Each draw runs into its recovery: none is a draw's event.
+        # The counts are the fit's own, the latest held out.
+        assert tank.n_windows >= sc.MIN_TANK_EVENTS
+        assert tank.n_recoveries >= sc.MIN_TANK_RECOVERIES
+        assert tank.n_draws == 0
+        every = tank.n_windows + tank.n_recoveries + tank.n_held
+        assert tank.n_held == sc._split(every) > 0
+        assert tank.fit is not None
+        assert set(tank.fit.terms) == {
+            t[1] for t in tf.TERMS + tf.CONDENSER_TERMS
+        }
         # A draw leads every run: no climb or start is clean, but every
         # run's blocks are metered.
         assert "too few recovery climbs" in groups["heat_map"].why
@@ -841,6 +924,7 @@ class TestKeepBetterEveryGroup:
                 assert j.base_error <= j.refit_error
         done = sc.Calibrated(
             fitted,
+            tank,
             "constant",
             len(frame),
             timedelta(minutes=5),
@@ -858,63 +942,13 @@ class TestKeepBetterEveryGroup:
         assert "Heat at 65 °F air, 120 °F water (BTU/h)" in names
 
 
-class TestKeepBetterFirstReview:
-    def test_a_law_is_scored_at_its_own_reference(self) -> None:
-        hours = np.linspace(0.0, 4.0, 49)
-        window = cal.StandbyWindow(
-            start=T0,
-            end=T0 + timedelta(hours=4),
-            ua_btu_hr_f=7.0,
-            rmse_f=0.1,
-            delta_t_mean_f=40.0,
-            duration_hours=4.0,
-            gap_hours=hours,
-            gap_f=np.zeros(49),
-            upper_f=100.0 - 0.6 * hours,
-            lower_f=100.0 - 0.6 * hours,
-            air_f=np.full(49, 60.0),
-        )
-        u30, e = 6.0, 0.3
-        base = sim.default_params()
-        loss = replace(
-            base.loss, ua_btu_hr_f=u30, ua_exponent=e, ua_ref_delta_t_f=30.0
-        )
-        # The same law, quoted at 50 °F.
-        same = replace(loss, ua_btu_hr_f=u30 * (50 / 30) ** e)
-        same = replace(same, ua_ref_delta_t_f=50.0)
-        at = sc._loss_error([window], loss, 60.0, base.tank)
-        assert at == pytest.approx(
-            sc._loss_error([window], same, 60.0, base.tank)
-        )
-        assert at != pytest.approx(
-            sc._loss_error(
-                [window], replace(loss, ua_ref_delta_t_f=50.0), 60.0, base.tank
-            )
-        )
-
-    def test_a_refit_law_takes_its_own_reference(self) -> None:
-        base = sim.default_params()
-        base = replace(base, loss=replace(base.loss, ua_ref_delta_t_f=30.0))
-        fit = cal.StandbyFit(
-            windows=(),
-            n_quiet=0,
-            n_dropped=0,
-            ua_ref=6.0,
-            ua_exponent=0.2,
-            tau_gap_hours=None,
-            n_gap_windows=0,
-            quiet_by="dhw_in_use",
-        )
-        loss = cal.with_standby(base, fit).loss
-        assert (loss.ua_btu_hr_f, loss.ua_ref_delta_t_f) == (6.0, 50.0)
-
-
 class TestKeepBetterSecondReview:
     def test_every_kept_group_is_judged_and_reported(
         self, device_status_dict: dict[str, Any]
     ) -> None:
-        # Quiet days only: nothing to refit the gap, compressor or power
-        # on, so each keeps the base and says why.
+        # Quiet days only: too few to refit the tank on, and nothing to
+        # refit the compressor or power on, so each keeps the base and
+        # says why.
         readings = days_of_quiet(device_status_dict, [UA] * 4)
         base = _fitted(12.0)
         done = sc.calibrate(
@@ -927,9 +961,9 @@ class TestKeepBetterSecondReview:
         assert judged["heat_map"].why == (
             "kept the base: too few recovery climbs to refit on (10 needed)"
         )
-        assert judged["gap_tau"].why == (
-            "kept the base: too few windows that open a gap to refit on "
-            "(20 needed)"
+        assert judged["tank"].why == (
+            "kept the base: under 10 quiet windows, draws and recoveries "
+            "to judge a refit by"
         )
         terms = _terms(done)
         for name, value in (
@@ -937,10 +971,7 @@ class TestKeepBetterSecondReview:
                 "Heat at 65 °F air, 120 °F water (BTU/h)",
                 f"{base.compressor.heat_btu_h:.4g}",
             ),
-            (
-                "Zone gap time constant (h)",
-                f"{base.tank.stratification_gap_tau_h:.3g}",
-            ),
+            (SIDES, "12"),
             (
                 "Power at 65 °F air, 120 °F water (W)",
                 f"{base.compressor.power_w:.3g}",
@@ -954,122 +985,15 @@ class TestKeepBetterSecondReview:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         readings = days_of_quiet(device_status_dict, [UA] * 12)
-        base = sim.default_params()
-        base = replace(base, unfitted=(*base.unfitted, "standby"))
+        base = _fitted(12.0)
+        base = replace(base, unfitted=(*base.unfitted, "tank"))
         done = sc.calibrate(
             readings, ambient=AIR_F, params=base, keep_better=True
         )
         assert done.held is not None
-        assert done.held.windows == ()
+        assert done.held.tank == ()
         plain = sc.calibrate(readings, ambient=AIR_F, params=base)
         assert done.calibration.params.loss == plain.calibration.params.loss
-
-
-class TestKeepBetterThirdReview:
-    def test_windows_the_law_cannot_use_are_not_its_evidence(self) -> None:
-        def window(day: int, delta_t: float) -> cal.StandbyWindow:
-            return cal.StandbyWindow(
-                start=T0 + timedelta(days=day),
-                end=T0 + timedelta(days=day, hours=4),
-                ua_btu_hr_f=UA,
-                rmse_f=0.1,
-                delta_t_mean_f=delta_t,
-                duration_hours=4.0,
-                gap_hours=np.zeros(2),
-                gap_f=np.zeros(2),
-            )
-
-        # Eight windows with the tank at or below the air, then two the
-        # law can use: too few to judge by, and no error from a refit
-        # on none.
-        windows = tuple(
-            [window(d, 0.0) for d in range(8)]
-            + [window(d, 50.0) for d in (8, 9)]
-        )
-        fit = cal.StandbyFit(
-            windows=windows,
-            n_quiet=10,
-            n_dropped=0,
-            ua_ref=UA,
-            ua_exponent=0.0,
-            tau_gap_hours=None,
-            n_gap_windows=0,
-            quiet_by="dhw_in_use",
-        )
-        base = _fitted(12.0)
-        frame = recovery_days(1)
-        with pytest.MonkeyPatch.context() as m:
-            m.setattr(cal, "fit_standby", lambda *_, **__: fit)
-            _, judged, held = sc._keep_better(frame, base, "air_f")
-        (standby,) = [j for j in judged if j.group == "standby"]
-        assert standby.n_held == 0
-        assert held.windows == ()
-
-
-def gap_windows(taus: list[float]) -> tuple[cal.StandbyWindow, ...]:
-    """A quiet window a day for each of ``taus``: a 6 °F zone gap
-    relaxing on that time constant over 6 h, the loss steady at ``UA``."""
-    hours = np.linspace(0.0, 6.0, 37)
-    return tuple(
-        cal.StandbyWindow(
-            start=T0 + timedelta(days=d),
-            end=T0 + timedelta(days=d, hours=6),
-            ua_btu_hr_f=UA,
-            rmse_f=0.1,
-            delta_t_mean_f=50.0,
-            duration_hours=6.0,
-            gap_hours=hours,
-            gap_f=6.0 * np.exp(-hours / tau),
-        )
-        for d, tau in enumerate(taus)
-    )
-
-
-def _keep_gap(
-    windows: tuple[cal.StandbyWindow, ...], base: sim.HeaterParams
-) -> tuple[sim.HeaterParams, sc.Judged, sc.HeldOut]:
-    """``_keep_better`` over ``windows``' standby, the gap's judgement."""
-    fit = cal.StandbyFit(
-        windows=windows,
-        n_quiet=len(windows),
-        n_dropped=0,
-        ua_ref=UA,
-        ua_exponent=0.0,
-        tau_gap_hours=None,
-        n_gap_windows=0,
-        quiet_by="dhw_in_use",
-    )
-    with pytest.MonkeyPatch.context() as m:
-        m.setattr(cal, "fit_standby", lambda *_, **__: fit)
-        done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
-    (gap,) = [j for j in judged if j.group == "gap_tau"]
-    return done.params, gap, held
-
-
-def _with_tau(tau: float) -> sim.HeaterParams:
-    base = _fitted(UA)
-    return replace(base, tank=replace(base.tank, stratification_gap_tau_h=tau))
-
-
-class TestKeepBetterSixthReview:
-    def test_a_gap_refit_that_scores_better_replaces_the_base(self) -> None:
-        params, gap, held = _keep_gap(gap_windows([4.0] * 26), _with_tau(1.0))
-        assert gap.kept == "refit"
-        assert gap.n_held == 5 == len(held.gap_windows)
-        assert gap.base_error is not None and gap.refit_error is not None
-        assert gap.refit_error < gap.base_error
-        assert params.tank.stratification_gap_tau_h == pytest.approx(
-            4.0, rel=0.01
-        )
-
-    def test_a_gap_base_the_latest_windows_favour_stays(self) -> None:
-        windows = gap_windows([1.0] * 21 + [4.0] * 5)
-        params, gap, held = _keep_gap(windows, _with_tau(4.0))
-        assert gap.kept == "base"
-        assert len(held.gap_windows) == 5
-        assert gap.base_error is not None and gap.refit_error is not None
-        assert gap.base_error < gap.refit_error
-        assert params.tank.stratification_gap_tau_h == 4.0
 
 
 #: Two heat pumps the planted evidence follows: the heat's and the
@@ -1159,7 +1083,9 @@ def _keep_pump(
     found = planted_evidence(law_at)
     with pytest.MonkeyPatch.context() as m:
         m.setattr(hpf, "evidence", lambda *_, **__: found)
-        done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
+        done, _, judged, held = sc._keep_better(
+            _ready(recovery_days(1)), base, (), map
+        )
     return done.params, {j.group: j for j in judged}, held
 
 
@@ -1216,8 +1142,8 @@ class TestKeepBetterTheHeatPump:
         found = planted_evidence(lambda _: greedy)
         with pytest.MonkeyPatch.context() as m:
             m.setattr(hpf, "evidence", lambda *_, **__: found)
-            done, judged, held = sc._keep_better(
-                recovery_days(1), base, "air_f"
+            done, tank, judged, held = sc._keep_better(
+                _ready(recovery_days(1)), base, (), map
             )
         kept = {j.group: j.kept for j in judged}
         assert (kept["heat_map"], kept["power_map"]) == ("base", "refit")
@@ -1225,6 +1151,7 @@ class TestKeepBetterTheHeatPump:
         report = _terms(
             sc.Calibrated(
                 done,
+                tank,
                 "constant",
                 1,
                 timedelta(minutes=5),
@@ -1332,12 +1259,10 @@ class TestAPartialAirRecordKeepsRecoveries:
         )
 
 
-class TestStandbyOnTheHeatersAir:
+class TestTheTankOnTheHeatersAir:
     def test_with_no_air_given_it_fits_on_the_heaters(self) -> None:
-        frame = recovery_days(6)
-        base = sim.default_params()
-        # The fixture's loss is constant: its exponent, held, is 0.
-        base = replace(base, loss=replace(base.loss, ua_exponent=0.0))
+        frame = recovery_days(12)
+        base = _fitted(12.0)
         readings = [
             (cast(datetime, t.to_pydatetime()), float(v))
             for t, v in frame["air_f"].items()
@@ -1349,14 +1274,11 @@ class TestStandbyOnTheHeatersAir:
         own = sc._fit(heater_only.copy(), base, [], None, None, None, None)
         assert given.air == "readings"
         assert own.air == "heater"
-        assert given.calibration.standby.ua_ref is not None
-        assert own.calibration.standby.ua_ref is not None
+        assert given.tank.fit is not None and own.tank.fit is not None
         # The fixture's cabinet reads its air plus the cabinet's warmth:
-        # each window's loss is the one on the air given.
-        assert [w.ua_btu_hr_f for w in own.calibration.standby.windows] == (
-            pytest.approx(
-                [w.ua_btu_hr_f for w in given.calibration.standby.windows]
-            )
+        # over the quiet windows, the air given.
+        assert own.calibration.params.loss.ua_side_btu_hr_f == pytest.approx(
+            given.calibration.params.loss.ua_side_btu_hr_f, rel=0.05
         )
         assert sc.NO_AIR_NOTE not in own.notes
         assert any(
@@ -1364,21 +1286,13 @@ class TestStandbyOnTheHeatersAir:
             for n in own.notes
         )
 
-    def test_on_the_heaters_air_the_exponent_is_the_bases(self) -> None:
-        frame = recovery_days(6).drop(columns=["air_f"])
-        base = sim.default_params()
-        base = replace(base, loss=replace(base.loss, ua_exponent=0.28))
-        done = sc._fit(frame, base, [], None, None, None, None)
-        standby = done.calibration.standby
-        assert standby.ua_ref is not None
-        assert standby.ua_exponent == pytest.approx(0.28)
-
     def test_without_the_heaters_reading_it_keeps_the_base(self) -> None:
         frame = recovery_days(3).drop(columns=["air_f", "heater_cabinet_f"])
         done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
         assert done.air is None
         assert sc.NO_AIR_NOTE in done.notes
-        assert "standby" in done.calibration.params.unfitted
+        assert "tank" in done.calibration.params.unfitted
+        assert _terms(done)[SIDES].why == "no air given"
 
     def test_the_air_is_the_cabinets_less_its_warmth(self) -> None:
         frame = recovery_days(3).drop(columns=["air_f"])
@@ -1390,16 +1304,14 @@ class TestStandbyOnTheHeatersAir:
         assert quiet.to_numpy() == pytest.approx(60.0 + 5.0 * np.sin(1.0))
 
     def test_a_window_without_the_idle_reading_is_not_fitted(self) -> None:
-        frame = recovery_days(6).drop(columns=["air_f"])
+        frame = recovery_days(12).drop(columns=["air_f"])
         # Unheard for an hour inside each quiet window.
         hour = (frame.index - frame.index[0]).total_seconds() / 3600 % 24
         unheard = ((hour >= 8) & (hour < 9)) | ((hour >= 20) & (hour < 21))
         frame.loc[unheard, "heater_cabinet_f"] = np.nan
         done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
         assert done.air == "heater"
-        assert done.calibration.standby.ua_ref is None
-        why = {t.name: t.why for t in sc.report(done)}
-        assert any(
-            "no quiet window has the heater's idle reading throughout" in w
-            for w in why.values()
+        assert (done.tank.fit, done.tank.n_windows) == (None, 0)
+        assert _terms(done)[SIDES].why == (
+            "no reading of the air where the heater stands"
         )

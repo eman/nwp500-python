@@ -507,9 +507,7 @@ With a heat book, a run also costs the book its first
 air (``loss_btu_per_gal`` per gallon circulated without it), and the
 book does not re-anchor across it. A projection takes the upper probe
 at the setpoint.
-``DrawParams.lower_gate_f``, ``pool_f_per_hour`` and
-``ungated_observability`` shape how the return reaches the lower probe;
-they act only with circulation. None of these has a default: they
+None of these has a default: they
 describe one installation's plumbing. ``site_example_params`` carries
 one installation's (19.36 gal, a return resting 7.84 degF above the air
 and cooling on 0.464 h, 1.397 gal/min, 159 BTU/gal, a 1.47 gal book
@@ -772,19 +770,10 @@ where it matters, the frame it was fitted in (``params.note_of``):
        rated storage, 76.1 gal against the 65's 63.2.
 
 Any other code raises ``ValueError``. The defaults belong to one tank
-in one place: its jacket loss reflects the air around that tank, its
-draw response one household's draws, and its inlet that home's mains.
-With your own calibration, pass your own ``HeaterParams``. These are
-what a simulation needs of it:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 60
-
-   * - Field
-     - Without it
-   * - ``loss.ua_btu_hr_f``
-     - The jacket loss falls back to ``loss.ua_baseline_btu_hr_f``.
+in one place: its losses reflect the air around that tank, its probes'
+reading that one heater's, and its inlet that home's mains. With your
+own calibration, pass your own ``HeaterParams``
+(:doc:`/how-to/calibrate-simulator`).
 
 Where the defaults come from
 ----------------------------
@@ -792,9 +781,9 @@ Where the defaults come from
 Every value in ``site_example_params(2)``, with what it was measured or
 fitted on. "Retrain" values come from the weekly refit of one NWP500-65's
 record on 2026-10-11, over the record to that date (from 2025-12-28),
-except where a row gives its own span: the standby, gap, compressor,
-circulation and ungated share rows were refit on the record to
-2026-10-24. They move a little at each retrain as the record grows; the range is
+except where a row gives its own span: the compressor and circulation
+rows were refit on the record to 2026-10-24, and the tank's on the
+record to 2026-10-26. They move a little at each retrain as the record grows; the range is
 the one seen over the retrains from 2026-08-08 to 2026-10-18.
 
 **Fitted at each retrain**
@@ -807,25 +796,32 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - Value
      - Fitted on, and its error
      - Range over retrains
-   * - ``loss.ua_btu_hr_f``, ``loss.ua_exponent``,
-       ``loss.bottom_loss_btu_hr``, ``loss.bottom_gate_f``
-     - 4.483, 0; 90.8 BTU/hr, 1.83 degF
-     - 378 quiet windows, 2026-02-14 to 10-24, the bottom loss on the 64
-       that were stratified; each window kept only if it tracks the
-       probes within 2 degF. On the 56 latest held out, at the gap
-       constant below, the probes' fall is tracked within 0.066 degF/h,
-       against 0.096 for the earlier law without a bottom loss, 4.605
-       and 0.186, at 60.06 h
-       (:doc:`/explanation/standby-loss`).
-     - 4.47-4.61 and 0.184-0.225 without a bottom loss
-   * - ``tank.stratification_gap_tau_h``
-     - 26.7 h
-     - 127 quiet windows that opened with a gap of 2 degF or more, the
-       bottom loss opening the gaps it relaxes. On the 32 latest held
-       out, a mean squared error of 0.69 degF² against 1.78 for the
-       earlier 60.06 h without a bottom loss. Fitted without one, on
-       146 windows, it was 59 h (95 % CI 47-94 h).
-     - 60.0-60.4 h without a bottom loss
+   * - ``loss.ua_side_btu_hr_f``, ``ua_bottom_btu_hr_f``,
+       ``ua_top_btu_hr_f``; ``tank.conductance_btu_hr_f``
+     - 2.889, 0.887, 0.678 BTU/hr per degF; 0.424 BTU/hr per degF
+     - The layered tank's terms, fitted together
+       (``sim_calibrate.calibrate_changes``, ``sim.tank_fit``) on 266
+       quiet windows, 254 metered draws and 118 recoveries, 2026-04-16
+       to 10-26, each started from the record's replay of the day
+       before it, against a sensor of the air beside the heater: both
+       probes' error every 10 minutes, 2.64 degF RMS over the events.
+       Fitted on the record to 2026-09-18, they scored on the 59 quiet
+       windows after it 0.255 and 0.548 degF RMS (upper, lower) against
+       0.299 and 0.630 for the two-zone tank, and on 46 draws 0.290 and
+       2.09 against 0.281 and 2.16 (:doc:`/explanation/simulator`).
+     - First fitted 2026-10-27
+   * - ``tank.upper_probe_height``, ``lower_probe_height``,
+       ``upper_probe_spread_gal``, ``lower_probe_spread_gal``,
+       ``lower_probe_offset_f``
+     - 0.890, 0.478; 5.90, 3.11 gal; 0.797 degF
+     - The same fit. The upper probe's 0.890 puts 7.0 gal of the 63.2
+       above it, against the 5.3-7.3 gal the delivered water lags it by
+       (:doc:`/explanation/draws`).
+     - First fitted 2026-10-27
+   * - ``tank.inlet_mix_gal``, ``tank.condenser_span``
+     - 12.2 gal; 0.147-0.576
+     - The same fit, the span on the recoveries.
+     - First fitted 2026-10-27
    * - ``compressor.heat_btu_h`` and its slopes per degF of air and
        of water
      - 4,499 BTU/hr at 65 degF air and 120 degF water; +55.5 per degF
@@ -862,19 +858,6 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - The median overshoot at the stop of 31 draw-free run-ons,
        2026-04-21 to 10-22.
      - First fitted 2026-10-26
-   * - ``draw.ungated_observability``
-     - 0.263
-     - ``fit_ungated_observability`` on 165 windows around circulation
-       runs, April to October 2026, at the run model's terms (below):
-       the share of the run model's heat the probes showed. The return
-       feeds the mixing valve's cold port as well as the tank's inlet,
-       and that split is not measured, so the share is the split and
-       any shortfall of the probes together. It falls as the record
-       grows: 0.117 on the 50 windows since September. Held out, the
-       COP fit's latest 45 cycles came out at 6.1 % (median) against
-       6.3 % with the 0.398 measured at the earlier loop
-       (:doc:`/explanation/standby-loss`).
-     - 0.117-0.263 (since September, since April)
    * - ``SITE_CIRCULATION``
      - 19.36 gal, +7.84 degF, 0.464 h, 1.397 gal/min
      - The run model's three terms fitted together (``fit_return``) on
@@ -902,15 +885,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
    * - Field
      - Value
      - Evidence
-   * - ``tank.volume_gal``, ``tank.lower_zone_share``
-     - 63.2 gal, 0.5
+   * - ``tank.volume_gal``
+     - 63.2 gal
      - The heater's own energy fields put the tank at 156.6 Wh per degF
-       (:doc:`/explanation/tank-energy`). Recoveries heat 0.44-0.48 of
-       the tank while it is stratified and 0.96 once mixed, over 269
-       recoveries (:doc:`/explanation/recovery-speed`). The share
-       is a round 0.5: under the earlier refrigerant model, a share of
-       0.435-0.5 moved the held-out recovery error by under 0.7 min
-       (33.7-34.3).
+       (:doc:`/explanation/tank-energy`).
    * - ``element.element_w``
      - 5,148 W
      - Element-only minutes in the record (90 % CI 5,104-5,176 W,
@@ -977,28 +955,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
    * - Field
      - Value
      - Evidence
-   * - ``draw.observability``
-     - 0.633
-     - Draws with the compressor off, metered, refitted on 2026-09-26
-       with the inlet probe (earlier fits 0.454 and 0.505). It prices a
-       draw's heat; without it no draw moves the tank.
-   * - ``draw.reach_gate_f``, ``draw.reach_offset_f``,
-       ``draw.reach_gal``, ``draw.upper_f_per_gal``
-     - 30.0 degF, 1.25 degF, 9.0 gal, 0.05 degF/gal
-     - How a draw moves the probes: 399 draws from 2026-02-21 to 07-31
-       with nothing heating or circulating around them, against the
-       probes 10 minutes after each ended. Held-out accuracy in
-       :doc:`/explanation/draws`.
    * - ``draw.inlet_temp_f``, the valve line
      - 72.4 degF, (53.56, 0.485)
      - Long-draw plateaus on the cold supply, and five plateaus at the
        valve outlet (:doc:`/explanation/draws`).
-   * - ``draw.lower_gate_f``, ``draw.pool_f_per_hour``
-     - 5.0 degF, 0.015 degF/h
-     - 146 circulation runs with no draw: the gap above which a run's
-       heat lands on the lower probe (interval 3.5-6.0 degF), and the
-       slow cooling of the water below it
-       (:doc:`/explanation/standby-loss`).
    * - ``book.hp_btu_per_h``, ``book.hp_btu_per_h_per_f``, ``book.ua_btu_per_h_f``
      - 4,338, 66.0, 2.88
      - The book's heat-pump rate and standby, refitted on 2026-10-23
@@ -1032,13 +992,13 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - The bath tests, the outlet lag and the readiness evidence
        (:doc:`/explanation/draws`).
 
-**Engineering values**, not measured on the heater: the jacket loss
-fallback (5.0 BTU/hr per degF) and the maps' cross terms (0: the record
-does not place them). ``CompressorParams()`` is this fit, rounded.
+**Engineering values**, not measured on the heater: the maps' cross
+terms (0: the record does not place them). ``CompressorParams()`` is
+this fit, rounded.
 
-**The stratified tank's priors** (``sim.physics.stratified``; nothing
-reads them yet, and calibration fits them). Heights are shares of the
-volume from the bottom.
+**The layered tank's priors** (``TankParams()``, ``LossParams()``):
+where a calibration starts, and what a heater without one is walked
+with. Heights are shares of the volume from the bottom.
 
 .. list-table::
    :header-rows: 1
@@ -1052,25 +1012,24 @@ volume from the bottom.
      - HPWHsim's layer count.
    * - ``tank.upper_probe_height``, ``tank.lower_probe_height``
      - 0.85, 0.2
-     - Where the record's draws first move each probe; the clean draws
-       fit them.
+     - Where the record's draws first move each probe.
    * - ``tank.upper_element_height``, ``tank.lower_element_height``
      - 0.72, 0.15
      - The upper element with 17.5 gal of the 63.2 above it; the lower
-       near the bottom. The element runs fit them.
+       near the bottom. Not fitted.
    * - ``tank.condenser_span``
      - 0-0.45
      - The coil wraps the lower stratum: recoveries heat 0.44-0.48 of
        the tank while it is stratified.
    * - ``tank.inlet_mix_gal``
      - 9 gal
-     - The water an inflow mixes with as it enters: the draw
-       response's reach (``draw.reach_gal``).
+     - The water an inflow mixes with as it enters: how far the
+       two-zone tank's fitted draw response reached.
    * - ``tank.conductance_btu_hr_f``
      - 0.89 BTU/hr per degF
      - The water column's, end to end (10.7 between each pair of twelve
-       layers): its slowest mode closes a two-zone gap on the 60 h
-       prior, ``mass / (pi^2 tau)``.
+       layers): its slowest mode closes a gap between the probes on
+       60 h, the two-zone tank's fit, ``mass / (pi^2 tau)``.
    * - ``tank.upper_probe_spread_gal``, ``tank.lower_probe_spread_gal``
      - 0 gal
      - How far along the column each probe feels the water: it reads the
@@ -1083,16 +1042,16 @@ volume from the bottom.
        lower higher, after a recovery).
    * - ``loss.ua_bottom_btu_hr_f``
      - 1.8 BTU/hr per degF
-     - The bottom loss (``loss.bottom_loss_btu_hr``, 90.8 BTU/hr) over a
+     - The two-zone tank's fitted bottom loss, 90.8 BTU/hr, over a
        50 degF gap to the air, from the bottom layer alone.
    * - ``loss.ua_top_btu_hr_f``
      - 0 BTU/hr per degF
      - The top's loss, from the top layer: the head, the fittings and
        the pipes.
    * - ``loss.ua_side_btu_hr_f``
-     - unset
-     - The sides' loss, shared equally by the layers; unset, the
-       jacket's (``loss.ua_btu_hr_f``, else the baseline).
+     - 5.0 BTU/hr per degF
+     - The sides' loss, shared equally by the layers: an engineering
+       value for an insulated tank of this size.
 
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document
@@ -1115,14 +1074,14 @@ The ones about inputs and parameters:
    * - Reason
      - What it says
    * - ``physics_uncalibrated``, ``energy_uncalibrated``,
-       ``standby_uncalibrated``
+       ``tank_uncalibrated``
      - A term calibration could not fit on this heater (a recovery's
-       duration; its energy and COP; the jacket's loss) is the base's
-       (``HeaterParams.unfitted``).
+       duration; its energy and COP; the tank's losses, probes and
+       condenser) is the base's (``HeaterParams.unfitted``).
    * - ``book_uncalibrated``, ``readiness_uncalibrated``,
        ``draw_uncalibrated``
      - The installation's heat book terms, readiness terms or draw
-       response are another installation's (``default_params()`` marks
+       terms (its valve's line and inlet) are another installation's (``default_params()`` marks
        all three, ``INSTALLATION_TERMS``), not fitted from this one's
        meter. The readiness answer says the first two, whether or not a
        recovery was needed; any answer with draws, the third. Fit them and drop each from

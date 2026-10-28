@@ -11,6 +11,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -54,6 +55,7 @@ from nwp500.sim.engine import simulate as walk
 from nwp500.sim.params import (
     CirculationParams,
     HeaterParams,
+    LossParams,
     ReadinessParams,
     params_from_document,
     params_to_document,
@@ -63,6 +65,7 @@ from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import TankPhysics, TankState
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
+FIXTURES = Path(__file__).with_name("fixtures") / "sim"
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 FULL = (140.5, 139.6)
 
@@ -256,9 +259,9 @@ class TestTheBookInASimulation:
     def test_a_draw_moves_the_lower_zone_at_once_as_without_one(
         self, params: HeaterParams
     ) -> None:
-        """A draw of a few gallons takes the lower zone down at its
-        onset by its calibrated response, with a book as without one."""
-        s = _scenario(loads=Loads(draws=(Draw(at=at(0.5), gallons=5.0),)))
+        """A draw takes the lower zone down at its onset, with a book as
+        without one."""
+        s = _scenario(loads=Loads(draws=(Draw(at=at(0.5), gallons=20.0),)))
         book = full_tank_book(*FULL, params.book)
         booked = simulate(s, params, book=book).points
         plain = {p.at: p.lower_f for p in simulate(s, params).points}
@@ -513,6 +516,34 @@ class TestTheParameters:
         doc = {**params_to_document(params), "schema": "heater-params/1"}
         with pytest.raises(ValueError, match="calibrate again"):
             params_from_document(doc)
+
+    @pytest.mark.parametrize(
+        "two_zone",
+        [
+            {"loss": {"ua_btu_hr_f": 4.48, "bottom_loss_btu_hr": 90.8}},
+            {"unfitted": ["standby", "gap_tau", "book"]},
+        ],
+    )
+    def test_a_two_zone_document_reads_with_the_tank_unfitted(
+        self, params: HeaterParams, two_zone: dict[str, Any]
+    ) -> None:
+        """Its tank's terms are the two zones', which the layers do not
+        read: the tank is the priors', and says so."""
+        doc = {**params_to_document(params), **two_zone}
+        read = params_from_document(doc)
+        assert "tank" in read.unfitted
+        assert not {"standby", "gap_tau"} & set(read.unfitted)
+        if "loss" in two_zone:
+            assert read.loss == LossParams()
+
+    def test_a_document_the_two_zone_code_wrote_reads(self) -> None:
+        """The site example as the two-zone code wrote it: its sides'
+        loss null, its tank and draw response the zones'."""
+        doc = json.loads((FIXTURES / "heater_params_two_zone.json").read_text())
+        read = params_from_document(doc)
+        assert read.unfitted == ("tank",)
+        assert read.loss == LossParams()
+        assert read.tank.volume_gal == 63.2
 
     @pytest.mark.parametrize(
         ("part", "name", "value", "match"),

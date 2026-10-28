@@ -27,9 +27,11 @@ recorded history and checked on later records it was not fitted on.
 
 Four ideas run through the whole simulator:
 
-- **Two probes, two zones.** The heater reports two thermistors, one
-  high in the tank and one low. The model's tank is two zones that
-  those probes read, not a finer grid the probes can't check.
+- **Two probes, a layered tank.** The heater reports two thermistors,
+  one high in the tank and one low. The model's tank is a column of
+  layers that conserves its heat, and the probes are its observations:
+  where they read and how widely are fitted so the model's probes track
+  the record's.
 - **Events, not time steps.** Nothing the firmware decides happens
   between events, so the walk jumps from one event to the next and lets
   the physics carry the tank across each span.
@@ -55,8 +57,8 @@ entry firing, a setpoint or mode write, a TOU window opening or closing,
 a pending compressor start coming due, the restart lockout or an
 element's dead time ending, a draw window's edge. It also looks ahead
 along the tank's predicted path for the events the tank itself causes:
-the lower zone falling to the heater's start threshold, the upper zone
-falling to where an element mode starts again, a recovery reaching its
+the lower probe falling to the heater's start threshold, the upper
+probe falling to where an element mode starts again, a recovery reaching its
 target. The nearest of these is the next event.
 
 **Between events.** The walk moves the tank to that instant with the
@@ -106,20 +108,16 @@ the lockout ends:
           capped --> idle: the window closes
           locked_out --> idle: 330 s after the stop
 
-**Finding a crossing.** Paths are kept as points: every 10 minutes on a
-coast, and on a 10-minute grid for a recovery. A crossing of a threshold
-is placed by linear interpolation between the two points around it. A
-draw that takes the lower zone past the threshold places the crossing at
+**Finding a crossing.** The tank is walked between events (below), and
+the walk finds the instant a threshold is crossed to the second. A draw
+that takes the lower probe past the threshold places the crossing at
 the draw's own instant.
 
-**A running recovery is predicted once per target.** A recovery keeps
-its origin and predicts one path from it for each target it heats to,
-so a setpoint raise, or a Time-of-Use cap's lower target, adds a path
-from the same origin. When a draw, a pause or a write interrupts a
-recovery, the tank is put back on its target's path where the path's
-lower zone matches the tank's. The origin moves, and every path is
-predicted again, only when the tank is colder than where it started, or
-the heat book moved the upper zone.
+**A running recovery is the tank walked with the compressor on.** From
+its start the tank is walked with the condenser heating it, through
+whatever draws, writes and element events come, until the lower probe
+reaches the stop. Nothing is predicted ahead and put back: after a
+draw or a pause the walk goes on from the tank as it stands.
 
 **Details the firmware imposes.** Setpoints are rounded to the device's
 0.5 degC. A reservation entry fires at the start of its minute. A start
@@ -130,56 +128,58 @@ whatever runs is cut, with the stop reason ``horizon``.
 The tank
 ========
 
-**State.** The tank is two zones of equal mass: the upper, which the
-upper probe reads, and the lower, which the lower probe reads. The walk
-carries them as a mean temperature :math:`\bar T` and a gap :math:`g`:
+**State.** The tank is a column of layers of equal volume, 12 by
+default (``TankParams.layers``), the bottom first, each mixed within
+itself: HPWHsim's stratified tank (``physics.stratified``). The whole
+tank's mass is
 
 .. math::
 
-   T_U = \bar T + \tfrac{g}{2}, \qquad T_L = \bar T - \tfrac{g}{2},
-   \qquad m = 8.34\,V
+   m = 8.34\,V
 
 where :math:`V` is the storage volume (63.2 gal for the 65 gal model),
-so :math:`m` is about 527 BTU/degF, and each zone holds half of it.
+so :math:`m` is about 527 BTU/degF, and each of the :math:`n` layers
+holds :math:`m/n`. Every operator below conserves the layers' energy to
+rounding.
 
-**Standby.** Heat leaves through the jacket to the air beside the
-heater, at :math:`T_a`, with :math:`t` in hours:
+**The probes.** The probes read the layers; they are not the state.
+Each reads the layers around its height (a share of the volume from
+the bottom), weighted by :math:`e^{-d/s}` with the distance :math:`d`
+along the column and its spread :math:`s`, and the lower one reads a
+fixed offset above them. A walk that starts from the two probes alone
+builds a profile they read back exactly (``estimate``) and says
+``tank_profile_estimated``.
 
-.. math::
-
-   m \frac{d\bar T}{dt} = -\,UA(\Delta T)\,\Delta T, \qquad
-   \Delta T = \bar T - T_a, \qquad
-   UA(\Delta T) = UA_{\text{ref}}
-   \left(\frac{\max(|\Delta T|, 5)}{50}\right)^{n}
-
-At the current fit :math:`n = 0`, so :math:`UA` is a constant. A coast
-is stepped every 10 minutes (explicit Euler on :math:`\bar T`), with
-:math:`UA` evaluated at each step.
-
-**The bottom loss.** A second loss, :math:`Q_b`, leaves the lower zone
-alone. The lower probe sees a share of it that grows with the gap, over
-a fitted gate :math:`g_b`:
+**Standby.** Each layer relaxes toward the air beside the heater, at
+:math:`T_a`, through its share of the sides' loss, the bottom layer
+through the bottom's too and the top layer through the top's, with
+:math:`t` in hours:
 
 .. math::
 
-   \frac{m}{2} \frac{dT_L}{dt} = -\,Q_b \left(1 - e^{-g / g_b}\right)
+   \frac{m}{n} \frac{dT_i}{dt} = -\left(\frac{UA_s}{n}
+   + [i = 1]\,UA_b + [i = n]\,UA_t\right)\left(T_i - T_a\right)
 
-so it sees nearly all of it in a stratified tank and little in a mixed
-one. So a stratified
-tank's lower zone falls faster than its upper and the gap opens, as the
-record shows. :doc:`standby-loss` has the fits.
+Each step solves it exactly, so no layer passes the air and a tank at
+the air stays there. The bottom's loss cools the bottom layer faster
+than the rest, so a tank left alone stratifies, as the record shows.
+:doc:`standby-loss` has the measurements.
 
-**The gap relaxes.** With nothing heating or drawing, the gap closes in
-closed form on the time constant :math:`\tau`
-(``stratification_gap_tau_h``):
+**Conduction.** Neighbouring layers exchange heat through the column's
+conductance (``conductance_btu_hr_f``, end to end): conduction in the
+water and the slow mixing between layers. It is sub-stepped so no layer
+passes its neighbours.
 
-.. math::
+**Turnover.** A layer warmer than the one above turns over at once: the
+layers pool to their mean. Heat put in low rises to where it belongs
+so.
 
-   g(t) = g_0\, e^{-(t - t_0)/\tau}
-
-A draw, the bottom loss or a circulation run resets :math:`g_0` and
-:math:`t_0` to the gap it leaves, and the relaxation starts again from
-there.
+**Steps.** A walk steps every 10 minutes with nothing heating or
+flowing, and every minute while something is, on a grid anchored to
+the clock, so a walk split at a step's end is the walk whole. Within a
+step the draws at its start are taken, then the heat goes in, the water
+flows, the tank loses, the layers conduct, and inversions turn over.
+A stop (a target reached, a threshold crossed) is found to the second.
 
 **The air.** The ambient is given as readings (or one value) and
 interpolated onto a 10-minute grid. A coast reads it at each step; a
@@ -197,17 +197,20 @@ air and 120 degF water (``physics.heat_pump``):
 
 .. math::
 
-   \dot Q_h = Q_0 + q_a\,(T_a - 65) + q_w\,(T_L - 120), \qquad
-   P = P_0 + p_a\,(T_a - 65) + p_w\,(T_L - 120)
+   \dot Q_h = Q_0 + q_a\,(T_a - 65) + q_w\,(T_c - 120), \qquad
+   P = P_0 + p_a\,(T_a - 65) + p_w\,(T_c - 120)
+
+where :math:`T_c` is the water the condenser heats: the layers it
+wraps, weighted by how much of each.
 
 Each is read with the air and the water held to the span it was
 fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
 the power's 45 to 90 degF air and 73 to 148 degF water, on the record),
 so a recovery outside it takes the nearest edge rather than
 extrapolating. The heat is fitted on a mixed tank, where the tank's
-mean and the lower zone are within a few degrees, and read at the lower
-zone; while the tank is stratified the lower zone is below the heat's
-span and the heat is the edge's.
+mean and the condenser's water are within a few degrees; while the tank
+is stratified the condenser's water is below the heat's span and the
+heat is the edge's.
 The COP is :math:`\dot Q_h / 3.412 P`, and the heat taken from the air
 is :math:`\dot Q_h - 3.412 P`: what the condenser gives is what the
 evaporator takes plus the electricity, by construction. A fitted map
@@ -216,39 +219,22 @@ the air and the water, heat given to the air, or under 50 W; one that
 does is not applied. Each plane is checked with the one it would be
 applied with.
 
-**The climb.** The lower zone is integrated in 10-second steps, heated
-by the map at the air and the lower zone, less the standby loss and the
-bottom loss:
-
-.. math::
-
-   m_z \frac{dT_L}{dt} = \frac{\dot Q_h(T_a, T_L)
-   - UA(\Delta T)\,\Delta T
-   - Q_b\left(1 - e^{-g/g_b}\right)}{3600}, \qquad
-   m_z = \begin{cases} m/2 & g > 0 \\ m & g = 0 \end{cases}
-
-with the heat flows per hour. A step in which the gap closes takes the
-lower zone's mass up to the closure and the whole tank's after it. The
-electricity is :math:`\int P\,dt` over the same steps. The climb stops
-when the lower zone reaches the target (``hp_lower_off``) plus the
-run-on below (in ``simulate`` and ``active_cycle``, and in ``forecast``
-to the heater's own threshold, not a partial charge's), or after 30
-hours, reported as truncated.
-
-**Two zones in a recovery.** The condenser coil wraps the lower part of
-the tank. While there is a gap, the heat goes into the lower zone's
-mass and the upper zone holds; once the gap closes, the tank heats as
-one body.
-
-**The air over the recovery.** A recovery's duration depends on the air
-it runs in, and the air depends on how long it runs. The walk
-integrates the recovery at the air at its start, then once more at the
-mean air over the first answer's span, and keeps the second.
-``forecast`` repeats this up to three more times, stopping once the
-duration moves 2 minutes or less.
+**The climb.** The tank is walked a minute at a time with the
+condenser's heat, :math:`\dot Q_h` at the step's air and condenser
+water, spread over the layers it wraps (``TankParams.condenser_span``),
+while the tank loses and conducts as it does standing. The heat put in
+low rises: the layers it heats turn over into the ones above as they
+pass them, so a stratified tank heats from the bottom up and the upper
+probe holds until the warm water reaches it. The electricity is
+:math:`\int P\,dt` over the same steps. The climb stops when the lower
+probe reads the target (``hp_lower_off``) plus the run-on below (in
+``simulate`` and ``active_cycle``, and in ``forecast`` to the heater's
+own threshold, not a partial charge's), or after 16 hours, reported as
+truncated. Each step reads the air at its start, so a recovery runs in
+the air its own span has.
 
 **The start's hold.** After a start the compressor runs some minutes
-before the lower zone climbs, while the refrigerant circuit and the
+before the lower probe climbs, while the refrigerant circuit and the
 condenser warm. The hold is ``CompressorParams.start_hold_min``, a
 value for each band of time the compressor was off (under 15, 60, 180
 and 720 minutes, and beyond): 0, 5, 10, 18 and 22 minutes on the
@@ -257,16 +243,16 @@ it, drawing the map's power there, and the climb follows. A caller may
 pass its own ``start_hold`` by time off, or ``running_hold`` for a
 compressor already running.
 
-**The run-on.** The heat pump does not stop the moment the lower zone
+**The run-on.** The heat pump does not stop the moment the lower probe
 reaches its target: on the record it stops a median 0.9 degF past it
 (``ControllerParams.hp_stop_overshoot_f``). The climb is integrated to
-the target plus that overshoot. The TOU window's cap on the lower zone
+the target plus that overshoot. The TOU window's cap on the lower probe
 is still judged at the target.
 
 **The operating range.** The heat pump runs only with the air at the
 heater at 41 to 113 degF and the water in the tank at 50 to 149 degF
 (the user's manual, 3.13.1; ``ControllerParams.hp_air_range_f`` and
-``hp_water_range_f``, the water read at the lower zone). The walk finds
+``hp_water_range_f``, the water read at the lower probe). The walk finds
 where the air readings cross either air bound, exactly on the readings
 themselves, and checks the water at each coast point, after each draw
 and where a recovery ends; at an instant where the range changes, the
@@ -309,14 +295,17 @@ context, and may decline, in which case the physics is served.
 The elements
 ============
 
-An element heats its zone at a constant rate: the upper at 2.01 degF a
-minute after a 1.21 minute dead time, the lower at 1.38 degF a minute,
-at 5,148 W. It runs to its off point (the setpoint; Energy Saver's
-upper element stops 1.62 degF short, and its zone coasts on with the
-heat in transit). Its heat is laid over whatever the tank is doing: a
-coast with its losses and draws, or a recovery's path, where the upper
-zone takes the higher of the two. When an element starts, and in which
-mode, is the controller's (:doc:`heating-elements`).
+An element puts its power, 5,148 W, into its layer: the upper's at 0.72
+of the volume from the bottom (17.5 gal of the 63.2 above it), the
+lower's at 0.15. The upper's heat reaches the water 1.21 minutes after
+it starts, and goes on as long after it stops. The heat rises from its
+layer as the layers turn over, so the upper element heats the water
+above it and the lower the whole tank. It runs to its off point (the
+setpoint; Energy Saver's upper element stops 1.62 degF short, and its
+heat still in transit lands after). Its heat is walked with whatever
+else the tank is doing: a coast with its losses and draws, or a
+recovery. When an element starts, and in which mode, is the
+controller's (:doc:`heating-elements`).
 
 
 Draws
@@ -337,35 +326,23 @@ with the valve's intercept :math:`b` and slope :math:`k`. With no valve
 (``NO_VALVE``, :math:`b = 0`, :math:`k = 1`) every delivered gallon is
 tank water.
 
-**How a draw moves the probes.** Cold water enters at the bottom, so a
-draw moves the lower zone first and most. Per delivered gallon
-:math:`V`, the lower zone falls toward the incoming water at a rate set
-by how much of the draw reaches the probe, and the upper zone falls a
-fixed small amount:
+**How a draw moves the tank.** Cold water enters at the bottom and
+pushes the column up and out of the top as a plug: the tank water a
+draw takes is the delivered gallons' tank share, solved gallon by
+gallon from the water leaving the top. The inflow mixes into the
+bottom ``inlet_mix_gal`` as it comes, so a short draw cools the bottom
+layers without a sharp front. The probes then read the layers where
+they sit: a draw shows on the lower probe first, and on the upper only
+once the cold has risen to it, so a draw that empties the tank takes
+the top down too. A draw split in two moves the tank as the whole draw
+does, to about a degree at the probes. :doc:`draws` has the record's
+draws.
 
-.. math::
-
-   \frac{dT_L}{dV} = -\,\frac{r\,h}{V_r}\left(T_L - T_{\text{in}}\right),
-   \qquad r = 1 - e^{-(g + \delta)/g_r}, \qquad
-   \frac{dT_U}{dV} = -\beta
-
-with the fitted reach volume :math:`V_r`, offset :math:`\delta`, gate
-:math:`g_r` and upper fall :math:`\beta`. A mixed tank (small gap)
-hides much of a small draw from the lower probe; a stratified one shows
-it. A draw is walked a quarter gallon at a time,
-so a draw split in two moves the tank as the whole draw does.
-:doc:`draws` has the fit and its held-out scores.
-
-**Observability.** The share of a draw's heat that the two probes' mean
-registers (``observability``, 0.633 at the site) prices draws in the
-same frame as the standby fit. It is a pricing term; the probes'
-response above does not use it.
-
-**The fitted range.** The draw terms were fitted over a range of upper
-zone temperatures and draw volumes. A walk with draws says
-``draw_out_of_domain`` when its largest draw is outside the fitted
-volumes, or the upper zone leaves the fitted range anywhere along the
-walk.
+**The fitted range.** The record's draws span a range of upper probe
+temperatures and draw volumes (``DrawParams.domain_upper_f``,
+``domain_volume_gal``). A walk with draws says ``draw_out_of_domain``
+when its largest draw is outside those volumes, or the upper probe
+leaves that range anywhere along the walk.
 
 
 Circulation
@@ -384,9 +361,10 @@ offset:
    V_{\text{loop}}\right)\left(1 - e^{-t_{\text{rest}}/\tau_c}\right),
    \qquad T_{\text{return}} = T_a + \Delta T_{\text{rest}}
 
-Only the lower zone moves on a gated run; an ungated one charges a
-share of its heat to both zones. Runs closer than 10 minutes count as
-one. The terms and their fits are in :doc:`standby-loss`.
+The pipe's cooled water returns at the bottom as a draw's cold water
+does, pushing as much out of the top; the rest of the run's water comes
+back as it left. Runs closer than 10 minutes count as one. The terms
+and their fits are in :doc:`standby-loss`.
 
 
 The heat book
@@ -477,8 +455,7 @@ the upper probe already below the line, none.
 **Ready for a bath.** ``time_to_ready`` compares the deliverable
 gallons with the bath. If the tank is short, it finds the first minute
 the bath is covered along the heat pump's next recovery (from now if
-the compressor runs, else from the heater's own trigger after a coast
-on the standby model), and in each element mode as if written now. An
+the compressor runs, else from the heater's own trigger after a coast), and in each element mode as if written now. An
 answer within the book's error band, or one that a 1 degF probe error
 would flip, says so.
 
@@ -498,26 +475,25 @@ spacing (and at least 5 minutes) marks the span unobserved. The air
 beside the heater and the humidity are added where given, and the
 draws and circulation runs where both are.
 
-**Quiet windows.** Spans of 3 hours or more with nothing heating and no
-water moving, starting 45 minutes after the last of either. Each window
-is fitted on its own first; a window whose fit misses the probes' mean
-by 2 degF RMS or more is dropped.
+**The tank's events.** Quiet windows: spans of 3 hours or more with
+nothing heating and no water moving, starting 45 minutes after the last
+of either, followed for up to 24 hours. A meter's sized draws, each
+followed for an hour. And recoveries that reached their target, each
+followed from its start. The tank's fit needs 10 windows and draws.
 
-**Standby loss.** Only windows that open with a gap of 10 degF or less
-are used. With 10 or more that open with a gap of 1 degF or more, the
-loss law, the bottom loss and its gate are fitted together by least
-squares with a soft L1 loss, so outlying windows weigh less, on where
-each window's two probes ended, each walked from its start as the
-simulation walks it. With fewer, the law is fitted on the windows' own
-``UA`` values and there is no bottom loss. The exponent is fitted only
-with 4 or more windows across two 20 degF bands of tank-to-air
-difference and an air sensor; on the heater's own reading it stays at
-the base's.
-
-**The gap's time constant.** Fitted on the windows that open with a gap
-of 2 degF or more, by a bounded search. The bottom loss opens the gaps
-the constant closes, so the two fits alternate until the constant moves
-0.5 % or less.
+**The tank** (``sim.tank_fit``). Two probes do not say where the water
+below the lower one is, so each event starts from the layers the record
+before it leaves: the tank walked over the 24 hours before it through
+the recorded heating, draws and circulation, corrected toward the
+probes every 10 minutes, and the probes' own readings at the event laid
+over it. The tank's terms (the sides', bottom's and top's losses, the
+column's conductance, each probe's height and spread, the lower
+probe's offset and the inlet's mixing) are then fitted together by
+least squares with a soft L1 loss, so outlying readings weigh less, on
+each probe's error every 10 minutes over every event, each event
+weighing alike. With 5 recoveries or more, where the condenser heats is
+fitted with them, on the recoveries too. A fit walks every event at
+every trial, up to 300.
 
 **The heat pump** (``sim.heat_pump_fit``). Each compressor run is put
 on a one-minute grid and split into its hold, its climb and its
@@ -525,8 +501,8 @@ run-on, and four measures are read from it:
 
 - **the heat**, on draw-free stretches of 20 minutes or more of a climb with the
   tank mixed (the probes within 5 degF below or 1 degF above each
-  other), as the tank's mass times the mean's rise plus the standby
-  and bottom loss. The heat's plane is a least-squares fit weighted by
+  other), as the tank's mass times the mean's rise plus the tank's
+  losses, at the terms just fitted. The heat's plane is a least-squares fit weighted by
   each stretch's minutes, with 10 stretches or more;
 - **the power**, on 10-minute blocks of a climb's metered power,
   stratified or not, at the air and the lower probe: a least-squares
@@ -550,12 +526,15 @@ the draw response and the readiness evidence have fits of their own
 
 **Held out, in time order.** The heat book's fit needs 10
 pairs, holds out the latest fifth, and replaces the base only when it
-books those no worse. With ``keep_better``, the standby loss, the gap's
-constant, the heat's map, the power's map, the start's hold and the
-run-on are each refitted on their earlier four fifths, and a refit
+books those no worse. With ``keep_better``, the tank's terms, the
+heat's map, the power's map, the start's hold and the run-on are each
+refitted on their earlier four fifths (the tank's quiet windows, draws
+and recoveries together), and a refit
 replaces the base's value only where it scores better on the latest
-fifth; with fewer than 10 items the base is kept. A group the base lists as unfitted takes its
-refit without that comparison, fitted on all its data.
+fifth; with fewer than 10 items the base is kept, and the tank's refit
+still needs 10 windows and draws among the four fifths it is fitted on.
+A group the base lists as unfitted takes its refit without that
+comparison, fitted on all its data.
 
 **Provenance.** Every parameter records whether it was ``measured`` on
 the heater by a targeted run, ``fitted`` from its record, or an
@@ -624,7 +603,7 @@ The heater's readings
    * - Reading
      - How the simulator uses it
    * - The upper and lower tank probes
-     - The tank's state at the start, the two zones every fit is scored
+     - The tank's state at the start, what every fit is scored
        against, and the heat book's anchors (both within
        ``uniform_band_f`` is a full tank). Required.
    * - The compressor's running flag
@@ -648,7 +627,7 @@ The heater's readings
        cabinet's own warmth: about 6 degF warm, so 6.2 degF
        (``IDLE_CABINET_WARM_F``) is taken off and the answer says
        ``ambient_from_idle_cabinet``. With the compressor's state
-       unknown, it is not corrected. Without an air sensor, the standby
+       unknown, it is not corrected. Without an air sensor, the tank's
        fit uses the idle reading corrected the same way, and the
        recoveries the running one.
    * - The heater's power reading
@@ -660,7 +639,7 @@ The heater's readings
        means no heating is needed, but only while no TOU window has
        raised the upper start threshold.
    * - The setpoint and the thresholds
-     - The setpoint, ``hp_lower_on`` (the lower zone's start; without it
+     - The setpoint, ``hp_lower_on`` (the lower probe's start; without it
        that start is never searched, ``hp_lower_on_unknown``),
        ``hp_lower_off`` (the recovery's target; without it, the
        setpoint), and ``hp_upper_on``, whose rise marks a TOU window in
@@ -689,7 +668,7 @@ An installation's sensors
    * - Sensor
      - How the simulator uses it
    * - Air beside the heater
-     - The ambient for the standby loss and the recoveries, and the
+     - The ambient for the tank's losses and the recoveries, and the
        circulation return's rest temperature. In a fit from Home
        Assistant, its readings count only over the span they cover. Without it: the heater's
        own reading as above, or 65 degF with ``ambient_defaulted``.

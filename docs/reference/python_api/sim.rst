@@ -135,8 +135,7 @@ Parameters
       params_to_document, params_from_document, unknown_fields,
       PARAMS_SCHEMA, RETIRED_SCHEMAS, FITTED,
       MEASURED, DEFAULT, HEATER, INSTALLATION, UNFITTED_TERMS,
-      INSTALLATION_TERMS, UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F,
-      CirculationParams
+      INSTALLATION_TERMS, CirculationParams
 
 .. automodule:: nwp500.sim.defaults
    :members: site_example_params, with_valve, SITE_VALVE, NO_VALVE,
@@ -170,8 +169,7 @@ Hot water and the heat book
       FittedLocationAir
 
 .. automodule:: nwp500.sim.calibration
-   :members: calibrate, Calibration, fit_standby, StandbyFit, StandbyWindow,
-      clean_draws, CleanDraw, crossing,
+   :members: calibrate, Calibration, clean_draws, CleanDraw, crossing,
       demonstrated, frontier, capacity, held_out, fit_evidence,
       EvidenceFit, RecordedBook, fit_book_terms, BookFit,
       fit_terms_l1, BOOK_TERMS, BOOK_TERM_BOUNDS, BOOK_CIRCUIT_GAL_BOUNDS,
@@ -180,14 +178,11 @@ Hot water and the heat book
       measure_runs, run_heat_btu, fit_return, fit_displaced_gal,
       REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS, MIN_TERM_INDEPENDENCE,
       recent_flow_gpm,
-      flow_lookup, circulation_windows, CirculationWindow,
-      fit_ungated_observability, element_stints, fit_element_lag, ElementLagFit,
+      flow_lookup, element_stints, fit_element_lag, ElementLagFit,
       element_off_points, element_power, element_grid, element_runs,
       fit_element_rates, ElementRateFit, day_ci,
       energy_saver_off_deficit, upper_start_edge, snapshots, recoveries, quiet_windows,
-      busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
-      fit_loss, LossFit, loss_windows, standby_ends, standby_error,
-      walk_tau, gap_paths, gap_error, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD,
+      busy_intervals, DRAW_LEAD,
       heat_pump_cycles, HeatPumpCycle, water_in_use
 
 .. automodule:: nwp500.sim.heat_pump_fit
@@ -264,8 +259,7 @@ The pieces the entry points are built from.
    :members: from_walk, HeatingPoint
 
 .. automodule:: nwp500.sim.decay
-   :members: project_decay, DecayProjection, AmbientSampler, Draw,
-      Impulse, draw_step, partitions, threshold_crossing,
+   :members: AmbientSampler, Impulse, threshold_crossing,
       compute_start_time
 
 .. automodule:: nwp500.sim.tou_triggers
@@ -281,13 +275,6 @@ The pieces the entry points are built from.
    :members: heat_btu_h, power_w, cop, evaporator_btu_h, start_hold_min,
       carnot_cop, heat_air_outside, HEAT_MAP_OUT_OF_DOMAIN
 
-.. automodule:: nwp500.sim.physics.compressor
-   :members: predict_physics_detailed, PhysicsPath, PhysicsResult,
-      MAX_MINUTES
-
-.. automodule:: nwp500.sim.physics.tank
-   :members: ua_at, bottom_loss_reach, bottom_loss_drop_f
-
 .. automodule:: nwp500.sim.physics.stratified
    :members: TankState, Layout, layout, energy_btu, mix, lose, conduct,
       add_heat, condenser_water_f, condenser_heat, element_heat, flow,
@@ -297,8 +284,8 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.tank_fit
    :members: TankRecord, tank_record, replay, start_state, Coast, errors,
-      rmse, fit, TankFit, TERMS, term_values, with_terms, REPLAY,
-      ASSIMILATE_EVERY, MINUTE
+      rmse, event_rmse, fit, TankFit, TERMS, CONDENSER_TERMS, term_values,
+      with_terms, REPLAY, ASSIMILATE_EVERY, MINUTE
 
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
@@ -307,14 +294,9 @@ The pieces the entry points are built from.
       DEVICE_MODE, HEATER_MODE
 
 .. automodule:: nwp500.sim.physics.draw
-   :members: delivery_temp_f, hot_fraction, draw_energy_btu,
-      withdrawn_gal, probes_after_draw, lower_zone_drop_f,
-      DEFAULT_OBSERVABILITY, DEFAULT_INLET_TEMP_F,
-      DEFAULT_TMV_DELIVERY_INTERCEPT_F, DEFAULT_TMV_DELIVERY_SLOPE,
-      DEFAULT_REACH_GATE_F, DEFAULT_REACH_OFFSET_F, DEFAULT_REACH_GAL,
-      DEFAULT_UPPER_F_PER_GAL, DEFAULT_DOMAIN_T_UPPER_F,
-      DEFAULT_DOMAIN_VOLUME_GAL, DEFAULT_LOWER_GATE_F,
-      DEFAULT_POOL_F_PER_HOUR
+   :members: delivery_temp_f, hot_fraction, withdrawn_gal,
+      DEFAULT_INLET_TEMP_F, DEFAULT_TMV_DELIVERY_INTERCEPT_F,
+      DEFAULT_TMV_DELIVERY_SLOPE, NO_VALVE_INTERCEPT_F, NO_VALVE_SLOPE
 
 
 Documents
@@ -350,7 +332,8 @@ Recorded history
    :members:
 
 .. automodule:: nwp500.sim_calibrate
-   :members: calibrate, calibrate_changes, Calibrated, prepare,
+   :members: calibrate, calibrate_changes, Calibrated, TankCalibration,
+      MIN_TANK_EVENTS, MIN_TANK_RECOVERIES, TANK_EVALUATIONS, prepare,
       prepare_changes, Prepared, report, Term,
       fit_book, BookTermsFit, MIN_BOOK_PAIRS, MIN_RUN_PAIRS,
       score, Judged, HeldOut, GROUPS, air_unread_note,

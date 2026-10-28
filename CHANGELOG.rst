@@ -48,8 +48,7 @@ Added
   (``TankParams.upper_probe_spread_gal``, ``lower_probe_spread_gal``),
   and the lower one reads ``lower_probe_offset_f`` above them. The top
   layer loses heat through ``LossParams.ua_top_btu_hr_f``, and the
-  sides through ``ua_side_btu_hr_f`` (unset: the jacket's UA). All
-  default to the earlier behaviour.
+  sides through ``ua_side_btu_hr_f``.
 
 - **``nwp500.sim.physics.stratified``: the tank as stacked layers.**
   Twelve layers by default (HPWHsim's model), the bottom first, each
@@ -139,6 +138,44 @@ Added
 
 Changed
 -------
+
+- **Calibration fits the layered tank** (breaking).
+  ``sim_calibrate.calibrate`` and ``calibrate_changes`` fit the tank's
+  terms (``tank_fit.TERMS``: the sides', bottom's and top's losses, the
+  column's conductance, each probe's height and spread, the lower
+  probe's offset, the inlet's mixing) on the record's quiet windows and,
+  given a meter's ``draws``, its draws, with where the condenser heats
+  (``CONDENSER_TERMS``) on 5 recoveries or more; then the heat pump, its
+  heat priced against the fitted tank's loss. The tank needs 10 windows
+  and draws (``MIN_TANK_EVENTS``) and the air. ``Calibrated.tank``
+  (``TankCalibration``) says what its fit saw, and ``map_`` spreads its
+  trials over processes (``nwp-cli simulate calibrate`` uses one per
+  core). ``keep_better`` judges the tank as one group, ``tank``, on the
+  latest fifth of its events (``tank_fit.event_rmse``), in place of
+  ``standby`` and ``gap_tau``, and ``HeldOut`` holds those events
+  (``tank``, ``record``). The report's tank rows replace the loss law's
+  and the gap's. ``HeaterParams.unfitted`` and the reasons name
+  ``tank`` (``tank_uncalibrated``) in place of ``standby`` and
+  ``gap_tau`` (``standby_uncalibrated``); a document of the two-zone
+  tank's reads with ``tank`` unfitted, its tank the priors'.
+  ``sim.calibration.calibrate`` fits the heat pump alone, and
+  ``Calibration`` has no ``standby``. ``heat_pump_fit.climb_heat`` and
+  ``evidence`` take the ``HeaterParams`` whose tank prices the loss.
+
+  The defaults' tank is that fit on one NWP500-65's record, 2026-04-16
+  to 2026-10-26 (266 quiet windows, 254 metered draws, 118 recoveries):
+  the sides 2.89, the bottom 0.89 and the top 0.68 BTU/hr per °F, the
+  probes at 0.890 and 0.478 of the volume. Calibrated on the record to
+  2026-09-18 and scored after it, a draw-free recovery's duration is
+  out a mean 11.8 min (7.3-16.6; the two zones 7.9), its electricity
+  5.8 % (7.2 %), a coast's upper probe 0.255 °F (0.299) and its lower
+  0.548 °F (0.630), the probes after a draw 0.290 and 2.09 °F (0.281
+  and 2.16). Started from the priors, the fit went from 6.92 to 2.68 °F
+  RMS in 25 trials and scored within each of those intervals. The
+  record does not split the bottom's loss from the sides' well: the
+  bottom came out 0.89 to 2.35 across the fits. Refitted against the
+  layered loss, the heat map moves under 0.1 %, and the shipped one
+  stays.
 
 - **The simulator walks the layered tank** (breaking).
   ``tank_physics.TankPhysics`` is the stratified tank
@@ -260,6 +297,29 @@ Fixed
 Removed
 -------
 
+- The two-zone tank: ``physics.tank`` and ``physics.compressor``;
+  ``TankParams.lower_zone_share`` and ``stratification_gap_tau_h``;
+  ``LossParams.ua_btu_hr_f``, ``ua_exponent``, ``ua_ref_delta_t_f``,
+  ``ua_baseline_btu_hr_f``, ``bottom_loss_btu_hr`` and
+  ``bottom_gate_f`` (``ua_side_btu_hr_f`` is the sides' own, 5.0
+  BTU/hr per °F unfitted); ``params.UA_REF_DELTA_T_F``,
+  ``UA_MIN_DELTA_T_F`` and ``TAU_GAP_PRIOR_H``.
+- The two zones' draw response: ``DrawParams.observability``,
+  ``reach_gate_f``, ``reach_offset_f``, ``reach_gal``,
+  ``upper_f_per_gal``, ``lower_gate_f``, ``pool_f_per_hour`` and
+  ``ungated_observability``; ``physics.draw.probes_after_draw``,
+  ``lower_zone_drop_f``, ``draw_energy_btu``, ``LEGACY_TMV_DELIVERY_F``
+  and the ``DEFAULT_`` constants of those terms and of the draws'
+  range.
+- The standby fits: ``calibration.fit_standby``, ``StandbyFit``,
+  ``StandbyWindow``, ``fit_window``, ``fit_ua_law``, ``fit_loss``,
+  ``LossFit``, ``loss_windows``, ``standby_ends``, ``standby_error``,
+  ``with_standby``, ``fit_gap_tau``, ``gap_paths``, ``gap_error``,
+  ``walk_tau``, ``circulation_windows``, ``CirculationWindow``,
+  ``fit_ungated_observability`` and their bounds and thresholds;
+  ``calibrate``'s ``ua_exponent``.
+- ``decay.project_decay``, ``DecayProjection``, ``Draw``,
+  ``draw_step`` and ``partitions``.
 - ``simulate``'s ``ledger``, ``lead_draws`` and ``physics_usable``;
   ``History.heated_at``; the reason ``tau_gap_prior``; and the refusal
   of draws on parameters with no fitted draw response

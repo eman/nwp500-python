@@ -11,15 +11,19 @@ import pandas as pd
 import pytest
 
 from nwp500 import sim
+from nwp500.sim import default_params
 from nwp500.sim import heat_pump_fit as hpf
 from nwp500.sim.calibration import heat_pump_cycles
-from nwp500.sim.params import CompressorParams, LossParams, TankParams
+from nwp500.sim.params import CompressorParams, LossParams
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 T0 = datetime(2026, 3, 2, tzinfo=UTC)
-TANK = TankParams()
-LOSS = LossParams(ua_btu_hr_f=4.4)
-MASS = TANK.volume_gal * WATER_BTU_PER_GAL_F
+#: The planted tank loses through its jacket alone.
+PARAMS = replace(
+    default_params(),
+    loss=LossParams(ua_side_btu_hr_f=4.4, ua_bottom_btu_hr_f=0.0),
+)
+MASS = PARAMS.tank.volume_gal * WATER_BTU_PER_GAL_F
 TARGET = 140.0
 OVERSHOOT = 1.2
 STEP_S = 30.0
@@ -296,7 +300,7 @@ class TestTheRunOn:
 
 class TestTheHeat:
     def test_the_planted_heat_and_power(self, frame: pd.DataFrame) -> None:
-        got = hpf.climb_heat(frame, TANK, LOSS)
+        got = hpf.climb_heat(frame, PARAMS)
         # The top-offs from near the target climb for under 20 minutes.
         assert len(got) >= 4
         for r in got.itertuples():
@@ -309,18 +313,24 @@ class TestTheHeat:
                 r.heat_btu_h / (r.power_w * 3.412141633),  # type: ignore[attr-defined]
             )
 
-    def test_the_bottom_loss_is_priced(self, frame: pd.DataFrame) -> None:
-        bottom = LossParams(
-            ua_btu_hr_f=4.4, bottom_loss_btu_hr=100.0, bottom_gate_f=1.0
+    def test_the_ends_loss_is_priced(self, frame: pd.DataFrame) -> None:
+        """The heat is what the tank kept plus what it lost: through its
+        sides, its bottom and its top, the tank mixed."""
+        ends = replace(
+            PARAMS,
+            loss=replace(
+                PARAMS.loss, ua_bottom_btu_hr_f=1.5, ua_top_btu_hr_f=0.5
+            ),
         )
-        plain = hpf.climb_heat(frame, TANK, LOSS)
-        more = hpf.climb_heat(frame, TANK, bottom)
-        # A 0.5 °F gap: 1 - e^-0.5 of it.
+        plain = hpf.climb_heat(frame, PARAMS)
+        more = hpf.climb_heat(frame, ends)
         added = more["heat_btu_h"] - plain["heat_btu_h"]
-        assert added.to_numpy() == pytest.approx(100.0 * 0.39, abs=8.0)
+        assert added.to_numpy() == pytest.approx(
+            (2.0 * (plain["water_f"] - plain["air_f"])).to_numpy()
+        )
 
     def test_the_air_raises_the_heat(self, frame: pd.DataFrame) -> None:
-        got = hpf.climb_heat(frame, TANK, LOSS)
+        got = hpf.climb_heat(frame, PARAMS)
         slope = np.polyfit(got["air_f"], got["heat_btu_h"], 1)[0]
         assert slope == pytest.approx(33.0, abs=10.0)
 
@@ -328,7 +338,7 @@ class TestTheHeat:
         history = planted(CYCLES[3:5], draw_in=0)
         cycles = heat_pump_cycles(history)
         assert [c.draw_free for c in cycles] == [False, True]
-        got = hpf.climb_heat(hpf.recovery_frame(history), TANK, LOSS)
+        got = hpf.climb_heat(hpf.recovery_frame(history), PARAMS)
         assert set(got["cycle"]) <= {cycles[1].n}
 
 
@@ -344,7 +354,7 @@ class TestThePower:
 @pytest.fixture(scope="module")
 def found() -> hpf.Evidence:
     """Three passes of ``CYCLES``: enough of each measure to fit."""
-    return hpf.evidence(planted(CYCLES * 3, seed=11), TANK, LOSS)
+    return hpf.evidence(planted(CYCLES * 3, seed=11), PARAMS)
 
 
 class TestTheFits:
@@ -401,7 +411,7 @@ class TestTheFits:
                 assert value == c.start_hold_min[i]
 
     def test_too_little_fits_nothing(self) -> None:
-        empty = hpf.evidence(planted(CYCLES[:2]), TANK, LOSS)
+        empty = hpf.evidence(planted(CYCLES[:2]), PARAMS)
         fit = hpf.fit_heat_pump(empty, CompressorParams())
         assert fit.heat is None and fit.power is None
         assert fit.overshoot_f is None

@@ -4,7 +4,7 @@ Calibrate the Simulator to Your Heater
 
 The simulator's default parameters are one NWP500-65's, fitted at one
 installation. Record what your own heater reports for a few weeks and
-fit its standby loss, its compressor and its power to that record.
+fit its tank, its compressor and its power to that record.
 
 .. contents::
    :local:
@@ -49,9 +49,11 @@ from a home-automation recorder) as long as each line has this shape:
 ``(instant, DeviceStatus)`` pairs, and ``status_history.iter_read(lines)``
 yields them one at a time, for a long recording.
 
-Record through quiet nights and full recoveries. The standby fit needs
-windows of 3 hours or more with no heating and no hot water in use. The
-compressor fit needs at least 5 recoveries that reached their target,
+Record through quiet nights and full recoveries. The tank's fit needs
+10 windows of 3 hours or more with no heating and no hot water in use
+(a meter's draws count toward them, from Python), and places the
+compressor's heat once it also has 5 recoveries that reached their
+target. The compressor fit needs at least 5 recoveries that reached their target,
 and holds out the latest fifth once there are 10. The power fits need
 10 compressor cycles.
 
@@ -59,8 +61,8 @@ and holds out the latest fifth once there are 10. The power fits need
 Record the air beside the heater
 ================================
 
-The standby loss is the heat the tank loses to the air it stands in,
-so the fit needs that air over the whole record. The heater does not
+The tank loses heat to the air it stands in, so the tank's fit needs
+that air over the whole record. The heater does not
 read it while idle: its sensor sits at the heat pump's intake, and it
 reads the air the heater stands in only while the evaporator fan runs.
 Idle, it reads the cabinet, about 6 °F warm. So give one of these:
@@ -88,27 +90,22 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   and not while its sensor was ``unavailable``; the humidity takes the
   50 % default outside that span, and the report says how much that
   is. Home Assistant keeps 10 days of history by default, so of a
-  60-day record only the last 10 days have the air, and the standby
-  loss is fitted from those alone. For the whole record, raise the
+  60-day record only the last 10 days have the air, and the tank is
+  fitted on those alone. For the whole record, raise the
   recorder's ``purge_keep_days`` to cover it before you start
   recording, or give the air another way (``--air``). Where the
   draws' or the circulation's history doesn't cover the whole record,
   the heater's own flag is used instead. ``--air``, ``--ambient`` and
   ``--humidity`` override the sources.
 
-Without the air, the command fits the standby loss on the heater's own
-reading while its compressor is idle. That reading is the cabinet's,
-and 6.2 degF is taken off it for the cabinet's warmth
+Without the air, the command fits the tank on the heater's own reading
+while its compressor is idle. That reading is the cabinet's, and 6.2
+degF is taken off it for the cabinet's warmth
 (``sim_adapters.IDLE_CABINET_WARM_F``). A quiet window the heater wasn't
 heard from throughout is left out, and a note says how many windows
-were read and what share of the quiet hours they hold. The cabinet's
-warmth rises a little with the tank's, which would bend the loss law's
-shape, so only its level is fitted, on the base's exponent. At one
-installation, against a sensor beside the heater, the loss came out
-0.7 % high over 378 windows (2026-02-14 to 10-24), and 2.2 % low on
-the later half with the warmth measured on the earlier half alone.
-With no such reading at all, the standby loss keeps the base's value
-and the report says so. When you give the air, the recoveries use it
+were read and what share of the quiet hours they hold. With no such
+reading at all, the tank keeps the base's terms and the report says
+so. When you give the air, the recoveries use it
 too; without it, they use the heater's own reading while the compressor
 runs.
 
@@ -152,23 +149,19 @@ fitted or kept the base's value, and why:
 
    * - Term
      - Fitted from
-   * - Standby loss, its exponent, the bottom loss and its gate
+   * - The tank: its sides', bottom's and top's losses, the column's
+       conductance, each probe's height and spread, the lower probe's
+       offset, the inlet's mixing, and where the condenser heats
      - Quiet windows of 3 h or more, starting 45 minutes after any
-       heating or hot water in use, that open with a gap of 10 °F or
-       less between the probes. A window counts only if its fit tracks
-       the probes within 2 °F. Each window's upper and lower probe are
-       walked from its start as the simulation walks them, and the
-       terms are fitted to where the probes ended. The exponent is
-       fitted only when the windows span two 20 °F bands of tank-to-air
-       difference; it is held at 0 (a constant loss) otherwise. The
-       bottom loss needs 10 windows that open with a gap of 1 °F or
-       more; with fewer it is 0, and the loss is the jacket law
-       alone.
-   * - Zone gap time constant
-     - How fast the upper and lower probes' gap closes over quiet
-       windows; it needs 20 windows that open with a gap of 2 °F or
-       more. The bottom loss opens the gaps it relaxes, so the two are
-       fitted in turn until the constant settles.
+       heating or hot water in use, and, from Python, a hot-water
+       meter's sized draws, each followed for an hour; it needs 10. With
+       5 recoveries that reached their target, it fits where the
+       condenser heats on those too. Each event's tank is replayed from
+       the record before it, and walked from its start as the
+       simulation walks it. The terms are fitted together for the least
+       error in both probes every 10 minutes; the error is that RMS
+       error before and after the fit, °F. A term on its bound says
+       so.
    * - Heat at 65 °F air, 120 °F water, and per °F of each
      - Draw-free climbs of 20 minutes or more with the tank mixed, the
        heat the tank kept plus the loss just fitted; it needs 10. The
@@ -186,7 +179,7 @@ fitted or kept the base's value, and why:
 
 ``Unfitted`` lists every term that kept the base's value. The answers
 those terms reach say so in their ``reasons`` (for example
-``standby_uncalibrated``). The ``book``, ``readiness`` and ``draw``
+``tank_uncalibrated``). The ``book``, ``readiness`` and ``draw``
 terms are always listed, because they are fitted only from a hot-water
 meter's draws, which the command does not take (see below).
 
@@ -270,12 +263,32 @@ read in order without holding every status:
        print(term.name, term.value, "fitted" if term.fitted else term.why)
 
 Give ``ambient`` instead of ``air`` for a constant, or neither: the
-standby loss is then fitted on the heater's idle reading less its
-cabinet's warmth (above), and ``done.air`` is ``"heater"``. Without ``humidity`` the fits
-get 50 %. An input it cannot use raises ``CalibrationInputError``.
+tank is then fitted on the heater's idle reading less its cabinet's
+warmth (above), and ``done.air`` is ``"heater"``. Without ``humidity``
+the fits get 50 %. An input it cannot use raises
+``CalibrationInputError``.
+
+A hot-water meter's draws, ``draws=[(onset, gallons), ...]``, fit the
+tank on each draw too. The tank's fit walks every event for each of up
+to 300 trials (``TANK_EVALUATIONS``); ``map_=`` spreads them over a
+pool, as the command does over one process per core:
+
+.. code-block:: python
+
+   import functools
+   from concurrent.futures import ProcessPoolExecutor
+
+   with ProcessPoolExecutor() as pool:
+       done = sim_calibrate.calibrate(
+           recorded(days), air=air_readings, draws=meter_draws,
+           map_=functools.partial(pool.map, chunksize=8),
+       )
 
 On a desktop computer, 60 days of statuses (about 540,000) took about
-40 seconds to read and 10 to fit, in about 150 MB.
+40 seconds to read, in about 150 MB. The tank's fit takes longest: on
+one installation's 155 days (208 quiet windows, 208 metered draws and
+91 recoveries) it took about 6 minutes from the priors over 8
+processes, under 2 from its own earlier fit.
 
 Calibrate in an application
 ---------------------------
@@ -314,12 +327,8 @@ fit as ``params`` with ``keep_better=True``:
 
 Each group of terms holds out its latest evidence from its refit:
 
-- the standby loss, its exponent, the bottom loss and its gate: its
-  quiet windows, scored on the probes' error in each window's fall,
-  °F/h;
-- the zone gap time constant: its windows that open a gap, judged
-  before the standby loss, which is then fitted and scored on the
-  constant kept;
+- the tank: its quiet windows, draws and recoveries together, scored
+  on both probes' RMS error, °F;
 - the heat's map: its climbs, scored on the RMS heat error, judged
   with the base's power;
 - the power's map: its metered blocks (a run's blocks on one side),
@@ -432,7 +441,8 @@ value)`` pairs, with the instants heard from:
 
 On a desktop computer, 60 days with a heartbeat every 10 seconds
 (about 550,000 rows) took about 13 seconds to read, not counting Home
-Assistant's own queries, and 11 to fit, in about 180 MB.
+Assistant's own queries, in about 180 MB; the fit takes as long as
+above.
 
 
 Fit the heat book
@@ -552,7 +562,7 @@ Limitations
 - **Circulation the heater does not run.** The quiet test is the
   heater's own "hot water in use" flag, which also fires on
   circulation. A loop's heat that does not trip the flag is invisible
-  to the heater and lands in the standby loss. From Python, pass the
+  to the heater and lands in the tank's losses. From Python, pass the
   circulation's runs (``record=`` or ``sa.history(...,
   circulating=...)``) to keep them out of the quiet windows.
 

@@ -284,17 +284,8 @@ def _point_shape(lay: Layout) -> tuple[float, ...]:
 
 
 def layout(params: HeaterParams) -> Layout:
-    """The stratified tank ``params`` describe. The sides' UA is
-    ``LossParams.ua_side_btu_hr_f``, else the jacket's reference value
-    (``ua_btu_hr_f``, else the baseline), constant: the layers' loss
-    stays linear in their temperatures."""
+    """The stratified tank ``params`` describe."""
     t, loss = params.tank, params.loss
-    if loss.ua_side_btu_hr_f is not None:
-        side = loss.ua_side_btu_hr_f
-    elif loss.ua_btu_hr_f is not None:
-        side = loss.ua_btu_hr_f
-    else:
-        side = loss.ua_baseline_btu_hr_f
     return Layout(
         volume_gal=t.volume_gal,
         layers=t.layers,
@@ -304,7 +295,7 @@ def layout(params: HeaterParams) -> Layout:
         lower_element=t.lower_element_height,
         condenser_span=t.condenser_span,
         inlet_mix_gal=t.inlet_mix_gal,
-        ua_btu_hr_f=side,
+        ua_btu_hr_f=loss.ua_side_btu_hr_f,
         ua_bottom_btu_hr_f=loss.ua_bottom_btu_hr_f,
         ua_top_btu_hr_f=loss.ua_top_btu_hr_f,
         conductance_btu_hr_f=t.conductance_btu_hr_f,

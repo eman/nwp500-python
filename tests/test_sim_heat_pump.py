@@ -1,6 +1,5 @@
-"""The heat pump as a performance map (``sim.physics.heat_pump``), the
-recovery it drives (``sim.physics.compressor``), and the run-on past
-the target."""
+"""The heat pump as a performance map (``sim.physics.heat_pump``) and
+the run-on past the target."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -9,14 +8,8 @@ import pytest
 
 from nwp500 import sim
 from nwp500.sim import heat_pump_fit as hpf
-from nwp500.sim.params import (
-    CompressorParams,
-    ControllerParams,
-    LossParams,
-    TankParams,
-)
+from nwp500.sim.params import CompressorParams, ControllerParams
 from nwp500.sim.physics import heat_pump as hp
-from nwp500.sim.physics.compressor import predict_physics_detailed
 from nwp500.sim.units import BTU_PER_WH
 
 C = CompressorParams()
@@ -108,52 +101,6 @@ class TestTheHold:
         # a lower tank from 73 °F.
         assert hp.heat_btu_h(C, 65.0, 80.0) == hp.heat_btu_h(C, 65.0, 114.0)
         assert hp.power_w(C, 65.0, 80.0) < hp.power_w(C, 65.0, 114.0)
-
-
-def _walk(gap: float, loss: LossParams = LossParams()) -> object:
-    return predict_physics_detailed(
-        t_start_lower=100.0,
-        hp_lower_off=140.0,
-        t_amb_mean=65.0,
-        compressor=C,
-        loss=loss,
-        ua_btu_hr_f=loss.ua_baseline_btu_hr_f,
-        stratification_gap=gap,
-        record_path=True,
-    )
-
-
-class TestTheRecovery:
-    @pytest.mark.parametrize("gap", [0.0, 15.0, 60.0])
-    def test_the_heat_is_what_the_tank_kept_without_a_loss(
-        self, gap: float
-    ) -> None:
-        """With no loss, the map's heat is the lower zone's mass times
-        its rise while the gap is open, and the whole tank's after."""
-        r = _walk(gap, LossParams(ua_baseline_btu_hr_f=0.0))
-        path = r.path  # type: ignore[attr-defined]
-        tank = TankParams()
-        rise = path.t_lower[-1] - path.t_lower[0]
-        stratified = min(gap, rise)
-        kept = tank.lower_zone_thermal_mass_btu_f * stratified + (
-            tank.thermal_mass_btu_f * (rise - stratified)
-        )
-        assert path.heat_btu[-1] == pytest.approx(kept, rel=1e-9)
-
-    def test_the_electricity_is_the_maps(self) -> None:
-        r = _walk(10.0)
-        path = r.path  # type: ignore[attr-defined]
-        charged = sum(
-            hp.power_w(C, 65.0, lo) * BTU_PER_WH * 10.0 / 3600.0
-            for lo in path.t_lower[:-1]
-        )
-        assert path.input_btu[-1] == pytest.approx(charged, rel=1e-9)
-        cop = path.heat_btu[-1] / path.input_btu[-1]
-        assert hp.cop(C, 65.0, 140.0) < cop < hp.cop(C, 65.0, 100.0)
-
-    def test_a_stratified_tank_recovers_its_lower_zone_sooner(self) -> None:
-        mixed, stratified = _walk(0.0), _walk(30.0)
-        assert stratified.minutes < mixed.minutes  # type: ignore[attr-defined]
 
 
 T0 = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)

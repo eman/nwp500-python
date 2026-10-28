@@ -52,7 +52,7 @@ import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -66,7 +66,9 @@ from nwp500.sim.params import HeaterParams, params_to_document
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import point_at
-from nwp500.sim_calibrate import Prepared
+
+if TYPE_CHECKING:
+    from nwp500.sim_calibrate import Prepared
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"

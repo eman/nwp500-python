@@ -20,6 +20,8 @@ except ImportError:
     pytest.skip("CLI dependencies not installed", allow_module_level=True)
 
 from nwp500 import sim, status_history
+from nwp500 import sim_calibrate as sc
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.params import params_from_document, params_to_document
 from nwp500.unit_system import reset_unit_system
 
@@ -62,6 +64,25 @@ def quiet_lines(
     return lines
 
 
+def quiet_days(status: dict[str, Any], days: int) -> list[str]:
+    """``quiet_lines`` 20 h a day, then 4 h of the upper element heating
+    the tank back to 130 °F: a quiet window a day."""
+    lines: list[str] = []
+    for d in range(days):
+        start = T0 + timedelta(days=d)
+        lines += quiet_lines(status, hours=20, start=start)
+        t = start + timedelta(hours=20)
+        while t < start + timedelta(days=1):
+            raw = status | {
+                "heatUpperUse": 2,
+                "tankUpperTemperature": _deci_c(130.0),
+                "tankLowerTemperature": _deci_c(126.0),
+            }
+            lines.append(status_history.line(t, raw))
+            t += timedelta(minutes=2)
+    return lines
+
+
 @pytest.fixture
 def history(tmp_path: Path, device_status_dict: dict[str, Any]) -> str:
     path = tmp_path / "history.jsonl"
@@ -84,7 +105,7 @@ class TestTheFits:
             air=cal_cli.read_readings(air, "air"),
         )
         assert done.air == "readings"
-        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
+        assert done.tank.n_windows == 1
 
     def test_the_notes_name_the_options(self, history: str) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history))
@@ -187,7 +208,9 @@ class TestTheCommand:
         assert "Calibration" in result.stdout
         assert "720 statuses" in result.stdout
         params = params_from_document(json.loads(out.read_text()))
-        assert params.loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
+        # One quiet day: too few windows to fit the tank on.
+        assert params.loss == sim.default_params().loss
+        assert "tank" in params.unfitted
 
     def test_a_bad_input_is_a_usage_error(self, history: str) -> None:
         result = CliRunner().invoke(
@@ -212,7 +235,7 @@ class TestTheCommand:
         text = out.getvalue()
         assert "the cabinet's less its warmth" in text
         assert "gaps of over" not in text
-        assert "Unfitted: compressor, power, gap_tau" in text
+        assert "Unfitted: compressor, power, tank" in text
 
 
 class TestHoldout:
@@ -235,17 +258,44 @@ class TestHoldout:
         )
         assert held.base.events == held.fitted.events
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="the calibration fits the two-zone tank's UA, which the "
-        "layered tank takes as its sides' alone, on top of its ends'",
-    )
-    def test_the_fit_scores_better_than_the_defaults(self, days: str) -> None:
+    def test_with_no_air_read_the_events_start_from_the_probes(
+        self, tmp_path: Path, device_status_dict: dict[str, Any]
+    ) -> None:
+        # Too short for a quiet window: the cabinet gives no air at all.
+        path = tmp_path / "short.jsonl"
+        path.write_text("\n".join(quiet_lines(device_status_dict, 2)) + "\n")
         held = cal_cli.holdout(
-            cal_cli.read_history(days), T0 + timedelta(days=3), ambient=AIR_F
+            cal_cli.read_history(path), T0 + timedelta(hours=1)
         )
-        name = "standby_fall_abs_f_h"
-        assert held.fitted.metrics[name].value < held.base.metrics[name].value
+        assert held.done.air == "heater"
+        assert held.done.tank.fit is None
+
+    def test_the_fit_scores_better_than_the_defaults(
+        self,
+        tmp_path: Path,
+        device_status_dict: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The tank's sides alone, in few trials: the fit's others are
+        # ``tank_fit``'s to test.
+        monkeypatch.setattr(tf, "TERMS", tf.TERMS[:1])
+        monkeypatch.setattr(sc, "TANK_EVALUATIONS", 20)
+        path = tmp_path / "weeks.jsonl"
+        path.write_text("\n".join(quiet_days(device_status_dict, 14)) + "\n")
+        held = cal_cli.holdout(
+            cal_cli.read_history(path), T0 + timedelta(days=11), ambient=AIR_F
+        )
+        assert held.done.tank.fit is not None
+        # The probes together, as the fit weighs them.
+
+        def both(score: Any) -> float:
+            m = score.metrics
+            return (
+                m["standby_upper_rmse_f"].value ** 2
+                + m["standby_lower_rmse_f"].value ** 2
+            )
+
+        assert both(held.fitted) < both(held.base)
 
     def test_nothing_on_one_side_is_refused(self, days: str) -> None:
         with pytest.raises(InputError, match="one side"):

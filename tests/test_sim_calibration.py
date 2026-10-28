@@ -6,7 +6,7 @@ port; these hold what each recovers, screens and reports.
 """
 
 import math
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -94,7 +94,6 @@ class TestQuiet:
         h["drawing"] = False
         h["circulating"] = False
         assert cal.quiet_windows(h) == [(T0, h.index[-1].to_pydatetime())]
-        assert cal.fit_standby(h, MASS).quiet_by == "meter"
 
     def test_a_meter_without_circulation_keeps_the_heaters_flag(self) -> None:
         """Only draws recorded: the heater's flag still stands in for
@@ -111,52 +110,6 @@ class TestQuiet:
         h = decay(5, 5.0)
         h.loc[T0 + timedelta(hours=2), "compressor_on"] = True
         assert cal.quiet_windows(h) == []
-
-
-class TestStandby:
-    def test_a_window_recovers_its_ua(self) -> None:
-        h = decay(24, 6.0)
-        fit = cal.fit_window(h, (T0, T0 + timedelta(hours=24)), MASS)
-        assert fit is not None
-        assert fit.ua_btu_hr_f == pytest.approx(6.0, rel=0.02)
-        assert fit.delta_t_mean_f > 0
-
-    def test_a_window_without_air_is_not_fitted(self) -> None:
-        h = decay(24, 6.0).drop(columns="air_f")
-        assert cal.fit_window(h, (T0, T0 + timedelta(hours=24)), MASS) is None
-
-    def test_the_law_is_constant_without_the_range(self) -> None:
-        ua, exponent = cal.fit_ua_law([50, 52, 55, 51], [5, 6, 5, 6])
-        assert exponent == 0.0
-        assert ua == pytest.approx(5.5)
-
-    def test_the_law_recovers_an_exponent(self) -> None:
-        dt = [20.0, 35.0, 50.0, 70.0, 90.0]
-        ua = [5.0 * (x / 50.0) ** 0.3 for x in dt]
-        ref, exponent = cal.fit_ua_law(dt, ua)
-        assert exponent == pytest.approx(0.3)
-        assert ref == pytest.approx(5.0)
-
-    def test_the_gap_needs_enough_windows(self) -> None:
-        t = np.arange(0, 10, 1 / 12)
-        few = [(t, 5.0 * np.exp(-t / 50.0))] * (cal.MIN_GAP_FIT_WINDOWS - 1)
-        assert cal.fit_gap_tau(few) == (None, cal.MIN_GAP_FIT_WINDOWS - 1)
-        tau, n = cal.fit_gap_tau(few + few[:1])
-        assert tau == pytest.approx(50.0, rel=1e-3)
-        assert n == cal.MIN_GAP_FIT_WINDOWS
-
-    def test_fit_standby_and_its_parameters(self) -> None:
-        h = decay(24, 6.0)
-        fit = cal.fit_standby(h, MASS)
-        assert (fit.n_quiet, fit.n_dropped) == (1, 0)
-        assert fit.ua_ref == pytest.approx(6.0, rel=0.02)
-        assert fit.tau_gap_hours is None
-        params = cal.with_standby(default_params(), fit)
-        assert params.loss.ua_btu_hr_f == fit.ua_ref
-        assert (
-            params.tank.stratification_gap_tau_h
-            == default_params().tank.stratification_gap_tau_h
-        )
 
 
 def recovery_history(
@@ -292,28 +245,21 @@ class TestCalibrate:
         base = default_params()
         got = cal.calibrate(recovery_history([(2, 100, 100.0)]), base)
         assert got.heat_pump.heat is None and got.heat_pump.power is None
-        assert got.standby.ua_ref is None
-        # Base's values, each named as not fitted on this heater, and
-        # base's own record of the installation's terms kept.
+        # Base's values, the heat pump's named as not fitted on this
+        # heater, and base's own record of every other group kept.
         assert replace(got.params, unfitted=base.unfitted) == base
         assert got.params.unfitted == (
             "compressor",
             "power",
-            "standby",
-            "gap_tau",
             "book",
             "readiness",
             "draw",
         )
         site = cal.calibrate(
-            recovery_history([(2, 100, 100.0)]), site_example_params()
+            recovery_history([(2, 100, 100.0)]),
+            replace(site_example_params(), unfitted=("tank",)),
         )
-        assert site.params.unfitted == (
-            "compressor",
-            "power",
-            "standby",
-            "gap_tau",
-        )
+        assert site.params.unfitted == ("compressor", "power", "tank")
         assert len(got.recoveries) == 1
 
     def test_what_was_not_fitted_says_so_in_its_answers(self) -> None:
@@ -337,7 +283,6 @@ class TestCalibrate:
         for reason in (
             "physics_uncalibrated",
             "energy_uncalibrated",
-            "standby_uncalibrated",
             "draw_uncalibrated",
         ):
             assert reason in r.reasons
@@ -468,93 +413,6 @@ class TestSnapshots:
         assert plain.draw_gal.isna().all()
 
 
-class TestTheProbesShareOfCirculation:
-    """``circulation_windows`` and ``fit_ungated_observability``."""
-
-    def _history(
-        self,
-        runs: Sequence[tuple[datetime, datetime]],
-        compressor: Sequence[tuple[datetime, datetime]] = (),
-    ) -> pd.DataFrame:
-        times = [T0 + timedelta(minutes=m) for m in range(24 * 60)]
-        upper, lower = [], []
-        u, lo = 138.0, 130.0
-        for t in times:
-            on = any(a <= t < b for a, b in runs)
-            u -= 0.6 if on else 0.002
-            lo -= 0.3 if on else 0.002
-            upper.append(u)
-            lower.append(lo)
-        heating = [any(a <= t < b for a, b in compressor) for t in times]
-        return pd.DataFrame(
-            {
-                "upper_f": upper,
-                "lower_f": lower,
-                "air_f": [65.0] * len(times),
-                "compressor_on": heating,
-            },
-            index=pd.DatetimeIndex(times),
-        )
-
-    def test_a_chain_of_runs_is_one_window(self) -> None:
-        from nwp500.sim import site_example_params
-
-        runs = [
-            (T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10)),
-            (
-                T0 + timedelta(hours=2, minutes=20),
-                T0 + timedelta(hours=2, minutes=25),
-            ),
-            (T0 + timedelta(hours=6), T0 + timedelta(hours=6, minutes=8)),
-        ]
-        w = cal.circulation_windows(
-            self._history(runs), runs, site_example_params(), draws=[]
-        )
-        assert len(w) == 2
-        assert [len(x.runs) for x in w] == [1, 1]  # merged within the gap
-        assert w[0].runs[0][0] == pytest.approx(25.0)
-        assert all(x.apparent_btu > 0 for x in w)
-
-    def test_a_compressor_or_an_unsized_draw_rules_one_out(self) -> None:
-        from nwp500.sim import site_example_params
-
-        runs = [
-            (T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10)),
-            (T0 + timedelta(hours=6), T0 + timedelta(hours=6, minutes=8)),
-            (T0 + timedelta(hours=10), T0 + timedelta(hours=10, minutes=8)),
-        ]
-        heating = [
-            (T0 + timedelta(hours=6, minutes=20), T0 + timedelta(hours=7))
-        ]
-        unsized = [(T0 + timedelta(hours=10, minutes=4), float("nan"))]
-        w = cal.circulation_windows(
-            self._history(runs, heating),
-            runs,
-            site_example_params(),
-            draws=unsized,
-        )
-        assert len(w) == 1
-
-    def test_too_few_windows_fit_nothing(self) -> None:
-        from nwp500.sim import site_example_params
-
-        runs = [(T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10))]
-        p = site_example_params()
-        w = cal.circulation_windows(self._history(runs), runs, p, draws=[])
-        assert p.circulation is not None
-        assert (
-            cal.fit_ungated_observability(
-                w, p.circulation.displaced_gal, p.circulation.flow_gpm
-            )
-            is None
-        )
-        many = w * cal.MIN_OBSERVABILITY_WINDOWS
-        got = cal.fit_ungated_observability(
-            many, p.circulation.displaced_gal, p.circulation.flow_gpm
-        )
-        assert got is not None and got[1] == cal.MIN_OBSERVABILITY_WINDOWS
-
-
 class TestTheLeadByInterval:
     """A meter's flag marks a sample's interval (``sim_adapters``): a
     draw inside the lead but before its first sample is on the sample
@@ -592,12 +450,3 @@ class TestTheLeadByInterval:
         before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
         h.loc[before, "dhw_in_use"] = True
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
-
-
-class TestAFixedExponent:
-    def test_only_the_level_is_fitted(self) -> None:
-        dt = [55.0, 60.0, 70.0, 80.0]
-        ua = [5.0 * (d / 50.0) ** 0.28 for d in dt]
-        ref, exponent = cal.fit_ua_law(dt, ua, ref_delta_t=50.0, exponent=0.28)
-        assert exponent == 0.28
-        assert ref == pytest.approx(5.0)

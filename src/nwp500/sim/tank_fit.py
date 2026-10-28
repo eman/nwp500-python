@@ -540,14 +540,10 @@ Terms = tuple[tuple[str, str, float, float, float], ...]
 def term_values(
     params: HeaterParams, terms: Terms = TERMS
 ) -> tuple[float, ...]:
-    """``params``' values of ``terms``; the sides' UA, when unset, the
-    jacket's ``layout`` reads."""
-    lay = st.layout(params)
+    """``params``' values of ``terms``."""
     out: list[float] = []
     for group, name, *_ in terms:
-        if name == "ua_side_btu_hr_f":
-            out.append(lay.ua_btu_hr_f)
-        elif name in _SPAN:
+        if name in _SPAN:
             low, high = params.tank.condenser_span
             out.append(low if name == "condenser_low" else high - low)
         else:
@@ -597,6 +593,34 @@ class TankFit:
     evaluations: int
 
 
+def _event_rmse(found: Iterable[Sequence[Sequence[float]]]) -> float:
+    """The root mean square, over the events and the two probes, of each
+    probe's RMSE over its event, °F."""
+    squares = [
+        (math.fsum(e * e for e in du) + math.fsum(e * e for e in dl))
+        / (2 * len(du))
+        for du, dl in found
+    ]
+    return math.sqrt(math.fsum(squares) / len(squares))
+
+
+def event_rmse(
+    params: HeaterParams,
+    record: TankRecord | None,
+    coasts: Sequence[Coast],
+    *,
+    map_: Callable[..., Iterable[Any]] = map,
+) -> float | None:
+    """``params``' error on ``coasts`` as ``fit`` measures it, each
+    started from the ``record``'s replay: the root mean square, over
+    the events and the two probes, of each probe's RMSE over its event,
+    °F; None with no events."""
+    if not coasts:
+        return None
+    parts = [None if record is None else record.before(c.start) for c in coasts]
+    return _event_rmse(map_(errors, [params] * len(coasts), parts, coasts))
+
+
 def _robust(error: float) -> float:
     """``error`` through the soft-L1 loss at 1 °F, as a residual: its
     square is ``2 (sqrt(1 + e²) - 1)``, quadratic small and linear
@@ -643,15 +667,7 @@ def fit(
             out.extend(w * _robust(e) for e in (*du, *dl))
         return np.array(out)
 
-    def event_rmse(x: np.ndarray) -> float:
-        squares = [
-            (math.fsum(e * e for e in du) + math.fsum(e * e for e in dl))
-            / (2 * len(du))
-            for du, dl in trial(x)
-        ]
-        return math.sqrt(math.fsum(squares) / len(squares))
-
-    before = event_rmse(x0)
+    before = _event_rmse(trial(x0))
     done = least_squares(
         residuals,
         x0,
@@ -669,6 +685,6 @@ def fit(
         terms=dict(zip(names, x.tolist(), strict=True)),
         on_bound=tuple(k for k, e in zip(names, edge, strict=True) if e),
         rmse_before=before,
-        rmse_after=event_rmse(x),
+        rmse_after=_event_rmse(trial(x)),
         evaluations=int(done.nfev),
     )

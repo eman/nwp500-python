@@ -172,10 +172,10 @@ about 2 degF per gallon.
 
 **The lower probe's response follows the gap.** The same draw moves
 the lower probe further the wider the gap between the probes when it
-starts. The simulator moves the lower probe toward the inflow by the
-share ``1 - exp(-(gap + 1.25) / 30)`` of its distance from it per 9 gal
-withdrawn, and the upper probe 0.05 degF per delivered gallon, walking
-the draw a quarter gallon at a time. It was fitted on 399 draws from
+starts. The two-zone tank moved the lower probe toward the inflow by
+the share ``1 - exp(-(gap + 1.25) / 30)`` of its distance from it per
+9 gal withdrawn, and the upper probe 0.05 degF per delivered gallon,
+walking the draw a quarter gallon at a time. It was fitted on 399 draws from
 2026-02-21 to 2026-07-31 with nothing heating or circulating and the
 heater heard throughout, from 15 minutes before to 30 minutes after,
 and no other draw within 30 minutes. The table scores the lower probe
@@ -233,11 +233,20 @@ the lower probe's mean absolute error went from 2.79 to 1.91 degF and
 the upper probe's from 0.31 to 0.21, and the bias of the two probes'
 mean stayed within 0.2 degF. The largest draws keep the widest error.
 
+The layered tank replaces that response with the water itself: a draw
+pushes the column up through an inlet zone (12.2 gal at the fit) and
+out of the top, and the probes read the layers where they sit
+(:doc:`simulator-methodology`). On the 46 metered draws after
+2026-09-18, each followed for an hour, fitted on the record before
+them, its lower probe's RMS error was 2.09 degF against 2.16 for the
+response above, and its upper 0.290 against 0.281.
+
 The upper probe is harder. Over 563 draws of 5 gal or more in 204 days,
 a two-zone model's upper zone, moved only by each draw's calibrated
 response, ran too warm by a mean of 0.22 degF over the first 5 gal,
 9.1 degF at 30-40 gal and 19.0 degF past 40 gal. Tracking the heat a draw takes
-from the top of the tank, as the simulator's heat book does
+from the top of the tank, as the simulator's heat book and its layered
+tank do
 (:doc:`simulator`), is what lets an estimate see the tank run out.
 
 
