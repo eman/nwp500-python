@@ -401,8 +401,9 @@ Fixed
     minute, and keeps the draws from its start, so a draw earlier in
     that minute reached neither its replay nor its walk. It is now
     replayed at that minute's start, then corrected to the probes the
-    recovery starts from, as one a minute earlier is. So is one in a
-    quiet window's first minute, before its start, which was dropped.
+    recovery starts from, as one a minute earlier is.
+  - **A quiet window:** a draw in its first minute, before its start,
+    was dropped. It is now replayed the same way.
 
   No held-out metric moves on this heater's record.
 - In Electric, an upper element a lowered setpoint stops at its new off

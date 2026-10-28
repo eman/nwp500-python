@@ -621,9 +621,10 @@ def _replayable(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
     draws in the minute ``at`` falls in, before it, moved to a
     microsecond before that minute's start. The replay to ``at`` stops
     at that start, its last span taking what comes before it
-    (``tank_fit.replay``), and an event's own draws start at ``at``: so
-    every draw before an event is replayed, then corrected to the
-    probes it starts from, which were read after it."""
+    (``tank_fit.replay``), and an event's own draws start at ``at`` (a
+    delivery's is left out first, ``_without_own_draw``): so every draw
+    before an event is replayed, then corrected to the probes it starts
+    from, which were read after it."""
     part = record.before(at)
     cut = part.instant(part.minute(at))
     lo = bisect_left(part.draws, (cut, -math.inf))
