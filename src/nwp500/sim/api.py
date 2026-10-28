@@ -39,6 +39,7 @@ from nwp500.sim.engine import (
     HEATER_SETPOINT_MIN_F,
     Entry,
     Heater,
+    HeatingInterval,
     PathPoint,
     RawWrite,
     Simulation,
@@ -873,25 +874,45 @@ MAX_PROFILE_SLOTS = 2000
 
 def _stint_end(
     simulation: Simulation, start: datetime, opens: timedelta
-) -> tuple[datetime, bool] | None:
+) -> tuple[datetime, datetime | None] | None:
     """When the recovery a mode write at ``start`` sets off ends: the
     heating that begins within ``opens`` of it (the write's lag and the
     compressor's lockout), and all that begins before that has ended (an
-    element handing over, the heat pump alongside); and whether a write
-    or the heater dropping the mode ended part of it after ``start``
-    rather than its targets: a stop on a mode change (``stop`` "mode";
-    a setpoint write stops a run only once it has reached the new
-    setpoint). ``start`` when none begins; None when it is still
-    heating at the walk's end."""
-    end, cut = start, False
+    element handing over, the heat pump alongside); and the first instant
+    after ``start`` a run in it stopped short of its target (``_cut``).
+    ``start`` when none begins; None when it is still heating at the
+    walk's end."""
+    end: datetime = start
+    cut: datetime | None = None
     for h in sorted(simulation.heating, key=lambda h: h.start.at):
         if h.start.at > max(end, start + opens):
             break
         if h.stop == "horizon":
             return None
         end = max(end, h.end)
-        cut = cut or (h.stop == "mode" and h.end > start)
+        if (
+            h.end > start
+            and _cut(simulation, h)
+            and (cut is None or h.end < cut)
+        ):
+            cut = h.end
     return end, cut
+
+
+def _cut(simulation: Simulation, h: HeatingInterval) -> bool:
+    """Whether ``h`` stopped short of its target: on the mode changing
+    then (a write, or the heater dropping it at a window), not on the
+    heat pump taking over from an element standing in for it; or, the
+    compressor, on a setpoint write with the lower zone short of the new
+    setpoint (the engine's own ``reached``). An element stops on a
+    setpoint write only at its new off point."""
+    if h.stop == "mode":
+        return any(
+            m.end == h.end and m.ended_by != "horizon" for m in simulation.modes
+        ) or any(at == h.end for at, _ in simulation.drops)
+    if h.stop == "write" and h.source == "compressor":
+        return not any(at == h.end for at, _ in simulation.reached)
+    return False
 
 
 def _first_reach(
@@ -973,8 +994,9 @@ def element_mode(
     when given. It ends when the recovery the write sets off does (every
     element and the heat pump stopped), within ``READY_HORIZON``, or at
     the switch-back, whichever is first. A recovery part of which a
-    later mode write or the heater dropping the mode at a window stops
-    has no ``full_minutes``
+    later mode write or the heater dropping the mode at a window stops,
+    or whose compressor a setpoint write stops short of the new
+    setpoint, within the stint, has no ``full_minutes``
     (``recovery_cut_short``); a write of the mode already in force
     changes nothing, and the stint is what the heater does in it anyway
     (``mode_already_in_force``). The ready level and the setpoint are
@@ -1035,7 +1057,7 @@ def element_mode(
     c = params.controller
     opens = c.write_start_lag + c.restart_lockout
     found = _stint_end(walked.simulation, s.start, opens)
-    done, cut = (None, False) if found is None else found
+    done, cut_at = (None, None) if found is None else found
     end = walked.until if done is None else done
     truncated = False
     if switch_back_after_minutes is not None:
@@ -1044,13 +1066,9 @@ def element_mode(
         end = min(end, back)
     reasons = list(BASE_REASONS)
     # The stint itself, its times, energy and end all from the one
-    # walk; one with nothing to heat is walked just past the write
-    # taking effect, for what its entry decision rests on.
-    stint = stint_walk(
-        end - s.start
-        if end > s.start
-        else c.write_start_lag + timedelta(seconds=1)
-    )
+    # walk; one with nothing to heat is walked for a second, for what
+    # the entry decision at the start rests on.
+    stint = stint_walk(end - s.start if end > s.start else timedelta(seconds=1))
     reasons += [
         r for r in stint.reasons if r != "element_mode_dropped_projected"
     ]
@@ -1077,6 +1095,7 @@ def element_mode(
     # The recovery ends with every element and the heat pump stopped,
     # not cut by a write or the heater's drop; read off the stint's own
     # walk, whose last stop may land a little sooner than the first's.
+    cut = cut_at is not None and cut_at <= end
     full: float | None = None
     if not truncated and done is not None and not cut:
         again = _stint_end(sim, s.start, opens) if path else None

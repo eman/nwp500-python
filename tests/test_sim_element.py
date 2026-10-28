@@ -355,6 +355,72 @@ class TestWhatEndsTheRecovery:
         assert r.full_minutes is None
         assert "recovery_cut_short" in r.reasons
 
+    def test_a_setpoint_write_stopping_the_compressor_short_cuts_it(
+        self, params: HeaterParams
+    ) -> None:
+        """Lowered to 120 °F at minute 20 with the lower zone near 103:
+        the compressor stops short of the new setpoint."""
+        s = _scenario(
+            125.0,
+            100.0,
+            given={
+                "commands": Commands(
+                    writes=(
+                        Write(at=T0 + timedelta(minutes=20), setpoint_f=120.0),
+                    )
+                )
+            },
+        )
+        r = element_mode(s, params, mode=HIGH_DEMAND)
+        assert r.full_minutes is None
+        assert "recovery_cut_short" in r.reasons
+
+    @pytest.mark.parametrize("mode", [ENERGY_SAVER, HIGH_DEMAND])
+    def test_the_heat_pump_taking_over_from_an_element_is_not_a_cut(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """Air under the heat pump's range for 20 minutes: the lower
+        element stands in, and stops as the heat pump comes back."""
+        air = (
+            (T0, 30.0),
+            (T0 + timedelta(minutes=20), 30.0),
+            (T0 + timedelta(minutes=20, seconds=1), 68.0),
+        )
+        s = _scenario(
+            125.0,
+            100.0,
+            given={"environment": Environment(ambient_f=air, humidity=48.0)},
+        )
+        r = element_mode(s, params, mode=mode)
+        assert "heat_pump_unavailable" in r.reasons
+        assert r.full_minutes is not None
+        assert "recovery_cut_short" not in r.reasons
+
+    def test_a_cut_after_the_switch_back_is_not_the_stints(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(125.0, 110.0, given={"schedules": _tou_opening_at(12, 8)})
+        r = element_mode(s, params, mode=ELECTRIC, switch_back_after_minutes=5)
+        assert "truncated_by_switch_back" in r.reasons
+        assert "recovery_cut_short" not in r.reasons
+        assert "element_mode_dropped_projected" not in r.reasons
+
+    def test_an_empty_stint_does_not_take_a_later_writes_notes(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(
+            SETPOINT + 1.2,
+            SETPOINT + 0.7,
+            given={
+                "commands": Commands(
+                    writes=(Write(at=T0 + timedelta(seconds=10), mode=2),)
+                )
+            },
+        )
+        r = element_mode(s, params, mode=HIGH_DEMAND)
+        assert r.end_minute == 0.0
+        assert "element_later_starts_not_modelled" not in r.reasons
+
     def test_the_writes_own_stop_at_the_start_does_not_cut(
         self, params: HeaterParams
     ) -> None:

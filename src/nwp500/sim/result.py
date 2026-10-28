@@ -267,7 +267,8 @@ class ElementModeResult:
     #: When the recovery the write set off ends: every element and the
     #: heat pump stopped at its target. None when the switch-back comes
     #: first, a later mode write or the heater dropping the mode at a
-    #: window stops part of it, or it does not end within the walk.
+    #: window stops part of it, a setpoint write stops the compressor
+    #: short of the new setpoint, or it does not end within the walk.
     full_minutes: float | None
     #: The stint's end, and the tank then: the probes and the layers
     #: (``HeaterState.layers_f``).
