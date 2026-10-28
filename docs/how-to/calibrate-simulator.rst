@@ -50,9 +50,10 @@ from a home-automation recorder) as long as each line has this shape:
 yields them one at a time, for a long recording.
 
 Record through quiet nights and full recoveries. The tank's fit needs
-10 windows of 3 hours or more with no heating and no hot water in use,
-and 5 recoveries that reached their target to place the compressor's
-heat. The compressor fit needs at least 5 recoveries that reached their target,
+10 windows of 3 hours or more with no heating and no hot water in use
+(a meter's draws count toward them, from Python), and places the
+compressor's heat once it also has 5 recoveries that reached their
+target. The compressor fit needs at least 5 recoveries that reached their target,
 and holds out the latest fifth once there are 10. The power fits need
 10 compressor cycles.
 
@@ -326,8 +327,8 @@ fit as ``params`` with ``keep_better=True``:
 
 Each group of terms holds out its latest evidence from its refit:
 
-- the tank: its quiet windows, draws and recoveries, each kind's
-  latest fifth held out, scored on both probes' RMS error, °F;
+- the tank: its quiet windows, draws and recoveries together, scored
+  on both probes' RMS error, °F;
 - the heat's map: its climbs, scored on the RMS heat error, judged
   with the base's power;
 - the power's map: its metered blocks (a run's blocks on one side),

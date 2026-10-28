@@ -1334,7 +1334,8 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     runs no rule that could use them. A document of the two-zone tank's
     (its ``loss.ua_btu_hr_f``, or ``standby`` or ``gap_tau`` unfitted)
     carries none of the layered tank's fitted terms, so its tank reads
-    as the priors, with ``tank`` unfitted. A schema other than
+    as the priors (a loss it leaves null included), with ``tank``
+    unfitted. A schema other than
     ``PARAMS_SCHEMA`` is a ``ValueError``, and so are a ``doc`` that is
     not an object and a value of the wrong type (a number where a list
     goes, a string where a number goes).
@@ -1350,6 +1351,15 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         )
     if schema != PARAMS_SCHEMA:
         raise ValueError(f"not a {PARAMS_SCHEMA} document: schema {schema!r}")
+    unfitted = doc.get("unfitted", ())
+    _check("unfitted", tuple[str, ...], unfitted)
+    names = set(unfitted)
+    loss = doc.get("loss")
+    two_zone = bool(names & _TWO_ZONE_TERMS) or (
+        isinstance(loss, Mapping) and _TWO_ZONE_LOSS in loss
+    )
+    if two_zone:
+        names = (names - _TWO_ZONE_TERMS) | {"tank"}
     parts: dict[str, Any] = {}
     for name, cls in PARTS.items():
         if name in OPTIONAL_PARTS and doc.get(name) is None:
@@ -1360,18 +1370,13 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         values = {}
         hints = get_type_hints(cls)
         for f in fields(cls):
+            if two_zone and name == "loss" and given.get(f.name) is None:
+                # Its sides' loss was unset: the jacket's, not a term.
+                continue
             if f.name in given:
                 _check(f"{name}.{f.name}", hints[f.name], given[f.name])
                 values[f.name] = given[f.name]
             elif f.default is MISSING and f.default_factory is MISSING:
                 raise ValueError(f"{name}.{f.name} is missing")
         parts[name] = cls(**values)
-    unfitted = doc.get("unfitted", ())
-    _check("unfitted", tuple[str, ...], unfitted)
-    names = set(unfitted)
-    loss = doc.get("loss")
-    if names & _TWO_ZONE_TERMS or (
-        isinstance(loss, Mapping) and _TWO_ZONE_LOSS in loss
-    ):
-        names = (names - _TWO_ZONE_TERMS) | {"tank"}
     return HeaterParams(**parts, unfitted=tuple(names))

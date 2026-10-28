@@ -11,6 +11,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -64,6 +65,7 @@ from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.tank_physics import TankPhysics, TankState
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
+FIXTURES = Path(__file__).with_name("fixtures") / "sim"
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 FULL = (140.5, 139.6)
 
@@ -533,6 +535,15 @@ class TestTheParameters:
         assert not {"standby", "gap_tau"} & set(read.unfitted)
         if "loss" in two_zone:
             assert read.loss == LossParams()
+
+    def test_a_document_the_two_zone_code_wrote_reads(self) -> None:
+        """The site example as the two-zone code wrote it: its sides'
+        loss null, its tank and draw response the zones'."""
+        doc = json.loads((FIXTURES / "heater_params_two_zone.json").read_text())
+        read = params_from_document(doc)
+        assert read.unfitted == ("tank",)
+        assert read.loss == LossParams()
+        assert read.tank.volume_gal == 63.2
 
     @pytest.mark.parametrize(
         ("part", "name", "value", "match"),

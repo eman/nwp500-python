@@ -205,8 +205,14 @@ def holdout(
     except sc.CalibrationInputError as e:
         raise InputError(str(e)) from None
     found = ss.events(ready, since=start)
-    # Each event starts from the layers the history before it leaves.
-    replayed = tf.tank_record(ready.frame) if "air_f" in ready.frame else None
+    # Each event starts from the layers the history before it leaves,
+    # which needs the air read somewhere in it.
+    air_f = ready.frame.get("air_f")
+    replayed = (
+        tf.tank_record(ready.frame)
+        if air_f is not None and bool(air_f.notna().any())
+        else None
+    )
     # Local days, as ``--holdout-from`` is read.
     tz = local_zone() or "UTC"
     return HeldOutScore(

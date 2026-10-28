@@ -150,8 +150,8 @@ Changed
   and draws (``MIN_TANK_EVENTS``) and the air. ``Calibrated.tank``
   (``TankCalibration``) says what its fit saw, and ``map_`` spreads its
   trials over processes (``nwp-cli simulate calibrate`` uses one per
-  core). ``keep_better`` judges the tank as one group, ``tank``, on each
-  kind of event's latest fifth (``tank_fit.event_rmse``), in place of
+  core). ``keep_better`` judges the tank as one group, ``tank``, on the
+  latest fifth of its events (``tank_fit.event_rmse``), in place of
   ``standby`` and ``gap_tau``, and ``HeldOut`` holds those events
   (``tank``, ``record``). The report's tank rows replace the loss law's
   and the gap's. ``HeaterParams.unfitted`` and the reasons name

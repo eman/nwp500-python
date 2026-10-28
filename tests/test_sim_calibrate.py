@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
@@ -730,10 +731,52 @@ class TestKeepBetter:
         (tank,) = [j for j in done.judged if j.group == "tank"]
         assert tank.kept == "base"
         assert tank.why == (
-            "kept the base: 4 quiet windows and draws; 10 needed"
+            "kept the base: under 10 quiet windows, draws and recoveries "
+            "to judge a refit by"
         )
+        # Not fitted at all: nothing to judge it by.
+        assert done.tank.fit is None
         assert done.calibration.params.loss.ua_side_btu_hr_f == 12.0
         assert sc.score(done, base)["tank"] is None
+
+    def test_the_tanks_events_are_held_out_together(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Under 10 of each kind, 13 in all: the latest 3, whatever their
+        # kind, are held out, and the fit sees the rest.
+        def at(hours: float) -> Any:
+            return SimpleNamespace(start=T0 + timedelta(hours=hours))
+
+        windows = [at(24 * d) for d in range(9)]
+        recoveries = [at(24 * d + 12) for d in range(4, 8)]
+        record = cast("tf.TankRecord", object())
+        found = sc._TankEvents(record, windows, [], recoveries)
+        seen: list[Any] = []
+
+        def fit(_: Any, train: Any, __: Any) -> tuple[Any, str]:
+            seen.append(train)
+            return SimpleNamespace(params=_fitted(UA)), ""
+
+        monkeypatch.setattr(sc, "_tank_events", lambda *_: found)
+        monkeypatch.setattr(sc, "_fit_tank", fit)
+        monkeypatch.setattr(
+            tf, "event_rmse", lambda p, *_, **__: p.loss.ua_side_btu_hr_f
+        )
+        judged: list[sc.Judged] = []
+        params, tank, held, _ = sc._keep_better_tank(
+            _ready(recovery_days(1)), _fitted(12.0), (), set(), judged, map
+        )
+        assert [c.start for c in held] == [
+            windows[7].start,
+            recoveries[3].start,
+            windows[8].start,
+        ]
+        (train,) = seen
+        assert (len(train.windows), len(train.recoveries)) == (7, 3)
+        assert (tank.n_windows, tank.n_recoveries, tank.n_held) == (7, 3, 3)
+        (j,) = judged
+        assert (j.kept, j.n_held) == ("refit", 3)
+        assert params.loss.ua_side_btu_hr_f == UA
 
     def test_an_unfitted_base_takes_the_refit(
         self, device_status_dict: dict[str, Any]
@@ -858,8 +901,12 @@ class TestKeepBetterEveryGroup:
         assert {"tank", "heat_map", "power_map"} <= set(groups)
         # Each day's quiet decay and recovery: the condenser is fitted
         # too. Each draw runs into its recovery: none is a draw's event.
+        # The counts are the fit's own, the latest held out.
         assert tank.n_windows >= sc.MIN_TANK_EVENTS
-        assert tank.n_recoveries == 14 and tank.n_draws == 0
+        assert tank.n_recoveries >= sc.MIN_TANK_RECOVERIES
+        assert tank.n_draws == 0
+        every = tank.n_windows + tank.n_recoveries + tank.n_held
+        assert tank.n_held == sc._split(every) > 0
         assert tank.fit is not None
         assert set(tank.fit.terms) == {
             t[1] for t in tf.TERMS + tf.CONDENSER_TERMS
@@ -915,7 +962,8 @@ class TestKeepBetterSecondReview:
             "kept the base: too few recovery climbs to refit on (10 needed)"
         )
         assert judged["tank"].why == (
-            "kept the base: 4 quiet windows and draws; 10 needed"
+            "kept the base: under 10 quiet windows, draws and recoveries "
+            "to judge a refit by"
         )
         terms = _terms(done)
         for name, value in (

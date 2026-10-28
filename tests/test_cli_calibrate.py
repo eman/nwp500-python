@@ -258,6 +258,18 @@ class TestHoldout:
         )
         assert held.base.events == held.fitted.events
 
+    def test_with_no_air_read_the_events_start_from_the_probes(
+        self, tmp_path: Path, device_status_dict: dict[str, Any]
+    ) -> None:
+        # Too short for a quiet window: the cabinet gives no air at all.
+        path = tmp_path / "short.jsonl"
+        path.write_text("\n".join(quiet_lines(device_status_dict, 2)) + "\n")
+        held = cal_cli.holdout(
+            cal_cli.read_history(path), T0 + timedelta(hours=1)
+        )
+        assert held.done.air == "heater"
+        assert held.done.tank.fit is None
+
     def test_the_fit_scores_better_than_the_defaults(
         self,
         tmp_path: Path,

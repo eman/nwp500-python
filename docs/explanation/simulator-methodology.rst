@@ -528,8 +528,8 @@ the draw response and the readiness evidence have fits of their own
 pairs, holds out the latest fifth, and replaces the base only when it
 books those no worse. With ``keep_better``, the tank's terms, the
 heat's map, the power's map, the start's hold and the run-on are each
-refitted on their earlier four fifths (the tank's, of each kind of
-event), and a refit
+refitted on their earlier four fifths (the tank's quiet windows, draws
+and recoveries together), and a refit
 replaces the base's value only where it scores better on the latest
 fifth; with fewer than 10 items the base is kept. A group the base lists as unfitted takes its
 refit without that comparison, fitted on all its data.

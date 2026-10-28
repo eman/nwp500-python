@@ -1,0 +1,264 @@
+{
+ "schema": "heater-params/2",
+ "tank": {
+  "volume_gal": 63.2,
+  "lower_zone_share": 0.5,
+  "stratification_gap_tau_h": 26.714600938534186,
+  "layers": 12,
+  "upper_probe_height": 0.85,
+  "lower_probe_height": 0.2,
+  "upper_probe_spread_gal": 0.0,
+  "lower_probe_spread_gal": 0.0,
+  "lower_probe_offset_f": 0.0,
+  "upper_element_height": 0.72,
+  "lower_element_height": 0.15,
+  "condenser_span": [
+   0.0,
+   0.45
+  ],
+  "inlet_mix_gal": 9.0,
+  "conductance_btu_hr_f": 0.8900863340612089
+ },
+ "loss": {
+  "ua_btu_hr_f": 4.482756204771071,
+  "ua_exponent": 2.4838799049548713e-16,
+  "ua_ref_delta_t_f": 50.0,
+  "ua_baseline_btu_hr_f": 5.0,
+  "bottom_loss_btu_hr": 90.83634299259268,
+  "bottom_gate_f": 1.8315130798400514,
+  "ua_bottom_btu_hr_f": 1.8,
+  "ua_top_btu_hr_f": 0.0,
+  "ua_side_btu_hr_f": null
+ },
+ "compressor": {
+  "heat_btu_h": 4499.436604500702,
+  "heat_btu_h_per_air_f": 55.49795247502065,
+  "heat_btu_h_per_water_f": -15.948333659761246,
+  "heat_btu_h_per_air_water_f": 0.0,
+  "power_w": 401.7270566837221,
+  "power_w_per_air_f": 0.21405638109110056,
+  "power_w_per_water_f": 2.8460496649489793,
+  "power_w_per_air_water_f": 0.0,
+  "heat_domain_air_f": [
+   61.0,
+   89.0
+  ],
+  "heat_domain_water_f": [
+   114.0,
+   144.0
+  ],
+  "power_domain_air_f": [
+   45.0,
+   90.0
+  ],
+  "power_domain_water_f": [
+   73.0,
+   148.0
+  ],
+  "start_hold_after_min": [
+   15.0,
+   60.0,
+   180.0,
+   720.0
+  ],
+  "start_hold_min": [
+   0.0,
+   5.0,
+   10.0,
+   18.0,
+   22.0
+  ]
+ },
+ "element": {
+  "element_w": 5148.0,
+  "upper_f_per_min": 2.01,
+  "lower_f_per_min": 1.38,
+  "upper_starts_below_setpoint_f": 0.54,
+  "high_demand_starts_below_setpoint_f": 0.72,
+  "start_bracket_lower_f": 0.0,
+  "high_demand_bracket_lower_f": 0.36,
+  "upper_reengages_below_setpoint_f": 4.1,
+  "energy_saver_reengages_at_f": 104.9,
+  "energy_saver_entry_deficit_f": 1.8,
+  "energy_saver_bracket_lower_f": 1.44,
+  "energy_saver_upper_off_below_setpoint_f": 1.62,
+  "upper_dead_time_min": 1.21
+ },
+ "draw": {
+  "observability": 0.633,
+  "reach_gate_f": 30.0,
+  "reach_offset_f": 1.25,
+  "reach_gal": 9.0,
+  "upper_f_per_gal": 0.05,
+  "delivery_intercept_f": 53.56,
+  "delivery_slope": 0.485,
+  "inlet_temp_f": 72.4,
+  "inlet_from_probe": true,
+  "lower_gate_f": 5.0,
+  "pool_f_per_hour": 0.015,
+  "ungated_observability": 0.26307054260699586,
+  "domain_upper_f": [
+   122.2,
+   147.9
+  ],
+  "domain_volume_gal": [
+   1.0,
+   41.6
+  ]
+ },
+ "controller": {
+  "write_start_lag_s": 30.0,
+  "restart_lockout_s": 330.0,
+  "window_write_starts_f": 4.0,
+  "mode_write_starts_f": 2.0,
+  "mode_write_lower_starts_f": 3.6,
+  "energy_saver_write_seen_f": 1.44,
+  "tou_cap_f": 3.6,
+  "hp_stop_overshoot_f": 0.9,
+  "hp_air_range_f": [
+   41.0,
+   113.0
+  ],
+  "hp_water_range_f": [
+   50.0,
+   149.0
+  ]
+ },
+ "readiness": {
+  "line_f": 105.0,
+  "delivered_lag_gal": 5.0,
+  "fall_f_per_gal": 2.0,
+  "probe_resolution_f": 1.0,
+  "bath_gal": 28.7,
+  "shower_gal": 12.0,
+  "evidence": [
+   [
+    124.88,
+    115.34,
+    8.2
+   ],
+   [
+    127.76,
+    102.2,
+    7.8
+   ],
+   [
+    127.76,
+    124.16,
+    11.7
+   ],
+   [
+    128.66,
+    125.24,
+    15.4
+   ],
+   [
+    129.2,
+    113.36,
+    8.7
+   ],
+   [
+    129.74,
+    99.32,
+    12.7
+   ],
+   [
+    130.64,
+    120.92,
+    13.6
+   ],
+   [
+    132.08,
+    127.76,
+    16.5
+   ],
+   [
+    133.7,
+    111.38,
+    14.2
+   ],
+   [
+    134.78,
+    135.86,
+    18.1
+   ],
+   [
+    134.96,
+    135.5,
+    18.3
+   ],
+   [
+    135.5,
+    135.68,
+    18.6
+   ],
+   [
+    135.86,
+    135.5,
+    23.6
+   ],
+   [
+    135.86,
+    136.76,
+    24.1
+   ],
+   [
+    139.64,
+    139.28,
+    25.1
+   ],
+   [
+    140.36,
+    132.98,
+    22.1
+   ],
+   [
+    141.08,
+    141.44,
+    33.4
+   ],
+   [
+    142.52,
+    113.0,
+    14.3
+   ],
+   [
+    142.52,
+    142.52,
+    38.2
+   ]
+  ]
+ },
+ "book": {
+  "tank_gal": 63.2,
+  "hp_btu_per_h": 4338.0,
+  "hp_btu_per_h_per_f": 66.0,
+  "element_w": 5148.0,
+  "ua_btu_per_h_f": 2.88,
+  "reference_f": 70.0,
+  "inlet_default_f": 70.0,
+  "delivery_intercept_f": 0.0,
+  "delivery_slope": 1.0,
+  "empty_btu": 16169.0,
+  "zone_empty_btu": 12636.0,
+  "zone_mix_f_per_gal": 1.25,
+  "zone_mix_gal": 14.0,
+  "error_btu": 3000.0,
+  "aged_error_btu": 4100.0,
+  "uniform_band_f": 1.5,
+  "anchor_run_min": 15.0,
+  "max_anchor_age_h": 18.0,
+  "history_h": 72.0,
+  "draw_gpm": 0.3
+ },
+ "circulation": {
+  "displaced_gal": 19.36,
+  "flow_gpm": 1.397,
+  "return_rest_offset_f": 7.84,
+  "return_cool_tau_h": 0.464,
+  "loss_btu_per_gal": 159.0,
+  "book_circuit_gal": 1.47,
+  "meter_share": 0.0,
+  "run_gap_min": 10.0
+ }
+}

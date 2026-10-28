@@ -434,27 +434,42 @@ def _keep_better_tank(
 ) -> tuple[
     HeaterParams, TankCalibration, tuple[tf.Coast, ...], tf.TankRecord | None
 ]:
-    """The tank's terms refitted on all but each kind's latest events,
-    and kept only where they score better there (``score``'s ``tank``).
-    With the tank unfitted in ``base``, the refit is taken unjudged, on
-    every event. Returns the parameters, the fit, the events held out
-    and the record they start from; ``unfitted`` and ``judged`` are
-    updated in place."""
+    """The tank's terms refitted on all but the latest of its events
+    (its quiet windows, draws and recoveries together, ``_split``), and
+    kept only where they score better on those (``score``'s ``tank``).
+    With too few events to hold any out, the base is kept without a
+    fit. With the tank unfitted in ``base``, the refit is taken
+    unjudged, on every event. Returns the parameters, the fit (its
+    counts the events it was fitted on), the events held out and the
+    record they start from; ``unfitted`` and ``judged`` are updated in
+    place."""
     found = _tank_events(ready, base, draws)
     open_tank = "tank" in unfitted
-    train: list[list[tf.Coast]] = []
-    held: list[tf.Coast] = []
-    for kind in (found.windows, found.draws, found.recoveries):
-        n = 0 if open_tank else _split(len(kind))
-        train.append(kind[: len(kind) - n])
-        held.extend(kind[len(kind) - n :])
-    fit, why = _fit_tank(
-        base,
-        replace(found, windows=train[0], draws=train[1], recoveries=train[2]),
-        map_,
-    )
-    params = base
     what = "quiet windows, draws and recoveries"
+    events = sorted(
+        [*found.windows, *found.draws, *found.recoveries],
+        key=lambda c: c.start,
+    )
+    n = 0 if open_tank else _split(len(events))
+    held = events[len(events) - n :]
+    out = {id(c) for c in held}
+
+    def kept(kind: list[tf.Coast]) -> list[tf.Coast]:
+        return [c for c in kind if id(c) not in out]
+
+    train = replace(
+        found,
+        windows=kept(found.windows),
+        draws=kept(found.draws),
+        recoveries=kept(found.recoveries),
+    )
+    if found.record is not None and not open_tank and not held:
+        # Nothing to judge a refit by: not worth the fit's minutes.
+        j = _judge("tank", what, 0, None, None)
+        judged.append(j)
+        return base, _tank_calibration(None, train, j.why), (), found.record
+    fit, why = _fit_tank(base, train, map_)
+    params = base
     if fit is None:
         if not open_tank:
             judged.append(
@@ -477,14 +492,13 @@ def _keep_better_tank(
             len(held),
             tf.event_rmse(base, found.record, held, map_=map_),
             tf.event_rmse(fit.params, found.record, held, map_=map_),
-            n_all=len(found.windows) + len(found.draws) + len(found.recoveries),
         )
         judged.append(j)
         if j.kept == "refit":
             params = fit.params
     return (
         params,
-        _tank_calibration(fit, found, why, len(held)),
+        _tank_calibration(fit, train, why, len(held)),
         tuple(held),
         found.record,
     )
