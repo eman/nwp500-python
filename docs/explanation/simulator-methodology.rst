@@ -531,8 +531,10 @@ heat's map, the power's map, the start's hold and the run-on are each
 refitted on their earlier four fifths (the tank's quiet windows, draws
 and recoveries together), and a refit
 replaces the base's value only where it scores better on the latest
-fifth; with fewer than 10 items the base is kept. A group the base lists as unfitted takes its
-refit without that comparison, fitted on all its data.
+fifth; with fewer than 10 items the base is kept, and the tank's refit
+still needs 10 windows and draws among the four fifths it is fitted on.
+A group the base lists as unfitted takes its refit without that
+comparison, fitted on all its data.
 
 **Provenance.** Every parameter records whether it was ``measured`` on
 the heater by a targeted run, ``fitted`` from its record, or an
