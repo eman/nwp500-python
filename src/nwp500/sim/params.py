@@ -34,9 +34,8 @@ consumer reads the parameters without the model that was trained with
 them. Floats are kept as they are, so a document read back is the
 value written.
 
-This module imports only the standard library and two leaves of the
-core (``units`` and the UA law's reference ΔT in ``physics.tank``),
-which import nothing back.
+This module imports only the standard library and one leaf of the core
+(``units``), which imports nothing back.
 """
 
 import math
@@ -103,21 +102,13 @@ _IN_RECOVERY = (
     "recoveries, against a location-air sensor; durations without them "
     "come out a little long"
 )
-_VALVE_FRAME = (
-    "fitted through one installation's mixing valve and coupled with "
-    "inlet_temp_f: change them together"
-)
 _VALVE_LINE = (
     "a mixing valve's delivery line; intercept 0 and slope 1 is no valve, "
     "delivery at the tank's own temperature"
 )
 _MAINS = (
     "one installation's September mains, the median plateau of a "
-    "probe's long draws over 2026-09-19..26; coupled with observability"
-)
-_CIRCULATION = (
-    "fitted on one installation's circulation return water; acts only "
-    "with flowing draws"
+    "probe's long draws over 2026-09-19..26"
 )
 _PER_DELIVERED = "per gallon delivered through one installation's mixing valve"
 
@@ -174,51 +165,24 @@ def note_of(part: object, name: str) -> str | None:
     return None if note is None else str(note)
 
 
-# ΔT at which ``ua_ref`` is quoted.  50 °F sits between the cold-soak and
-# hot-standby clusters, so ua_ref is interpolated rather than extrapolated
-# from either.
-UA_REF_DELTA_T_F = 50.0
-#: The gap time constant served when the parameters carry none
-#: (``TankParams.stratification_gap_tau_h``), h: history puts it near
-#: 60 h on this product.
-TAU_GAP_PRIOR_H = 60.0
-
-# ΔT floor inside the power law.  As ΔT → 0 the power law would drive UA
-# → 0 (exponent > 0), which is unphysical: conduction through the jacket
-# does not vanish.  It also has no observable consequence (the loss term
-# is UA·ΔT, so both factors are heading to zero), but it keeps UA finite
-# and positive for callers that read it directly.
-UA_MIN_DELTA_T_F = 5.0
+#: The two-zone gap's time constant on this product, h, which the
+#: water column's conductance prior closes (``TankParams.
+#: conductance_btu_hr_f``).
+_GAP_PRIOR_H = 60.0
 
 
 @dataclass(frozen=True, kw_only=True)
 class TankParams:
-    """The tank: its size, and the thermal masses that follow from it.
+    """The tank: its size, and how the stratified tank lays it out
+    (``physics.stratified.layout``).
 
-    The masses are derived, not stored, so a tank of another size
+    The thermal mass is derived, not stored, so a tank of another size
     cannot carry the 63.2-gal tank's mass.
     """
 
     #: Rated storage, gallons: the NWP500-65's actual 63.2 (marketed as
     #: 65).
     volume_gal: float = field(default=63.2, metadata=_p(DEFAULT, "gal"))
-    #: The share of the tank the two-zone model gives the lower zone,
-    #: the stratum the condenser coil wraps. The recoveries put the
-    #: stratified tank's share at 0.435-0.475
-    #: (``docs/explanation/recovery-speed.rst``) and the draw fit's free
-    #: lower zone at 33.2 gal (0.525). A cycle model's constant fitted
-    #: to durations at 0.435, 0.455, 0.475 and 0.5 (177 recoveries, 35
-    #: held out) gave held-out errors of 34.3, 33.9, 33.7 and 33.7 min,
-    #: so 0.5 stays.
-    lower_zone_share: float = field(
-        default=0.5, metadata=_p(DEFAULT, "fraction")
-    )
-    #: Time constant of the stratification gap's decay, hours, fitted per
-    #: retrain. None, unfitted: the consumer uses its prior.
-    stratification_gap_tau_h: float | None = field(
-        default=None, metadata=_p(FITTED, "h")
-    )
-
     #: The stratified tank's layers (``physics.stratified``), equal in
     #: volume, the bottom first: HPWHsim's twelve.
     layers: int = field(default=12, metadata=_p(DEFAULT, "1"))
@@ -258,16 +222,14 @@ class TankParams:
     condenser_span: tuple[float, float] = field(
         default=(0.0, 0.45), metadata=_p(DEFAULT, "fraction")
     )
-    #: The water an inflow mixes with as it enters at the bottom, gal:
-    #: the draw response's reach (``DrawParams.reach_gal``). A prior.
+    #: The water an inflow mixes with as it enters at the bottom, gal.
     inlet_mix_gal: float = field(default=9.0, metadata=_p(DEFAULT, "gal"))
     #: The water column's axial conductance, end to end, BTU/hr·°F:
     #: conduction and the slow mixing between the layers. The prior
-    #: closes a two-zone gap on ``TAU_GAP_PRIOR_H`` (the column's
-    #: slowest mode, ``mass / (π² · τ)``), 10.7 between each pair of
-    #: twelve layers.
+    #: closes a two-zone gap on 60 h (the column's slowest mode,
+    #: ``mass / (π² · τ)``), 10.7 between each pair of twelve layers.
     conductance_btu_hr_f: float = field(
-        default=63.2 * WATER_BTU_PER_GAL_F / (math.pi**2 * TAU_GAP_PRIOR_H),
+        default=63.2 * WATER_BTU_PER_GAL_F / (math.pi**2 * _GAP_PRIOR_H),
         metadata=_p(DEFAULT, "BTU/hr/°F"),
     )
 
@@ -281,70 +243,27 @@ class TankParams:
         """Full-tank thermal mass, BTU/°F (≈ 527 at 63.2 gal)."""
         return self.volume_gal * WATER_BTU_PER_GAL_F
 
-    @property
-    def lower_zone_thermal_mass_btu_f(self) -> float:
-        """Lower-zone thermal mass, BTU/°F (≈ 263)."""
-        return self.thermal_mass_btu_f * self.lower_zone_share
-
-    @property
-    def lower_zone_volume_gal(self) -> float:
-        """The lower zone, gallons (31.6), which a flowing draw's inflow
-        mixes into (``physics.draw.lower_zone_drop_f``)."""
-        return self.volume_gal * self.lower_zone_share
-
 
 @dataclass(frozen=True, kw_only=True)
 class LossParams:
-    """Standby loss through the jacket: the UA law
-    (``physics.tank.ua_at``)."""
+    """The stratified tank's standby loss (``physics.stratified.lose``):
+    each layer relaxes toward the air through its share of the sides'
+    UA, the bottom layer through the bottom's too and the top layer
+    through the top's."""
 
-    #: UA at ``ua_ref_delta_t_f``, BTU/hr·°F, fitted per retrain. None:
-    #: ``ua_baseline_btu_hr_f``.
-    ua_btu_hr_f: float | None = field(
-        default=None, metadata=_p(FITTED, "BTU/hr/°F", note=_LOCATION_AIR)
+    #: Its loss through its sides, shared equally by the layers,
+    #: BTU/hr·°F.
+    ua_side_btu_hr_f: float = field(
+        default=5.0, metadata=_p(FITTED, "BTU/hr/°F", note=_LOCATION_AIR)
     )
-    #: Power-law exponent of UA in ΔT. 0.0, what a fit from before the
-    #: power law carries, is a constant UA.
-    ua_exponent: float = field(
-        default=0.0, metadata=_p(FITTED, "1", note=_LOCATION_AIR)
-    )
-    #: ΔT at which ``ua_btu_hr_f`` is quoted, °F.
-    ua_ref_delta_t_f: float = field(
-        default=UA_REF_DELTA_T_F, metadata=_p(DEFAULT, "°F")
-    )
-    #: The UA used before any calibration, BTU/hr·°F.
-    ua_baseline_btu_hr_f: float = field(
-        default=5.0, metadata=_p(DEFAULT, "BTU/hr/°F")
-    )
-    #: Heat lost at the bottom of the tank, into the lower zone,
-    #: BTU/hr, on top of the UA law's loss from the whole tank. The
-    #: lower probe sees the share ``1 - exp(-gap / bottom_gate_f)`` of
-    #: it: little in a mixed tank, and in a stratified one a falling
-    #: lower zone and an opening gap
-    #: (``physics.tank.bottom_loss_reach``). 0.0, what a fit from before
-    #: the bottom loss carries, is none, to the bit.
-    bottom_loss_btu_hr: float = field(
-        default=0.0, metadata=_p(FITTED, "BTU/hr", note=_LOCATION_AIR)
-    )
-    #: The gap at which the lower probe sees ``1 - 1/e`` of the bottom
-    #: loss, °F.
-    bottom_gate_f: float = field(default=1.0, metadata=_p(FITTED, "°F"))
-    #: The stratified tank's loss through its bottom, from the bottom
-    #: layer, BTU/hr·°F (``physics.stratified.lose``): the bottom loss
-    #: above over a 50 °F gap to the air. A prior.
+    #: Its loss through its bottom, from the bottom layer, BTU/hr·°F.
     ua_bottom_btu_hr_f: float = field(
-        default=1.8, metadata=_p(DEFAULT, "BTU/hr/°F")
+        default=1.8, metadata=_p(FITTED, "BTU/hr/°F", note=_LOCATION_AIR)
     )
     #: Its loss through its top, from the top layer: the head, the
     #: fittings and the pipes, BTU/hr·°F.
     ua_top_btu_hr_f: float = field(
-        default=0.0, metadata=_p(DEFAULT, "BTU/hr/°F")
-    )
-    #: Its loss through its sides, shared equally by the layers,
-    #: BTU/hr·°F. None: the jacket's (``ua_btu_hr_f``, else the
-    #: baseline), for a tank fitted only as two zones.
-    ua_side_btu_hr_f: float | None = field(
-        default=None, metadata=_p(FITTED, "BTU/hr/°F", note=_LOCATION_AIR)
+        default=0.0, metadata=_p(FITTED, "BTU/hr/°F", note=_LOCATION_AIR)
     )
 
 
@@ -475,34 +394,10 @@ class CompressorParams:
 
 @dataclass(frozen=True, kw_only=True)
 class DrawParams:
-    """A draw through the tank (``physics.draw``), as a calibration
-    carries it: a delivered draw's terms (``draw_*``), and how a flowing draw's
-    inflow mixes into the lower zone (the last three)."""
+    """A draw through the tank as an installation carries it: its
+    mixing valve (``physics.draw``), its inlet, and the range its draws
+    were seen over."""
 
-    #: Share of a draw's enthalpy the probes' mean registers: the price
-    #: of a delivered draw's heat (``physics.draw.draw_energy_btu``).
-    #: None: no delivered draw moves the tank.
-    observability: float | None = field(
-        metadata=_p(FITTED, "1", INSTALLATION, _VALVE_FRAME)
-    )
-    #: The gap, °F, at which the water a delivered draw lets in reaches
-    #: the lower thermistor with share ``1 − 1/e``, with
-    #: ``reach_offset_f`` added to it
-    #: (``physics.draw.probes_after_draw``).
-    reach_gate_f: float = field(
-        default=30.0, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
-    )
-    reach_offset_f: float = field(
-        default=1.25, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
-    )
-    #: Gallons the water let in mixes with at the lower thermistor.
-    reach_gal: float = field(
-        default=9.0, metadata=_p(FITTED, "gal", INSTALLATION, _VALVE_FRAME)
-    )
-    #: °F the upper thermistor falls per delivered gallon.
-    upper_f_per_gal: float = field(
-        default=0.05, metadata=_p(FITTED, "°F/gal", INSTALLATION, _VALVE_FRAME)
-    )
     #: The mixing valve's delivery line: intercept + slope × T_upper,
     #: never above the tank. Intercept 0 and slope 1 is no valve.
     delivery_intercept_f: float = field(
@@ -515,31 +410,8 @@ class DrawParams:
     inlet_temp_f: float = field(metadata=_p(FITTED, "°F", INSTALLATION, _MAINS))
     #: Whether ``inlet_temp_f`` was read from the inlet probe.
     inlet_from_probe: bool = field(metadata=_p(MEASURED, "flag", INSTALLATION))
-    #: The stratification gap over which a flowing draw's inflow reaches
-    #: the lower thermistor (``physics.draw.lower_zone_drop_f``). 0.0 is
-    #: the ungated charge, ``ungated_observability`` of the heat to both
-    #: zones alike.
-    lower_gate_f: float = field(
-        metadata=_p(FITTED, "°F", INSTALLATION, _CIRCULATION)
-    )
-    #: °F per hour the tank has stood unheated, added to the gap the
-    #: inflow is gated on: a tank that has stood longer shows more of a
-    #: run on its lower probe.
-    pool_f_per_hour: float = field(
-        metadata=_p(FITTED, "°F/h", INSTALLATION, _CIRCULATION)
-    )
-    #: Share of a circulation run's heat the tank's probes show under
-    #: the ungated charge (``lower_gate_f = 0.0``, parameters from
-    #: before the lower-zone law). An effective share: the run's heat
-    #: counts all its flow as the tank's, but the return can feed the
-    #: mixing valve's cold port as well as the tank's inlet, and at one
-    #: installation that split is not measured. The share is that split
-    #: and any shortfall of the probes together.
-    ungated_observability: float = field(
-        metadata=_p(FITTED, "1", INSTALLATION, _CIRCULATION)
-    )
-    #: The range the draw terms were fitted over: the upper zone before
-    #: a draw, °F (508 episodes spanning 122.2-147.9; the delivery line
+    #: The range the record's draws spanned: the upper probe before a
+    #: draw, °F (508 episodes spanning 122.2-147.9; the delivery line
     #: was measured only over 123.8-139.5, so the top of the band
     #: already extrapolates it), and a draw's own volume, gallons. A
     #: walk with a draw outside either says ``draw_out_of_domain``.
@@ -552,17 +424,6 @@ class DrawParams:
     )
 
     def __post_init__(self) -> None:
-        """A gate or reach volume at or below zero divides by zero or
-        warms the lower zone, and a negative upper rate warms the
-        upper one."""
-        for name in ("reach_gate_f", "reach_gal"):
-            v = getattr(self, name)
-            if not (math.isfinite(v) and v > 0.0):
-                raise ValueError(f"{name} must be above 0 (got {v})")
-        for name in ("reach_offset_f", "upper_f_per_gal"):
-            v = getattr(self, name)
-            if not (math.isfinite(v) and v >= 0.0):
-                raise ValueError(f"{name} must be at least 0 (got {v})")
         # A document carries the ranges as lists.
         for name in ("domain_upper_f", "domain_volume_gal"):
             v = getattr(self, name)
@@ -572,9 +433,9 @@ class DrawParams:
 
     def out_of_domain(self, upper_f: float, volume_gal: float) -> bool:
         """Whether a draw of ``volume_gal`` (its own volume, never a
-        rate times a mean) from an upper zone at ``upper_f`` lies
-        outside the range the draw terms were fitted over; both bounds
-        are inclusive."""
+        rate times a mean) from an upper probe at ``upper_f`` lies
+        outside the range the record's draws spanned; both bounds are
+        inclusive."""
         for value, bounds in (
             (upper_f, self.domain_upper_f),
             (volume_gal, self.domain_volume_gal),
@@ -1286,19 +1147,18 @@ class CirculationParams:
 
 
 #: The term groups calibration fits, as ``HeaterParams.unfitted`` names
-#: them: ``compressor`` (its constant and approach: a recovery's
-#: duration), ``power`` (the power and COP scales: its energy and COP),
-#: ``standby`` (the jacket's loss law) and ``gap_tau`` (the gap's time
-#: constant); and the installation's terms fitted from a meter's draws,
-#: ``book`` (``BookParams``: the heat book's terms and error bands),
-#: ``readiness`` (``ReadinessParams``: the delivered lag, evidence and
-#: volumes) and ``draw`` (``DrawParams``: the draw response and its
-#: domain).
+#: them: ``compressor`` (the heat map: a recovery's duration),
+#: ``power`` (the power map: its energy and COP) and ``tank`` (the
+#: layered tank's probes, mixing, conduction, losses and condenser,
+#: ``sim.tank_fit``); and the installation's terms fitted from a meter's
+#: draws, ``book`` (``BookParams``: the heat book's terms and error
+#: bands), ``readiness`` (``ReadinessParams``: the delivered lag,
+#: evidence and volumes) and ``draw`` (``DrawParams``: the delivery line
+#: and the inlet).
 UNFITTED_TERMS: tuple[str, ...] = (
     "compressor",
     "power",
-    "standby",
-    "gap_tau",
+    "tank",
     "book",
     "readiness",
     "draw",
@@ -1326,7 +1186,7 @@ class HeaterParams:
     #: on this heater but kept from the parameters calibration started
     #: from (``calibration.calibrate``): every answer they reach says so
     #: (``api`` reasons ``physics_uncalibrated``, ``energy_uncalibrated``,
-    #: ``standby_uncalibrated``, ``tau_gap_prior``). A client with its own
+    #: ``tank_uncalibrated``). A client with its own
     #: model may read it and turn the physics off itself.
     unfitted: tuple[str, ...] = ()
 
@@ -1457,6 +1317,13 @@ def _check(where: str, hint: Any, value: Any) -> None:
         raise ValueError(f"{where} is {value!r}, not {kind}")
 
 
+#: The two-zone tank's term groups in ``HeaterParams.unfitted``, and its
+#: fitted loss: a document that names either was written before the
+#: layered tank was calibrated.
+_TWO_ZONE_TERMS = frozenset({"standby", "gap_tau"})
+_TWO_ZONE_LOSS = "ua_btu_hr_f"
+
+
 def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     """The ``HeaterParams`` ``doc`` holds.
 
@@ -1464,7 +1331,10 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     added after the document was written would; one with no default is
     a ``ValueError``. Parts and fields this code does not know are left
     out (``unknown_fields`` names them): the code reading the document
-    runs no rule that could use them. A schema other than
+    runs no rule that could use them. A document of the two-zone tank's
+    (its ``loss.ua_btu_hr_f``, or ``standby`` or ``gap_tau`` unfitted)
+    carries none of the layered tank's fitted terms, so its tank reads
+    as the priors, with ``tank`` unfitted. A schema other than
     ``PARAMS_SCHEMA`` is a ``ValueError``, and so are a ``doc`` that is
     not an object and a value of the wrong type (a number where a list
     goes, a string where a number goes).
@@ -1498,4 +1368,10 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         parts[name] = cls(**values)
     unfitted = doc.get("unfitted", ())
     _check("unfitted", tuple[str, ...], unfitted)
-    return HeaterParams(**parts, unfitted=tuple(unfitted))
+    names = set(unfitted)
+    loss = doc.get("loss")
+    if names & _TWO_ZONE_TERMS or (
+        isinstance(loss, Mapping) and _TWO_ZONE_LOSS in loss
+    ):
+        names = (names - _TWO_ZONE_TERMS) | {"tank"}
+    return HeaterParams(**parts, unfitted=tuple(names))

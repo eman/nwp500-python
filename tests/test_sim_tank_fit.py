@@ -14,16 +14,20 @@ from nwp500 import sim_score as ss
 from nwp500.sim import default_params
 from nwp500.sim import tank_fit as tf
 from nwp500.sim.defaults import site_example_params
+from nwp500.sim.params import LossParams, TankParams
 from nwp500.sim.physics import stratified as S
 
 T0 = datetime(2026, 3, 2, 0, 0, tzinfo=UTC)
 AIR = 66.0
-#: The tank that writes the history: the defaults with the terms moved
-#: from their priors.
-TRUE = tf.with_terms(
-    replace(default_params(), circulation=site_example_params().circulation),
-    (2.0, 3.0, 1.5, 0.6, 0.3, 4.0, 0.5, 0.8, 3.0, 4.0),
+#: The layered tank's priors, with the site's circulation.
+PRIORS = replace(
+    default_params(),
+    tank=TankParams(),
+    loss=LossParams(),
+    circulation=site_example_params().circulation,
 )
+#: The tank that writes the history: the terms moved from their priors.
+TRUE = tf.with_terms(PRIORS, (2.0, 3.0, 1.5, 0.6, 0.3, 4.0, 0.5, 0.8, 3.0, 4.0))
 #: Draws through the history: (hours in, delivered gallons).
 DRAWS = ((7.2, 12.0), (17.0, 4.0), (31.0, 20.0), (44.4, 2.5))
 #: The compressor on, and an element run, in hours.
@@ -323,11 +327,6 @@ class TestTheTerms:
             pytest.approx(values)
         )
 
-    def test_unset_sides_are_the_jackets(self) -> None:
-        p = default_params()
-        assert p.loss.ua_side_btu_hr_f is None
-        assert tf.term_values(p)[0] == S.layout(p).ua_btu_hr_f
-
     def test_they_are_counted(self) -> None:
         with pytest.raises(ValueError):
             tf.with_terms(TRUE, (1.0,))
@@ -336,9 +335,7 @@ class TestTheTerms:
 class TestTheFit:
     def test_it_finds_the_tank_again(self, history, record) -> None:
         _, _, path = history
-        start = replace(
-            default_params(), circulation=site_example_params().circulation
-        )
+        start = PRIORS
         coasts = _coasts(path)
         got = tf.fit(start, record, coasts, max_evaluations=60)
         # Each probe's RMSE over each event, °F, the events alike.

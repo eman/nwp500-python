@@ -66,9 +66,9 @@ def test_the_constants_say_where_they_came_from() -> None:
 
 def test_the_65_is_ready_to_simulate() -> None:
     p = default_params()
-    assert p.tank.stratification_gap_tau_h is not None
     assert p.compressor.heat_btu_h > 0.0 and p.compressor.power_w > 0.0
-    assert p.loss.ua_btu_hr_f is not None
+    assert p.loss.ua_side_btu_hr_f > 0.0
+    assert "tank" not in p.unfitted
 
 
 #: A document a retrain wrote from a fitted model (heater-params/2),
@@ -187,7 +187,7 @@ def test_without_a_valve_every_gallon_is_tank_water() -> None:
         ("tank", "volume_gal", HEATER),
         ("controller", "restart_lockout_s", HEATER),
         ("element", "upper_f_per_min", HEATER),
-        ("draw", "observability", INSTALLATION),
+        ("draw", "delivery_intercept_f", INSTALLATION),
         ("draw", "inlet_temp_f", INSTALLATION),
         ("draw", "delivery_slope", INSTALLATION),
         ("book", "empty_btu", INSTALLATION),
@@ -203,7 +203,9 @@ def test_each_parameter_says_what_it_describes(
 
 def test_the_fitted_frames_are_noted() -> None:
     p = default_params()
-    assert "where the heater stands" in (note_of(p.loss, "ua_btu_hr_f") or "")
+    assert "where the heater stands" in (
+        note_of(p.loss, "ua_side_btu_hr_f") or ""
+    )
     assert "climbs" in (note_of(p.compressor, "heat_btu_h") or "")
-    assert "mixing valve" in (note_of(p.draw, "observability") or "")
+    assert "mixing valve" in (note_of(p.draw, "delivery_slope") or "")
     assert note_of(p.tank, "volume_gal") is None

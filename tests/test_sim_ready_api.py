@@ -60,7 +60,7 @@ def _scenario(**kw: Any) -> Scenario:
         "start": T0,
         "horizon": timedelta(hours=12),
         "tz": "UTC",
-        "state": HeaterState(upper_f=128.0, lower_f=112.0),
+        "state": HeaterState(upper_f=111.0, lower_f=107.0),
         "settings": Settings(
             setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
         ),
@@ -180,16 +180,16 @@ class TestNextRecovery:
         self, params: HeaterParams
     ) -> None:
         draws = tuple(
-            Draw(at=at(0.5) + timedelta(minutes=i), gallons=1.6)
+            Draw(at=at(0.5) + timedelta(minutes=i), gallons=4.0)
             for i in range(8)
         )
         r = next_recovery(_scenario(loads=Loads(draws=draws)), params)
         start = r.points[0][0]
-        # The shower itself takes the lower zone to the trigger: the
-        # draw that trips it is the coast's too.
+        # The bath itself takes the lower zone to the trigger: the draw
+        # that trips it is the coast's too.
         assert any(d.at == start for d in draws)
         before = sum(d.gallons for d in draws if d.at <= start)
-        assert 0.0 < before < 12.8
+        assert 0.0 < before < 32.0
         assert r.coast_draw_gal == pytest.approx(before)
 
     def test_a_draw_on_the_trigger_is_the_coasts(

@@ -585,7 +585,7 @@ def simulate(
         )
         if any_out:
             reasons.append("draw_out_of_domain")
-    reasons += _unfitted(params, "standby")
+    reasons += _unfitted(params, "tank")
     if s.loads.draws:
         reasons += _unfitted(params, "draw")
     if s.loads.windows:
@@ -659,7 +659,7 @@ UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
     {
         "compressor": "physics_uncalibrated",
         "power": "energy_uncalibrated",
-        "standby": "standby_uncalibrated",
+        "tank": "tank_uncalibrated",
         "book": "book_uncalibrated",
         "readiness": "readiness_uncalibrated",
         "draw": "draw_uncalibrated",
@@ -894,7 +894,7 @@ def standby(
             # A TOU opening could start it, or hold its lower trigger,
             # and no window was laid out to judge either.
             reasons.append("tou_schedule_unknown")
-    reasons += _unfitted(params, "standby")
+    reasons += _unfitted(params, "tank")
     if any(start <= d.at < until for d in loads.draws):
         reasons += _unfitted(params, "draw")
     if _circulation_unknown(params, loads, until):
@@ -1126,16 +1126,11 @@ def next_recovery(
     try:
         if not s.state.compressor_running:
             # The household's expected draws cool the tank to its
-            # trigger; quiet only when they cannot be modelled.
-            loads = (
-                s.loads
-                if params.draw.observability is not None
-                else s.loads.model_copy(update={"draws": ()})
-            )
+            # trigger.
             coast = standby(
                 s.state,
                 s.environment,
-                loads,
+                s.loads,
                 params,
                 start=now,
                 until=now + TRIGGER_HORIZON,
@@ -1150,7 +1145,7 @@ def next_recovery(
                 return Recovery("idle")
             start = max(now, coast.starts_at)
             upper, lower, coast_btu, coast_gal = _to_start(
-                s.model_copy(update={"loads": loads}), params, start, air
+                s, params, start, air
             )
         if mode != "electric" and _out_of_range(
             params, [_ambient_at(s.environment, start)], lower
@@ -1476,7 +1471,7 @@ def time_to_ready(
         answer["reasons"] = _unique(
             [
                 *answer["reasons"],
-                *_unfitted(params, "compressor", "power", "standby"),
+                *_unfitted(params, "compressor", "power", "tank"),
                 *(_unfitted(params, "draw") if s.loads.draws else []),
                 *(
                     [CIRCULATION_UNKNOWN]
@@ -1786,7 +1781,7 @@ def forecast(
                         lower_s,
                         stop,
                     ),
-                    *_unfitted(params, "compressor", "power", "standby"),
+                    *_unfitted(params, "compressor", "power", "tank"),
                     *(_unfitted(params, "draw") if loads.draws else []),
                     *_ambient_reasons(environment),
                     *(
@@ -1880,7 +1875,7 @@ def active_cycle(
                 [
                     *reasons,
                     *_range_reasons(params, [air], state.lower_f, stop),
-                    *_unfitted(params, "compressor", "standby"),
+                    *_unfitted(params, "compressor", "tank"),
                     *_ambient_reasons(environment),
                 ]
             )

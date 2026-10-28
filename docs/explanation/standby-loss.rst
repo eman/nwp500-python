@@ -24,23 +24,25 @@ Summary
    * - Loss
      - Observed behaviour
    * - Jacket loss
-     - ``UA`` of **4.48 BTU/hr per degF** at any difference between the
-       tank and the air, and **90.8 BTU/hr** more from the bottom while
-       the tank is stratified. For a mixed 140 degF tank in 65 degF air
-       that is about **0.64 degF an hour**.
+     - In the simulator's layered tank, **2.89 BTU/hr per degF** through
+       the sides, **0.89** through the bottom and **0.68** through the
+       top, each layer's to the air: **4.45** in all. For a mixed
+       140 degF tank in 65 degF air that is about **0.63 degF an hour**.
+       Fitted as two zones, ``UA`` was 4.48, with 90.8 BTU/hr more from
+       the bottom while the tank was stratified.
    * - A circulation run
      - Priced on an effective loop of **19.36 gal**, its return at the
-       air plus 7.84 degF, of which the probes show **0.263**. At the
-       loop fitted in September (6.38 gal), a typical run was about
-       5 degF of the whole tank, and the probes showed 0.44 of it.
+       air plus 7.84 degF. At the loop fitted in September (6.38 gal), a
+       typical run was about 5 degF of the whole tank, and the probes
+       showed 0.44 of it.
    * - Where a run's heat shows
      - Ten minutes after a run, the lower probe had fallen **0.9 degF** in
        a mixed tank and **7.0 degF** in a stratified one. The upper probe
        moved no more than standby alone.
    * - The gap between the probes
      - With nothing heating or drawing, it appears to close on a time
-       constant of about **59 h**; with the bottom loss reopening it,
-       the constant is **26.7 h**.
+       constant of about **59 h**. In the layered tank the column's
+       conduction closes it and the bottom's loss opens it.
 
 All figures come from one NWP500-65 and its recorded status history to
 2026-10-24, with the air beside the heater measured separately. The
@@ -69,8 +71,8 @@ stratified, the law goes flat: ``UA`` 4.48 BTU/hr per degF at any
 difference, and 90.8 BTU/hr at the bottom, seen as ``1 - exp(-gap /
 1.83 degF)`` of it. With the gap's constant fitted alongside it (see
 below), on the 56 latest windows held out it tracks the probes' fall
-within 0.066 degF/h, against 0.096 for the rising law, and the
-simulator uses it (:doc:`/reference/simulator-inputs`). In a mixed
+within 0.066 degF/h, against 0.096 for the rising law; the two-zone
+tank used it. In a mixed
 tank, where the probe sees none of the bottom loss, the flat law loses
 58 BTU/hr at 13 degF above the air against the rising law's 47, and 336
 against 372 at 75 degF. Computed from the rising law, with the
@@ -104,6 +106,20 @@ tank's thermal mass of
 
 The cooling rate is for the probes' mean in a tank left alone. It says
 nothing about draws or circulation runs, which come on top.
+
+The simulator now walks the tank as layers
+(:doc:`simulator-methodology`), each losing to the air through its share
+of the sides' ``UA``, the bottom layer through the bottom's too and the
+top through the top's, all fitted together with where the probes read
+(``sim.tank_fit``). On 266 quiet windows, 254 metered draws and 118
+recoveries from 2026-04-16 to 10-26, the sides came out at 2.89 BTU/hr
+per degF, the bottom 0.89 and the top 0.68. The record does not split
+the bottom from the sides well: fitted on the record to 2026-09-18,
+the bottom came out 1.65 started from an earlier fit, or 2.35 started
+from the priors, and the sides 2.77 or 2.53. On the 59 quiet windows after
+2026-09-18 the layered tank tracks the upper probe within 0.255 degF
+RMS and the lower within 0.548, against 0.299 and 0.630 for the two
+zones (:doc:`/reference/simulator-inputs`).
 
 The clearest single window was 93.9 hours from 2026-08-08 to 2026-08-12,
 with no draw, no heating and no circulation run. The tank destratified
@@ -272,13 +288,11 @@ together. That share held from 15 minutes to 2 hours after a run. At
 
 Those figures price a run at the September loop with its return at the
 air. At the current run model (19.36 gal, the return at the air plus
-7.84 degF, the pipe cooling on 0.464 h), the calibration's own fit
-(``fit_ungated_observability``) gives **0.263** on 165 windows from
-April to October, and 0.117 on the 50 since September. The simulator
-uses 0.263. The share only prices the runs inside a metered COP cycle
-(``metered_withdrawn``), and there the latest 45 cycles held out came
-out at a median error of 6.3 % with 0.398, 6.1 % with 0.263 and 5.1 %
-with 0.117.
+7.84 degF, the pipe cooling on 0.464 h), the share came out at
+**0.263** on 165 windows from April to October, and 0.117 on the 50
+since September. The two-zone tank priced runs with it; the layered
+tank carries a run's water through the column instead, where the probes
+read the layers it reaches.
 
 A run into a stratified tank can take the lower probe to its turn-on
 setting while the upper probe has not moved, and the lower-tank trigger
@@ -298,9 +312,15 @@ six hours later and about 6.7 degF a day later.
 That fit takes the gap as relaxing alone. With the bottom loss opening
 it again while the tank is stratified (127 windows to 2026-10-24), the
 gap relaxes faster than it appears to: the constant is **26.7 h**, which
-the simulator uses. On the 32 latest windows held out, its mean squared
-error is 0.69 degF², against 1.78 for 60 h without a bottom loss and
-3.71 for 50.9 h with one.
+the two-zone tank used. On the 32 latest windows held out, its mean
+squared error is 0.69 degF², against 1.78 for 60 h without a bottom
+loss and 3.71 for 50.9 h with one.
+
+The layered tank has no gap constant: the column's conductance (0.42
+BTU/hr per degF end to end, fitted with the losses) closes the gap,
+and the bottom's loss opens it. On the 59 quiet windows after
+2026-09-18 its gap's mean squared error was 2.96 degF², against 3.36
+for the two zones.
 
 
 Projecting the tank's cooling
@@ -319,8 +339,8 @@ above it.
 Limits
 ======
 
-One unit, one installation, one loop. The jacket law is fitted on quiet
-windows, and the clearest cold window, the 93.9-hour stretch, is one
+One unit, one installation, one loop. The losses are fitted on quiet
+windows, draws and recoveries, and the clearest cold window, the 93.9-hour stretch, is one
 episode. The heat per run and where it shows depend on
 the loop's volume, its plumbing and where its return enters; on a loop
 that returns elsewhere, the split between the probes will differ. The

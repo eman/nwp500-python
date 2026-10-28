@@ -81,22 +81,32 @@ SITE_CIRCULATION = CirculationParams(
 def _nwp500_65() -> HeaterParams:
     """The NWP500-65's parameters."""
     return HeaterParams(
+        # The layered tank fitted on its record, 2026-04-16 to
+        # 2026-10-26 (``sim_calibrate.calibrate_changes``): 266 quiet
+        # windows, 254 metered draws and 118 recoveries, each started
+        # from the day's replay before it.
         tank=TankParams(
             volume_gal=63.2,
-            lower_zone_share=0.5,
-            stratification_gap_tau_h=26.714600938534186,
+            layers=12,
+            upper_probe_height=0.8904462277533243,
+            lower_probe_height=0.4778886251218728,
+            upper_probe_spread_gal=5.896071165293375,
+            lower_probe_spread_gal=3.1110738307754477,
+            lower_probe_offset_f=0.7968961082980054,
+            condenser_span=(0.14686601147540912, 0.5759474981060145),
+            inlet_mix_gal=12.212086224812172,
+            conductance_btu_hr_f=0.4244538806083805,
         ),
         loss=LossParams(
-            ua_btu_hr_f=4.482756204771071,
-            ua_exponent=2.4838799049548713e-16,
-            ua_ref_delta_t_f=50.0,
-            ua_baseline_btu_hr_f=5.0,
-            bottom_loss_btu_hr=90.83634299259268,
-            bottom_gate_f=1.8315130798400514,
+            ua_side_btu_hr_f=2.8886640584102756,
+            ua_bottom_btu_hr_f=0.8873047640398399,
+            ua_top_btu_hr_f=0.677778724077633,
         ),
         # The performance map, hold and run-on fitted on its record,
-        # 2025-12-28 to 2026-10-26, against the loss above
-        # (``heat_pump_fit.fit_heat_pump``).
+        # 2025-12-28 to 2026-10-26 (``heat_pump_fit.fit_heat_pump``),
+        # the heat against the two-zone tank's loss: refitted against
+        # the loss above, from 2026-04-16, it moves under 0.1 % (4,497
+        # BTU/h, +55.5 per °F of air, -16.1 per °F of water).
         compressor=CompressorParams(
             heat_btu_h=4499.436604500702,
             heat_btu_h_per_air_f=55.49795247502065,
@@ -129,18 +139,10 @@ def _nwp500_65() -> HeaterParams:
             upper_dead_time_min=1.21,
         ),
         draw=DrawParams(
-            observability=0.633,
-            reach_gate_f=30.0,
-            reach_offset_f=1.25,
-            reach_gal=9.0,
-            upper_f_per_gal=0.05,
             delivery_intercept_f=53.56,
             delivery_slope=0.485,
             inlet_temp_f=72.4,
             inlet_from_probe=True,
-            lower_gate_f=5.0,
-            pool_f_per_hour=0.015,
-            ungated_observability=0.26307054260699586,
         ),
         controller=ControllerParams(
             write_start_lag_s=30.0,
@@ -194,11 +196,11 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
     (``SITE_VALVE``) and circulation (``SITE_CIRCULATION``) included: a
-    snapshot of its fit of 2026-10-11, the standby loss and the zone
-    gap's time constant refitted on 2026-10-24 and the heat pump's
-    performance map fitted on 2026-10-26. Several of its values move
-    with every refit there (the circulation's displaced volume and flow,
-    the heat pump's map), so read it as an example, not as that
+    snapshot of its fit of 2026-10-11, the heat pump's performance map
+    fitted on 2026-10-26 and the layered tank's terms on 2026-10-27.
+    Several of its values move with every refit there (the
+    circulation's displaced volume and flow, the heat pump's map, the
+    tank's losses), so read it as an example, not as that
     installation's current state. The 50 and 80 gal models scale by
     rated storage (``RATED_GAL``) its tank volume (the tank's, and the
     heat book's count of it) and the book's empty point

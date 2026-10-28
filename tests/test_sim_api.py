@@ -617,18 +617,24 @@ class TestWhatTheResultSays:
         )
         assert "tou_schedule_unknown" not in known.reasons
 
-    def test_a_draw_moves_the_tank_without_a_fitted_response(
-        self, params: HeaterParams
-    ) -> None:
-        """The layers take a draw as water through the tank: no fitted
-        response is needed to move them."""
-        bare = replace(params, draw=replace(params.draw, observability=None))
+    def test_a_draw_moves_the_tank(self, params: HeaterParams) -> None:
+        """The layers take a draw as water through the tank."""
         s = _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=30.0),)))
         t = standby(
-            s.state, s.environment, s.loads, bare, start=s.start, until=s.until
+            s.state,
+            s.environment,
+            s.loads,
+            params,
+            start=s.start,
+            until=s.until,
         )
         quiet = standby(
-            s.state, s.environment, Loads(), bare, start=s.start, until=s.until
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=s.start,
+            until=s.until,
         )
         assert t.points[-1].lower_f < quiet.points[-1].lower_f - 5.0
 
@@ -849,7 +855,8 @@ class TestAnElementStopsAtItsOffPoint:
         assert "compressor" in {h.source for h in r.heating}
         at_end = [p for p in r.points if p.at == el.end]
         assert at_end and at_end[-1].lower_f == pytest.approx(122.0, abs=0.06)
-        assert all(p.lower_f < 121.9 for p in r.points if p.at < el.end)
+        stop = at_end[-1].lower_f
+        assert all(p.lower_f < stop for p in r.points if p.at < el.end)
 
     @pytest.mark.parametrize("mode", [3, 4])
     def test_with_a_book_and_a_draw_after_its_off_point(

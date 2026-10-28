@@ -13,11 +13,18 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from nwp500.sim import default_params
-from nwp500.sim.params import params_from_document, params_to_document
+from nwp500.sim.params import (
+    LossParams,
+    TankParams,
+    params_from_document,
+    params_to_document,
+)
 from nwp500.sim.physics import stratified as S
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
-P = default_params()
+#: The layered tank's priors: the operators' tests are the physics',
+#: not one heater's fit.
+P = replace(default_params(), tank=TankParams(), loss=LossParams())
 L = S.layout(P)
 T0 = datetime(2026, 1, 10, 6, 3, 17, tzinfo=UTC)
 SITE_VALVE = (53.56, 0.485)

@@ -153,7 +153,6 @@ def test_the_core_has_modules_to_check() -> None:
     assert {
         "params.py",
         "units.py",
-        "physics/compressor.py",
         "tank_physics.py",
         "decay.py",
         "heating_trajectory.py",
@@ -228,7 +227,7 @@ def test_the_import_check_sees_a_violation() -> None:
     for module in (
         "nwp500.sim",
         "nwp500.sim.params",
-        "nwp500.sim.physics.tank",
+        "nwp500.sim.physics.stratified",
         "math",
         "numpy",
         "pandas",
@@ -395,18 +394,12 @@ def test_the_names_a_caller_matches_on_are_documented() -> None:
             "HEATER_SETPOINT_MIN_F",
             "HEATER_SETPOINT_MAX_F",
         },
-        "nwp500.sim.physics.compressor": {"MAX_MINUTES"},
         "nwp500.sim.tank_physics": {"RECOVERY_BOUND"},
         "nwp500.sim.params": {
             "FITTED",
             "unknown_fields",
-            "UA_REF_DELTA_T_F",
-            "UA_MIN_DELTA_T_F",
         },
-        "nwp500.sim.physics.draw": {
-            "DEFAULT_INLET_TEMP_F",
-            "DEFAULT_OBSERVABILITY",
-        },
+        "nwp500.sim.physics.draw": {"DEFAULT_INLET_TEMP_F"},
     }
     for module, names in wanted.items():
         assert names <= listed[module], (module, names - listed[module])

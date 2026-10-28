@@ -787,11 +787,9 @@ the tank could supply it:
 onset against the gallons expected; ``depleted`` says the delivered
 water fell below the line.
 
-Pass a ``book`` for ``depleted`` to mean anything. Without one, each
-draw moves the zones by its calibrated response, which holds the upper
-zone up even through a draw that empties the tank, so the delivery does
-not fall; ``reasons`` says ``no_heat_book``, and ``margin_gal`` is then
-the answer to read. ``result.delivery`` and ``sa.path(result)`` give the
+Without a ``book``, the delivery is the upper probe's as the tank's
+layers carry it through each draw, and ``reasons`` says
+``no_heat_book``. ``result.delivery`` and ``sa.path(result)`` give the
 delivered temperature along the whole walk.
 
 
@@ -920,7 +918,8 @@ schedule, give the runs and what each takes
 
 **The heat book.** With a hot-water flow meter and a record of the
 heater's statuses, book the tank's heat from the record and pass it as
-``book=``: draws then take the zones down as the tank empties.
+``book=``: the delivery and the draw windows then read the heat
+booked as the tank empties.
 
 .. code-block:: python
 
@@ -1114,62 +1113,54 @@ and says which air to give; from Python:
 
 .. code-block:: python
 
-   from datetime import timedelta
+   from nwp500 import sim_calibrate
 
-   from nwp500.sim import calibration
-
-   history = sa.history(
+   done = sim_calibrate.calibrate(
        recorded,                 # [(instant, DeviceStatus), ...]
        air=air_over_the_record,  # a sensor's, beside the heater
-       humidity=humidity,        # %RH; give 50 if you have none
-       max_gap=timedelta(minutes=5),  # a longer gap is unobserved
+       humidity=humidity,        # %RH; 50 without
+       params=sa.params(feature),
    )
-   fitted = calibration.calibrate(history, sa.params(feature),
-                                  recovery_air="air_f")
-   print(fitted.standby.ua_ref, fitted.standby.n_quiet)
+   print(done.tank.fit.rmse_after if done.tank.fit else done.tank.why)
+   fitted = done.calibration
    print(fitted.heat_pump.heat, fitted.heat_pump.n_heat)
    params = fitted.params
 
 The fits run only where the record holds the evidence for them, and
 each says what it used:
 
-- **Standby loss**: the jacket's loss law, and how fast the zones
-  mix, from windows of 3 hours or more with no heating and no hot water
-  in use (45 minutes after either). It needs ``air``.
+- **The tank** (``done.tank``, ``sim_calibrate.TankCalibration``):
+  its losses, the column's conductance, the probes' heights and
+  spreads, the inlet's mixing and where the condenser heats
+  (``sim.tank_fit``), from quiet windows of 3 hours or more with no
+  heating and no hot water in use (45 minutes after either), a meter's
+  draws (``draws=``) and recoveries. It needs 10 windows and draws, 5
+  recoveries for the condenser, and the air.
 - **The heat pump** (``fitted.heat_pump``,
   ``sim.heat_pump_fit.HeatPumpFit``): from the compressor runs with no
   water moving, the heat's map on mixed climbs of 20 minutes or more
   (10 needed), priced against the loss just fitted; the power's map on
   the heater's own power readings in 10-minute blocks (30 needed); the
   hold by time off on clean starts (3 a band); and the run-on past the
-  target (5 runs). ``recovery_air="air_f"`` takes the air over a
-  recovery from the sensor's too; the default is the heater's own
-  reading, taken while its compressor runs. A map that claims more
-  than a heat pump can (``violations``) is not applied.
-- **The probes' share of circulation's heat**
-  (``DrawParams.ungated_observability``):
-  ``cal.fit_ungated_observability(cal.circulation_windows(history,
-  runs, params, draws=meter_draws), displaced_gal, flow_gpm)``. It
-  works on windows of circulation with no compressor and no unsized
-  draw (a NaN gallon count). Fit it at the same run terms you will use
-  (``fit_return``; pass ``rest_offset_f`` and ``cool_tau_h``): a run's
-  modelled heat rests on them, so they are a set. It needs 20 windows,
-  and a factor outside 0.05-1 is refused.
+  target (5 runs). The recoveries take the air given too; without it,
+  the heater's own reading, taken while its compressor runs. A map
+  that claims more than a heat pump can (``violations``) is not
+  applied.
 
 A part without the evidence keeps the value it had, and is named in
-``cal.params.unfitted``: ``compressor`` (too few recoveries, or a fit
-pinned on a bound), ``power``, ``standby`` (no quiet window) or
-``gap_tau``. Every answer such a term reaches says so in its
+``params.unfitted``: ``compressor`` (too few recoveries, or a fit
+pinned on a bound), ``power`` or ``tank`` (too few quiet windows and
+draws, or no air). Every answer such a term reaches says so in its
 ``reasons``: ``physics_uncalibrated`` for a recovery's duration,
-``energy_uncalibrated`` for its energy and COP, ``standby_uncalibrated``
-for the jacket's loss.
+``energy_uncalibrated`` for its energy and COP, ``tank_uncalibrated``
+for the tank's.
 The base's record of the installation's book, readiness and draw terms
 is kept (``default_params`` names all three): they are fitted apart,
 from a meter's draws, and once you apply your own fits drop each from
 ``unfitted`` (``replace(params, unfitted=...)``). A meter's draws
 and the circulation's runs, where you record them, make the quiet test
-exact (``sa.history(..., drawing=..., circulating=...)``): the heater's
-own "hot water in use" flag also fires on circulation.
+exact (``record=``): the heater's own "hot water in use" flag also
+fires on circulation.
 
 Save the parameters (``nwp500.sim.params.params_to_document``) and load
 them with ``params_from_document``.
@@ -1238,9 +1229,7 @@ too, the book walked continuously over it (``book_walk``):
 
 ``mix`` is how the upper zone falls through a long draw
 (``zone_mix_f_per_gal``, ``zone_mix_gal``). It reports its error on the
-training and held-out draws and a day bootstrap's interval. The lower
-zone takes each draw's calibrated response (``DrawParams``), with a
-book or without one.
+training and held-out draws and a day bootstrap's interval.
 
 With circulation's own telemetry (its running samples, flow and return
 line temperature), fit its terms too:

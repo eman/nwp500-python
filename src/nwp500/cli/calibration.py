@@ -10,11 +10,13 @@ This module needs the ``sim`` extra.
 """
 
 import csv
+import functools
 import json
 import logging
 import math
 import sys
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +28,7 @@ from rich.table import Table
 from nwp500 import sim, status_history
 from nwp500 import sim_calibrate as sc
 from nwp500 import sim_score as ss
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.params import params_to_document
 from nwp500.sim_calibrate import Calibrated, Term, report
 
@@ -103,8 +106,11 @@ _OPTION_NOTES = {
     sc.DEFAULT_BASE_NOTE: "refitting the 65 gal defaults (give --params "
     "for another tank size)",
     sc.NO_AIR_NOTE: "no air given (--air, --ambient or --sources): the "
-    "standby loss is not fitted",
+    "tank is not fitted",
 }
+
+#: The events each of the tank fit's workers takes at a time.
+_CHUNK = 8
 
 
 def calibrate(
@@ -118,17 +124,20 @@ def calibrate(
 ) -> Calibrated:
     """``sim_calibrate.calibrate`` with ``params`` a parameters
     document, its errors as ``InputError`` and its notes naming the
-    command's options."""
+    command's options, the tank's fit spread over the machine's
+    processors."""
     base = None if params is None else read_params(params, "--params")
     try:
-        done = sc.calibrate(
-            readings,
-            air=air,
-            ambient=ambient,
-            humidity=humidity,
-            params=base,
-            record=record,
-        )
+        with ProcessPoolExecutor() as pool:
+            done = sc.calibrate(
+                readings,
+                air=air,
+                ambient=ambient,
+                humidity=humidity,
+                params=base,
+                record=record,
+                map_=functools.partial(pool.map, chunksize=_CHUNK),
+            )
     except sc.CalibrationInputError as e:
         raise InputError(str(e)) from None
     return replace(
@@ -196,13 +205,15 @@ def holdout(
     except sc.CalibrationInputError as e:
         raise InputError(str(e)) from None
     found = ss.events(ready, since=start)
+    # Each event starts from the layers the history before it leaves.
+    replayed = tf.tank_record(ready.frame) if "air_f" in ready.frame else None
     # Local days, as ``--holdout-from`` is read.
     tz = local_zone() or "UTC"
     return HeldOutScore(
         start,
         done,
-        ss.score(found, base, tz=tz),
-        ss.score(found, done.calibration.params, tz=tz),
+        ss.score(found, base, tz=tz, record=replayed),
+        ss.score(found, done.calibration.params, tz=tz, record=replayed),
     )
 
 
@@ -246,8 +257,7 @@ def print_report(done: Calibrated, console: Console) -> None:
     """The report as tables on ``console``."""
     c = done.calibration
     console.print(
-        f"{done.n_statuses} statuses; quiet test: {c.standby.quiet_by}; "
-        f"{len(c.recoveries)} recoveries found"
+        f"{done.n_statuses} statuses; {len(c.recoveries)} recoveries found"
     )
     if done.n_gaps:
         minutes = done.max_gap.total_seconds() / 60

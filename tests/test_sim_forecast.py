@@ -63,7 +63,7 @@ class TestReadyByATime:
             f.physics_estimate_minutes + start_hold_min(params.compressor, None)
         )
         # The tank coasted to the start, cooler than now.
-        assert f.lower_f_at_start < 100.0
+        assert f.upper_f_at_start + f.lower_f_at_start < 125.0 + 100.0
         assert f.trajectory is not None
         assert f.trajectory[0].at == f.start_at
         assert f.trajectory[-1].at == f.ready_at

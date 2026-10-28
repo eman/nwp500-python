@@ -74,26 +74,30 @@ to the range it was fitted over. What the condenser gives is what the air gives
 plus the electricity, and a fit that claims more than a real heat pump
 could is not applied. A start holds for a time set by how long the
 compressor was off (0 to 22 minutes on the record), drawing power while
-the tank holds; the climb is integrated in 10-second steps until the
-lower thermistor is a fitted run-on (0.9 degF) past its target.
+the tank holds; the tank is then walked a minute at a time with the
+condenser heating it until the lower thermistor is a fitted run-on
+(0.9 degF) past its target.
 Outside the manual's operating range (41-113 degF air, 50-149 degF
 water) it does not run, and the elements heat the tank as in Electric.
 
-**The tank, in two zones.** The condenser coil wraps the lower part of
-the tank, so while the tank is stratified a recovery warms the lower
-zone (about half the tank's mass) and holds the upper zone where it
-started. Once the gap between the zones closes, the tank heats as one
-body. On 30 compressor-only recoveries the upper probe fell a median
-0.5 degF while the gap was over 3 degF, then rose to 1.3 degF above its
-start over the gap's last 2 to 3 degF, as the zones mixed; after that
-the two probes rose together. In standby the gap relaxes on a
-fitted time constant. Standby loss follows a jacket law,
-``UA(dT) = ua_ref * (max(dT, 5) / 50) ^ n``, with the ambient as the
-other side, on the whole tank. A bottom loss ``Q_b`` leaves the lower
-zone alone: the lower probe sees the share ``1 - exp(-gap / gate)`` of
-it, so a stratified tank's lower zone falls faster and its gap opens,
-while a mixed tank's lower probe shows little of it. With ``Q_b = 0``
-the loss is the jacket law alone.
+**The tank, in layers.** The tank is a column of 12 layers, each mixed
+within itself (``physics.stratified``, after HPWHsim's), and the two
+probes are readings of the layers around their heights. Every step
+conserves the layers' heat. Each layer loses to the air through its
+share of the sides' UA, the bottom layer through the bottom's too and
+the top through the top's, exactly, so no layer cools below the air;
+the bottom's loss cools the bottom fastest, so a tank left alone
+stratifies. Neighbouring layers conduct, and a layer warmer than the
+one above turns over at once. The condenser coil wraps the lower part
+of the tank, so a recovery heats the layers it wraps and the heat rises
+from there: while the tank is stratified the upper probe holds, and it
+climbs once the warm water reaches it. On 30 compressor-only
+recoveries the upper probe fell a median 0.5 degF while the probes
+were over 3 degF apart, then rose to 1.3 degF above its start over the
+last 2 to 3 degF of the gap; after that the two probes rose together.
+Where the probes read, how widely, the losses, the conductance and
+where the condenser heats are fitted together on the record
+(``sim.tank_fit``).
 
 **The elements.** They follow the device's own rules
 (:doc:`heating-elements`): per-mode entry thresholds, a dead time,
@@ -104,9 +108,10 @@ record), so a walk in Electric heats only on entry and says so
 (``element_later_starts_not_modelled``).
 
 **Draws.** A draw is gallons on the delivered (mixed) line. The tank
-gives up the hot share of them through the mixing valve, and the cold
-water replacing them enters at the bottom and mixes into the lower zone
-according to how stratified the tank is.
+gives up the hot share of them through the mixing valve, from the top,
+and the cold water replacing them enters at the bottom, mixing into the
+water there as it comes, and pushes the column up. A draw that empties
+the tank takes the upper probe down with it.
 
 **The controller.** The heater's own rules for starting and stopping
 (:doc:`what-starts-a-recovery`, :doc:`tou-recovery-cap`):
@@ -133,13 +138,10 @@ full. The book (``sim.book``) starts from a full tank and books the
 heat from there: out by each draw through the mixing valve and by
 standby, in from the compressor and the elements, all of it drawable
 wherever it lands, in a draw's cold water at the bottom too. At each
-draw it moves the upper zone the probe would show: it falls as the water
-above the rising front mixes and, once the booked heat is spent, to the
-line and below. The lower zone takes each draw's calibrated response at
-once, with a book or without one, as the lower probe falls on every
-draw. Without a book the upper zone takes its calibrated response too,
-which is what the probe shows on an ordinary draw and holds the upper
-zone up through one that empties the tank. The library starts a
+draw it reckons the water the tap gets: it falls as the water above the
+rising front mixes and, once the booked heat is spent, to the line and
+below. The tank's probes are the layered tank's, with a book or without
+one. The library starts a
 book only from what the caller knows: after a small draw the probes
 can still read full.
 
@@ -235,26 +237,29 @@ measured.
 
 What carries to another installation, and what does not:
 
-- **The heater's terms** (tank, element power and rates, controller
-  thresholds, the stratification time constant, input power) were
-  measured on one unit and are expected to hold for the model.
-- **The standby loss and the compressor terms** were fitted against a
-  sensor of the air where the heater stands. The heater's own
-  ``ambient_temperature`` reads that air within about 0.35 degF while
-  the compressor runs (August to October; up to about 2 degF warm from
-  May to July) and about 6 degF warm while it is idle, so give
-  the simulator the running readings, or a forecast anchored to one.
-  The compressor terms were fitted with that installation's draws and
-  circulation runs inside its recoveries, so a recovery without them
-  comes out a little long.
-- **The draw terms** (observability, how far a draw moves each probe,
-  the inlet temperature) were fitted together through that installation's mixing
-  valve, on its mains and its household's metered draws. Change them
-  together, or not at all. The **book's** and **readiness's** terms are
-  that installation's too, and its evidence over-promises on an
-  installation without a valve.
-- **Circulation** (the gate, the hours stood, the return water's
-  share) acts only when a circulation schedule is given.
+- **The heater's terms** (the tank's volume, element power and rates,
+  controller thresholds, input power) were measured on one unit and are
+  expected to hold for the model.
+- **The tank's terms** (where the probes read and how widely, the
+  losses, the conductance, the inlet's mixing, where the condenser
+  heats) were fitted together on that installation's quiet windows,
+  metered draws through its mixing valve and recoveries, against a
+  sensor of the air where the heater stands. The losses are that
+  tank's in that air's surroundings.
+- **The compressor terms** were fitted against the same sensor. The
+  heater's own ``ambient_temperature`` reads that air within about
+  0.35 degF while the compressor runs (August to October; up to about
+  2 degF warm from May to July) and about 6 degF warm while it is idle,
+  so give the simulator the running readings, or a forecast anchored to
+  one. They were fitted with that installation's draws and circulation
+  runs inside its recoveries, so a recovery without them comes out a
+  little long.
+- **The draw terms** (the inlet temperature, the valve's line) were
+  measured through that installation's mixing valve, on its mains. The
+  **book's** and **readiness's** terms are that installation's too, and
+  its evidence over-promises on an installation without a valve.
+- **Circulation** (the loop's volume, its return's rest and cooling, its
+  flow) acts only when a circulation schedule is given.
 
 A caller with its own calibration passes its own ``HeaterParams``.
 
@@ -329,23 +334,26 @@ is given) plus the physics' climb.
 Accuracy
 ========
 
-Measured on one NWP500-65. The recovery figures are the held-out
-scoreboard's (``sim_score``): parameters calibrated on the record from
-2026-04-16 to 2026-09-18, and scored on the 27 recoveries from then to
+Measured on one NWP500-65. The recovery, quiet-window and draw figures
+are the held-out scoreboard's (``sim_score``): parameters calibrated
+(``sim_calibrate.calibrate_changes``) on the record from
+2026-04-16 to 2026-09-18, and scored on the events from then to
 2026-10-26, with 90 % day-block bootstrap intervals.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error 7.9 min (5.3-10.9) on the 11 with no water moving, a mean
-  0.0 min short; 42.0 min (20.8-71.5) on the 16 with draws or
-  circulation inside them, a mean 31 min short, since the duration does
-  not see the water a walk takes apart. Under the earlier refrigerant
-  model, on the same recoveries: 13.6 and 44.4 min. Over 119
-  recoveries each hot gallon drawn inside one added about 4.7 min to it
-  and each minute of circulation about 1.3 min;
+  error 11.8 min (7.3-16.6) on the 11 with no water moving, a mean
+  6.2 min long; 47.4 min (27.0-76.2) on the 16 with draws or
+  circulation inside them, a mean 24 min short. As two zones: 7.9 and
+  43.6 min; under the earlier refrigerant model, 13.6 and 44.4 min.
+  Over 119 recoveries each hot gallon drawn inside one added about
+  4.7 min to it and each minute of circulation about 1.3 min;
 - a recovery's electricity, from the map, against the heater's metered
-  energy on the 11 metered recoveries: mean absolute error 7.2 %
-  (4.7-9.9), a mean 1.5 % low; 12.8 % and 8.7 % low under the earlier
-  model;
+  energy on the 11 metered recoveries: mean absolute error 5.8 %
+  (3.7-8.0), a mean 2.0 % low; 7.2 % as two zones, and 12.8 % under
+  the earlier model;
+- the tank left alone, on the 59 quiet windows: the upper probe within
+  0.255 degF RMS (0.227-0.286) and the lower within 0.548 (0.457-0.646),
+  against 0.299 and 0.630 as two zones;
 - replaying recorded writes, with a recovery model trained on the
   heater's record, under the earlier refrigerant model:
   recorded starts reproduced over six days held out, 31 of 40; daily
@@ -357,9 +365,9 @@ scoreboard's (``sim_score``): parameters calibrated on the record from
   5; draws called empty where the probe never crossed, 17 of 1,306
   (1.3 %). From 2026-07-01, after the heat book's fit, 2 of 2 caught
   (one independent event) and 2 false calls in 488. Replayed over whole
-  days (214, 2026-02-26 to 2026-09-27) the zones drift from the record:
-  mean absolute error 3.22 degF a day on the upper zone and 6.61 degF on
-  the lower;
+  days (214, 2026-02-26 to 2026-09-27), the two-zone tank drifted from
+  the record: mean absolute error 3.22 degF a day on the upper zone and
+  6.61 degF on the lower;
 - a forecast's draw windows, issued every 3 h for 24 h ahead from
   2026-09-08 to 2026-09-28, flagged by the delivered water and scored
   against the upper probe crossing the line, which reads 5.3-7.3 gal
@@ -370,11 +378,10 @@ scoreboard's (``sim_score``): parameters calibrated on the record from
   out, 0.13 min, ready a little later than predicted.
   Element energy on the 7 whole runs: mean absolute error 0.045 kWh,
   7 % high;
-- the lower zone 10 minutes after a draw, fitted on 399 draws to
-  2026-07-31 and scored on the 136 from 2026-08-01: mean absolute error
-  1.91 degF, against 2.79 for the fixed response it replaced; 0.35 degF
-  under 1 gal and 3.52 degF at 8-20 gal over all 535 draws
-  (:doc:`draws`);
+- the probes over the hour after each of the 46 metered draws: the
+  upper within 0.290 degF RMS (0.183-0.458) and the lower within 2.09
+  (1.42-2.86), against 0.281 and 2.16 for the two zones' fitted draw
+  response (:doc:`draws`);
 - the heat book against the tank's re-anchors, fitted February-June and
   scored July-September: mean absolute error 1,987 BTU (about 5 gal),
   against 3,761 BTU with textbook constants; flat to 18 h after an

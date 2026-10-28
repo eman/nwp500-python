@@ -42,11 +42,9 @@ from nwp500.sim.params import (
     MAP_REF_WATER_F,
     CompressorParams,
     HeaterParams,
-    LossParams,
-    TankParams,
 )
 from nwp500.sim.physics import heat_pump as hp
-from nwp500.sim.physics.tank import bottom_loss_reach, ua_at
+from nwp500.sim.physics import stratified as st
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 #: The grid a recovery is read on.
@@ -430,14 +428,6 @@ def _mean(values: np.ndarray) -> float:
     return float(np.mean(values[ok])) if ok.any() else math.nan
 
 
-def _ua_ref(loss: LossParams) -> float:
-    return (
-        loss.ua_btu_hr_f
-        if loss.ua_btu_hr_f is not None
-        else loss.ua_baseline_btu_hr_f
-    )
-
-
 _HEAT_COLUMNS = (
     "cycle",
     "start",
@@ -456,24 +446,24 @@ _HEAT_COLUMNS = (
 
 def climb_heat(
     frame: pd.DataFrame,
-    tank: TankParams,
-    loss: LossParams,
+    params: HeaterParams,
     *,
     min_minutes: int = MIN_STRETCH_MINUTES,
 ) -> pd.DataFrame:
     """The heat a recovery puts into the tank, from its draw-free climbs
     with the tank mixed (``recovery_frame``): the probes' mean is then
     the tank's, and the heat is its mass times the mean's rise (a
-    least-squares slope over at least ``min_minutes``) plus the loss
-    ``loss`` prices against the air: the UA law's, and the bottom
-    loss's share at each minute's gap
-    (``physics.tank.bottom_loss_reach``). A row a stretch:
+    least-squares slope over at least ``min_minutes``) plus what the
+    tank ``params`` lay out loses at that temperature, mixed: its sides',
+    top's and bottom's UA (``physics.stratified.layout``) against the
+    air. A row a stretch:
     ``cycle``, ``start``, ``minutes``, ``water_f`` (the mean's mean),
     ``lower_f``, ``air_f``, ``humidity_pct``, ``rise_f_h``,
     ``loss_btu_h``, ``heat_btu_h``, the metered ``power_w`` (NaN
     without a reading) and ``cop`` (the heat over the power)."""
-    mass = tank.volume_gal * WATER_BTU_PER_GAL_F
-    ua_ref = _ua_ref(loss)
+    lay = st.layout(params)
+    mass = lay.volume_gal * WATER_BTU_PER_GAL_F
+    ua = lay.ua_btu_hr_f + lay.ua_top_btu_hr_f + lay.ua_bottom_btu_hr_f
     rows: list[dict[str, object]] = []
     for g in _cycles(frame):
         if not bool(g["draw_free"].iloc[0]):
@@ -496,14 +486,7 @@ def climb_heat(
             rise = float(np.polyfit(minutes, mean, 1)[0]) * 60.0
             water = float(np.mean(mean))
             air = float(np.mean(s["air_f"].to_numpy(dtype=float)))
-            dt = water - air
-            reach = [
-                bottom_loss_reach(float(gap), loss.bottom_gate_f)
-                for gap in s["gap_f"].to_numpy(dtype=float)
-            ]
-            lost = ua_at(
-                dt, ua_ref, loss.ua_exponent, loss.ua_ref_delta_t_f
-            ) * dt + loss.bottom_loss_btu_hr * float(np.mean(reach))
+            lost = ua * (water - air)
             heat = mass * rise + lost
             power = _mean(s["power_w"].to_numpy(dtype=float))
             rows.append(
@@ -614,15 +597,15 @@ class Evidence:
 
 def evidence(
     history: pd.DataFrame,
-    tank: TankParams,
-    loss: LossParams,
+    params: HeaterParams,
     *,
     air: str = "air_f",
 ) -> Evidence:
     """``Evidence`` from ``history`` (``recovery_frame``, read with
-    ``air``), the heat priced against ``loss``."""
+    ``air``), the heat priced against the loss of the tank ``params``
+    lay out (``climb_heat``)."""
     frame = recovery_frame(history, air=air)
-    heat = climb_heat(frame, tank, loss).dropna(
+    heat = climb_heat(frame, params).dropna(
         subset=["air_f", "water_f", "heat_btu_h"]
     )
     blocks = power_blocks(frame)

@@ -428,7 +428,7 @@ class TestAtTheEdges:
             hours=3,
             loads=sim.Loads(
                 draws=(
-                    sim.Draw(at=at(0) + timedelta(seconds=20), gallons=30.0),
+                    sim.Draw(at=at(0) + timedelta(seconds=20), gallons=45.0),
                 )
             ),
         )
@@ -544,7 +544,7 @@ class TestTheHandOver:
             setpoint=150.0,
             hours=2,
             history=sim.History(compressor_stopped_at=at(-1 / 60)),
-            loads=sim.Loads(draws=(sim.Draw(at=at(1 / 60), gallons=30.0),)),
+            loads=sim.Loads(draws=(sim.Draw(at=at(1 / 60), gallons=45.0),)),
         )
         hp = [h for h in r.heating if h.source == "compressor"]
         lockout = sim.site_example_params().controller.restart_lockout
