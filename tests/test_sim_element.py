@@ -561,12 +561,21 @@ class TestWhatEndsTheRecovery:
                 ),
             },
         )
+        walked = simulate(
+            s.model_copy(update={"horizon": timedelta(hours=24)}), params
+        )
         upper = [
             h
-            for h in _walk(s, params)
+            for h in walked.simulation.heating
             if h.zone == "upper" and h.start.at == T0 + timedelta(minutes=5)
         ]
-        assert upper
+        assert upper and upper[0].start.cause == "write"
+        # The raise's own start, under a held mode: not the new mode's
+        # entry rule taking at once.
+        assert {
+            "mode_write_held_projected",
+            "element_start_on_setpoint_raise_n1",
+        } <= set(walked.reasons)
 
     def test_a_setpoint_write_the_compressor_has_reached_is_not_a_cut(
         self, params: HeaterParams

@@ -1165,8 +1165,9 @@ def _setpoint(
     A running element's off point follows the setpoint, and it stops
     once that is at or below its zone. In Energy Saver a raise leaving
     the upper zone the entry deficit short starts the element (n = 1),
-    unless a mode write at the same instant changes the mode: the new
-    mode's entry rule decides then.
+    unless a mode write at the same instant changes the mode at once
+    (not one held to a window's end): the new mode's entry rule decides
+    then.
 
     A running recovery moves its target or stops (``_would_stop``);
     otherwise the write may start one (``_write_starts``). Each write
