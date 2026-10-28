@@ -386,6 +386,9 @@ Changed
 Fixed
 -----
 
+- In Electric, an upper element a lowered setpoint stops at its new off
+  point hands over to the lower element, as one stopping at its own
+  does; the lower zone was left where it was.
 - **An element stops where its zone reaches its off point.** Its end
   was set from its fitted rate alone, so where something else lifted the
   zone too, it ran on at the setpoint, charged and lifting nothing. With

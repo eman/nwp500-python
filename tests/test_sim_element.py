@@ -19,8 +19,10 @@ from nwp500.sim import (
     TouPeriod,
     Write,
     element_mode,
+    simulate,
 )
 from nwp500.sim.defaults import site_example_params
+from nwp500.sim.engine import HeatingInterval
 from nwp500.sim.params import ElementParams, HeaterParams
 
 T0 = datetime(2026, 10, 1, 12, tzinfo=UTC)
@@ -58,6 +60,13 @@ def _scenario(
         "environment": Environment(ambient_f=68.0, humidity=48.0),
     }
     return Scenario(**{**base, **(given or {})})
+
+
+def _walk(s: Scenario, params: HeaterParams) -> list[HeatingInterval]:
+    """The heating of ``s`` walked as it stands, for a day."""
+    return simulate(
+        s.model_copy(update={"horizon": timedelta(hours=24)}), params
+    ).simulation.heating
 
 
 def _stint(
@@ -395,6 +404,101 @@ class TestWhatEndsTheRecovery:
         assert "heat_pump_unavailable" in r.reasons
         assert r.full_minutes is not None
         assert "recovery_cut_short" not in r.reasons
+
+    def test_a_mode_write_landing_on_the_handover_is_not_a_cut(
+        self, params: HeaterParams
+    ) -> None:
+        """High Demand written at the instant the heat pump takes over
+        from Energy Saver's stand-in element: the handover stopped it,
+        not the write."""
+        air = (
+            (T0, 30.0),
+            (T0 + timedelta(minutes=20), 30.0),
+            (T0 + timedelta(minutes=20, seconds=1), 68.0),
+        )
+        given: dict[str, Any] = {
+            "environment": Environment(ambient_f=air, humidity=48.0)
+        }
+        quiet = element_mode(
+            _scenario(125.0, 100.0, given=given), params, mode=ENERGY_SAVER
+        )
+        handover = next(
+            h.start.at
+            for h in _walk(_scenario(125.0, 100.0, given=given), params)
+            if h.source == "compressor"
+        )
+        given["commands"] = Commands(writes=(Write(at=handover, mode=4),))
+        r = element_mode(
+            _scenario(125.0, 100.0, given=given), params, mode=ENERGY_SAVER
+        )
+        assert quiet.full_minutes is not None
+        assert r.full_minutes is not None
+        assert "recovery_cut_short" not in r.reasons
+
+    def test_a_setpoint_write_the_compressor_has_reached_is_not_a_cut(
+        self, params: HeaterParams
+    ) -> None:
+        """Lowered to 125 °F at minute 120, the lower zone above it: the
+        engine counts the recovery reached."""
+        s = _scenario(
+            125.0,
+            110.0,
+            given={
+                "commands": Commands(
+                    writes=(
+                        Write(at=T0 + timedelta(minutes=120), setpoint_f=125.0),
+                    )
+                )
+            },
+        )
+        r = element_mode(s, params, mode=HIGH_DEMAND)
+        assert r.full_minutes == pytest.approx(120.0, abs=0.05)
+        assert "recovery_cut_short" not in r.reasons
+
+    def test_a_lowered_setpoint_hands_electrics_upper_to_its_lower(
+        self, params: HeaterParams
+    ) -> None:
+        """Lowered to 112 °F at minute 5, the upper zone past it: the
+        upper element stops at its new off point, which is not a cut,
+        and the lower takes over to the new setpoint."""
+        s = _scenario(
+            110.0,
+            105.0,
+            given={
+                "commands": Commands(
+                    writes=(
+                        Write(at=T0 + timedelta(minutes=5), setpoint_f=112.0),
+                    )
+                )
+            },
+        )
+        r = element_mode(s, params, mode=ELECTRIC)
+        assert r.full_minutes is not None and r.full_minutes > 5.0
+        assert r.end_lower_f > 111.0
+        assert "recovery_cut_short" not in r.reasons
+
+    def test_the_first_cut_is_judged_against_the_stints_end(
+        self, params: HeaterParams
+    ) -> None:
+        """A cut at minute 5 (Heat Pump written), a switch-back at 10,
+        and a second at 60 (Electric stopping the compressor): the stint
+        holds the first."""
+        s = _scenario(
+            125.0,
+            110.0,
+            given={
+                "commands": Commands(
+                    writes=(
+                        Write(at=T0 + timedelta(minutes=5), mode=1),
+                        Write(at=T0 + timedelta(minutes=60), mode=2),
+                    )
+                )
+            },
+        )
+        r = element_mode(
+            s, params, mode=HIGH_DEMAND, switch_back_after_minutes=10
+        )
+        assert "recovery_cut_short" in r.reasons
 
     def test_a_cut_after_the_switch_back_is_not_the_stints(
         self, params: HeaterParams

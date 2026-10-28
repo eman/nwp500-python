@@ -1057,15 +1057,18 @@ def _stop_element(s: _Step, reason: StopReason) -> None:
     """An element stops. At its off point short of the setpoint (Energy
     Saver's upper element), the element's own or one a lowered setpoint
     brought to the zone, the zone coasts on with the heat in transit.
-    In Electric the upper element hands over to the lower."""
+    In Electric the upper element hands over to the lower, at its own
+    off point or a lowered setpoint's."""
     zone = s.state.element.zone
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
         coast = DEVICE_MODE[s.heats_as]  # type: ignore[assignment]
     s.state = replace(s.state, element=Element())
     s.act(StopElement(s.at, reason, coast))
+    # A lowered setpoint brings the upper zone to its off point as the
+    # element's own run does: the lower takes over either way.
     if (
-        reason == "target"
+        reason in ("target", "write")
         and zone == "upper"
         and s.heats_as == ELECTRIC
         and s.lower < s.sp - ELEMENT_DONE_F
