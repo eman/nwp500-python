@@ -33,7 +33,6 @@ from nwp500.sim import (
     standby,
     time_to_ready,
 )
-from nwp500.sim.physics.element import mode_plan
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 EVERY_DAY = 254
@@ -479,66 +478,73 @@ class TestStandbysStart:
 
 
 class TestElementMode:
-    def test_it_is_the_element_models_plan(self, params: HeaterParams) -> None:
-        state = HeaterState(upper_f=125.0, lower_f=110.0)
-        settings = Settings(setpoint_f=141.8, hp_upper_on_f=RESTING)
-        r = element_mode(state, settings, params, mode=4, at=T0)
-        assert r.plan == mode_plan(
-            "HIGH_DEMAND", 125.0, 110.0, 141.8, params=params.element
+    def test_it_is_the_scenario_walked_in_the_mode(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(
+            state=HeaterState(upper_f=125.0, lower_f=110.0),
+            settings=Settings(setpoint_f=141.8, hp_upper_on_f=RESTING),
         )
+        r = element_mode(s, params, mode=4)
         assert r.reachable and r.unreachable_reason is None
+        assert r.mode == "high_demand" and r.starts_at == T0
+        walked = simulate(
+            s.model_copy(
+                update={
+                    "horizon": timedelta(minutes=r.end_minute),
+                    "commands": Commands(writes=(Write(at=T0, mode=4),)),
+                }
+            ),
+            params,
+        )
+        last = walked.simulation.points[-1]
+        assert (r.end_upper_f, r.end_lower_f) == (
+            round(last.upper_f, 2),
+            round(last.lower_f, 2),
+        )
 
     def test_not_reachable_inside_a_tou_window_or_on_vacation(
         self, params: HeaterParams
     ) -> None:
         state = HeaterState(upper_f=125.0, lower_f=110.0)
-        r = element_mode(
-            state,
-            Settings(setpoint_f=141.8, hp_upper_on_f=RAISED),
-            params,
-            mode=2,
-            at=T0,
-        )
-        assert r.unreachable_reason == "tou_window_in_force"
-        unknown = element_mode(
-            state, Settings(setpoint_f=141.8), params, mode=2, at=T0
-        )
-        assert unknown.unreachable_reason == "tou_window_in_force"
-        v = element_mode(
-            state, Settings(setpoint_f=141.8, mode=5), params, mode=3, at=T0
-        )
-        assert v.unreachable_reason == "heating_disabled"
+
+        def reach(settings: Settings, mode: int) -> str | None:
+            s = _scenario(state=state, settings=settings)
+            return element_mode(s, params, mode=mode).unreachable_reason
+
+        raised = Settings(setpoint_f=141.8, hp_upper_on_f=RAISED)
+        assert reach(raised, 2) == "tou_window_in_force"
+        assert reach(Settings(setpoint_f=141.8), 2) == "tou_window_in_force"
+        vacation = Settings(setpoint_f=141.8, mode=5)
+        assert reach(vacation, 3) == "heating_disabled"
 
     def test_a_what_if_setpoint_does_not_move_the_window_test(
         self, params: HeaterParams
     ) -> None:
         # A resting heater (hp_upper_on at the device minimum) asked about
-        # 108 °F: the window test is the device's setpoint's.
-        r = element_mode(
-            HeaterState(upper_f=100.0, lower_f=95.0),
-            Settings(setpoint_f=140.9, hp_upper_on_f=RESTING),
-            params,
-            mode=2,
-            at=T0,
-            setpoint_f=108.0,
+        # 108 °F: the window test is the device's setpoint's, and the
+        # stint heats to the one asked about.
+        s = _scenario(
+            state=HeaterState(upper_f=100.0, lower_f=95.0),
+            settings=Settings(setpoint_f=140.9, hp_upper_on_f=RESTING),
         )
+        r = element_mode(s, params, mode=2, setpoint_f=108.0)
         assert r.reachable
-        assert r.plan == mode_plan(
-            "ELECTRIC", 100.0, 95.0, 108.0, params=params.element
-        )
+        assert r.upper_setpoint_minutes is not None
+        assert 107.0 < r.end_upper_f < 115.0
+
+    def test_a_what_if_setpoint_outside_the_range_is_refused(
+        self, params: HeaterParams
+    ) -> None:
+        with pytest.raises(ValueError):
+            element_mode(_scenario(), params, mode=2, setpoint_f=200.0)
 
     @pytest.mark.parametrize("mode", [1, 5, 6])
     def test_a_mode_without_an_element_is_refused(
         self, params: HeaterParams, mode: int
     ) -> None:
         with pytest.raises(ValueError, match="no element"):
-            element_mode(
-                HeaterState(upper_f=125.0, lower_f=110.0),
-                Settings(setpoint_f=141.8),
-                params,
-                mode=mode,
-                at=T0,
-            )
+            element_mode(_scenario(), params, mode=mode)
 
 
 class TestTheDrawRange:
@@ -743,11 +749,12 @@ class TestTheHeatersOwnTouMarker:
         r = time_to_ready(_scenario(settings=raised), params)
         assert not any(d.startswith("tou_window=") for d in r.defaults_used)
         e = element_mode(
-            HeaterState(upper_f=120.0, lower_f=100.0),
-            raised,
+            _scenario(
+                state=HeaterState(upper_f=120.0, lower_f=100.0),
+                settings=raised,
+            ),
             params,
             mode=3,
-            at=T0,
         )
         assert e.unreachable_reason == "tou_window_in_force"
 

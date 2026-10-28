@@ -664,8 +664,6 @@ class ElementParams:
     for provenance."""
 
     element_w: float = field(default=5148.0, metadata=_p(FITTED, "W"))
-    upper_f_per_min: float = field(default=2.01, metadata=_p(FITTED, "°F/min"))
-    lower_f_per_min: float = field(default=1.38, metadata=_p(FITTED, "°F/min"))
     #: How far below the setpoint the upper zone must be **on entry to
     #: the mode** before the element starts, **in Electric**.  Not a
     #: thermostat; see the module docstring.
@@ -813,10 +811,9 @@ class ElementParams:
     #: Where **Energy Saver's** upper element switches off: this far
     #: below the setpoint, not at it (2026-10-02, a held-out re-run).
     #: The element runs, and is charged, until the upper zone is this
-    #: short; the zone then coasts on with no input, by at most
-    #: this much and at most the heat in transit (``coast_f``), so
-    #: ``upper_setpoint_minutes`` and time to ready keep the fitted rate
-    #: and only the element's run and energy stop here.
+    #: short; the zone then coasts on with no input, the heat still in
+    #: transit after the dead time (``upper_dead_time_min``), so only the
+    #: element's run and energy stop here.
     #:
     #: **Measured from raw rows**: every upper-element off-edge on the
     #: device's record against the upper probe and the setpoint as of the edge,
@@ -842,9 +839,9 @@ class ElementParams:
     )
 
     #: Minutes from the upper element's on-edge during which the upper
-    #: zone is held, before it rises at ``upper_f_per_min``
-    #: (2026-10-02).  The element draws its power, and is charged, from the
-    #: on-edge.  Every mode: the same element and probe.
+    #: zone is held, before its heat reaches the layers (2026-10-02).
+    #: The element draws its power, and is charged, from the on-edge.
+    #: Every mode: the same element and probe.
     #:
     #: **It is the lag of the line the probe's rise settles on, not its
     #: first tick.**  Measured from raw rows, stints that ran to their
@@ -863,33 +860,12 @@ class ElementParams:
     #: 0.67 (n = 4 on 2 days), Electric 0.43 (n = 7, 0.15-0.67): no
     #: split the data can carry, so one figure.
     #:
-    #: **The rate moved with it, from 1.66 to 2.01.**  1.66 was rise over
-    #: elapsed between the first and last one-minute grid points with
-    #: the element on, which spreads the lag through the rate; adding a
-    #: lag to it would count the lag twice and make every long run late.
-    #: The line gives back 1.63 in that convention at the median run (4.7
-    #: min), inside 1.66's interval.  On the Energy Saver and High Demand
-    #: stints of under 8 °F, the size an assisted mode makes, the line
-    #: lands within 0.31 min of every recorded run, where 1.66 alone was
-    #: 0.54-1.22 min early on every one; three short Electric runs rose
-    #: faster than either.
-    #:
-    #: **One lag, start and end** (``coast_f``): the coast after the
-    #: off-edge is the same lag's heat arriving, 0.98 min of rise at this
-    #: rate (median coast 1.98 °F, CI 1.80-1.98).  What is in transit at
-    #: the off-edge, rate × lag = 2.43 °F, exceeds both the coast and the
-    #: off deficit, so the setpoint, not the lag, bounds the coast.  The
-    #: lag's own minutes lift nothing during the run; their heat is the
-    #: coast, credited once, and the coast is capped at it (rate × the
-    #: lesser of the run and the lag), so nothing is credited that was
-    #: not charged.  Short clean stints coast the same ~2 °F whatever
-    #: their rise: Energy Saver runs lifting the zone 0.54, 1.26 and
-    #: 1.44 °F coasted 2.16, 1.98 and 2.16, each to 0.18-0.54 °F over
-    #: the setpoint; an Electric run of 0.18, 1.80; High Demand's 2.34,
-    #: 2.34.  So a run at the entry threshold coasts to the setpoint.
-    #:
-    #: **The upper element only.**  Electric's lower zone keeps its
-    #: end-to-end rate, which spans the lower probe's first-minute dip.
+    #: **One lag, start and end**: the coast after the off-edge is the
+    #: same lag's heat arriving (median coast 1.98 °F, CI 1.80-1.98).
+    #: Short clean stints coast the same ~2 °F whatever their rise:
+    #: Energy Saver runs lifting the zone 0.54, 1.26 and 1.44 °F coasted
+    #: 2.16, 1.98 and 2.16, each to 0.18-0.54 °F over the setpoint; an
+    #: Electric run of 0.18, 1.80; High Demand's 2.34, 2.34.
     upper_dead_time_min: float = field(default=1.21, metadata=_p(FITTED, "min"))
 
     def __post_init__(self) -> None:

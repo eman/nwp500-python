@@ -134,8 +134,6 @@ def _nwp500_65() -> HeaterParams:
         ),
         element=ElementParams(
             element_w=5148.0,
-            upper_f_per_min=2.01,
-            lower_f_per_min=1.38,
             upper_starts_below_setpoint_f=0.54,
             high_demand_starts_below_setpoint_f=0.72,
             start_bracket_lower_f=0.0,

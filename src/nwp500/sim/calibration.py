@@ -1227,13 +1227,14 @@ def _theil_sen(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
 
 @dataclass(frozen=True)
 class ElementLagFit:
-    """``ElementParams.upper_dead_time_min`` and ``upper_f_per_min``:
-    run minutes = lag + rise / rate, a Theil-Sen line over the stints
+    """``ElementParams.upper_dead_time_min``, and the probe's rise
+    (``rise_f_per_min``, a measurement no parameter reads): run
+    minutes = lag + rise / rate, a Theil-Sen line over the stints
     that started and ended clean with no draw recorded, and 90 % day
     bootstrap intervals."""
 
     upper_dead_time_min: float
-    upper_f_per_min: float
+    rise_f_per_min: float
     lag_interval: tuple[float, float]
     rate_interval: tuple[float, float]
     n: int
@@ -1274,7 +1275,7 @@ def fit_element_lag(
         rates.append(1 / b)
     return ElementLagFit(
         upper_dead_time_min=lag,
-        upper_f_per_min=1 / slope,
+        rise_f_per_min=1 / slope,
         lag_interval=tuple(np.quantile(lags, [0.05, 0.95])),
         rate_interval=tuple(np.quantile(rates, [0.05, 0.95])),
         n=len(q),
@@ -1530,72 +1531,45 @@ def element_runs(
 
 
 @dataclass(frozen=True)
-class ElementRateFit:
-    """``ElementParams.element_w`` (the median power with an element and
-    no compressor on, in High Demand or Electric), ``upper_f_per_min``
-    and ``lower_f_per_min`` (each zone's median run rate, every mode
-    pooled, runs with a known draw left out), and their 90 % bootstrap
-    intervals. A rate is None without a run."""
+class ElementPowerFit:
+    """``ElementParams.element_w``: the median power with an element and
+    no compressor on, in High Demand or Electric, and its 90 % bootstrap
+    interval; None without such a minute."""
 
     element_w: float | None
-    upper_f_per_min: float | None
-    lower_f_per_min: float | None
     element_w_interval: tuple[float, float] | None
-    upper_interval: tuple[float, float] | None
-    lower_interval: tuple[float, float] | None
     runs: int
 
 
-def fit_element_rates(
+def fit_element_w(
     grid: pd.DataFrame, *, n_boot: int = 2000, seed: int = 252
-) -> ElementRateFit:
-    """The element's power and the zones' rates from ``element_grid``
-    (see ``ElementRateFit``). The upper rate measured end to end on the
-    grid sits below ``fit_element_lag``'s, its lag counted in it."""
+) -> ElementPowerFit:
+    """The element's power from ``element_grid`` (see
+    ``ElementPowerFit``)."""
     rng = np.random.default_rng(seed)
-
-    def ci(values: np.ndarray) -> tuple[float, tuple[float, float]]:
-        boots = [
-            np.median(rng.choice(values, size=len(values), replace=True))
-            for _ in range(n_boot)
-        ]
-        return float(np.median(values)), (
-            float(np.quantile(boots, 0.05)),
-            float(np.quantile(boots, 0.95)),
-        )
-
     w = w_ci = None
     if not grid.empty:
-        alone = grid.loc[
-            (grid["U"] | grid["L"])
-            & ~grid["C"]
-            & grid["mode"].isin([HIGH_DEMAND, ELECTRIC]),
-            "W",
-        ].dropna()
-        if len(alone):
-            w, w_ci = ci(np.asarray(alone, dtype=float))
-    r = element_runs(grid) if not grid.empty else pd.DataFrame()
-    out: dict[str, tuple[float, tuple[float, float]] | None] = {}
-    for which in ("upper", "lower"):
-        x = (
-            np.asarray(
-                r.loc[(r["draw"] != True) & (r["which"] == which), "rate"],  # noqa: E712
-                dtype=float,
-            )
-            if not r.empty
-            else np.array([])
+        alone = np.asarray(
+            grid.loc[
+                (grid["U"] | grid["L"])
+                & ~grid["C"]
+                & grid["mode"].isin([HIGH_DEMAND, ELECTRIC]),
+                "W",
+            ].dropna(),
+            dtype=float,
         )
-        out[which] = ci(x) if len(x) else None
-    up, lo = out["upper"], out["lower"]
-    return ElementRateFit(
-        element_w=w,
-        upper_f_per_min=None if up is None else up[0],
-        lower_f_per_min=None if lo is None else lo[0],
-        element_w_interval=w_ci,
-        upper_interval=None if up is None else up[1],
-        lower_interval=None if lo is None else lo[1],
-        runs=len(r),
-    )
+        if len(alone):
+            boots = [
+                np.median(rng.choice(alone, size=len(alone), replace=True))
+                for _ in range(n_boot)
+            ]
+            w = float(np.median(alone))
+            w_ci = (
+                float(np.quantile(boots, 0.05)),
+                float(np.quantile(boots, 0.95)),
+            )
+    runs = element_runs(grid) if not grid.empty else pd.DataFrame()
+    return ElementPowerFit(element_w=w, element_w_interval=w_ci, runs=len(runs))
 
 
 def energy_saver_off_deficit(

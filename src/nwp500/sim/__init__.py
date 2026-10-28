@@ -10,8 +10,8 @@
   can deliver now; ``time_to_ready(scenario, params)``: whether it can
   run a bath, when it can in each heating mode, and the showers it is
   ready for;
-- ``element_mode(state, settings, params, mode=..., at=...)``: a
-  recovery in an element mode;
+- ``element_mode(scenario, params, mode=...)``: a stint in an element
+  mode, the scenario walked with the mode written at its start;
 - ``default_params(volume_code)``: one NWP500-65's parameters with no
   mixing valve; ``site_example_params`` that installation whole, valve
   included (``with_valve`` sets one); the parameters of one NWP500-65,
@@ -70,6 +70,7 @@ from nwp500.sim.ready import (
 )
 from nwp500.sim.result import (
     ActiveCycle,
+    ElementInterval,
     ElementModeResult,
     Forecast,
     RecoveryResult,
@@ -87,6 +88,7 @@ __all__ = (
     "Draw",
     "DrawWindow",
     "DrawWindowResult",
+    "ElementInterval",
     "ElementModeResult",
     "Environment",
     "HeaterParams",

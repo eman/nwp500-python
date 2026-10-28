@@ -358,9 +358,48 @@ Changed
   the map's power over the hold and the climb; the COP is the map's heat
   over it.
 
+- ``element_mode(scenario, params, *, mode, setpoint_f=None,
+  ready_upper_f=None, switch_back_after_minutes=None, slot_minutes=10.0,
+  recovery=None)`` walks the scenario with the mode written at its
+  start, as ``time_to_ready`` walks each mode: to the end of the
+  recovery the write sets off (every element and the heat pump stopped)
+  within ``READY_HORIZON``, or to a switch-back. It takes a ``Scenario`` in place of
+  ``state``, ``settings`` and ``at``, and no ``hp_lower_minutes``: the
+  heat pump heats the layers in the same walk. ``ElementModeResult``
+  carries the walk's times, the elements' minutes and kWh, the heat
+  pump's kWh (``heat_pump_kwh``), a ``profile`` of ``ElementInterval``
+  slots with both, the tank at the end with its layers, and
+  ``reasons``; ``plan`` is gone. A recovery part of which a later mode
+  write or the heater's drop at a window stops, or whose compressor a
+  setpoint write stops short, has no ``full_minutes``
+  (``recovery_cut_short``), and a write of the mode already in force
+  says ``mode_already_in_force``. From 125/110 °F at a 140.9 °F
+  setpoint the High Demand and Energy Saver recoveries end 127 and 128
+  minutes out, with the heat pump's, which the element model left
+  unknown; Electric's in 45.
+
+- ``calibration.fit_element_rates`` and ``ElementRateFit`` are
+  ``fit_element_w`` and ``ElementPowerFit``, the element's power alone;
+  ``ElementLagFit.upper_f_per_min`` is ``rise_f_per_min``, a
+  measurement no parameter reads.
+
 Fixed
 -----
 
+- In Electric, an upper element a lowered setpoint stops at its new off
+  point hands over to the lower element, as one stopping at its own
+  does; the lower zone was left where it was. Not when a mode write at
+  the same instant changes the mode at once: the new mode's rule
+  decides; a mode write held to a TOU window's end decides nothing
+  then.
+- A setpoint raise in Energy Saver written with a mode that a TOU window
+  holds to its end starts the upper element, as a raise alone does: the
+  held mode leaves Energy Saver in force. It started nothing until the
+  window closed.
+- An element heating in the heat pump's place stops with
+  ``HeatingInterval.stop`` ``heat_pump`` when the heat pump takes the
+  recovery back, not ``mode``, so ``element_mode`` does not count that
+  handover as cutting its recovery short.
 - **An element stops where its zone reaches its off point.** Its end
   was set from its fitted rate alone, so where something else lifted the
   zone too, it ran on at the setpoint, charged and lifting nothing. With
@@ -382,6 +421,17 @@ Fixed
 Removed
 -------
 
+- The element-mode planner: ``physics.element.mode_recovery``,
+  ``ModeRecovery``, ``mode_plan``, ``ModePlan``, ``coast_f``,
+  ``upper_rise_f`` and ``MAX_PROFILE_SLOTS`` (``api.MAX_PROFILE_SLOTS``
+  caps ``element_mode``'s profile); ``ElementParams.upper_f_per_min``
+  and ``lower_f_per_min``, which a document still carrying them is
+  read without (``unknown_fields`` names them); the reasons
+  ``energy_saver_later_starts_not_modelled``,
+  ``upper_zone_coasts_short_of_the_setpoint``, ``hp_lower_not_given``,
+  ``lower_zone_not_projected_under_heat_pump``,
+  ``switch_back_lands_before_the_recovery_finishes`` and
+  ``plan_ends_when_the_elements_stop_not_at_switch_back``.
 - The heat book: ``sim.book``, ``BookParams``, ``Booked``,
   ``full_tank_book``, ``HeaterParams.book`` and ``book_terms``,
   ``SimulationResult.booked``, and the ``book`` arguments of

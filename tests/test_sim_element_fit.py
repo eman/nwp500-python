@@ -85,12 +85,12 @@ def tank(
 
 
 class TestTheLag:
-    def test_the_line_recovers_the_lag_and_the_rate(self) -> None:
+    def test_the_line_recovers_the_lag_and_the_rise(self) -> None:
         record, _ = tank()
         stints = cal.element_stints(record, draws=[])
         fit = cal.fit_element_lag(stints, n_boot=200)
         assert fit is not None
-        assert fit.upper_f_per_min == pytest.approx(RATE, abs=0.05)
+        assert fit.rise_f_per_min == pytest.approx(RATE, abs=0.05)
         assert fit.upper_dead_time_min == pytest.approx(LAG_S / 60, abs=0.15)
         assert fit.lag_interval[0] <= fit.upper_dead_time_min
 
@@ -122,12 +122,8 @@ class TestTheOffPoint:
         assert power["net_w"].median() == pytest.approx(5150.0, rel=0.01)
 
 
-class TestTheGridRates:
-    def test_the_zones_rates_and_power(self) -> None:
+class TestTheGridPower:
+    def test_the_elements_power(self) -> None:
         record, _ = tank()
-        fit = cal.fit_element_rates(cal.element_grid(record), n_boot=200)
-        assert fit.lower_f_per_min == pytest.approx(1.4, abs=0.05)
-        # End to end on the grid the lag is in the run: below the line's.
-        assert fit.upper_f_per_min is not None
-        assert fit.upper_f_per_min < RATE
+        fit = cal.fit_element_w(cal.element_grid(record), n_boot=200)
         assert fit.element_w == pytest.approx(5150.0)

@@ -160,7 +160,9 @@ ElementTrigger = Literal[
     "heat_pump_unavailable",
     "heat_pump_available",
 ]
-StopReason = Literal["target", "cap", "write", "mode", "envelope", "horizon"]
+StopReason = Literal[
+    "target", "cap", "write", "mode", "heat_pump", "envelope", "horizon"
+]
 #: How a mode interval ended: a write, the heater dropping the mode at a
 #: window, or the horizon.
 ModeEnd = Literal["write", "dropped", "horizon"]
@@ -850,7 +852,7 @@ def _start_compressor(
     ):
         # An element heating in the heat pump's place, which this mode
         # would not run: the heat pump takes the recovery back.
-        _stop_element(s, "mode")
+        _stop_element(s, "heat_pump")
     c = s.state.compressor
     if hold is None:
         hold = 0.0
@@ -1053,19 +1055,27 @@ def _check_element(s: _Step) -> None:
         s.act(ElementRetarget(off))
 
 
-def _stop_element(s: _Step, reason: StopReason) -> None:
+def _stop_element(
+    s: _Step, reason: StopReason, *, mode_follows: bool = False
+) -> None:
     """An element stops. At its off point short of the setpoint (Energy
     Saver's upper element), the element's own or one a lowered setpoint
     brought to the zone, the zone coasts on with the heat in transit.
-    In Electric the upper element hands over to the lower."""
+    In Electric the upper element hands over to the lower, at its own
+    off point or a lowered setpoint's, unless a mode write at the same
+    instant changes the mode at once (``mode_follows``; not one held to
+    a window's end): the new mode's rule decides then."""
     zone = s.state.element.zone
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
         coast = DEVICE_MODE[s.heats_as]  # type: ignore[assignment]
     s.state = replace(s.state, element=Element())
     s.act(StopElement(s.at, reason, coast))
+    # A lowered setpoint brings the upper zone to its off point as the
+    # element's own run does: the lower takes over either way.
     if (
-        reason == "target"
+        reason in ("target", "write")
+        and not mode_follows
         and zone == "upper"
         and s.heats_as == ELECTRIC
         and s.lower < s.sp - ELEMENT_DONE_F
@@ -1155,8 +1165,9 @@ def _setpoint(
     A running element's off point follows the setpoint, and it stops
     once that is at or below its zone. In Energy Saver a raise leaving
     the upper zone the entry deficit short starts the element (n = 1),
-    unless a mode write at the same instant changes the mode: the new
-    mode's entry rule decides then.
+    unless a mode write at the same instant changes the mode at once
+    (not one held to a window's end): the new mode's entry rule decides
+    then.
 
     A running recovery moves its target or stops (``_would_stop``);
     otherwise the write may start one (``_write_starts``). Each write
@@ -1170,7 +1181,7 @@ def _setpoint(
     if e.running:
         temp = s.upper if e.zone == "upper" else s.lower
         if temp >= value - _off_deficit(s, e.zone) - ELEMENT_DONE_F:
-            _stop_element(s, "write")
+            _stop_element(s, "write", mode_follows=mode_follows)
         else:
             s.act(ElementRetarget(s.sp - _off_deficit(s, e.zone)))
     elif (
@@ -1196,6 +1207,24 @@ def _setpoint(
         s.pend(_write_start(s, serves))
     elif pending is not None and pending.cause == "write":
         s.pend(None)
+
+
+def _holds(s: _Step, mode: HeaterMode, owner: Owner) -> bool:
+    """Whether a write of ``mode`` now is held to the window's end
+    (``_mode_write``): inside a TOU window, a mode not in force that an
+    entry writes, or an element mode a direct write names."""
+    return (
+        mode != s.mode
+        and (owner != "raw" or mode in ELEMENT_MODES)
+        and s.in_tou()
+    )
+
+
+def _takes(s: _Step, mode: HeaterMode, owner: Owner) -> bool:
+    """Whether a write of ``mode`` now changes the mode in force at
+    once: not to the mode in force, not held, not while heating is
+    disabled."""
+    return not s.disabled and mode != s.mode and not _holds(s, mode, owner)
 
 
 def _mode_write(
@@ -1249,7 +1278,7 @@ def _mode_write(
     if held is not None:
         s.act(ModeWithdrawn(held.ref, s.at))
     entry = owner != "raw"
-    if mode != s.mode and (entry or mode in ELEMENT_MODES) and s.in_tou():
+    if _holds(s, mode, owner):
         s.act(ModeHeld(ref))
         if entry and mode == HEAT_PUMP:
             s.note("heat_pump_entry_held_spec_only")
@@ -1371,9 +1400,13 @@ def _entry_fires(s: _Step, ev: EntryFires) -> None:
     changes_mode = powering_on or (
         ev.mode is not None and ev.mode != s.state.mode.commanded
     )
+    # The new mode decides only when it takes now.
+    follows = powering_on or (
+        ev.mode is not None and _takes(s, ev.mode, "plan")
+    )
     value = ev.setpoint_f
     if value is not None and abs(value - s.sp) > 1e-6:
-        _setpoint(s, value, ev.serves, mode_follows=changes_mode)
+        _setpoint(s, value, ev.serves, mode_follows=follows)
     if changes_mode:
         _mode_write(
             s,
@@ -1391,9 +1424,9 @@ def _raw_writes(s: _Step, ev: RawWrites) -> None:
     device's own order at one instant is unmeasured (no mode and
     setpoint write on the record share an instant; the three pairs
     17-67 ms apart come in either order)."""
+    # A mode the writes change at once decides; a held one does not.
     follows = any(
-        w.mode is not None and w.mode != s.state.mode.commanded
-        for w in ev.writes
+        w.mode is not None and _takes(s, w.mode, "raw") for w in ev.writes
     )
     for w in ev.writes:
         if w.setpoint_f is not None:

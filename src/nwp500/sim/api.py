@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from nwp500.sim.circulation import RUN_GAP, Circulation
-from nwp500.sim.controller import HEAT_PUMP_UNAVAILABLE
+from nwp500.sim.controller import ELEMENT_DONE_F, HEAT_PUMP_UNAVAILABLE
 from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
@@ -39,7 +39,10 @@ from nwp500.sim.engine import (
     HEATER_SETPOINT_MIN_F,
     Entry,
     Heater,
+    HeatingInterval,
+    PathPoint,
     RawWrite,
+    Simulation,
     SimulationError,
     quantise,
 )
@@ -63,12 +66,7 @@ from nwp500.sim.inputs import (
     Write,
 )
 from nwp500.sim.params import HeaterParams
-from nwp500.sim.physics.element import (
-    DEVICE_MODE,
-    ElementMode,
-    HeaterMode,
-    mode_plan,
-)
+from nwp500.sim.physics.element import BASE_REASONS, HeaterMode
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
     heat_air_outside,
@@ -85,6 +83,7 @@ from nwp500.sim.ready import (
 )
 from nwp500.sim.result import (
     ActiveCycle,
+    ElementInterval,
     ElementModeResult,
     Forecast,
     RecoveryResult,
@@ -868,71 +867,304 @@ def standby(
     )
 
 
+#: Most slots one ``element_mode`` profile may carry: a slot narrower
+#: than the walk's own minute over a day's stint is a list nobody reads.
+MAX_PROFILE_SLOTS = 2000
+
+
+def _stint_end(
+    simulation: Simulation, start: datetime, opens: timedelta
+) -> tuple[datetime, datetime | None] | None:
+    """When the recovery a mode write at ``start`` sets off ends: the
+    heating that begins within ``opens`` of it (the write's lag and the
+    compressor's lockout), and all that begins before that has ended (an
+    element handing over, the heat pump alongside); and the first instant
+    after ``start`` a run in it stopped short of its target (``_cut``).
+    ``start`` when none begins; None when it is still heating at the
+    walk's end."""
+    end: datetime = start
+    cut: datetime | None = None
+    for h in sorted(simulation.heating, key=lambda h: h.start.at):
+        if h.start.at > max(end, start + opens):
+            break
+        if h.stop == "horizon":
+            return None
+        end = max(end, h.end)
+        if (
+            h.end > start
+            and _cut(simulation, h)
+            and (cut is None or h.end < cut)
+        ):
+            cut = h.end
+    return end, cut
+
+
+def _cut(simulation: Simulation, h: HeatingInterval) -> bool:
+    """Whether ``h`` stopped short of its target: on the mode changing
+    then (a write, or the heater dropping it at a window), not on the
+    heat pump taking over from an element standing in for it (``stop``
+    "heat_pump"); or, the compressor, on a setpoint write with the lower
+    zone short of the new setpoint (the engine's own ``reached``). An
+    element stops on a setpoint write only at its new off point."""
+    if h.stop == "mode":
+        return any(
+            m.end == h.end and m.ended_by != "horizon" for m in simulation.modes
+        ) or any(at == h.end for at, _ in simulation.drops)
+    if h.stop == "write" and h.source == "compressor":
+        return not any(at == h.end for at, _ in simulation.reached)
+    return False
+
+
+def _first_reach(
+    points: Sequence[PathPoint],
+    start: datetime,
+    level: float,
+    zone: Callable[[PathPoint], float],
+) -> datetime | None:
+    """The first instant the path's ``zone`` reaches ``level``, between
+    its points; None when it does not."""
+    prev: PathPoint | None = None
+    for p in points:
+        v = zone(p)
+        if v >= level:
+            if prev is None or zone(prev) >= level or p.at <= prev.at:
+                return max(p.at, start)
+            share = (level - zone(prev)) / (v - zone(prev))
+            return prev.at + (p.at - prev.at) * share
+        prev = p
+    return None
+
+
+def _profile(
+    points: Sequence[PathPoint], start: datetime, slot_minutes: float
+) -> tuple[ElementInterval, ...]:
+    """The path's electricity in ``slot_minutes`` slots from ``start``:
+    each point's, over the interval ending at it, shared out by time."""
+    span = (points[-1].at - start).total_seconds() / 60.0 if points else 0.0
+    if span / slot_minutes > MAX_PROFILE_SLOTS:
+        raise ValueError(
+            f"a {span:.0f}-minute stint in {slot_minutes}-minute slots is "
+            f"{span / slot_minutes:.0f} intervals, over the "
+            f"{MAX_PROFILE_SLOTS} cap; widen slot_minutes"
+        )
+    n = max(1, math.ceil(span / slot_minutes - 1e-9)) if span > 0 else 0
+    element = [0.0] * n
+    heat_pump = [0.0] * n
+    for p0, p1 in itertools.pairwise(points):
+        a = (p0.at - start).total_seconds() / 60.0
+        b = (p1.at - start).total_seconds() / 60.0
+        if b <= a:
+            continue
+        last = min(n, math.ceil(b / slot_minutes))
+        for i in range(int(a // slot_minutes), last):
+            lo, hi = i * slot_minutes, (i + 1) * slot_minutes
+            share = max(0.0, min(b, hi) - max(a, lo)) / (b - a)
+            element[i] += p1.element_wh * share
+            heat_pump[i] += (p1.input_wh or 0.0) * share
+    return tuple(
+        ElementInterval(
+            end_minute=round(min(span, (i + 1) * slot_minutes), 3),
+            element_wh=round(element[i], 2),
+            heat_pump_wh=round(heat_pump[i], 2),
+        )
+        for i in range(n)
+    )
+
+
 def element_mode(
-    state: HeaterState,
-    settings: Settings,
+    scenario: Scenario,
     params: HeaterParams,
     *,
     mode: int,
-    at: datetime,
     setpoint_f: float | None = None,
     ready_upper_f: float | None = None,
-    hp_lower_minutes: float | None = None,
     switch_back_after_minutes: float | None = None,
     slot_minutes: float = 10.0,
+    recovery: RecoveryModel | None = None,
 ) -> ElementModeResult:
-    """A recovery in an element mode from ``at``: "what if I switch to
-    Energy Saver, High Demand or Electric?", how fast, at what energy,
-    and the tank when the mode is switched back
-    (``physics.element.mode_plan``). ``mode`` is a ``DhwOperationSetting``
-    value, 2, 3 or 4.
+    """A stint in an element mode from ``scenario.start``: "what if I
+    switch to Energy Saver, High Demand or Electric?", how fast, at what
+    energy, and the tank when it ends. ``mode`` is a
+    ``DhwOperationSetting`` value, 2, 3 or 4.
 
-    ``setpoint_f`` is a setpoint to project to instead of the heater's
-    (``settings.setpoint_f``), which still decides the TOU-window test:
-    a what-if setpoint of 108 °F must not make a resting heater read as
-    inside a window.
+    The stint is the scenario walked with ``mode`` written at its start
+    (``simulate``; the scenario's later writes still take), under the
+    TOU windows the heater keeps (``marked_windows``: an unknown marker
+    counts as in force), its heat pump's recovery served by ``recovery``
+    when given. It ends when the recovery the write sets off does (every
+    element and the heat pump stopped), within ``READY_HORIZON``, or at
+    the switch-back, whichever is first. A recovery part of which a
+    later mode write or the heater dropping the mode at a window stops,
+    or whose compressor a setpoint write stops short of the new
+    setpoint, within the stint, has no ``full_minutes``
+    (``recovery_cut_short``); a write of the mode already in force
+    changes nothing, and the stint is what the heater does in it anyway
+    (``mode_already_in_force``). The ready level and the setpoint are
+    the setpoint in force once the start's writes and reservation entries
+    have fired.
 
-    ``ready_upper_f`` is an upper-zone temperature that counts as ready;
-    ``hp_lower_minutes``, in High Demand and Energy Saver, the
-    heat pump's minutes for the lower zone (``recovery`` gives them);
-    ``switch_back_after_minutes`` ends the stint early. ``reachable``
-    says whether a mode write can take at ``at``: not while heating is
-    disabled, nor inside a TOU window, by the heater's own marker
+    ``setpoint_f`` is a setpoint written with the mode instead of the
+    heater's (``settings.setpoint_f``), which still decides the
+    TOU-window test: a what-if setpoint of 108 °F must not make a
+    resting heater read as inside a window.
+
+    ``ready_upper_f`` is an upper-zone temperature that counts as ready,
+    the setpoint by default. ``switch_back_after_minutes`` ends the
+    stint that long after the start: a time it does not reach first is
+    None. ``reachable``
+    says whether a mode write can take at the start: not while heating
+    is disabled, nor inside a TOU window, by the heater's own marker
     (``tou_marked``). An unknown marker counts as in force: the
-    conservative direction is "do not count on it"."""
-    at = _instant(at)
+    conservative direction is "do not count on it".
+
+    Raises ``ValueError`` for a mode that runs no element, and for a
+    setpoint written outside the heater's range, and
+    ``SimulationError`` for a walk it cannot price, as ``simulate``
+    does.
+    """
+    s = scenario
     named = ENGINE_MODE.get(mode)
     if named is None or named == "heat_pump":
         raise ValueError(
             f"mode {mode} runs no element: 2 Electric, 3 Energy Saver or "
             "4 High Demand"
         )
-    device: ElementMode = DEVICE_MODE[named]  # type: ignore[assignment]
-    plan = mode_plan(
-        device,
-        state.upper_f,
-        state.lower_f,
-        settings.setpoint_f if setpoint_f is None else setpoint_f,
-        ready_upper_f=ready_upper_f,
-        hp_lower_minutes=hp_lower_minutes,
-        switch_back_after_minutes=switch_back_after_minutes,
-        slot_minutes=slot_minutes,
-        params=params.element,
+    if not (math.isfinite(slot_minutes) and slot_minutes > 0.0):
+        raise ValueError("slot_minutes must be positive")
+    if switch_back_after_minutes is not None and not (
+        math.isfinite(switch_back_after_minutes)
+        and switch_back_after_minutes >= 0.0
+    ):
+        raise ValueError("switch_back_after_minutes must not be negative")
+    windows, schedule_unknown = _windows(s, s.start + READY_HORIZON)
+
+    def stint_walk(horizon: timedelta) -> SimulationResult:
+        return _mode_walk(
+            s, params, named, horizon, windows, recovery, setpoint_f=setpoint_f
+        )
+
+    # The mode's own recovery, to its end or the walk's: where the
+    # switch-back, if any, falls against it.
+    walked = stint_walk(READY_HORIZON)
+    # The setpoint in force once the start's writes and entries have
+    # fired, as the device holds it.
+    target = s.settings.setpoint_f
+    for w in sorted(walked.simulation.writes, key=lambda w: w.fires_at):
+        if w.fires_at > s.start:
+            break
+        if w.outcome == "fired" and w.setpoint_f is not None:
+            target = w.setpoint_f
+    c = params.controller
+    opens = c.write_start_lag + c.restart_lockout
+    found = _stint_end(walked.simulation, s.start, opens)
+    done, cut_at = (None, None) if found is None else found
+    end = walked.until if done is None else done
+    truncated = False
+    if switch_back_after_minutes is not None:
+        back = s.start + timedelta(minutes=switch_back_after_minutes)
+        truncated = back < end
+        end = min(end, back)
+    reasons = list(BASE_REASONS)
+    # The stint itself, its times, energy and end all from the one
+    # walk; one with nothing to heat is walked for a second, for what
+    # the entry decision at the start rests on.
+    stint = stint_walk(end - s.start if end > s.start else timedelta(seconds=1))
+    reasons += [
+        r for r in stint.reasons if r != "element_mode_dropped_projected"
+    ]
+    # The heater dropping the mode at a window: the first walk's, which
+    # also sees one that opens as the stint ends.
+    if any(at <= end for at, _ in walked.simulation.drops):
+        reasons.append("element_mode_dropped_projected")
+    sim = stint.simulation
+    path = sim.points if end > s.start else []
+    heating = sim.heating if end > s.start else []
+    if s.settings.mode == _MODE_SETTING[named]:
+        # A write of the mode in force changes nothing: the stint is
+        # what the heater does in it anyway.
+        reasons.append("mode_already_in_force")
+    if s.state.upper_f < target - ELEMENT_DONE_F and not any(
+        h.source == "element" and h.start.at <= s.start + opens
+        for h in walked.simulation.heating
+    ):
+        reasons.append("upper_element_does_not_start")
+    if truncated:
+        reasons.append("truncated_by_switch_back")
+    if schedule_unknown:
+        reasons.append("tou_schedule_unknown")
+    # The recovery ends with every element and the heat pump stopped,
+    # not cut by a write or the heater's drop; read off the stint's own
+    # walk, whose last stop may land a little sooner than the first's.
+    cut = cut_at is not None and cut_at <= end
+    full: float | None = None
+    if not truncated and done is not None and not cut:
+        again = _stint_end(sim, s.start, opens) if path else None
+        full = _minutes(s.start, end if again is None else again[0])
+    if cut:
+        reasons.append("recovery_cut_short")
+
+    def upper_at(level: float) -> float | None:
+        return _minutes(
+            s.start,
+            _first_reach(
+                path or sim.points[:1], s.start, level, lambda p: p.upper_f
+            ),
+        )
+
+    # Reached as the elements reach their off point (``ELEMENT_DONE_F``).
+    to_setpoint = upper_at(target - ELEMENT_DONE_F)
+    ready = to_setpoint
+    if ready_upper_f is not None:
+        ready = upper_at(ready_upper_f)
+        if ready is None and ready_upper_f > target:
+            reasons.append("ready_target_above_setpoint")
+    last = path[-1] if path else None
+    unpriced = any(
+        h.source == "compressor" and h.input_wh is None for h in heating
     )
-    _, disabled = _engine_mode(settings.mode)
+    _, disabled = _engine_mode(s.settings.mode)
     reason: str | None = None
     # The heater's own marker decides, at its own setpoint; unknown
     # counts as in force.
     if disabled:
         reason = "heating_disabled"
-    elif tou_marked(settings) is not False:
+    elif tou_marked(s.settings) is not False:
         reason = "tou_window_in_force"
     return ElementModeResult(
-        starts_at=at,
-        plan=plan,
+        starts_at=s.start,
+        mode=named,
         reachable=reason is None,
         unreachable_reason=reason,
+        upper_ready_minutes=ready,
+        upper_setpoint_minutes=to_setpoint,
+        full_minutes=full,
+        end_minute=round((end - s.start).total_seconds() / 60.0, 3),
+        end_upper_f=round(s.state.upper_f if last is None else last.upper_f, 2),
+        end_lower_f=round(s.state.lower_f if last is None else last.lower_f, 2),
+        end_layers_f=s.state.layers_f if last is None else last.layers_f,
+        element_minutes=round(
+            sum(
+                (min(h.end, end) - max(h.start.at, s.start)).total_seconds()
+                for h in heating
+                if h.source == "element"
+            )
+            / 60.0,
+            3,
+        ),
+        element_kwh=round(sum(p.element_wh for p in path) / 1000.0, 4),
+        heat_pump_kwh=None
+        if unpriced
+        else round(sum(p.input_wh or 0.0 for p in path) / 1000.0, 4),
+        profile=_profile(path, s.start, slot_minutes),
+        reasons=tuple(_unique(reasons)),
     )
+
+
+def _minutes(start: datetime, when: datetime | None) -> float | None:
+    """``when`` as minutes from ``start``, to 0.01; None for None."""
+    if when is None:
+        return None
+    return round((when - start).total_seconds() / 60.0, 2)
 
 
 def _instant(at: datetime) -> datetime:
@@ -1258,6 +1490,23 @@ _MODE_SETTING: Mapping[HeaterMode, int] = MappingProxyType(
 )
 
 
+def _windows(
+    s: Scenario, end: datetime
+) -> tuple[list[tuple[datetime, datetime]], bool]:
+    """The TOU windows the heater keeps from ``s.start`` to ``end``
+    (``marked_windows``), and whether its schedule is unknown. TOU on
+    with neither its periods nor the heater's marker known is in force,
+    as for the counter test."""
+    scheduled = _scheduled(s, s.start, end)
+    marker = tou_marked(s.settings)
+    if marker is None and scheduled is None:
+        marker = True
+    return (
+        marked_windows(s.start, marker, s.start, end, scheduled),
+        scheduled is None,
+    )
+
+
 def _mode_walk(
     s: Scenario,
     params: HeaterParams,
@@ -1265,24 +1514,23 @@ def _mode_walk(
     horizon: timedelta,
     windows: Sequence[tuple[datetime, datetime]],
     recovery: RecoveryModel | None,
+    *,
+    setpoint_f: float | None = None,
 ) -> SimulationResult:
     """``s`` walked for ``horizon`` with ``mode`` written at its start:
-    in place of a mode the scenario writes there (its setpoint kept),
-    and before its later writes, which still take."""
-    write = Write(at=s.start, mode=_MODE_SETTING[mode])
+    in place of a mode the scenario writes there (its setpoint kept, or
+    ``setpoint_f`` written with the mode), and before its later writes,
+    which still take."""
+    write = Write(at=s.start, mode=_MODE_SETTING[mode], setpoint_f=setpoint_f)
+    early = [w for w in s.commands.writes if w.at <= s.start]
     at_start = [
         w.model_copy(update={"mode": None})
-        for w in s.commands.writes
-        if w.at <= s.start and w.setpoint_f is not None
+        for w in early
+        if w.setpoint_f is not None
     ]
+    later = [w for w in s.commands.writes if w.at > s.start]
     commands = s.commands.model_copy(
-        update={
-            "writes": (
-                *at_start,
-                write,
-                *(w for w in s.commands.writes if w.at > s.start),
-            )
-        }
+        update={"writes": (*at_start, write, *later)}
     )
     walked = s.model_copy(update={"commands": commands, "horizon": horizon})
     return simulate(
@@ -1425,15 +1673,7 @@ def time_to_ready(
     if now_gal.gal < bath_gal:
         nxt = next_recovery(s, params, recovery=recovery)
         if nxt.outcome != "not_scheduled":
-            end = s.start + READY_HORIZON
-            scheduled = _scheduled(s, s.start, end)
-            marker = tou_marked(s.settings)
-            if marker is None and scheduled is None:
-                # TOU on, neither its periods nor the heater's marker
-                # known: in force, as for the counter test.
-                marker = True
-            windows = marked_windows(s.start, marker, s.start, end, scheduled)
-            schedule_unknown = scheduled is None
+            windows, schedule_unknown = _windows(s, s.start + READY_HORIZON)
             walked = [
                 _mode_run(s, params, mode, bath_gal, windows, recovery)
                 for mode in MODES

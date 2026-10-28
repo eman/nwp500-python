@@ -49,9 +49,7 @@ def _answers(params: sim.HeaterParams) -> dict[str, Any]:
             target_time=T0 + timedelta(hours=3),
         ),
         "active_cycle": sim.active_cycle(STATE, SETTINGS, AIR, params, at=T0),
-        "element_mode_result": sim.element_mode(
-            STATE, SETTINGS, params, mode=4, at=T0
-        ),
+        "element_mode_result": sim.element_mode(_scenario(), params, mode=4),
         "deliverable": sim.readiness(STATE, SETTINGS, params),
         "trace": sim.standby(
             STATE,

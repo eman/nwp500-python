@@ -800,13 +800,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - Element-only minutes in the record (90 % CI 5,104-5,176 W,
        168 min). A later refit over 95 element runs gave 5,143 W. Two
        commanded runs on one evening read 5,219 and 5,242 W.
-   * - ``element.upper_f_per_min``, ``element.upper_dead_time_min``
-     - 2.01 degF/min, 1.21 min
+   * - ``element.upper_dead_time_min``
+     - 1.21 min
      - 29 upper-element runs on 21 days (:doc:`/explanation/heating-elements`).
-   * - ``element.lower_f_per_min``
-     - 1.38 degF/min
-     - 9 lower-element runs (90 % CI 1.21-1.62). One commanded run read
-       1.19-1.55, depending on how the rise is measured.
    * - ``element`` start and stop thresholds
      - 0.54, 0.72, 1.44, 1.8, 1.62 degF; 104.9 degF
      - The entry-threshold sweeps and the off point
@@ -1089,32 +1085,29 @@ The ones ``element_mode`` adds about its own answer:
 
    * - Reason
      - What it says
-   * - ``energy_saver_later_starts_not_modelled``
-     - The answer is one recovery: Energy Saver's later starts in the
-       stint are not in it.
    * - ``upper_element_does_not_start``
-     - The upper zone is short of the setpoint, but not by the mode's
-       entry deficit: the upper element does not start.
-   * - ``upper_zone_coasts_short_of_the_setpoint``
-     - Energy Saver's upper element stops short and its coast doesn't
-       reach the setpoint: there is no time to the setpoint.
+     - The upper zone is short of the setpoint, and no element starts on
+       the write: the deficit is under the mode's entry deficit, the
+       mode is already in force, the write is held in a TOU window, or
+       heating is disabled.
+   * - ``mode_already_in_force``
+     - The mode asked about is the heater's own: the write changes
+       nothing, and the stint is what the heater does in it anyway.
    * - ``ready_target_above_setpoint``
      - The ready temperature asked for is above the setpoint, where the
-       element stops: it is never reached.
-   * - ``hp_lower_not_given``
-     - In High Demand or Energy Saver, the heat pump's minutes for the
-       lower zone were not given, so there is no full recovery time.
-   * - ``lower_zone_not_projected_under_heat_pump``
-     - Outside Electric, the lower zone's heating after the elements
-       is the heat pump's, and is not projected.
-   * - ``truncated_by_switch_back``,
-       ``switch_back_lands_before_the_recovery_finishes``
-     - ``switch_back_after_minutes`` ends the stint before the elements
-       finish, and (the second) before the ready time, the setpoint or
-       the full recovery is reached.
-   * - ``plan_ends_when_the_elements_stop_not_at_switch_back``
-     - The switch back comes after the elements finish: the answer ends
-       when they stop, not at the switch back.
+       element stops, and the stint does not reach it.
+   * - ``truncated_by_switch_back``
+     - ``switch_back_after_minutes`` ends the stint before its recovery
+       does: a time it does not reach by then is None.
+   * - ``recovery_cut_short``
+     - Within the stint, a later mode write or the heater dropping the
+       mode at a window (``element_mode_dropped_projected``) stopped part
+       of the recovery, or a setpoint write stopped the compressor short
+       of the new setpoint: there is no ``full_minutes``.
+   * - ``tou_schedule_unknown``
+     - TOU is on and its periods are not known: the stint's walk counts
+       the heater's marker, or a window in force when that is unknown
+       too.
 
 The ones about readiness:
 
