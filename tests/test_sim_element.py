@@ -12,6 +12,7 @@ from nwp500.sim import (
     Environment,
     HeaterState,
     History,
+    ReservationEntry,
     Scenario,
     Schedules,
     Settings,
@@ -38,13 +39,14 @@ def params() -> HeaterParams:
 def _scenario(
     upper: float, lower: float, *, given: Any = None, **settings: Any
 ) -> Scenario:
-    return Scenario(
-        **(given or {}),
-        start=T0,
-        horizon=timedelta(hours=12),
-        tz="UTC",
-        state=HeaterState(upper_f=upper, lower_f=lower),
-        settings=Settings(
+    """The tank at ``upper``/``lower``, its settings overridden by
+    ``settings`` and the scenario's fields by ``given``."""
+    base: dict[str, Any] = {
+        "start": T0,
+        "horizon": timedelta(hours=12),
+        "tz": "UTC",
+        "state": HeaterState(upper_f=upper, lower_f=lower),
+        "settings": Settings(
             **{
                 "setpoint_f": SETPOINT,
                 "hp_lower_on_f": 105.0,
@@ -52,9 +54,10 @@ def _scenario(
                 **settings,
             }
         ),
-        history=History(compressor_stopped_at=T0 - timedelta(hours=2)),
-        environment=Environment(ambient_f=68.0, humidity=48.0),
-    )
+        "history": History(compressor_stopped_at=T0 - timedelta(hours=2)),
+        "environment": Environment(ambient_f=68.0, humidity=48.0),
+    }
+    return Scenario(**{**base, **(given or {})})
 
 
 def _stint(
@@ -322,6 +325,85 @@ class TestWhatEndsTheRecovery:
             set(r.reasons)
         )
 
+    @pytest.mark.parametrize("mode", [ENERGY_SAVER, HIGH_DEMAND])
+    def test_a_drop_while_the_heat_pump_runs_on_cuts_it_short(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """The element is dropped short of the setpoint; the compressor
+        carrying on does not make the recovery whole."""
+        s = _scenario(125.0, 110.0, given={"schedules": _tou_opening_at(12, 8)})
+        r = element_mode(s, params, mode=mode)
+        assert r.upper_setpoint_minutes is None
+        assert r.full_minutes is None
+        assert {"element_mode_dropped_projected", "recovery_cut_short"} <= (
+            set(r.reasons)
+        )
+
+    def test_a_later_mode_write_cuts_it_short(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(
+            125.0,
+            110.0,
+            given={
+                "commands": Commands(
+                    writes=(Write(at=T0 + timedelta(minutes=5), mode=1),)
+                )
+            },
+        )
+        r = element_mode(s, params, mode=HIGH_DEMAND)
+        assert r.full_minutes is None
+        assert "recovery_cut_short" in r.reasons
+
+    def test_the_writes_own_stop_at_the_start_does_not_cut(
+        self, params: HeaterParams
+    ) -> None:
+        """Electric stops a compressor running at the start; nothing is
+        left to heat, and the recovery is done at once."""
+        s = _scenario(
+            125.0,
+            110.0,
+            given={
+                "state": HeaterState(
+                    upper_f=SETPOINT + 1.2,
+                    lower_f=SETPOINT + 0.7,
+                    compressor_running=True,
+                )
+            },
+        )
+        r = element_mode(s, params, mode=ELECTRIC)
+        assert r.full_minutes == 0.0
+        assert "recovery_cut_short" not in r.reasons
+
+    def test_a_reservation_at_the_start_sets_the_target(
+        self, params: HeaterParams
+    ) -> None:
+        """An entry firing at the start holds 98 half-degrees C,
+        120.2 °F: the tank is above it."""
+        entry = ReservationEntry(
+            week=0xFE, hour=12, minute=0, mode=4, setpoint_half_c=98
+        )
+        s = _scenario(
+            125.0,
+            110.0,
+            given={"schedules": Schedules(reservations=(entry,))},
+        )
+        r = element_mode(s, params, mode=HIGH_DEMAND)
+        assert r.upper_setpoint_minutes == 0.0
+        assert "upper_element_does_not_start" not in r.reasons
+
+    def test_an_empty_stint_does_not_report_a_later_drop(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(
+            SETPOINT + 1.2,
+            SETPOINT + 0.7,
+            given={"schedules": _tou_opening_at(12, 3)},
+        )
+        r = element_mode(s, params, mode=HIGH_DEMAND)
+        assert r.end_minute == 0.0
+        assert "element_mode_dropped_projected" not in r.reasons
+
     def test_the_scenarios_own_setpoint_is_the_target(
         self, params: HeaterParams
     ) -> None:
@@ -370,7 +452,8 @@ def test_a_slot_must_be_finite(params: HeaterParams, slot: float) -> None:
 def test_one_slot_wider_than_the_stint_holds_it_all(
     params: HeaterParams,
 ) -> None:
-    r = _stint(params, ELECTRIC, slot_minutes=1e9)
+    # Wide enough that the span is under 1e-9 of a slot.
+    r = _stint(params, ELECTRIC, slot_minutes=1e12)
     assert len(r.profile) == 1
     assert r.profile[0].element_wh / 1000.0 == pytest.approx(
         r.element_kwh, abs=1e-3

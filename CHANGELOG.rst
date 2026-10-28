@@ -363,15 +363,14 @@ Changed
   recovery=None)`` walks the scenario with the mode written at its
   start, as ``time_to_ready`` walks each mode: to the end of the
   recovery the write sets off (every element and the heat pump stopped)
-  within ``READY_HORIZON``, or to a switch-back, which writes the
-  scenario's own mode back. It takes a ``Scenario`` in place of
+  within ``READY_HORIZON``, or to a switch-back. It takes a ``Scenario`` in place of
   ``state``, ``settings`` and ``at``, and no ``hp_lower_minutes``: the
   heat pump heats the layers in the same walk. ``ElementModeResult``
   carries the walk's times, the elements' minutes and kWh, the heat
   pump's kWh (``heat_pump_kwh``), a ``profile`` of ``ElementInterval``
   slots with both, the tank at the end with its layers, and
-  ``reasons``; ``plan`` is gone. A recovery a later write or the
-  heater's drop at a window ends has no ``full_minutes``
+  ``reasons``; ``plan`` is gone. A recovery part of which a later mode
+  write or the heater's drop at a window stops has no ``full_minutes``
   (``recovery_cut_short``), and a write of the mode already in force
   says ``mode_already_in_force``. From 125/110 °F at a 140.9 °F
   setpoint the High Demand and Energy Saver recoveries end 127 and 128

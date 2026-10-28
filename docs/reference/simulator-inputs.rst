@@ -1100,9 +1100,9 @@ The ones ``element_mode`` adds about its own answer:
      - ``switch_back_after_minutes`` ends the stint before its recovery
        does: a time it does not reach by then is None.
    * - ``recovery_cut_short``
-     - A later write or the heater dropping the mode at a window
-       (``element_mode_dropped_projected``) ended the recovery before
-       its targets: there is no ``full_minutes``.
+     - A later mode write or the heater dropping the mode at a window
+       (``element_mode_dropped_projected``) stopped part of the recovery
+       before its target: there is no ``full_minutes``.
    * - ``tou_schedule_unknown``
      - TOU is on and its periods are not known: the stint's walk counts
        the heater's marker, or a window in force when that is unknown

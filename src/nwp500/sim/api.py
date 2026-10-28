@@ -878,17 +878,19 @@ def _stint_end(
     heating that begins within ``opens`` of it (the write's lag and the
     compressor's lockout), and all that begins before that has ended (an
     element handing over, the heat pump alongside); and whether a write
-    or the heater dropping the mode ended it rather than its targets.
-    ``start`` when none begins; None when it is still heating at the
-    walk's end."""
+    or the heater dropping the mode ended part of it after ``start``
+    rather than its targets: a stop on a mode change (``stop`` "mode";
+    a setpoint write stops a run only once it has reached the new
+    setpoint). ``start`` when none begins; None when it is still
+    heating at the walk's end."""
     end, cut = start, False
     for h in sorted(simulation.heating, key=lambda h: h.start.at):
         if h.start.at > max(end, start + opens):
             break
         if h.stop == "horizon":
             return None
-        if h.end >= end:
-            end, cut = h.end, h.stop in ("mode", "write")
+        end = max(end, h.end)
+        cut = cut or (h.stop == "mode" and h.end > start)
     return end, cut
 
 
@@ -970,12 +972,14 @@ def element_mode(
     counts as in force), its heat pump's recovery served by ``recovery``
     when given. It ends when the recovery the write sets off does (every
     element and the heat pump stopped), within ``READY_HORIZON``, or at
-    the switch-back, whichever is first. A recovery a later write or the
-    heater dropping the mode at a window ends has no ``full_minutes``
+    the switch-back, whichever is first. A recovery part of which a
+    later mode write or the heater dropping the mode at a window stops
+    has no ``full_minutes``
     (``recovery_cut_short``); a write of the mode already in force
     changes nothing, and the stint is what the heater does in it anyway
     (``mode_already_in_force``). The ready level and the setpoint are
-    the setpoint in force once the start's writes have taken.
+    the setpoint in force once the start's writes and reservation entries
+    have fired.
 
     ``setpoint_f`` is a setpoint written with the mode instead of the
     heater's (``settings.setpoint_f``), which still decides the
@@ -983,9 +987,9 @@ def element_mode(
     resting heater read as inside a window.
 
     ``ready_upper_f`` is an upper-zone temperature that counts as ready,
-    the setpoint by default. ``switch_back_after_minutes`` writes the
-    scenario's own mode back that long after the start, ending the
-    stint there: a time it does not reach first is None. ``reachable``
+    the setpoint by default. ``switch_back_after_minutes`` ends the
+    stint that long after the start: a time it does not reach first is
+    None. ``reachable``
     says whether a mode write can take at the start: not while heating
     is disabled, nor inside a TOU window, by the heater's own marker
     (``tou_marked``). An unknown marker counts as in force: the
@@ -1010,19 +1014,6 @@ def element_mode(
         and switch_back_after_minutes >= 0.0
     ):
         raise ValueError("switch_back_after_minutes must not be negative")
-    # The setpoint in force once the start's writes have taken, as the
-    # device holds it.
-    written = next(
-        (
-            w.setpoint_f
-            for w in reversed(s.commands.writes)
-            if w.at <= s.start and w.setpoint_f is not None
-        ),
-        None,
-    )
-    if setpoint_f is not None:
-        written = setpoint_f
-    target = s.settings.setpoint_f if written is None else quantise(written)
     windows, schedule_unknown = _windows(s, s.start + READY_HORIZON)
 
     def stint_walk(horizon: timedelta) -> SimulationResult:
@@ -1033,6 +1024,14 @@ def element_mode(
     # The mode's own recovery, to its end or the walk's: where the
     # switch-back, if any, falls against it.
     walked = stint_walk(READY_HORIZON)
+    # The setpoint in force once the start's writes and entries have
+    # fired, as the device holds it.
+    target = s.settings.setpoint_f
+    for w in sorted(walked.simulation.writes, key=lambda w: w.fires_at):
+        if w.fires_at > s.start:
+            break
+        if w.outcome == "fired" and w.setpoint_f is not None:
+            target = w.setpoint_f
     c = params.controller
     opens = c.write_start_lag + c.restart_lockout
     found = _stint_end(walked.simulation, s.start, opens)
@@ -1045,12 +1044,18 @@ def element_mode(
         end = min(end, back)
     reasons = list(BASE_REASONS)
     # The stint itself, its times, energy and end all from the one
-    # walk; one with nothing to heat is walked as far as a write could
-    # start something, for what it rests on.
-    stint = stint_walk(end - s.start if end > s.start else opens)
-    reasons += stint.reasons
-    # The heater dropping the mode at a window that opens as the stint
-    # ends is the first walk's to see.
+    # walk; one with nothing to heat is walked just past the write
+    # taking effect, for what its entry decision rests on.
+    stint = stint_walk(
+        end - s.start
+        if end > s.start
+        else c.write_start_lag + timedelta(seconds=1)
+    )
+    reasons += [
+        r for r in stint.reasons if r != "element_mode_dropped_projected"
+    ]
+    # The heater dropping the mode at a window: the first walk's, which
+    # also sees one that opens as the stint ends.
     if any(at <= end for at, _ in walked.simulation.drops):
         reasons.append("element_mode_dropped_projected")
     sim = stint.simulation
