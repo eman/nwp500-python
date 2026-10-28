@@ -529,17 +529,35 @@ class TestTheSourcesWindow:
 
 
 class _Keeper:
-    """A ``HomeAssistantBook`` that books ``booked`` without a request."""
+    """A ``HomeAssistantBook`` that books ``booked`` and gives
+    ``layers_f`` without a request."""
 
-    def __init__(self, booked: sim.Booked | None) -> None:
+    def __init__(
+        self,
+        booked: sim.Booked | None,
+        layers_f: tuple[float, ...] | None = None,
+    ) -> None:
         self.booked = booked
+        self.layers_f = layers_f
         self.asked: list[tuple[datetime, sim.HeaterParams]] = []
+        self.probes: list[tuple[float, float] | None] = []
 
     def book(self, at: datetime, params: sim.HeaterParams) -> Any:
         from nwp500 import sim_home_assistant as ha
 
         self.asked.append((at, params))
         return ha.BookAnswer(self.booked, False, ("book: a note",))
+
+    def layers(
+        self,
+        at: datetime,
+        params: sim.HeaterParams,
+        probes: tuple[float, float] | None = None,
+    ) -> Any:
+        from nwp500 import sim_home_assistant as ha
+
+        self.probes.append(probes)
+        return ha.LayersAnswer(self.layers_f, ("layers: a note",))
 
 
 class TestTheHeatBook:
@@ -643,6 +661,35 @@ class TestTheHeatBook:
         assert not keeper.asked
         assert "no_heat_book" in result.reasons
         assert "not now" in caplog.text
+
+    def test_the_walk_starts_from_the_layers_given(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The keeper's layers, the scenario's probes laid over them:
+        the simulator no longer makes them of the two probes."""
+        caplog.set_level("INFO")
+        n = sim.default_params(2).tank.layers
+        keeper = _Keeper(None, tuple(70.0 + 5.0 * k for k in range(n)))
+        _, result = self._run(keeper)
+        s = _scenario()
+        assert keeper.probes == [(s.state.upper_f, s.state.lower_f)]
+        assert "tank_profile_estimated" not in result.reasons
+        assert "layers: a note" in caplog.text
+
+    def test_without_layers_the_probes_are_the_tank(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        keeper = _Keeper(None)
+        _, result = self._run(keeper)
+        assert "tank_profile_estimated" in result.reasons
+        assert "layers: a note" in caplog.text
+
+    def test_a_scenario_not_starting_now_takes_no_layers(self) -> None:
+        n = sim.default_params(2).tank.layers
+        keeper = _Keeper(None, (120.0,) * n)
+        _, result = self._run(keeper, start=NOW + timedelta(hours=1))
+        assert not keeper.probes
+        assert "tank_profile_estimated" in result.reasons
 
     def test_the_keeper_takes_the_draw_flows_volume(
         self, monkeypatch: pytest.MonkeyPatch

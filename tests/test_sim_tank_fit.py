@@ -14,6 +14,7 @@ from nwp500 import sim_score as ss
 from nwp500.sim import default_params
 from nwp500.sim import tank_fit as tf
 from nwp500.sim.defaults import site_example_params
+from nwp500.sim.history import REPLAY
 from nwp500.sim.params import LossParams, TankParams
 from nwp500.sim.physics import stratified as S
 
@@ -188,7 +189,7 @@ class TestTheRecord:
         _, _, path = history
         for c in _coasts(path):
             part = record.before(c.start)
-            assert len(part) <= tf.REPLAY / tf.MINUTE + 20
+            assert len(part) <= REPLAY / tf.MINUTE + 20
             assert tf.errors(TRUE, part, c) == tf.errors(TRUE, record, c)
 
     @pytest.mark.parametrize("seed", range(6))

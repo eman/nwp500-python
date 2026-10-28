@@ -224,11 +224,14 @@ Hot water and the heat book
 .. automodule:: nwp500.sim.ready
    :members: assess, Recovery, TankNow, showers_ready_for, whole_showers
 
+.. automodule:: nwp500.sim.history
+   :members: Step, house_gpm, drawn_gal, record, replay, REPLAY,
+      FlowVolume, AMBIENT_DEFAULT_F
+
 .. automodule:: nwp500.sim.book
    :members: Booked, SpanLoss, full_tank_book,
-      full_tank, walk_booked, loss_ceiling_btu, BookedPath, Step,
-      book_steps, house_gpm, step_heat_btu, inlet_now_f, mains_f,
-      draw_out
+      full_tank, walk_booked, loss_ceiling_btu, BookedPath,
+      book_steps, step_heat_btu, inlet_now_f, mains_f, draw_out
 
 
 The engine and the physics
@@ -285,7 +288,7 @@ The pieces the entry points are built from.
 .. automodule:: nwp500.sim.tank_fit
    :members: TankRecord, tank_record, replay, start_state, Coast, errors,
       rmse, event_rmse, fit, TankFit, TERMS, CONDENSER_TERMS, term_values,
-      with_terms, REPLAY, ASSIMILATE_EVERY, MINUTE
+      with_terms, ASSIMILATE_EVERY, MINUTE
 
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,

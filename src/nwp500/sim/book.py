@@ -75,9 +75,10 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from statistics import median
-from typing import Literal, Protocol
+from typing import Protocol
 
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
+from nwp500.sim.history import FlowVolume, Step, house_gpm
 from nwp500.sim.params import BookParams, CirculationParams
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
@@ -104,12 +105,6 @@ def draw_btu(
     return (
         gal * WATER_BTU_PER_GAL_F * max(0.0, delivery_f(upper_f, p) - inlet_f)
     )
-
-
-#: What a recorded flow counts: gallons delivered through the mixing
-#: valve, or gallons of tank water (a meter or a detector on the
-#: heater's hot outlet).
-FlowVolume = Literal["delivered", "tank"]
 
 
 def draw_out(
@@ -151,55 +146,6 @@ def is_full(upper_f: float, lower_f: float, p: BookParams) -> bool:
     finished and nothing moving since, or the compressor running with
     nothing moving, the book's anchor."""
     return abs(upper_f - lower_f) <= p.uniform_band_f
-
-
-#: The air a recorded step stands in when none was recorded, °F.
-AMBIENT_DEFAULT_F = 65.0
-
-
-@dataclass(frozen=True)
-class Step:
-    """One interval of a recorded history, ``seconds`` long: what the
-    book reads of it (``Booked.step``, ``book_steps``)."""
-
-    seconds: float
-    upper_f: float
-    lower_f: float
-    #: The household flow meter's reading, gal/min (0 without a meter:
-    #: no draw is booked), in ``flow_volume``'s gallons.
-    flow_gpm: float
-    compressor_on: bool
-    element_on: bool
-    ambient_f: float
-    inlet_f: float
-    #: Circulation running, and its own flow, gal/min.
-    circulating: bool = False
-    circulation_gpm: float = 0.0
-    #: Whether ``inlet_f`` was measured (an inlet probe).
-    inlet_measured: bool = False
-    #: Circulation's flow over the span ``flow_gpm`` was read over, 0
-    #: where it was off: a meter's figure over a trailing window still
-    #: holds a run for a while after it stops. None: ``circulation_gpm``
-    #: while circulating, else none.
-    circulation_in_meter_gpm: float | None = None
-    #: Gallons the run had circulated before this step, runs closer
-    #: than ``CirculationParams.run_gap_min`` taken as one: what
-    #: ``CirculationParams.book_circuit_gal`` caps.
-    run_gal_before: float = 0.0
-    #: What ``flow_gpm`` counts (``FlowVolume``).
-    flow_volume: FlowVolume = "delivered"
-
-
-def house_gpm(s: Step, circulation: CirculationParams | None = None) -> float:
-    """The household's flow: the meter less the share of it that is
-    circulation (``CirculationParams.meter_share`` of its own flow),
-    never below 0."""
-    share = 0.0 if circulation is None else circulation.meter_share
-    if s.circulation_in_meter_gpm is not None:
-        return max(0.0, s.flow_gpm - share * s.circulation_in_meter_gpm)
-    if s.circulating:
-        return max(0.0, s.flow_gpm - share * s.circulation_gpm)
-    return s.flow_gpm
 
 
 def circulated_btu(

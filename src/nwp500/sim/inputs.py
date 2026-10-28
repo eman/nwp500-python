@@ -76,7 +76,7 @@ class HeaterState(_Value):
     upper_f: float
     lower_f: float
     #: The tank's layers, °F, the bottom first, as its history left
-    #: them (``tank_fit.start_state``): as many as the parameters lay out
+    #: them (``history.replay``): as many as the parameters lay out
     #: (``TankParams.layers``). None: the simulator makes them of the
     #: two probes, and says ``tank_profile_estimated``.
     layers_f: tuple[float, ...] | None = None

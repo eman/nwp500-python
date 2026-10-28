@@ -149,7 +149,8 @@ Built by ``sim_adapters.heater_state(status)``.
      - degF
      - None
      - The tank's layers, the bottom first, as its history left them
-       (``sim.tank_fit.start_state``), as many as
+       (``sim_adapters.layers_from_history`` and
+       ``layers_from_changes``, ``sim.history.replay``), as many as
        ``TankParams.layers``. With None, the simulator makes them of the
        two probes, and ``reasons`` says ``tank_profile_estimated``.
    * - ``compressor_running``

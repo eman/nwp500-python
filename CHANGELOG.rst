@@ -8,6 +8,18 @@ Unreleased
 Added
 -----
 
+- **The tank's layers from a recorded history, for any caller.**
+  ``sim_adapters.layers_from_history`` and ``layers_from_changes`` give
+  ``HeaterState.layers_f`` at an instant from a heater's statuses or its
+  values' changes, the household's flow, the circulation's runs and the
+  air, as ``book_from_history`` and ``book_from_changes`` take them:
+  the last 24 hours walked through the tank (``nwp500.sim.history``:
+  ``record``, ``replay``), corrected to the probes as they were read.
+  ``HomeAssistantBook.layers`` gives them from Home Assistant, and
+  ``nwp-cli simulate run`` starts a scenario that starts now from them,
+  with the scenario's probes laid over them: before, it started from
+  the two probes alone, as ``tank_profile_estimated`` said.
+
 - **A tank's layers as where a simulation starts**
   (``HeaterState.layers_f``, as many as ``TankParams.layers``, the
   bottom first). Two probes do not say how the water between and below
@@ -138,6 +150,13 @@ Added
 
 Changed
 -------
+
+- **A recorded history's ``Step`` lives in ``nwp500.sim.history``**,
+  with ``house_gpm``, ``FlowVolume``, ``AMBIENT_DEFAULT_F`` and the
+  replay's span, ``REPLAY`` (from ``sim.book`` and ``sim.tank_fit``,
+  which still import them). A step says when it starts (``Step.at``),
+  which ``book_steps_from_history`` and ``book_steps_from_changes``
+  fill.
 
 - **Calibration fits the layered tank** (breaking).
   ``sim_calibrate.calibrate`` and ``calibrate_changes`` fit the tank's

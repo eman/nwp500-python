@@ -92,11 +92,13 @@ from nwp500.sim import (
     default_params,
 )
 from nwp500.sim import full_tank_book as sim_full_tank_book
-from nwp500.sim.book import AMBIENT_DEFAULT_F, FlowVolume, book_steps
-from nwp500.sim.book import Step as BookStep
+from nwp500.sim import history as sim_history
+from nwp500.sim.book import book_steps
 from nwp500.sim.circulation import merge_runs
 from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
 from nwp500.sim.defaults import SITE_CIRCULATION
+from nwp500.sim.history import AMBIENT_DEFAULT_F, FlowVolume
+from nwp500.sim.history import Step as BookStep
 from nwp500.sim.inputs import POWER_OFF, VACATION
 from nwp500.sim.location_air import (
     SITE_LOCATION_AIR,
@@ -1851,6 +1853,7 @@ def _book_steps_on(
                 inlet_measured=in_f is not None,
                 run_gal_before=before_col[i],
                 flow_volume=flow_volume,
+                at=grid[i],
             )
         )
     return steps
@@ -2000,6 +2003,42 @@ def book_from_history(
     )
 
 
+def _heard_until(
+    rows: ChangeRows,
+    observed: Iterable[datetime],
+    heard: Iterable[tuple[datetime, datetime]] | None,
+    at: datetime,
+    flow_outages: Sequence[tuple[datetime, datetime]],
+) -> tuple[datetime, list[tuple[datetime, datetime]]] | None:
+    """When the heater was first heard before ``at``, and the spans it
+    went unheard since (``book_from_changes``'s ``observed`` and
+    ``heard``). None when it is not heard at ``at``, or the rows or the
+    flow are in an outage then: a gap is walked across, its values
+    held, so only one still open at ``at`` leaves the tank unknown."""
+    unseen: list[tuple[datetime, datetime]]
+    if heard is not None:
+        spans = [(a, b) for a, b in join_spans(heard) if a <= at]
+        if not spans or spans[-1][1] < at:
+            return None
+        since = spans[0][0]
+        unseen = [(b, a) for (_, b), (a, _) in itertools.pairwise(spans)]
+    else:
+        instants = sorted(
+            t for t in (t.astimezone(UTC) for t in observed) if t <= at
+        )
+        if not instants:
+            return None
+        gap = max_gap(instants)
+        if at - instants[-1] > gap:
+            return None
+        since = instants[0]
+        unseen = silences(instants, gap)
+    for a, b in [*unseen, *rows.outages, *flow_outages]:
+        if a.astimezone(UTC) <= at <= b.astimezone(UTC):
+            return None
+    return since, unseen
+
+
 def book_from_changes(
     rows: ChangeRows,
     observed: Iterable[datetime],
@@ -2048,29 +2087,10 @@ def book_from_changes(
     ``at`` only inside a span."""
     at = at.astimezone(UTC)
     flow_outages = list(flow_outages)
-    unseen: list[tuple[datetime, datetime]]
-    if heard is not None:
-        spans = [(a, b) for a, b in join_spans(heard) if a <= at]
-        if not spans or spans[-1][1] < at:
-            return None
-        since = spans[0][0]
-        unseen = [(b, a) for (_, b), (a, _) in itertools.pairwise(spans)]
-    else:
-        instants = sorted(
-            t for t in (t.astimezone(UTC) for t in observed) if t <= at
-        )
-        if not instants:
-            return None
-        gap = max_gap(instants)
-        if at - instants[-1] > gap:
-            return None
-        since = instants[0]
-        unseen = silences(instants, gap)
-    # A gap is walked across, its values held: only one still open now
-    # leaves the book unknown.
-    for a, b in [*unseen, *rows.outages, *flow_outages]:
-        if a.astimezone(UTC) <= at <= b.astimezone(UTC):
-            return None
+    found = _heard_until(rows, observed, heard, at, flow_outages)
+    if found is None:
+        return None
+    since, unseen = found
     # A missing reading is none: it neither moves water nor shows the
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
@@ -2109,6 +2129,95 @@ def book_from_changes(
         since,
         max_silence=None,
     )
+
+
+# ── the tank's layers, from a recorded history ──────────────────────
+
+
+def layers_from_history(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    params: HeaterParams,
+    *,
+    at: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+    flow_volume: FlowVolume = "delivered",
+    probes: tuple[float, float] | None = None,
+) -> tuple[float, ...] | None:
+    """The tank's layers at ``at`` (``HeaterState.layers_f``) as what
+    was recorded over the ``sim_history.REPLAY`` before it leaves them
+    (``sim.history.replay``): the recorded statuses, the meter's
+    ``flow``, the ``circulation``'s runs and the ``air``, as
+    ``book_from_history`` takes them, on its steps
+    (``book_steps_from_history``), the ``probes`` (upper, lower) °F laid
+    over them, by default the record's last. None when the record reads
+    both probes at no instant in that span."""
+    at = at.astimezone(UTC)
+    runs = list(circulation)
+    params = with_circulation_terms(params, runs)
+    steps = book_steps_from_history(
+        readings,
+        start=at - sim_history.REPLAY,
+        end=at,
+        flow=flow,
+        circulation=runs,
+        circulation_flow=circulation_flow,
+        air=air,
+        params=params,
+        flow_volume=flow_volume,
+    )
+    state = sim_history.replay(steps, params, probes=probes)
+    return None if state is None else state.layers_f
+
+
+def layers_from_changes(
+    rows: ChangeRows,
+    observed: Iterable[datetime],
+    params: HeaterParams,
+    *,
+    at: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+    flow_outages: Iterable[tuple[datetime, datetime]] = (),
+    air_outages: Iterable[tuple[datetime, datetime]] = (),
+    heard: Iterable[tuple[datetime, datetime]] | None = None,
+    flow_volume: FlowVolume = "delivered",
+    probes: tuple[float, float] | None = None,
+) -> tuple[float, ...] | None:
+    """``layers_from_history`` from a heater's values' changes, as
+    ``book_from_changes`` takes them, with the same refusals: None when
+    the heater is not heard at ``at``, or it or the flow is in an
+    outage then. Across a span nobody saw, each value holds from before
+    it, the flow for ``FLOW_HOLD`` and then none."""
+    at = at.astimezone(UTC)
+    flow_outages = list(flow_outages)
+    found = _heard_until(rows, observed, heard, at, flow_outages)
+    if found is None:
+        return None
+    since, unseen = found
+    flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    flows = _ended_in(flows, flow_outages, FLOW_HOLD)
+    runs = list(circulation)
+    params = with_circulation_terms(params, runs)
+    steps = book_steps_from_changes(
+        rows,
+        start=max(since, at - sim_history.REPLAY),
+        end=at,
+        flow=flows,
+        circulation=runs,
+        circulation_flow=circulation_flow,
+        air=air,
+        params=params,
+        air_outages=air_outages,
+        unheard=unseen,
+        flow_volume=flow_volume,
+    )
+    state = sim_history.replay(steps, params, probes=probes)
+    return None if state is None else state.layers_f
 
 
 def _ended_in(

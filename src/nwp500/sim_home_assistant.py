@@ -46,8 +46,9 @@ from typing import Any, cast
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
-from nwp500.sim.book import AMBIENT_DEFAULT_F, Booked, FlowVolume
+from nwp500.sim.book import Booked
 from nwp500.sim.cold_supply import ColdSupply, on_the_mains
+from nwp500.sim.history import AMBIENT_DEFAULT_F, FlowVolume
 from nwp500.sim.location_air import (
     FIT_LAGS_H,
     FittedLocationAir,
@@ -2165,6 +2166,31 @@ class BookAnswer:
     notes: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class LayersAnswer:
+    """``HomeAssistantBook.layers``' answer: the tank's layers (None
+    without them) and what they rest on."""
+
+    layers_f: tuple[float, ...] | None
+    notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _Gathered:
+    """The history ``HomeAssistantBook`` holds, read for an instant."""
+
+    rows: HeaterHistory
+    got: History
+    params: HeaterParams
+    flow: list[Reading]
+    flow_out: list[Span]
+    runs: list[Span]
+    inlet: list[Reading]
+    inlet_out: list[Span]
+    air: list[Reading]
+    air_out: list[Span]
+
+
 def _heating_lost(
     held: HeaterHistory, newer: HeaterHistory, start: datetime, end: datetime
 ) -> HeaterHistory:
@@ -2341,25 +2367,26 @@ class HomeAssistantBook:
                 self._units.pop(n, None)
                 self._notes.append(f"book: {n}'s unit not read ({err})")
 
-    def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
-        """The book at ``at`` from the history held, with no request:
-        CPU work, for an executor. None, and notes why, without the
-        heater's or the flow's history, or with no anchor."""
-        at = at.astimezone(UTC)
+    def _gathered(
+        self, at: datetime, params: HeaterParams, what: str
+    ) -> tuple[_Gathered | None, list[str]]:
+        """What ``book`` and ``layers`` read of the history held at
+        ``at``, and the notes on it, each headed ``what``: None without
+        the heater's or the flow's history, or the flow unconverted."""
         rows, got = self._heater_history, self._history
         # The last heater read's notes, then this keeper's.
         notes = [*(rows.notes if rows is not None else ()), *self._notes]
         if rows is None or got is None:
-            notes.append("book: no history read")
-            return BookAnswer(None, False, tuple(notes))
+            notes.append(f"{what}: no history read")
+            return None, notes
         if self._heater_tried != self._heater_read:
             # Since the last heater read that worked, its flags are
             # unknown: none held from before may credit heating.
             notes.append(
-                "book: none past the heater's last read "
+                f"{what}: none past the heater's last read "
                 f"({cast(datetime, self._heater_read).isoformat()})"
             )
-            return BookAnswer(None, False, tuple(notes))
+            return None, notes
         since = at - self.window
         e = self.entities
         circulation = params.circulation
@@ -2370,7 +2397,7 @@ class HomeAssistantBook:
                 params, circulation=replace(circulation, meter_share=0.0)
             )
             notes.append(
-                "book: the flow has no circulation in it, so the "
+                f"{what}: the flow has no circulation in it, so the "
                 "circulation's meter_share is taken as 0"
             )
         # After a read that failed, nothing is known past the last that
@@ -2379,14 +2406,14 @@ class HomeAssistantBook:
         failed = self._tried is not None and self._tried != self._read
         if failed and self._read is not None and self._read < at:
             unseen = [(self._read, at)]
-            notes.append(f"book: nothing read since {self._read.isoformat()}")
+            notes.append(f"{what}: nothing read since {self._read.isoformat()}")
         try:
             flow, unread = got.converted(
                 self.flow, self._units.get(self.flow), to_gpm, at
             )
         except ValueError as err:
-            notes.append(f"book: {self.flow}: {err}")
-            return BookAnswer(None, False, tuple(notes))
+            notes.append(f"{what}: {self.flow}: {err}")
+            return None, notes
         flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
         runs: list[Span] = []
         if e.circulation_speed is not None:
@@ -2399,12 +2426,12 @@ class HomeAssistantBook:
             )
             if known is None:
                 notes.append(
-                    f"book: the circulation's runs are unknown ({why}); "
-                    "booked with only its outages"
+                    f"{what}: the circulation's runs are unknown ({why}); "
+                    "taken with only its outages"
                 )
             if unknown:
                 notes.append(
-                    "book: the circulation's runs are known only from "
+                    f"{what}: the circulation's runs are known only from "
                     f"{unknown[-1][1].isoformat()}"
                 )
             # Across the pump's outages its speed holds, as a sampled
@@ -2424,7 +2451,7 @@ class HomeAssistantBook:
                 )
                 inlet_out = busy(bad, got.outages.get(e.inlet, []), unseen)
             except ValueError as err:
-                notes.append(f"book: {e.inlet}: {err}")
+                notes.append(f"{what}: {e.inlet}: {err}")
         air: list[Reading] = []
         air_out: list[Span] = []
         if e.air is not None:
@@ -2434,49 +2461,134 @@ class HomeAssistantBook:
                 )
                 air_out = busy(bad, got.outages.get(e.air, []), unseen)
             except ValueError as err:
-                notes.append(f"book: {e.air}: {err}")
+                notes.append(f"{what}: {e.air}: {err}")
         if runs and params.circulation is None:
             notes.append(
-                "book: the circulation's runs priced at one installation's "
-                "terms (CirculationParams)"
+                f"{what}: the circulation's runs priced at one "
+                "installation's terms (CirculationParams)"
             )
+        return (
+            _Gathered(
+                rows,
+                got,
+                params,
+                flow,
+                flow_out,
+                runs,
+                inlet,
+                inlet_out,
+                air,
+                air_out,
+            ),
+            notes,
+        )
+
+    def _air_note(self, g: _Gathered, at: datetime, what: str) -> str | None:
+        """Which air the history was taken with, without an air sensor's
+        readings."""
+        rows = g.rows
+        if g.air or not rows.rows.heater_air_f:
+            return None
+        # As the steps take it: unheard across its outages and the
+        # silences between the instants it was heard.
+        heard = sorted(t.astimezone(UTC) for t in rows.observed if t <= at)
+        silent = sa.silences(heard, sa.max_gap(heard)) if heard else []
+        settled = sa.settled_air(
+            sa.compressor_changes(rows.rows),
+            rows.rows.heater_air_f,
+            until=at,
+            unheard=[*silent, *rows.rows.outages],
+        )
+        if settled:
+            return (
+                f"{what}: the air is the heater's own reading while its "
+                "compressor runs"
+            )
+        return (
+            f"{what}: the heater's air not read while its compressor "
+            f"ran {sa.HEATER_AIR_SETTLE.total_seconds() / 60:g} "
+            f"minutes: the air is the default, {AMBIENT_DEFAULT_F:g} °F"
+        )
+
+    def layers(
+        self,
+        at: datetime,
+        params: HeaterParams,
+        probes: tuple[float, float] | None = None,
+    ) -> LayersAnswer:
+        """The tank's layers at ``at`` (``HeaterState.layers_f``) from
+        the history held (``sim_adapters.layers_from_changes``), the
+        ``probes`` (upper, lower) °F laid over them, by default the
+        history's last, with no request: CPU work, for an executor.
+        None, and notes why, without
+        the heater's or the flow's history, the heater not heard at
+        ``at`` or the flow unknown then."""
+        at = at.astimezone(UTC)
+        g, notes = self._gathered(at, params, "layers")
+        if g is None:
+            return LayersAnswer(None, tuple(notes))
+        try:
+            layers = sa.layers_from_changes(
+                g.rows.rows,
+                g.rows.observed,
+                g.params,
+                at=at,
+                flow=g.flow,
+                circulation=g.runs,
+                air=g.air,
+                flow_outages=g.flow_out,
+                air_outages=g.air_out,
+                flow_volume=self.flow_volume,
+                probes=probes,
+            )
+        except ValueError as err:
+            notes.append(f"layers: {err}")
+            return LayersAnswer(None, tuple(notes))
+        air = self._air_note(g, at, "layers")
+        if air is not None:
+            notes.append(air)
+        if layers is None:
+            notes.append(
+                f"layers: {self.flow} is unknown now"
+                if any(a <= at <= b for a, b in g.flow_out)
+                else "layers: the heater not heard now, or its probes "
+                "not read in the history"
+            )
+        return LayersAnswer(layers, tuple(notes))
+
+    def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
+        """The book at ``at`` from the history held, with no request:
+        CPU work, for an executor. None, and notes why, without the
+        heater's or the flow's history, or with no anchor."""
+        at = at.astimezone(UTC)
+        g, notes = self._gathered(at, params, "book")
+        if g is None:
+            return BookAnswer(None, False, tuple(notes))
+        e = self.entities
+        rows, got, params = g.rows, g.got, g.params
+        flow_out = g.flow_out
+        inlet = g.inlet
         try:
             booked = sa.book_from_changes(
                 rows.rows,
                 rows.observed,
                 params,
                 at=at,
-                flow=flow,
-                circulation=runs,
+                flow=g.flow,
+                circulation=g.runs,
                 inlet=inlet,
-                air=air,
+                air=g.air,
                 flow_outages=flow_out,
-                inlet_outages=inlet_out,
-                air_outages=air_out,
+                inlet_outages=g.inlet_out,
+                air_outages=g.air_out,
                 flow_volume=self.flow_volume,
             )
         except ValueError as err:
             notes.append(f"book: {err}")
             return BookAnswer(None, False, tuple(notes))
-        if not air and rows.rows.heater_air_f:
-            # As the book takes it: unheard across its outages and the
-            # silences between the instants it was heard.
-            heard = sorted(t.astimezone(UTC) for t in rows.observed if t <= at)
-            silent = sa.silences(heard, sa.max_gap(heard)) if heard else []
-            settled = sa.settled_air(
-                sa.compressor_changes(rows.rows),
-                rows.rows.heater_air_f,
-                until=at,
-                unheard=[*silent, *rows.rows.outages],
-            )
-            notes.append(
-                "book: the air is the heater's own reading while its "
-                "compressor runs"
-                if settled
-                else "book: the heater's air not read while its compressor "
-                f"ran {sa.HEATER_AIR_SETTLE.total_seconds() / 60:g} "
-                f"minutes: the air is the default, {AMBIENT_DEFAULT_F:g} °F"
-            )
+        air = self._air_note(g, at, "book")
+        if air is not None:
+            notes.append(air)
         if booked is None:
             if any(a <= at <= b for a, b in flow_out):
                 notes.append(f"book: {self.flow} is unknown now")

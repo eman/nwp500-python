@@ -18,7 +18,7 @@ from nwp500 import sim_calibrate as sc
 from nwp500 import sim_home_assistant as ha
 from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 from nwp500.models import DeviceStatus
-from nwp500.sim.book import AMBIENT_DEFAULT_F
+from nwp500.sim.history import AMBIENT_DEFAULT_F
 from nwp500.temperature import DeciCelsius
 
 T0 = datetime(2026, 1, 5, tzinfo=UTC)
@@ -681,6 +681,36 @@ class TestTheBookKeptCurrent:
         assert want is not None and got.booked is not None
         assert got.booked.heat_btu == pytest.approx(want.heat_btu)
         assert not got.inlet_measured
+
+    def test_its_layers_are_layers_from_changes(self) -> None:
+        client = WindowedClient(_book_rows(), BOOK_UNITS)
+        keeper = _keeper(client)
+        asyncio.run(keeper.read(END))
+        got = keeper.layers(END, self.P)
+        history = asyncio.run(
+            ha.read_heater_history(
+                cast(ha.HomeAssistantClient, client),
+                BOOK_HEATER,
+                END - ha.BOOK_WINDOW,
+                END,
+            )
+        )
+        flow = asyncio.run(
+            client.read_history([FLOW], END - ha.BOOK_WINDOW, END)
+        )
+        readings, _ = flow.converted(FLOW, "gal/min", ha.to_gpm, END)
+        want = sa.layers_from_changes(
+            history.rows, history.observed, self.P, at=END, flow=readings
+        )
+        assert want is not None and got.layers_f == pytest.approx(want)
+        laid = keeper.layers(END, self.P, (130.0, 120.0)).layers_f
+        assert laid is not None and laid != got.layers_f
+
+    def test_no_history_read_gives_no_layers(self) -> None:
+        keeper = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is None
+        assert "layers: no history read" in got.notes
 
     def test_a_tank_flow_books_as_book_from_changes(self) -> None:
         """``flow_volume="tank"`` goes through to the book: each gallon
