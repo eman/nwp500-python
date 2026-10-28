@@ -345,12 +345,12 @@ class TestTimeToReady:
         point = next(p for p in walk.points if p.at == then)
         from nwp500.sim.delivery import deliverable
 
-        assert (
-            deliverable(
-                params, point.upper_f, point.lower_f, point.layers_f
-            ).gal
-            >= 40.0
-        )
+        def gal(p: Any) -> float:
+            return deliverable(params, p.upper_f, p.lower_f, p.layers_f).gal
+
+        assert gal(point) >= 40.0
+        # The first: no earlier instant of the walk delivers it.
+        assert all(gal(p) < 40.0 for p in walk.points if p.at < then)
         wh = sum(
             (p.input_wh or 0.0) + p.element_wh
             for p in walk.points
@@ -362,6 +362,39 @@ class TestTimeToReady:
         # Its element's caveats are its own row's.
         assert "element_model_small_n" in rows["electric"].reasons
         assert rows["heat_pump"].reasons == ()
+
+    def test_a_scenarios_own_mode_write_does_not_set_every_row(
+        self, params: HeaterParams
+    ) -> None:
+        """Each row's own mode replaces the scenario's write at the
+        start: the heat pump's row is the heat pump's."""
+        own = time_to_ready(_scenario(), params, bath_gal=40.0)
+        written = time_to_ready(
+            _scenario(commands=Commands(writes=(Write(at=T0, mode=2),))),
+            params,
+            bath_gal=40.0,
+        )
+        rows = {m.mode: m for m in written.bath.by_mode}
+        assert written.bath.by_mode == own.bath.by_mode
+        assert (
+            rows["heat_pump"].ready_in_minutes
+            != rows["electric"].ready_in_minutes
+        )
+
+    def test_an_unknown_marker_and_schedule_hold_the_element_writes(
+        self, params: HeaterParams
+    ) -> None:
+        """TOU on with neither its periods nor the heater's marker known:
+        in force, so no element mode's write takes and every row is the
+        heat pump's."""
+        s = _scenario(settings=UNMARKED, schedules=Schedules(tou_enabled=True))
+        r = time_to_ready(s, params, bath_gal=40.0)
+        times = {m.ready_in_minutes for m in r.bath.by_mode}
+        assert len(times) == 1
+        assert not any(
+            m.reachable_now for m in r.bath.by_mode if m.mode != "heat_pump"
+        )
+        assert "tou_schedule_unknown" in r.reasons
 
     def test_a_bath_out_of_reach_has_no_time(
         self, params: HeaterParams

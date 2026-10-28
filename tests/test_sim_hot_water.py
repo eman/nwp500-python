@@ -403,6 +403,16 @@ class TestTheParameters:
         ]
         assert params_from_document(doc) == params
 
+    def test_the_books_draw_flow_is_the_draws(
+        self, params: HeaterParams
+    ) -> None:
+        doc = json.loads(json.dumps(params_to_document(params)))
+        del doc["draw"]["draw_gpm"]
+        doc["book"] = {"draw_gpm": 0.5}
+        assert params_from_document(doc).draw.draw_gpm == 0.5
+        doc["draw"]["draw_gpm"] = 0.4
+        assert params_from_document(doc).draw.draw_gpm == 0.4
+
     def test_a_document_without_readiness_takes_the_defaults(
         self, params: HeaterParams
     ) -> None:
@@ -535,3 +545,15 @@ class TestTheAdaptersAndTheCodec:
         assert json.loads(json.dumps(doc)) == doc
         assert doc["delivery"] == list(r.delivery)
         assert doc["windows"][0]["depleted"] is True
+
+    def test_a_tap_that_never_runs_cold_is_null_in_a_document(
+        self, params: HeaterParams
+    ) -> None:
+        """A mains at or above the line never takes the tap under it:
+        unbounded gallons, which JSON holds as null."""
+        hot = Environment(ambient_f=68.0, humidity=48.0, inlet_f=110.0)
+        r = simulate(_scenario(environment=hot), params)
+        assert r.windows[0].deliverable_gal == float("inf")
+        doc = result_to_document(r)
+        assert doc["windows"][0]["deliverable_gal"] is None
+        json.dumps(doc, allow_nan=False)

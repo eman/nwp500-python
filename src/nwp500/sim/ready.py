@@ -169,9 +169,11 @@ def assess(
     ``shower_volume_default``; ``bath_ready_within_probe_resolution``;
     ``draw_in_progress``; ``element_running``; ``tou_window_in_force``;
     and, the bath not ready, ``heating_not_scheduled``,
-    ``time_to_ready_unavailable``, ``heating_not_triggered``,
-    ``bath_waits_for_tou_window_end`` or
-    ``bath_not_reached_by_full_recovery``."""
+    ``time_to_ready_unavailable`` (no heat-pump walk),
+    ``heating_not_triggered`` or ``bath_not_reached_by_full_recovery``
+    (its walk never gets there, idle or not), or
+    ``bath_waits_for_tou_window_end`` (it gets there after the end of
+    the TOU-capped ``recovery``)."""
     p = params or ReadinessParams()
     bath_gal = round(bath_gal, 1)  # compared as it is reported
     reasons = list(ALWAYS)
@@ -220,19 +222,28 @@ def assess(
             }
         )
     ready_in = by_mode[0]["ready_in_minutes"]
+    ready_at = by_mode[0]["ready_at"]
+    hp_run = by_run.get("heat_pump")
     if not ready:
-        if recovery.outcome == "not_scheduled":
+        if not_heating:
             reasons.append("heating_not_scheduled")
-        elif recovery.outcome == "unavailable" and not recovery.hp_unavailable:
+        elif hp_run is None or "time_to_ready_unavailable" in hp_run.reasons:
             reasons.append("time_to_ready_unavailable")
-        elif recovery.outcome == "idle" and ready_in is None:
-            reasons.append("heating_not_triggered")
         elif ready_in is None:
             reasons.append(
-                "bath_waits_for_tou_window_end"
-                if recovery.tou_capped
+                "heating_not_triggered"
+                if recovery.outcome == "idle"
                 else "bath_not_reached_by_full_recovery"
             )
+        elif (
+            recovery.tou_capped
+            and recovery.points
+            and ready_at is not None
+            and ready_at > recovery.points[-1][0]
+        ):
+            # The capped recovery ends short of the bath: it waits for
+            # the window to end.
+            reasons.append("bath_waits_for_tou_window_end")
 
     ready_for = showers_ready_for(now_gal.gal, shower_gal)
     return {

@@ -701,9 +701,12 @@ for up to 24 hours (``READY_HORIZON``), to the first instant its layers
 deliver the bath; its energy is the walk's electricity to then. The
 heat pump's row is the heater's own walk: from now if the compressor
 runs, else from its own trigger on the coast to it, under the scenario's
-draws, with the TOU cap applied where the recovery ends
-(``r.recovery``). An element mode's row carries the reasons its walk
-adds to the heat pump's. An element mode is not reachable inside a TOU
+draws and the TOU windows the heater keeps (an unknown marker with an
+unknown schedule counts as in force); ``r.recovery`` is the next
+recovery with the TOU cap judged where it ends. A mode the scenario
+writes at its start is replaced by each row's own; its later writes
+still take. An element mode's row carries the reasons its walk adds to
+the answer's. An element mode is not reachable inside a TOU
 window, nor anything while heating is disabled. The bath defaults to
 ``ReadinessParams.bath_gal`` (28.7 gal, one household's), the shower to
 12 gal; ``defaults_used`` says when they were used.

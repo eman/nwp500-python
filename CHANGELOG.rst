@@ -163,8 +163,11 @@ Changed
   ``readiness`` takes ``inlet_f``. ``time_to_ready`` walks the scenario
   in each mode, the mode written at the start, for up to a day
   (``READY_HORIZON``), to the first instant its layers deliver the
-  bath, the energy the walk's to then; an element mode's row carries
-  its walk's own reasons. On 34 deliveries held out of the fit, none of
+  bath, the energy the walk's to then, under the TOU windows the heater
+  keeps; the heat pump's walk's reasons are the answer's, and an
+  element mode's row carries what its walk adds to them. It raises
+  ``ValueError`` for a setpoint written out of range, as ``simulate``
+  does. On 34 deliveries held out of the fit, none of
   which crossed the line, the replayed layers under-promised 3 % of
   them, by 1.16 gal on average, against 6 % and 2.00 gal from the
   probes alone. Of the three draws in the record that took the upper
@@ -186,9 +189,11 @@ Changed
 
 - **A parameters document fitted with the heat book still reads.** Its
   ``book`` part and its readiness ``evidence``, ``delivered_lag_gal``
-  and ``fall_f_per_gal`` are named by ``unknown_fields`` and left out;
-  ``book`` and ``readiness`` in its ``unfitted`` are dropped
-  (``RETIRED_TERMS``).
+  and ``fall_f_per_gal`` are named by ``unknown_fields`` and left out,
+  its book's ``draw_gpm`` read as ``DrawParams.draw_gpm``; ``book`` and
+  ``readiness`` in its ``unfitted`` are dropped (``RETIRED_TERMS``).
+  A result document holds unbounded gallons (a mains at or above the
+  line) as null.
 
 - **A recorded history's ``Step`` lives in ``nwp500.sim.history``**,
   with ``house_gpm``, ``FlowVolume``, ``AMBIENT_DEFAULT_F`` and the
@@ -367,8 +372,10 @@ Removed
   ``circulation.CirculationLoss``; ``CirculationParams.loss_btu_per_gal``
   and ``book_circuit_gal``; ``Recovery.coast_btu``, ``coast_draw_gal``
   and ``hp_btu_per_h``; the reasons ``no_heat_book``,
-  ``heat_book_aged``, ``book_uncalibrated`` and
-  ``readiness_uncalibrated``.
+  ``heat_book_aged``, ``book_uncalibrated``,
+  ``readiness_uncalibrated``, ``upper_probe_stand_in``,
+  ``capped_at_observed_volume`` and
+  ``bath_ready_within_estimate_error``.
 - The readiness evidence and the outlet lag: ``ReadinessParams.evidence``,
   ``delivered_lag_gal`` and ``fall_f_per_gal``;
   ``delivery.EXAMPLE_EVIDENCE``, ``with_example_evidence``,

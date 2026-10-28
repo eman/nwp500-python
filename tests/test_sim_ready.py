@@ -136,22 +136,41 @@ class TestAssess:
         assert a["bath"]["ready_in_minutes"] is None
         assert "bath_not_reached_by_full_recovery" in a["reasons"]
 
-    def test_inside_a_tou_window_the_bath_waits_for_its_end(self) -> None:
-        runs = [ModeRun(mode, None, None) for mode in MODES]
-        a = _assess(
-            _tank(tou_window=True),
-            Recovery("ok", tou_capped=True),
-            Deliverable(10.0, "layers"),
-            runs,
+    def test_a_bath_past_the_capped_recovery_waits_for_its_end(
+        self,
+    ) -> None:
+        """The capped recovery ends 30 minutes in; the heat pump's walk
+        reaches the bath after it, once the window has ended."""
+        capped = Recovery(
+            "ok",
+            [(NOW, 120.0, 100.0), (NOW + timedelta(minutes=30), 125.0, 130.0)],
+            tou_capped=True,
         )
+        a = _assess(_tank(tou_window=True), capped, Deliverable(10.0, "layers"))
         assert "bath_waits_for_tou_window_end" in a["reasons"]
         assert "bath_not_reached_by_full_recovery" not in a["reasons"]
+        within = _assess(
+            _tank(tou_window=True),
+            capped,
+            Deliverable(10.0, "layers"),
+            _runs(20.0),
+        )
+        assert "bath_waits_for_tou_window_end" not in within["reasons"]
         m = _modes(a)
         assert m["heat_pump"]["reachable_now"]
         assert not any(
             m[x]["reachable_now"]
             for x in ("energy_saver", "high_demand", "electric")
         )
+
+    def test_a_failed_heat_pump_walk_has_no_time(self) -> None:
+        runs = [
+            ModeRun("heat_pump", None, None, ("time_to_ready_unavailable",)),
+            *_runs()[1:],
+        ]
+        a = _assess(now_gal=Deliverable(10.0, "layers"), runs=runs)
+        assert "time_to_ready_unavailable" in a["reasons"]
+        assert "bath_not_reached_by_full_recovery" not in a["reasons"]
 
     def test_an_idle_heater_with_no_time_says_why(self) -> None:
         runs = [ModeRun(mode, None, None) for mode in MODES]

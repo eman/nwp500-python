@@ -9,6 +9,7 @@ could not be modelled is named in the result's ``reasons``, and every
 default used in its ``defaults_used``.
 """
 
+import contextlib
 import dataclasses
 import itertools
 import math
@@ -1233,29 +1234,56 @@ _MODE_SETTING: Mapping[HeaterMode, int] = MappingProxyType(
 )
 
 
+def _mode_walk(
+    s: Scenario,
+    params: HeaterParams,
+    mode: HeaterMode,
+    horizon: timedelta,
+    windows: Sequence[tuple[datetime, datetime]],
+    recovery: RecoveryModel | None,
+) -> SimulationResult:
+    """``s`` walked for ``horizon`` with ``mode`` written at its start:
+    in place of a mode the scenario writes there (its setpoint kept),
+    and before its later writes, which still take."""
+    write = Write(at=s.start, mode=_MODE_SETTING[mode])
+    at_start = [
+        w.model_copy(update={"mode": None})
+        for w in s.commands.writes
+        if w.at <= s.start and w.setpoint_f is not None
+    ]
+    commands = s.commands.model_copy(
+        update={
+            "writes": (
+                *at_start,
+                write,
+                *(w for w in s.commands.writes if w.at > s.start),
+            )
+        }
+    )
+    walked = s.model_copy(update={"commands": commands, "horizon": horizon})
+    return simulate(
+        walked, params, recovery=recovery, tou_windows_in_force=windows
+    )
+
+
 def _mode_run(
     s: Scenario,
     params: HeaterParams,
     mode: HeaterMode,
     bath_gal: float,
+    windows: Sequence[tuple[datetime, datetime]],
     recovery: RecoveryModel | None,
 ) -> ModeRun:
     """The scenario walked with ``mode`` written at its start (the mode's
     entry rule run, as the heater runs it on a write) to the first
     instant its layers deliver ``bath_gal`` (``delivery.deliverable``),
-    within ``READY_HORIZON``. Its reasons are the walk's."""
-    write = Write(at=s.start, mode=_MODE_SETTING[mode])
-    commands = s.commands.model_copy(
-        update={"writes": (write, *s.commands.writes)}
-    )
-    walked = s.model_copy(
-        update={"commands": commands, "horizon": READY_HORIZON}
-    )
+    within ``READY_HORIZON``, under the TOU ``windows``. Its reasons are
+    the walk's to that instant, or over the whole horizon when it does
+    not get there."""
     try:
-        result = simulate(walked, params, recovery=recovery)
+        result = _mode_walk(s, params, mode, READY_HORIZON, windows, recovery)
     except SimulationError:
         return ModeRun(mode, None, None, ("time_to_ready_unavailable",))
-    reasons = tuple(result.reasons)
     wh = 0.0
     for pt in result.simulation.points:
         wh += (pt.input_wh or 0.0) + pt.element_wh
@@ -1266,12 +1294,23 @@ def _mode_run(
             pt.layers_f,
             inlet_f=s.environment.inlet_f,
         )
-        if got.gal >= bath_gal:
-            minutes = (pt.at - s.start).total_seconds() / 60.0
-            return ModeRun(
-                mode, round(minutes, 1), round(wh / 1000.0, 2), reasons
-            )
-    return ModeRun(mode, None, None, reasons)
+        if got.gal < bath_gal:
+            continue
+        span = pt.at - s.start
+        reasons = result.reasons
+        if span > timedelta(0):
+            # What the walk rests on up to the bath, not past it.
+            with contextlib.suppress(SimulationError):
+                reasons = _mode_walk(
+                    s, params, mode, span, windows, recovery
+                ).reasons
+        return ModeRun(
+            mode,
+            round(span.total_seconds() / 60.0, 1),
+            round(wh / 1000.0, 2),
+            tuple(reasons),
+        )
+    return ModeRun(mode, None, None, tuple(result.reasons))
 
 
 def time_to_ready(
@@ -1294,12 +1333,16 @@ def time_to_ready(
     The gallons are the tank's layers' (``HeaterState.layers_f``, else
     the profile the probes stand for: ``tank_profile_estimated``) at the
     scenario's inlet (``sim.delivery``). Each mode's time is the
-    scenario walked in that mode (``simulate``, the mode written at the
-    start) to the first instant its layers deliver the bath, within
-    ``READY_HORIZON``; its recovery's duration served by ``recovery``
+    scenario walked with that mode written at its start (``simulate``;
+    the scenario's later writes still take) to the first instant its
+    layers deliver the bath, within ``READY_HORIZON``, under the TOU
+    windows the heater keeps (``marked_windows``: an unknown marker
+    counts as in force); its recovery's duration served by ``recovery``
     when given (``extensions.RecoveryModel``) and by physics alone
     otherwise, which runs short on long recoveries (the simulator
-    explanation's *Accuracy*).
+    explanation's *Accuracy*). The heat pump's walk's reasons, to the
+    bath, are the answer's; an element mode's row says what its own walk
+    adds to them.
 
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
@@ -1308,8 +1351,12 @@ def time_to_ready(
     (``draw_forecast.shower_gal``). ``drawing``: water is being drawn
     now. ``inlet_measured``: the scenario's inlet is the mains as
     measured; without it the answer says ``inlet_temp_modelled``.
+
+    Raises ``ValueError`` for a setpoint written outside the heater's
+    range, as ``simulate`` does.
     """
     s = scenario
+    _check_setpoints(s)
     p = params.readiness
     defaults: list[str] = []
     bath_source: Literal["configured", "request"] = "request"
@@ -1349,20 +1396,36 @@ def time_to_ready(
     # not ready now.
     nxt = Recovery("unavailable")
     runs: list[ModeRun] = []
+    hp_reasons: tuple[str, ...] = ()
+    schedule_unknown = False
     if now_gal.gal < bath_gal:
         nxt = next_recovery(s, params, recovery=recovery)
         if nxt.outcome != "not_scheduled":
+            end = s.start + READY_HORIZON
+            scheduled = _scheduled(s, s.start, end)
+            marker = tou_marked(s.settings)
+            if marker is None and scheduled is None:
+                # TOU on, neither its periods nor the heater's marker
+                # known: in force, as for the counter test.
+                marker = True
+            windows = marked_windows(s.start, marker, s.start, end, scheduled)
+            schedule_unknown = scheduled is None
             walked = [
-                _mode_run(s, params, mode, bath_gal, recovery) for mode in MODES
+                _mode_run(s, params, mode, bath_gal, windows, recovery)
+                for mode in MODES
             ]
-            # Each element mode's row says what its own walk adds to the
-            # heat pump's.
+            # The heat pump's walk's reasons are the answer's; each
+            # element mode's row says what its own walk adds to them.
             hp_reasons = walked[0].reasons
             runs = [
                 replace(
                     r,
                     reasons=(
-                        ()
+                        tuple(
+                            x
+                            for x in r.reasons
+                            if x == "time_to_ready_unavailable"
+                        )
                         if r.mode == "heat_pump"
                         else tuple(x for x in r.reasons if x not in hp_reasons)
                     ),
@@ -1415,6 +1478,8 @@ def time_to_ready(
         answer["reasons"] = _unique(
             [
                 *answer["reasons"],
+                *hp_reasons,
+                *(["tou_schedule_unknown"] if schedule_unknown else []),
                 *_unfitted(params, "compressor", "power"),
                 *(
                     [CIRCULATION_UNKNOWN]
@@ -1425,6 +1490,11 @@ def time_to_ready(
                 ),
             ]
         )
+    # A mode's row says only what the answer does not.
+    for row in answer["bath"]["by_mode"]:
+        row["reasons"] = [
+            r for r in row["reasons"] if r not in answer["reasons"]
+        ]
     return typed(answer, s.start, nxt, defaults)
 
 

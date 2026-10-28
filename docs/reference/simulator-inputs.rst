@@ -1128,19 +1128,26 @@ The ones about readiness:
    * - ``heating_not_triggered``
      - Not ready, and the heater would not start itself within 24 h.
    * - ``time_to_ready_unavailable``
-     - Not ready, and the next recovery couldn't be worked out.
+     - Not ready, and the heat pump's walk couldn't be completed.
    * - ``bath_waits_for_tou_window_end``
-     - Not ready, and the TOU cap stops the recovery short of the bath
-       until the window ends.
+     - Not ready, and the TOU cap stops the next recovery short of the
+       bath: the heat pump's walk gets there after the window ends.
    * - ``bath_not_reached_by_full_recovery``
      - Not ready, and the heat pump's walk does not cover the bath
        within ``READY_HORIZON`` (24 h).
 
 Each mode's time is the scenario walked with that mode written at its
-start (``simulate``, the mode's entry rule run as on a write) to the
+start (``simulate``, the mode's entry rule run as on a write; a mode the
+scenario writes there is replaced, its later writes still take) to the
 first instant its layers deliver the bath, and its energy the walk's
-electricity to then. An element mode's row carries the reasons its walk
-gives beyond the heat pump's (``ModeReady.reasons``).
+electricity to then. The walks keep the TOU windows the heater does
+(``marked_windows``); with TOU on and neither its periods nor the
+heater's marker known, a window is taken as in force throughout, and
+the answer says ``tou_schedule_unknown``. The heat pump's walk's
+reasons, to the bath, are the answer's; an element mode's row carries
+the reasons its walk gives beyond the answer's (``ModeReady.reasons``).
+A setpoint written outside the heater's range is a ``ValueError``, as
+for ``simulate``.
 
 A bath or shower volume not given is named in ``defaults_used``
 (``bath_gal=``, ``shower_gal=``), not in ``reasons``. The readiness

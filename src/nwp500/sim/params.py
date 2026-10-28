@@ -1122,7 +1122,9 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     (its ``loss.ua_btu_hr_f``, or ``standby`` or ``gap_tau`` unfitted)
     carries none of the layered tank's fitted terms, so its tank reads
     as the priors (a loss it leaves null included), with ``tank``
-    unfitted. A schema other than
+    unfitted. A document fitted with the heat book has its book's
+    ``draw_gpm`` read as ``DrawParams.draw_gpm`` where the draw part
+    carries none. A schema other than
     ``PARAMS_SCHEMA`` is a ``ValueError``, and so are a ``doc`` that is
     not an object and a value of the wrong type (a number where a list
     goes, a string where a number goes).
@@ -1155,6 +1157,15 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         if not isinstance(given, Mapping):
             raise ValueError(f"part {name!r} is not an object")
         values = {}
+        book = doc.get("book")
+        if (
+            name == "draw"
+            and "draw_gpm" not in given
+            and isinstance(book, Mapping)
+            and "draw_gpm" in book
+        ):
+            # The flow that is a draw was the heat book's term.
+            given = {**given, "draw_gpm": book["draw_gpm"]}
         hints = get_type_hints(cls)
         for f in fields(cls):
             if two_zone and name == "loss" and given.get(f.name) is None:
