@@ -386,6 +386,15 @@ Changed
 Fixed
 -----
 
+- ``sim_score`` starts a delivery from a replay without its own draw.
+  The meter's delivery starts and the detector's draw onsets run on
+  different clocks, the onset 5–10 s earlier and, in 3 of 34 held-out
+  deliveries, in the minute before, so the replay took the delivery's
+  draw from the tank it then scored. A draw whose onset falls in the
+  settle before a delivery (``calibration.DRAW_SETTLE_S``, when the
+  meter saw no flow) is now left out. No held-out metric moves: the
+  held-out deliveries are all floors, and none of the three changes
+  sides.
 - In Electric, an upper element a lowered setpoint stops at its new off
   point hands over to the lower element, as one stopping at its own
   does; the lower zone was left where it was. Not when a mode write at

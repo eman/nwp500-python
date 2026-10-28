@@ -307,6 +307,54 @@ class TestTheDeliveries:
         assert got.over_promised == 1
 
 
+class TestADeliverysOwnDraw:
+    """A delivery starts on the meter's clock, its draw's onset on the
+    detector's: seconds earlier, and in the minute before."""
+
+    AT = T0 + timedelta(hours=2, seconds=5)
+
+    def _record(
+        self, ready: Prepared, draws: list[tuple[datetime, float]]
+    ) -> tank_fit.TankRecord:
+        return tank_fit.tank_record(ready.frame, draws)
+
+    def test_its_onset_is_left_out_of_the_replay(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        own = (self.AT - timedelta(seconds=10), 15.0)
+        record = self._record(ready, [own])
+        kept = ss._without_own_draw(record, self.AT)  # pyright: ignore[reportPrivateUsage]
+        assert kept.draws == ()
+
+        def layers(r: tank_fit.TankRecord) -> tuple[float, ...] | None:
+            return ss._state(site, r, self.AT, 140.0, 138.0).layers_f  # pyright: ignore[reportPrivateUsage]
+
+        assert layers(kept) == layers(self._record(ready, []))
+        assert layers(record) != layers(kept)
+
+    def test_an_earlier_draw_is_kept(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, _ = history
+        earlier = (self.AT - timedelta(minutes=30), 5.0)
+        own = (self.AT - timedelta(seconds=10), 15.0)
+        record = self._record(ready, [earlier, own])
+        kept = ss._without_own_draw(record, self.AT)  # pyright: ignore[reportPrivateUsage]
+        assert kept.draws == (earlier,)
+
+    def test_it_is_scored_as_if_it_had_not_happened(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        e = ss.Delivery(self.AT, 140.0, 138.0, 140.0, True, 5.0)
+        found = ss.Events(deliveries=(e,))
+        own = (self.AT - timedelta(seconds=10), 15.0)
+        with_own = ss.score(found, site, record=self._record(ready, [own]))
+        without = ss.score(found, site, record=self._record(ready, []))
+        assert with_own.metrics == without.metrics
+
+
 class TestTheInterval:
     def test_one_day_has_no_spread(self) -> None:
         s = ss._stat([1.0, 3.0], [5, 5])  # pyright: ignore[reportPrivateUsage]

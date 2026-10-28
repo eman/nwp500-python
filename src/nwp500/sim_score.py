@@ -50,7 +50,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
@@ -602,6 +602,19 @@ def _state(
     )
 
 
+def _without_own_draw(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
+    """``record`` up to a delivery at ``at`` (``TankRecord.before``),
+    without the draws whose onset falls in the settle before it: the
+    meter saw no flow there (``calibration.DRAW_SETTLE_S``), so a draw
+    another clock places there is the delivery's own, which the replay
+    would otherwise take from the tank it starts."""
+    part = record.before(at)
+    settle = at - timedelta(seconds=cal.DRAW_SETTLE_S)
+    return replace(
+        part, draws=tuple(d for d in part.draws if not settle <= d[0] <= at)
+    )
+
+
 def _loads(
     record: tf.TankRecord | None,
     start: datetime,
@@ -797,6 +810,8 @@ def _delivery_score(
     """Scored, and whether it promised more than a crossing delivered.
     A draw that did not cross delivered at least its gallons: only a
     prediction under them is an error, an under-promise."""
+    if record is not None:
+        record = _without_own_draw(record, e.at)
     try:
         got = sim.readiness(
             _state(params, record, e.at, e.upper_f, e.lower_f),
