@@ -49,6 +49,7 @@ metered draws.
 import hashlib
 import json
 import math
+from bisect import bisect_left
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time, timedelta
@@ -615,6 +616,20 @@ def _without_own_draw(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
     )
 
 
+def _unreplayed(
+    record: tf.TankRecord, at: datetime
+) -> tuple[tuple[datetime, float], ...]:
+    """The record's draws in the minute ``at`` falls in, before it. The
+    replay to ``at`` stops at that minute's start (``tank_fit.replay``)
+    and an event's own draws start at ``at``, so an event that starts
+    there takes these at its start."""
+    lo = bisect_left(
+        record.draws, (record.instant(record.minute(at)), -math.inf)
+    )
+    hi = bisect_left(record.draws, (at, -math.inf))
+    return record.draws[lo:hi]
+
+
 def _loads(
     record: tf.TankRecord | None,
     start: datetime,
@@ -647,7 +662,10 @@ def _recovery_score(
     ``params`` give a start after the time off it had; False when the
     simulator could not answer."""
     horizon = (e.end - e.start) + RECOVERY_SLACK
-    draws = tuple(sim.Draw(at=t, gallons=g) for t, g in e.draws)
+    early = () if record is None else _unreplayed(record, e.start)
+    draws = tuple(sim.Draw(at=e.start, gallons=g) for _, g in early) + tuple(
+        sim.Draw(at=t, gallons=g) for t, g in e.draws
+    )
     hold = start_hold_min(
         params.compressor,
         None
@@ -918,9 +936,11 @@ def score(
     public simulator, its error against the record, and each metric
     over its events (``Stat``, days in ``tz``). ``inlet_f`` is the mains
     the draws meet; None, the parameters'. With the ``record``
-    (``tank_fit.tank_record``), each recovery, window and draw starts
-    from the layers its replay leaves (``HeaterState.layers_f``); with
-    none, from the two probes.
+    (``tank_fit.tank_record``), each event starts from the layers its
+    replay leaves (``HeaterState.layers_f``), a recovery taking the
+    record's draws its replay stopped short of at its start and a
+    delivery's replay leaving out its own draw; with none, from the two
+    probes.
 
     The metrics, lower is better unless a bias:
 
