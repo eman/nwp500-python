@@ -132,27 +132,26 @@ the tank takes the upper probe down with it.
   heating. In Vacation an entry is skipped; powered off, it fires and
   turns the heater on, judged as a mode write.
 
-**The heat book.** Two probes cannot say how much hot water is left
-once the hot/cold boundary sits between them; they can when the tank is
-full. The book (``sim.book``) starts from a full tank and books the
-heat from there: out by each draw through the mixing valve and by
-standby, in from the compressor and the elements, all of it drawable
-wherever it lands, in a draw's cold water at the bottom too. At each
-draw it reckons the water the tap gets: it falls as the water above the
-rising front mixes and, once the booked heat is spent, to the line and
-below. The tank's probes are the layered tank's, with a book or without
-one. The library starts a
-book only from what the caller knows: after a small draw the probes
-can still read full.
+**The tank's layers now.** Two probes cannot say how much hot water is
+left once the hot/cold boundary sits between them: after a draw the
+bottom is the inlet's, which they read as no different from a tank that
+coasted. A scenario's state can carry the tank's layers
+(``HeaterState.layers_f``), as its recent history left them
+(``sim.history``): the last day's record replayed through the layered
+tank, the probes laid over the end. Without them the simulator starts
+from the profile the two probes stand for, and says so
+(``tank_profile_estimated``).
 
 **Hot water at the tap** (``sim.delivery``). Deliverable gallons are the
 water past the mixing valve before the delivered water falls below the
-line (105 degF by default), from the book's heat above its empty point.
-The probe is not at the tap: the delivered water crosses the line some
-gallons after the upper probe does, the tank water above it, so every
-answer carries that lag. Without a book, the
-answer is the tank's heat as its two probes place it, or evidence from
-the caller's own draws where it shows more. A draw window runs cold when the delivered water falls below the line.
+line (105 degF by default): the water leaving the top in turn, each
+gallon through the valve, to the first it delivers under the line, the
+mains at the scenario's inlet. The tank's outlet is above the upper
+probe, so the tap stays hot for the water above the probe after the
+probe has crossed. The delivered temperature along a walk is the top
+layer's water through the valve, so the gallons and the delivery agree
+on when the tank runs out. A draw window runs cold when the delivered
+water falls below the line.
 
 
 Inputs
@@ -206,8 +205,8 @@ Parameters and their defaults
 =============================
 
 ``HeaterParams`` holds every fitted or device constant, in parts: tank,
-loss, compressor, power, element, draw, controller, readiness and the
-book. Each field records where its value came from
+loss, compressor, element, draw, controller, readiness and circulation.
+Each field records where its value came from
 (``params.provenance_of``): ``measured`` on the heater by a targeted
 run, ``fitted`` from its record, or an engineering ``default``; and
 what it describes (``params.scope_of``): the **heater**, an NWP500's
@@ -225,10 +224,8 @@ the one draw setting with no fitted numbers in it, and the one that
 errs the safe way for a valve owner who leaves it unset (every gallon
 charged as tank water, so depletion is called early, never late). An
 installation with a valve sets its line (``with_valve``). It also has
-no circulation and no readiness evidence, and it names the
-installation's heat book, readiness and draw terms as not fitted
-(``HeaterParams.unfitted``), so the answers they reach say
-``book_uncalibrated``, ``readiness_uncalibrated`` or
+no circulation, and it names the installation's draw terms as not
+fitted (``HeaterParams.unfitted``), so the answers they reach say
 ``draw_uncalibrated`` until an installation's own meter fits them. The 50 and
 80 gal models get the same parameters with the tank's volume scaled by
 rated storage (45.2 and 76.1 gal against the 65's 63.2), and nothing
@@ -255,9 +252,7 @@ What carries to another installation, and what does not:
   runs inside its recoveries, so a recovery without them comes out a
   little long.
 - **The draw terms** (the inlet temperature, the valve's line) were
-  measured through that installation's mixing valve, on its mains. The
-  **book's** and **readiness's** terms are that installation's too, and
-  its evidence over-promises on an installation without a valve.
+  measured through that installation's mixing valve, on its mains.
 - **Circulation** (the loop's volume, its return's rest and cooling, its
   flow) acts only when a circulation schedule is given.
 
@@ -285,17 +280,18 @@ Entry points
 ``standby(state, environment, loads, params, start=..., until=...)``
    The tank coasting with no heating: jacket loss and draws.
 
-``readiness(state, settings, params, book=...)``
+``readiness(state, settings, params, inlet_f=...)``
    "How much hot water is left?": deliverable gallons now, and what the
-   answer rests on.
+   answer rests on: the tank's layers, or the probes alone.
 
-``time_to_ready(scenario, params, bath_gal=..., book=...)``
+``time_to_ready(scenario, params, bath_gal=...)``
    "When can I run a bath?": ready now or not, the margin, the time to
    ready and its energy in each heating mode, and the showers the tank
-   is ready for. The heat pump's time follows the recovery the heater
-   runs next (``next_recovery``): the tank coasts on the standby model
-   to the heater's own trigger, and the recovery runs from there to the
-   heater's stop threshold, with the TOU cap judged where it ends.
+   is ready for. Each mode's time is the scenario walked with that mode
+   written at its start, up to a day ahead, to the first instant its
+   layers deliver the bath; the energy is the walk's to then. In the
+   heat pump the tank coasts to the heater's own trigger and recovers
+   from there, with the TOU cap judged where it ends.
 
 ``element_mode(state, settings, params, mode=..., at=...)``
    One recovery in an element mode, from the element model.
@@ -363,7 +359,7 @@ are the held-out scoreboard's (``sim_score``): parameters calibrated
   events from 2026-02-25), with the upper probe crossing the line
   standing in for the tap running cold: recorded depletions caught, 5 of
   5; draws called empty where the probe never crossed, 17 of 1,306
-  (1.3 %). From 2026-07-01, after the heat book's fit, 2 of 2 caught
+  (1.3 %). From 2026-07-01, 2 of 2 caught
   (one independent event) and 2 false calls in 488. Replayed over whole
   days (214, 2026-02-26 to 2026-09-27), the two-zone tank drifted from
   the record: mean absolute error 3.22 degF a day on the upper zone and
@@ -382,22 +378,18 @@ are the held-out scoreboard's (``sim_score``): parameters calibrated
   upper within 0.290 degF RMS (0.183-0.458) and the lower within 2.09
   (1.42-2.86), against 0.281 and 2.16 for the two zones' fitted draw
   response (:doc:`draws`);
-- the heat book against the tank's re-anchors, fitted February-June and
-  scored July-September: mean absolute error 1,987 BTU (about 5 gal),
-  against 3,761 BTU with textbook constants; flat to 18 h after an
-  anchor and about double beyond;
-- the five recorded crossings of the line, with the book as it was when
-  it held back the heat in a draw's cold water: all caught, 0.8-12.7
-  gal early, in sample (the book's form was chosen with all five in
-  view; fitted without them, 2 of 5); draws of 5 gal or more that did
-  not cross, called empty before they ended: 14 of 446 (3.1 %);
-- the deliverable answer from the book at the start of the four usable
-  drawdowns to the line, February to October, against the gallons
-  delivered to the crossing net of the heat added, the lag included:
-  3.8 gal mean absolute error (7.4 gal under to 5.7 over). Holding
-  back the heat in a draw's cold water under-read the two drawdowns
-  where it held any back by 9.3 gal on average;
-- the outlet lag: one measurement (5.3-7.3 gal, 5.0 used).
+- the deliverable gallons at the start of each of the 34 deliveries
+  held out, none of which crossed the line, so each delivered at least
+  its gallons: from the replayed layers, 3 % under-promised, by
+  1.16 gal on average across all 34; from the probes alone, 6 % and
+  2.00 gal;
+- the three draws in the whole record that took the upper probe across
+  the line, each with the compressor running: on two, the model's
+  crossing of the probe came at 26.1 and 31.3 gal against the recorded
+  23.3 and 31.3; the third started below the line;
+- the water above the upper probe: one measurement put the tap's
+  crossing 5.3-7.3 gal after the probe's; the fitted probe sits with
+  6.9 gal of the 63.2 above it.
 
 
 Limitations
@@ -410,9 +402,11 @@ Limitations
 - **Supply voltage.** Element power is the fitted 240 V figure.
 - **The air at the heater ahead of time.** The ambient is an input: the
   device reports the air at its intake now, not what it will be.
-- **The book's starting point.** The heater reports the probes, not
-  how much of the tank is cold water from the last draw. A book starts
-  from the caller's knowledge, or not at all.
+- **The tank's state now.** The heater reports the probes, not how
+  much of the tank is cold water from the last draw. The layers come
+  from replaying the caller's last day of record, which needs a metered
+  draw flow; without it, the profile the probes stand for, which
+  promises too much after a draw.
 - **The installation.** The mixing valve's setting and the household's
   draws are the installation's: the readiness defaults are one
   installation's (``ReadinessParams``).

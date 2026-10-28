@@ -201,6 +201,9 @@ class PathPoint:
     element_wh: float = 0.0
     #: The mode in force over the interval, in the feature's names.
     mode: HeaterMode = HEAT_PUMP
+    #: The tank's layers here, °F, the bottom first, for a physics whose
+    #: state has them (``physics.stratified``); None otherwise.
+    layers_f: tuple[float, ...] | None = field(default=None, compare=False)
 
 
 @dataclass
@@ -315,6 +318,14 @@ class SimulationError(Exception):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
+
+def _layers_of(state: object) -> tuple[float, ...] | None:
+    """The layers of a physics state that has them
+    (``physics.stratified.TankState``); None for any other, or none."""
+    layers = getattr(state, "layers_f", None)
+    return None if layers is None else tuple(float(t) for t in layers)
+
 
 #: The heater's setpoint resolution, °C: the NWP500 holds a setpoint in
 #: half degrees Celsius, so 146 °F is held as 146.3 (2026-09-20).
@@ -490,6 +501,7 @@ class _Engine:
                 running,
                 0.0,
                 mode=heater.mode,
+                layers_f=_layers_of(self.tank_state),
             )
         ]
         self.heating: list[HeatingInterval] = []
@@ -774,6 +786,7 @@ class _Engine:
                     p.input_wh,
                     p.element_wh,
                     self.mode,
+                    _layers_of(p.state),
                 )
             )
         cycle = self.cycle
@@ -987,6 +1000,7 @@ class _Engine:
                 True,
                 0.0,
                 mode=self.mode,
+                layers_f=_layers_of(self.tank_state),
             )
         )
 
@@ -1283,6 +1297,7 @@ class _Engine:
                 self.element is not None,
                 0.0,
                 mode=self.mode,
+                layers_f=_layers_of(self.tank_state),
             )
         )
 

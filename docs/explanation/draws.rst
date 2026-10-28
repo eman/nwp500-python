@@ -244,10 +244,9 @@ response above, and its upper 0.290 against 0.281.
 The upper probe is harder. Over 563 draws of 5 gal or more in 204 days,
 a two-zone model's upper zone, moved only by each draw's calibrated
 response, ran too warm by a mean of 0.22 degF over the first 5 gal,
-9.1 degF at 30-40 gal and 19.0 degF past 40 gal. Tracking the heat a draw takes
-from the top of the tank, as the simulator's heat book and its layered
-tank do
-(:doc:`simulator`), is what lets an estimate see the tank run out.
+9.1 degF at 30-40 gal and 19.0 degF past 40 gal. Tracking the water a
+draw takes from the top of the tank, as the simulator's layered tank
+does (:doc:`simulator`), is what lets an estimate see the tank run out.
 
 
 How much hot water is left
@@ -272,37 +271,35 @@ plateaus (next section) instead, they were 26.3, 49.3 and 2.4: a mean
 0.3 gal over, and a worst over-promise of 9.4 gal. Three events say
 little about the level.
 
-Without a full tank in the last 72 hours for the heat book to count
-from, the estimate reads the tank's heat from its two probes, as the
-book's anchor does, and adds the lag to the delivered water (5 gal by
-default). It does so for any state with the upper probe at or above the
-line, the probes together or apart, the heater running or not. Two
-drawdowns from uniform tanks delivered what the probes said, net of the
-heat added during them, and one from 136.4/111.4 degF (upper/lower)
-delivered 31.1 gal where the probes said 34.5.
+The estimate now reads the tank's layers: the water leaving the top in
+turn, each gallon through the mixing valve, to the first the valve
+delivers under the line (:doc:`simulator-methodology`). The layers are
+what the last day's record leaves (the probes, the compressor and the
+elements, the metered draws and the circulation's runs, replayed), with
+the probes now laid over them. Without a record they are the profile the
+two probes stand for, and the answer says so
+(``tank_profile_estimated``).
 
-Evidence, where the caller has it, can raise the estimate: the longest
-draw the history shows from a tank in the same state or colder, counted
-to the upper probe's crossing. That is a low figure. No clean recorded
-draw took the upper probe below 105 degF (the lowest reached
-107.2 degF), so for a full tank that had filled a 38 gal bath the
-evidence gives 33.4 gal at the probe. Its assumption, that a tank no
-colder delivers at least as much, failed on small differences: 15 of 22
-later draws over-promised for a 2 degF fall.
+The record has few draws that cross the line. Of 34 deliveries held out
+of the fit, none crossed, so each delivered at least its gallons: an
+estimate under them is an under-promise. From the probes alone 6 % were
+under-promised, by 2.00 gal on average across all 34; from the replayed
+layers 3 %, by 1.16 gal. Only three draws in the whole record took the
+upper probe across the line, each with the compressor running. On two,
+the model's own crossing of the probe came at 26.1 and 31.3 gal against
+the recorded 23.3 and 31.3; the third started below the line. The tap
+crosses later than the probe: the water above the probe still leaves
+hot. From the layers the estimates at the tap were 34.3 and 44.0 gal,
+against 29.2 and 62.0 from the probes alone.
 
-The probes over-read a tank whose upper element has just heated a thin
-top over a spent tank. On 2026-04-14 a draw from 139.6/78.4 degF
-stayed above 129 degF for 15.7 gal, where the probes say 15.3. Ninety
-minutes later a six-minute upper element run took the upper probe from
-126 to 141 degF, and a 10 gal draw from 141.3/89.6 degF took it to
-101 degF, where the probes say 22.9. The heat book answers it: it
-counts that element's 1,757 BTU, about four delivered gallons, on top
-of what the first draw left, where the probes alone can't tell that top
-from a full one. From the book the second draw read 15.7 gal at its
-start against 14.3 delivered to the crossing, net of the heat added,
-the lag included.
-The heat book's catch of recorded depletions is in :doc:`simulator`,
-under Accuracy.
+The probes alone over-read a tank whose upper element has just heated a
+thin top over a spent tank. On 2026-04-14 a draw from 139.6/78.4 degF
+(upper/lower) stayed above 129 degF for 15.7 gal. Ninety minutes later
+a six-minute upper element run took the upper probe from 126 to
+141 degF, and a 10 gal draw from 141.3/89.6 degF took it to 101 degF.
+Two probes can't tell that top from a full tank. The replayed layers
+can: the element's heat goes into the layers at and above it, over the
+cold the first draw left below.
 
 
 Reading a cold-supply probe
@@ -330,8 +327,7 @@ The at-rest reading misleads. On later draws the plateaus sat at
 71.2-72.8 degF, while the probe's 3-hour median ran 3.4 degF below them
 with the air under 68 degF and 5.7 degF above them with the air over
 80 degF. Converting heat to gallons at that median swung the gallons
-available by 10-20 %. :doc:`/how-to/simulate-heater` reads the plateau,
-and the heat book reads it from the long draws in its own record.
+available by 10-20 %. :doc:`/how-to/simulate-heater` reads the plateau.
 
 .. _mains-by-season:
 

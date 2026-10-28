@@ -251,8 +251,6 @@ class TestCalibrate:
         assert got.params.unfitted == (
             "compressor",
             "power",
-            "book",
-            "readiness",
             "draw",
         )
         site = cal.calibrate(

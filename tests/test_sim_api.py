@@ -35,7 +35,6 @@ from nwp500.sim import (
     standby,
 )
 from nwp500.sim.api import LOW_CONFIDENCE_FLOOR
-from nwp500.sim.book import Booked
 from nwp500.sim.engine import (
     Entry,
     Heater,
@@ -859,13 +858,13 @@ class TestAnElementStopsAtItsOffPoint:
         assert all(p.lower_f < stop for p in r.points if p.at < el.end)
 
     @pytest.mark.parametrize("mode", [3, 4])
-    def test_with_a_book_and_a_draw_after_its_off_point(
+    def test_a_draw_after_its_off_point(
         self, params: HeaterParams, mode: int
     ) -> None:
-        """A book walks to the next draw in one coast (``_nothing_before``),
-        which stops at the element's off point as any coast does."""
+        """A walk to the next draw in one coast (``_nothing_before``)
+        stops at the element's off point as any coast does."""
 
-        def run(book: Booked | None, draws: tuple[Draw, ...]) -> Any:
+        def run(draws: tuple[Draw, ...]) -> Any:
             return simulate(
                 _scenario(
                     horizon=timedelta(hours=1),
@@ -879,16 +878,12 @@ class TestAnElementStopsAtItsOffPoint:
                     loads=Loads(draws=draws),
                 ),
                 params,
-                book=book,
             )
 
         late = (Draw(at=at(0.2), gallons=0.5),)
         ends = [
             next(h.end for h in r.heating if h.source == "element")
-            for r in (
-                run(None, ()),
-                run(Booked(30000.0, 1.0, 60.0), late),
-            )
+            for r in (run(()), run(late))
         ]
         assert ends[0] < at(0.2)
         assert abs((ends[1] - ends[0]).total_seconds()) < 1.0

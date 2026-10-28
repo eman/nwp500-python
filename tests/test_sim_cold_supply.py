@@ -8,14 +8,10 @@ its rules.
 from datetime import UTC, datetime, timedelta
 
 from nwp500 import sim_adapters as sa
-from nwp500.sim.book import full_tank_book
 from nwp500.sim.cold_supply import (
-    ColdSupply,
     ColdSupplyParams,
-    on_the_mains,
     plateau_t_cold,
 )
-from nwp500.sim.params import BookParams
 
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
@@ -111,12 +107,3 @@ class TestWhatTheReadingsAre:
             sa.cold_supply(probe, at=at, draws=draws, circulation=None).t_cold_f
             is None
         )
-
-
-def test_on_the_mains() -> None:
-    book = full_tank_book(140.0, 139.5, BookParams())
-    moved, measured = on_the_mains(book, ColdSupply(71.5, 3))
-    assert moved is not None and moved.inlet_f == 71.5 and measured
-    same, measured = on_the_mains(book, ColdSupply(None))
-    assert same == book and not measured
-    assert on_the_mains(None, ColdSupply(71.5, 3)) == (None, False)

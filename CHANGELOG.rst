@@ -12,10 +12,10 @@ Added
   ``sim_adapters.layers_from_history`` and ``layers_from_changes`` give
   ``HeaterState.layers_f`` at an instant from a heater's statuses or its
   values' changes, the household's flow, the circulation's runs and the
-  air, as ``book_from_history`` and ``book_from_changes`` take them:
-  the last 24 hours walked through the tank (``nwp500.sim.history``:
+  air: the last 24 hours walked through the tank (``nwp500.sim.history``:
   ``record``, ``replay``), corrected to the probes as they were read.
-  ``HomeAssistantBook.layers`` gives them from Home Assistant, and
+  ``sim_home_assistant.HomeAssistantTank.layers`` gives them from Home
+  Assistant, and
   ``nwp-cli simulate run`` starts a scenario that starts now from them,
   with the scenario's probes laid over them: before, it started from
   the two probes alone, as ``tank_profile_estimated`` said.
@@ -151,12 +151,50 @@ Added
 Changed
 -------
 
+- **Hot water at the tap from the tank's layers** (breaking).
+  Deliverable gallons (``delivery.deliverable``), the delivered
+  temperature along a walk (``delivery_along``), draw windows and
+  ``readiness`` read the tank's layers (``HeaterState.layers_f``):
+  the water leaving the top in turn, each gallon through the mixing
+  valve, to the first the valve delivers under the line, the mains at
+  the scenario's inlet. Without layers they read the profile the two
+  probes stand for and say ``tank_profile_estimated``.
+  ``Deliverable.basis`` is ``"layers"`` or ``"probes"``.
+  ``readiness`` takes ``inlet_f``. ``time_to_ready`` walks the scenario
+  in each mode, the mode written at the start, for up to a day
+  (``READY_HORIZON``), to the first instant its layers deliver the
+  bath, the energy the walk's to then; an element mode's row carries
+  its walk's own reasons. On 34 deliveries held out of the fit, none of
+  which crossed the line, the replayed layers under-promised 3 % of
+  them, by 1.16 gal on average, against 6 % and 2.00 gal from the
+  probes alone. Of the three draws in the record that took the upper
+  probe across the line, the model's crossing came at 26.1 and
+  31.3 gal against the recorded 23.3 and 31.3 (the third started below
+  the line).
+  ``sim_score`` scores deliveries from the replayed layers.
+
+- **The tank's keeper from Home Assistant is ``HomeAssistantTank``**
+  (was ``HomeAssistantBook``): it holds the replay's 24 hours
+  (``TANK_WINDOW``) and no longer reads the inlet or the draw demand.
+  ``nwp-cli simulate run`` reads it with ``read_tank`` and says when a
+  scenario that does not start now walks from the two probes.
+
+- **A history's steps are ``steps_from_history`` and
+  ``steps_from_changes``** (were ``book_steps_from_*``), on
+  ``STEP_GRID_S`` (was ``BOOK_GRID_S``). A draw is a flow over
+  ``DrawParams.draw_gpm`` (0.3 gal/min).
+
+- **A parameters document fitted with the heat book still reads.** Its
+  ``book`` part and its readiness ``evidence``, ``delivered_lag_gal``
+  and ``fall_f_per_gal`` are named by ``unknown_fields`` and left out;
+  ``book`` and ``readiness`` in its ``unfitted`` are dropped
+  (``RETIRED_TERMS``).
+
 - **A recorded history's ``Step`` lives in ``nwp500.sim.history``**,
   with ``house_gpm``, ``FlowVolume``, ``AMBIENT_DEFAULT_F`` and the
-  replay's span, ``REPLAY`` (from ``sim.book`` and ``sim.tank_fit``,
-  which still import them). A step says when it starts (``Step.at``),
-  which ``book_steps_from_history`` and ``book_steps_from_changes``
-  fill.
+  replay's span, ``REPLAY`` (from ``sim.tank_fit``, which still imports
+  them). A step says when it starts (``Step.at``), which
+  ``steps_from_history`` and ``steps_from_changes`` fill.
 
 - **Calibration fits the layered tank** (breaking).
   ``sim_calibrate.calibrate`` and ``calibrate_changes`` fit the tank's
@@ -316,6 +354,28 @@ Fixed
 Removed
 -------
 
+- The heat book: ``sim.book``, ``BookParams``, ``Booked``,
+  ``full_tank_book``, ``HeaterParams.book`` and ``book_terms``,
+  ``SimulationResult.booked``, and the ``book`` arguments of
+  ``simulate``, ``readiness`` and ``time_to_ready``;
+  ``sim_adapters.book_from_history``, ``book_from_changes`` and
+  ``full_tank_book``; ``sim_home_assistant.BookAnswer``,
+  ``BOOK_WINDOW`` and ``HomeAssistantBook.book``;
+  ``sim_calibrate.fit_book``, ``BookTermsFit``, ``MIN_BOOK_PAIRS`` and
+  ``MIN_RUN_PAIRS``; calibration's book, zone-mix, empty-point and
+  evidence fits; ``cold_supply.on_the_mains``;
+  ``circulation.CirculationLoss``; ``CirculationParams.loss_btu_per_gal``
+  and ``book_circuit_gal``; ``Recovery.coast_btu``, ``coast_draw_gal``
+  and ``hp_btu_per_h``; the reasons ``no_heat_book``,
+  ``heat_book_aged``, ``book_uncalibrated`` and
+  ``readiness_uncalibrated``.
+- The readiness evidence and the outlet lag: ``ReadinessParams.evidence``,
+  ``delivered_lag_gal`` and ``fall_f_per_gal``;
+  ``delivery.EXAMPLE_EVIDENCE``, ``with_example_evidence``,
+  ``probes_gal``, ``booked_deliverable``, ``zone_delivery_f``,
+  ``demonstrated_gal``, ``observed_max_gal`` and
+  ``Deliverable.at_observed_max``. The water above the upper probe is
+  the layered tank's own.
 - The two-zone tank: ``physics.tank`` and ``physics.compressor``;
   ``TankParams.lower_zone_share`` and ``stratification_gap_tau_h``;
   ``LossParams.ua_btu_hr_f``, ``ua_exponent``, ``ua_ref_delta_t_f``,

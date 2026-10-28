@@ -323,7 +323,7 @@ class TestTheAnswers:
         assert sim.next_recovery(scenario(35.0), params).outcome == (
             "unavailable"
         )
-        ready = sim.time_to_ready(scenario(35.0), params, bath_gal=25.0)
+        ready = sim.time_to_ready(scenario(35.0), params, bath_gal=60.0)
         assert ctl.HEAT_PUMP_UNAVAILABLE in ready.reasons
         assert "time_to_ready_unavailable" not in ready.reasons
         # Every mode heats as Electric does.
@@ -646,13 +646,20 @@ class TestTheAnswersOverTheTop:
         by_mode = {m.mode: m.ready_in_minutes for m in ready.bath.by_mode}
         hp, electric = by_mode["heat_pump"], by_mode["electric"]
         assert hp is not None and electric is not None
-        # As Electric from the tank the coast leaves at the trigger.
+        # As Electric from the tank the coast leaves at the trigger: its
+        # layers as the walk carries them.
         (when, upper, lower), *_ = nxt.points
+        walk = sim.simulate(
+            s.model_copy(update={"horizon": timedelta(hours=24)}), params
+        ).simulation
+        layers = next(p.layers_f for p in walk.points if p.at >= when)
         then = sim.time_to_ready(
             s.model_copy(
                 update={
                     "start": when,
-                    "state": sim.HeaterState(upper_f=upper, lower_f=lower),
+                    "state": sim.HeaterState(
+                        upper_f=upper, lower_f=lower, layers_f=layers
+                    ),
                 }
             ),
             params,

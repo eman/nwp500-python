@@ -86,7 +86,7 @@ class TestTheRecord:
         assert rec.upper_f[20] == 128.0
 
     def test_a_flow_under_a_draw_is_none(self) -> None:
-        under = P.book.draw_gpm * 0.5
+        under = P.draw.draw_gpm * 0.5
         rec = hist.record(_steps(1.0, draw=(0.0, 1.0, under)), P)
         assert rec.draws == ()
 

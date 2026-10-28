@@ -46,9 +46,8 @@ from typing import Any, cast
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
-from nwp500.sim.book import Booked
-from nwp500.sim.cold_supply import ColdSupply, on_the_mains
-from nwp500.sim.history import AMBIENT_DEFAULT_F, FlowVolume
+from nwp500.sim.cold_supply import ColdSupply
+from nwp500.sim.history import AMBIENT_DEFAULT_F, REPLAY, FlowVolume
 from nwp500.sim.location_air import (
     FIT_LAGS_H,
     FittedLocationAir,
@@ -94,7 +93,7 @@ LOCATION_AIR_MIN_SPAN = timedelta(days=1)
 #: The least r (``FittedLocationAir.r``) such a fit is used at.
 LOCATION_AIR_MIN_R = 0.5
 #: The heater's own air reading is the air it stands in from this far
-#: into a compressor run, and not while idle: the book's settle
+#: into a compressor run, and not while idle: the steps' settle
 #: (``sim_adapters.HEATER_AIR_SETTLE``).
 RUN_SETTLE = sa.HEATER_AIR_SETTLE
 #: How long a request waits, seconds.
@@ -143,8 +142,8 @@ class Entities:
     #: attribute the outdoor air.
     weather: str | None = None
     #: The household's hot water draw flow, the circulation's water not
-    #: in it, such as a draw detector's (``HomeAssistantBook``'s
-    #: ``flow``): with the heater's entities, the heat book.
+    #: in it, such as a draw detector's (``HomeAssistantTank``'s
+    #: ``flow``): with the heater's entities, the tank's layers.
     draw_flow: str | None = None
 
 
@@ -162,7 +161,8 @@ class Sources:
     #: The heater's own entities, whose air while the compressor runs
     #: fits and anchors the projection where no air entity does.
     heater: HeaterEntities | None = None
-    #: What ``entities.draw_flow``'s gallons count (``book.FlowVolume``).
+    #: What ``entities.draw_flow``'s gallons count
+    #: (``history.FlowVolume``).
     draw_flow_volume: FlowVolume = "delivered"
 
 
@@ -198,7 +198,7 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
     The token is read from ``environ``, never from the file.
     ``draw_flow_volume`` says what the draw flow's gallons count: the
     water delivered through the mixing valve, or the tank's own water
-    (``sim_adapters.book_from_history``'s ``flow_volume``). Raises
+    (``sim_adapters.layers_from_history``' ``flow_volume``). Raises
     ``ValueError`` naming what is wrong."""
     ha = doc.get("home_assistant")
     if not isinstance(ha, Mapping):
@@ -1895,7 +1895,7 @@ class HeaterEntities:
 class HeaterHistory:
     """A heater's history from Home Assistant, as
     ``sim_calibrate.calibrate_changes`` and
-    ``sim_adapters.book_from_changes`` take it: its values' changes, the
+    ``sim_adapters.layers_from_changes`` take it: its values' changes, the
     instants it was heard from, and what the reading noted."""
 
     rows: sa.ChangeRows
@@ -2148,27 +2148,16 @@ async def read_heater_history(
     return HeaterHistory(rows, sorted(set(heard)), tuple(notes))
 
 
-# ── the heat book, kept current ─────────────────────────────────────
+# ── the tank's layers, kept current ─────────────────────────────────
 
-#: How far back ``HomeAssistantBook`` holds the history: the oldest
-#: anchor a book reads (``BookParams.history_h``'s default).
-BOOK_WINDOW = timedelta(hours=72)
-
-
-@dataclass(frozen=True)
-class BookAnswer:
-    """``HomeAssistantBook.book``'s answer: the book (None without one),
-    whether its gallons convert at the mains, as ``time_to_ready``'s
-    ``inlet_measured`` takes it, and what it rests on."""
-
-    booked: Booked | None
-    inlet_measured: bool
-    notes: tuple[str, ...]
+#: How far back ``HomeAssistantTank`` holds the history: the replay's
+#: (``sim.history.REPLAY``).
+TANK_WINDOW = REPLAY
 
 
 @dataclass(frozen=True)
 class LayersAnswer:
-    """``HomeAssistantBook.layers``' answer: the tank's layers (None
+    """``HomeAssistantTank.layers``' answer: the tank's layers (None
     without them) and what they rest on."""
 
     layers_f: tuple[float, ...] | None
@@ -2177,16 +2166,13 @@ class LayersAnswer:
 
 @dataclass(frozen=True)
 class _Gathered:
-    """The history ``HomeAssistantBook`` holds, read for an instant."""
+    """The history ``HomeAssistantTank`` holds, read for an instant."""
 
     rows: HeaterHistory
-    got: History
     params: HeaterParams
     flow: list[Reading]
     flow_out: list[Span]
     runs: list[Span]
-    inlet: list[Reading]
-    inlet_out: list[Span]
     air: list[Reading]
     air_out: list[Span]
 
@@ -2253,29 +2239,26 @@ def _without(spans: Sequence[Span], cut: Sequence[Span]) -> list[Span]:
     return out
 
 
-class HomeAssistantBook:
-    """The tank's heat booked (``sim_adapters.book_from_changes``) from
-    Home Assistant and kept current: ``read`` reads the history once
-    over ``window``, then only what is new since the last read, and
-    holds it (``extended``, ``since``); ``book`` books from what it
+class HomeAssistantTank:
+    """The tank's layers (``sim_adapters.layers_from_changes``) from
+    Home Assistant's history, kept current: ``read`` reads the history
+    once over ``window``, then only what is new since the last read, and
+    holds it (``extended``, ``since``); ``layers`` replays what it
     holds, with no request.
 
     ``flow`` is the household's hot water draw flow, the circulation's
     water not in it, in any unit ``to_gpm`` reads. ``flow_volume`` says
-    what its gallons count. Delivered at the taps through the mixing
-    valve, the default, the book prices a gallon at the valve's delivery
-    line (``DrawParams.delivery_intercept_f`` and ``delivery_slope``);
-    the tank's own water (a meter or a detector on the heater's hot
-    outlet, ``"tank"``), at the upper probe. ``heater`` is the heater's own
-    entities. Of ``entities``, ``circulation_speed`` gives the
-    circulation's runs, ``inlet`` the inlet the book converts at, and
-    with ``demand`` the mains (``mains_plateau``, ``on_the_mains``),
-    and ``air`` the air beside the heater; each optional, a book without
-    one losing only what it gives. A flow reported late reaches the
-    book late: it books what the history holds at ``read``. Across a
-    span an entity was unavailable, a restart's say, the book holds its
-    value from before: the flow for ``sim_adapters.FLOW_HOLD`` and the
-    pump's speed for ``PUMP_STALE``, then none."""
+    what its gallons count: delivered at the taps through the mixing
+    valve, the default, or the tank's own water (a meter or a detector
+    on the heater's hot outlet, ``"tank"``). ``heater`` is the heater's
+    own entities. Of ``entities``, ``circulation_speed`` gives the
+    circulation's runs and ``air`` the air beside the heater; each
+    optional, a replay without one losing only what it gives. A flow
+    reported late reaches the replay late: it replays what the history
+    holds at ``read``. Across a span an entity was unavailable, a
+    restart's say, the replay holds its value from before: the flow for
+    ``sim_adapters.FLOW_HOLD`` and the pump's speed for ``PUMP_STALE``,
+    then none."""
 
     def __init__(
         self,
@@ -2284,7 +2267,7 @@ class HomeAssistantBook:
         flow: str,
         entities: Entities | None = None,
         *,
-        window: timedelta = BOOK_WINDOW,
+        window: timedelta = TANK_WINDOW,
         flow_volume: FlowVolume = "delivered",
     ) -> None:
         if window <= timedelta(0):
@@ -2307,11 +2290,7 @@ class HomeAssistantBook:
     @property
     def _others(self) -> list[str]:
         e = self.entities
-        return [
-            n
-            for n in (self.flow, e.circulation_speed, e.inlet, e.demand, e.air)
-            if n
-        ]
+        return [n for n in (self.flow, e.circulation_speed, e.air) if n]
 
     async def read(self, now: datetime) -> None:
         """Read the history since the last read (the whole ``window``
@@ -2330,7 +2309,7 @@ class HomeAssistantBook:
                 self.client, self.heater, start, now
             )
         except (HomeAssistantError, ValueError) as err:
-            self._notes.append(f"book: the heater's history not read ({err})")
+            self._notes.append(f"layers: the heater's history not read ({err})")
         else:
             held_ = self._heater_history
             if held_ is not None:
@@ -2343,14 +2322,14 @@ class HomeAssistantBook:
         try:
             got = await self.client.read_history(self._others, start, now)
         except HomeAssistantError as err:
-            self._notes.append(f"book: the flow's history not read ({err})")
+            self._notes.append(f"layers: the flow's history not read ({err})")
         else:
             # A read opens with the value in force: with neither a reading
             # nor an outage, the flow is unread, and read again next time.
             if not got.readings.get(self.flow) and not got.outages.get(
                 self.flow
             ):
-                self._notes.append(f"book: no history of {self.flow} read")
+                self._notes.append(f"layers: no history of {self.flow} read")
             else:
                 got = _unread_marked(got, self._others, start, now)
                 had = self._history
@@ -2358,32 +2337,30 @@ class HomeAssistantBook:
                 self._history = merged.since(cut)
                 self._read = now
         for n in self._others:
-            if n == self.entities.demand:
-                continue
             try:
                 self._units[n] = (await self.client.state(n)).unit
             except HomeAssistantError as err:
-                # Without its unit, its readings are left out of the book.
+                # Without its unit, its readings are left out of the replay.
                 self._units.pop(n, None)
-                self._notes.append(f"book: {n}'s unit not read ({err})")
+                self._notes.append(f"layers: {n}'s unit not read ({err})")
 
     def _gathered(
-        self, at: datetime, params: HeaterParams, what: str
+        self, at: datetime, params: HeaterParams
     ) -> tuple[_Gathered | None, list[str]]:
-        """What ``book`` and ``layers`` read of the history held at
-        ``at``, and the notes on it, each headed ``what``: None without
-        the heater's or the flow's history, or the flow unconverted."""
+        """What ``layers`` reads of the history held at ``at``, and the
+        notes on it: None without the heater's or the flow's history, or
+        the flow unconverted."""
         rows, got = self._heater_history, self._history
         # The last heater read's notes, then this keeper's.
         notes = [*(rows.notes if rows is not None else ()), *self._notes]
         if rows is None or got is None:
-            notes.append(f"{what}: no history read")
+            notes.append("layers: no history read")
             return None, notes
         if self._heater_tried != self._heater_read:
             # Since the last heater read that worked, its flags are
             # unknown: none held from before may credit heating.
             notes.append(
-                f"{what}: none past the heater's last read "
+                "layers: none past the heater's last read "
                 f"({cast(datetime, self._heater_read).isoformat()})"
             )
             return None, notes
@@ -2397,7 +2374,7 @@ class HomeAssistantBook:
                 params, circulation=replace(circulation, meter_share=0.0)
             )
             notes.append(
-                f"{what}: the flow has no circulation in it, so the "
+                "layers: the flow has no circulation in it, so the "
                 "circulation's meter_share is taken as 0"
             )
         # After a read that failed, nothing is known past the last that
@@ -2406,13 +2383,13 @@ class HomeAssistantBook:
         failed = self._tried is not None and self._tried != self._read
         if failed and self._read is not None and self._read < at:
             unseen = [(self._read, at)]
-            notes.append(f"{what}: nothing read since {self._read.isoformat()}")
+            notes.append(f"layers: nothing read since {self._read.isoformat()}")
         try:
             flow, unread = got.converted(
                 self.flow, self._units.get(self.flow), to_gpm, at
             )
         except ValueError as err:
-            notes.append(f"{what}: {self.flow}: {err}")
+            notes.append(f"layers: {self.flow}: {err}")
             return None, notes
         flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
         runs: list[Span] = []
@@ -2426,13 +2403,12 @@ class HomeAssistantBook:
             )
             if known is None:
                 notes.append(
-                    f"{what}: the circulation's runs are unknown ({why}); "
-                    f"{'booked' if what == 'book' else 'replayed'} with "
-                    "only its outages"
+                    f"layers: the circulation's runs are unknown ({why}); "
+                    "replayed with only its outages"
                 )
             if unknown:
                 notes.append(
-                    f"{what}: the circulation's runs are known only from "
+                    "layers: the circulation's runs are known only from "
                     f"{unknown[-1][1].isoformat()}"
                 )
             # Across the pump's outages its speed holds, as a sampled
@@ -2443,16 +2419,6 @@ class HomeAssistantBook:
                 if a + PUMP_STALE < b
             ]
             runs = busy(_without(known or [], stale), unseen)
-        inlet: list[Reading] = []
-        inlet_out: list[Span] = []
-        if e.inlet is not None and what == "book":
-            try:
-                inlet, bad = got.converted(
-                    e.inlet, self._units.get(e.inlet), to_f, at
-                )
-                inlet_out = busy(bad, got.outages.get(e.inlet, []), unseen)
-            except ValueError as err:
-                notes.append(f"{what}: {e.inlet}: {err}")
         air: list[Reading] = []
         air_out: list[Span] = []
         if e.air is not None:
@@ -2462,29 +2428,17 @@ class HomeAssistantBook:
                 )
                 air_out = busy(bad, got.outages.get(e.air, []), unseen)
             except ValueError as err:
-                notes.append(f"{what}: {e.air}: {err}")
+                notes.append(f"layers: {e.air}: {err}")
         if runs and params.circulation is None:
             notes.append(
-                f"{what}: the circulation's runs priced at one "
+                "layers: the circulation's runs priced at one "
                 "installation's terms (CirculationParams)"
             )
-        return (
-            _Gathered(
-                rows,
-                got,
-                params,
-                flow,
-                flow_out,
-                runs,
-                inlet,
-                inlet_out,
-                air,
-                air_out,
-            ),
-            notes,
-        )
+        return _Gathered(
+            rows, params, flow, flow_out, runs, air, air_out
+        ), notes
 
-    def _air_note(self, g: _Gathered, at: datetime, what: str) -> str | None:
+    def _air_note(self, g: _Gathered, at: datetime) -> str | None:
         """Which air the history was taken with, without an air sensor's
         readings."""
         rows = g.rows
@@ -2502,11 +2456,11 @@ class HomeAssistantBook:
         )
         if settled:
             return (
-                f"{what}: the air is the heater's own reading while its "
+                "layers: the air is the heater's own reading while its "
                 "compressor runs"
             )
         return (
-            f"{what}: the heater's air not read while its compressor "
+            "layers: the heater's air not read while its compressor "
             f"ran {sa.HEATER_AIR_SETTLE.total_seconds() / 60:g} "
             f"minutes: the air is the default, {AMBIENT_DEFAULT_F:g} °F"
         )
@@ -2521,11 +2475,10 @@ class HomeAssistantBook:
         the history held (``sim_adapters.layers_from_changes``), the
         ``probes`` (upper, lower) °F laid over them, by default the
         history's last, with no request: CPU work, for an executor.
-        None, and notes why, without
-        the heater's or the flow's history, the heater not heard at
-        ``at`` or the flow unknown then."""
+        None, and notes why, without the heater's or the flow's history,
+        the heater not heard at ``at`` or the flow unknown then."""
         at = at.astimezone(UTC)
-        g, notes = self._gathered(at, params, "layers")
+        g, notes = self._gathered(at, params)
         if g is None:
             return LayersAnswer(None, tuple(notes))
         try:
@@ -2545,7 +2498,7 @@ class HomeAssistantBook:
         except ValueError as err:
             notes.append(f"layers: {err}")
             return LayersAnswer(None, tuple(notes))
-        air = self._air_note(g, at, "layers")
+        air = self._air_note(g, at)
         if air is not None:
             notes.append(air)
         if layers is None:
@@ -2556,68 +2509,3 @@ class HomeAssistantBook:
                 f"{self.flow} not read long enough before it"
             )
         return LayersAnswer(layers, tuple(notes))
-
-    def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
-        """The book at ``at`` from the history held, with no request:
-        CPU work, for an executor. None, and notes why, without the
-        heater's or the flow's history, or with no anchor."""
-        at = at.astimezone(UTC)
-        g, notes = self._gathered(at, params, "book")
-        if g is None:
-            return BookAnswer(None, False, tuple(notes))
-        e = self.entities
-        rows, got, params = g.rows, g.got, g.params
-        flow_out = g.flow_out
-        inlet = g.inlet
-        try:
-            booked = sa.book_from_changes(
-                rows.rows,
-                rows.observed,
-                params,
-                at=at,
-                flow=g.flow,
-                circulation=g.runs,
-                inlet=inlet,
-                air=g.air,
-                flow_outages=flow_out,
-                inlet_outages=g.inlet_out,
-                air_outages=g.air_out,
-                flow_volume=self.flow_volume,
-            )
-        except ValueError as err:
-            notes.append(f"book: {err}")
-            return BookAnswer(None, False, tuple(notes))
-        air = self._air_note(g, at, "book")
-        if air is not None:
-            notes.append(air)
-        if booked is None:
-            if any(a <= at <= b for a, b in flow_out):
-                notes.append(f"book: {self.flow} is unknown now")
-            else:
-                notes.append(
-                    "book: no anchor in the history, or the heater not "
-                    "heard now"
-                )
-            return BookAnswer(None, False, tuple(notes))
-        if e.inlet is None or e.demand is None or not inlet:
-            return BookAnswer(booked, False, tuple(notes))
-        if got.states is None:
-            notes.append(
-                f"inlet: {e.demand} not read (no states in the history)"
-            )
-            return BookAnswer(booked, False, tuple(notes))
-        cold = mains_plateau(
-            got,
-            e.inlet,
-            e.demand,
-            e.circulation_speed,
-            probe_unit=self._units.get(e.inlet),
-            pump_unit=self._units.get(e.circulation_speed or ""),
-            since=at - min(INLET_LOOKBACK, self.window),
-            now=at,
-            notes=notes,
-        )
-        if cold is None:
-            return BookAnswer(booked, False, tuple(notes))
-        moved, measured = on_the_mains(booked, cold)
-        return BookAnswer(moved, measured, tuple(notes))

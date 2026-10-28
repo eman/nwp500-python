@@ -13,8 +13,8 @@ starts from; without them it starts from the two probes alone and says
 
 The history is a run of ``Step``: one interval each, what the heater
 and the meter read over it. ``sim_adapters`` makes them of a heater's
-statuses or its values' changes (``book_steps_from_history``,
-``book_steps_from_changes``).
+statuses or its values' changes (``steps_from_history``,
+``steps_from_changes``).
 
 Nothing here reads a file, the network or the clock.
 """
@@ -63,7 +63,7 @@ class Step:
     upper_f: float
     lower_f: float
     #: The household flow meter's reading, gal/min (0 without a meter:
-    #: no draw is booked), in ``flow_volume``'s gallons.
+    #: no draw is replayed), in ``flow_volume``'s gallons.
     flow_gpm: float
     compressor_on: bool
     element_on: bool
@@ -80,8 +80,7 @@ class Step:
     #: while circulating, else none.
     circulation_in_meter_gpm: float | None = None
     #: Gallons the run had circulated before this step, runs closer
-    #: than ``CirculationParams.run_gap_min`` taken as one: what
-    #: ``CirculationParams.book_circuit_gal`` caps.
+    #: than ``CirculationParams.run_gap_min`` taken as one.
     run_gal_before: float = 0.0
     #: What ``flow_gpm`` counts (``FlowVolume``).
     flow_volume: FlowVolume = "delivered"
@@ -110,13 +109,13 @@ def _instant(s: Step) -> datetime:
 
 def drawn_gal(s: Step, params: HeaterParams) -> float:
     """The gallons delivered through the mixing valve over ``s``: the
-    household's flow (``house_gpm``) over ``BookParams.draw_gpm``, none
+    household's flow (``house_gpm``) over ``DrawParams.draw_gpm``, none
     under it. Tank gallons (``Step.flow_volume``) are the valve's
     delivery of them: each takes a hot share of tank water
     (``physics.draw.hot_fraction``) at the step's upper probe, with the
     parameters' inlet."""
     house = house_gpm(s, params.circulation)
-    if house <= params.book.draw_gpm:
+    if house <= params.draw.draw_gpm:
         return 0.0
     gal = house * s.seconds / 60.0
     if s.flow_volume == "delivered":

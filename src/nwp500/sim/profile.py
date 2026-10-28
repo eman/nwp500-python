@@ -28,7 +28,6 @@ from types import MappingProxyType
 from typing import Any
 
 from nwp500.sim import inputs
-from nwp500.sim.book import DEPLETION_THRESHOLD_F
 from nwp500.sim.controller import (
     COMPRESSOR_MODES,
     ELEMENT_MODES,
@@ -40,7 +39,7 @@ from nwp500.sim.engine import (
     HEATER_SETPOINT_MIN_F,
     SETPOINT_RESOLUTION_C,
 )
-from nwp500.sim.params import TankParams
+from nwp500.sim.params import ReadinessParams, TankParams
 from nwp500.sim.physics.element import DEVICE_MODE, HEATER_MODE
 
 #: The energy sources, in the order served.
@@ -197,7 +196,7 @@ class HeaterProfile:
 
 def heater_profile(
     tank: TankParams = TankParams(),
-    line_f: float = DEPLETION_THRESHOLD_F,
+    line_f: float = ReadinessParams().line_f,
 ) -> HeaterProfile:
     """The profile the simulation runs by; ``tank_gal`` is ``tank``'s
     volume, the one the physics use (pass ``HeaterParams.tank``), and

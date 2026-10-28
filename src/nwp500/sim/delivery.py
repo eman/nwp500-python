@@ -1,59 +1,29 @@
 """Hot water at the tap: how much the tank can deliver now, and the
-delivered temperature along a simulation.
+delivered temperature along a simulation, both from the tank's layers
+(``physics.stratified``).
 
-Everything here derives from **deliverable volume**: the water delivered
-past the mixing valve that the tank can supply from its current state
-before the **delivered** water falls below the line
-(``ReadinessParams.line_f``).
+**Deliverable volume** is the water delivered past the mixing valve
+that the tank gives before the **delivered** water falls below the line
+(``ReadinessParams.line_f``): the water leaving the top in turn, each
+tank gallon delivering ``1 / hot_fraction`` at the tap
+(``physics.draw``), to the first that the valve delivers under the line
+(``stratified.deliverable_gal``). The tank's outlet is its top, above
+the upper probe, so the tap stays hot for the water above the probe
+after the probe has crossed. The mains the draw meets is the scenario's
+inlet, else ``DrawParams.inlet_temp_f``.
 
-**The delivered line is the probe's plus a lag.** Everything is measured
-against the upper probe: the empty point is the heat left when it
-crossed, the evidence is draws it saw finish above the line. But the
-probe is not at the tap. The cold front rises from the bottom, so it
-reaches the probe first, and the tank water above the probe still
-leaves hot: the delivered water crosses the line
-``delivered_lag_gal`` gallons after the probe does. So the delivered
-answer is the probe line's plus the lag while the probe line has water
-left, and from the book, once it is spent, the lag less the gallons
-drawn past it. Without a book, a probe below the line answers 0: nothing
-says how far past it the draw went.
+**The layers** are the state's (``HeaterState.layers_f``: as the tank's
+history left them, ``sim.history``), and ``basis`` says ``layers``;
+without them, the profile the two probes stand for
+(``stratified.estimate``), and ``basis`` says ``probes``. The probes
+alone cannot say where the water below the lower one is: after a draw
+the bottom is the inlet's, which they read as no different from a tank
+that coasted.
 
-**From the tank's booked heat** (``sim.book``) when the caller has a
-book: the heat above the empty point per delivered gallon. On the
-installation the defaults come from, that is the answer 78 % of the
-time.
-
-**From the probes otherwise** (``probes_gal``): the tank's heat as its
-two probes place it, ``8.34 · V · (T_mean − 70)`` at a 70 °F inlet, as
-the book's anchor reads it, above the empty point per delivered gallon.
-That is the answer for any state with the upper probe at or above the
-line, the probes together or apart, heating or not: heating only adds
-heat. On one installation two drawdowns from uniform tanks delivered
-what it says, net of the heat added during them, and one from
-136.4/111.4 °F delivered 31.1 gal where it says 34.5, the lag included.
-
-**With evidence** (``ReadinessParams.evidence``, none by default) the
-answer is the larger of the probes' and the longest draw the caller's
-record shows a tank in the same or a worse state (neither probe warmer)
-delivering, finishing with the heat pump and both elements off, from a
-settled start. ``EXAMPLE_EVIDENCE`` is one installation's.
-
-**The book is read no higher than the tank can hold**: all of it at the
-warmer probe (``book.tank_max_btu``).
-
-**Heat booked into a cold bottom is drawable**: the compressor's heat
-and the elements' count in full, wherever they land (``sim.book``).
-
-**When it runs out** (``delivery_temp_f``): the drawable heat is what a
-draw can take before the upper probe crosses the line, and the lag is
-what the delivered water holds on after, so the delivery temperature is
-the upper zone while either is left (the line itself while only the lag
-is and the zone reads below it), the line when both are spent, and
-``fall_f_per_gal`` lower per delivered gallon past it, down to the
-inlet. A simulation's delivery (``delivery_along``) and its windows'
-``deliverable_gal`` read the same state, so the two agree on whether and
-when the tank runs out. Without a book the delivery is the
-upper zone's on the same line (``zone_delivery_f``).
+**The delivery along a simulation** (``delivery_along``) is the top
+layer's water through the valve (``delivery_f``), so a simulation's
+delivery and its windows' ``deliverable_gal`` read the same layers and
+agree on whether and when the tank runs out.
 
 **A draw runs cold** (``depletion``) when the delivery falls below the
 line.
@@ -61,298 +31,122 @@ line.
 
 import itertools
 import math
-from bisect import bisect_left, bisect_right
+from bisect import bisect_left
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Literal
 
-from nwp500.sim.book import (
-    Booked,
-    BookedPath,
-    deliverable_from_heat,
-    full_tank,
-    probe_line_gal,
-)
-from nwp500.sim.book import delivery_f as tank_delivery_f
-from nwp500.sim.engine import Draw, HeatingInterval, PathPoint, Simulation
-from nwp500.sim.params import (
-    BookParams,
-    DrawParams,
-    EvidenceDraw,
-    ReadinessParams,
-)
-from nwp500.sim.units import WATER_BTU_PER_GAL_F
-
-
-def demonstrated_gal(
-    upper_f: float,
-    lower_f: float,
-    evidence: tuple[EvidenceDraw, ...] = (),
-) -> float:
-    """The most any evidence draw from a state no better than this one
-    delivered before crossing the threshold; 0 if none is that bad."""
-    return max(
-        (g for u, lo, g in evidence if u <= upper_f and lo <= lower_f),
-        default=0.0,
-    )
-
-
-def probes_gal(
-    upper_f: float,
-    lower_f: float,
-    p: ReadinessParams | None = None,
-    ep: BookParams | None = None,
-) -> float:
-    """The probe line's gallons from the probes alone: the tank's heat
-    as its two probes place it, the book's anchor at its default inlet,
-    over the heat a delivered gallon takes (module docstring). 0 with
-    the upper probe below the line."""
-    p = p or ReadinessParams()
-    ep = ep or BookParams()
-    if upper_f < p.line_f:
-        return 0.0
-    inlet = ep.inlet_default_f
-    heat = full_tank(upper_f, lower_f, inlet, ep).heat_btu
-    return deliverable_from_heat(heat, upper_f, inlet, ep)
+from nwp500.sim.engine import HeatingInterval, PathPoint, Simulation
+from nwp500.sim.params import DrawParams, HeaterParams, ReadinessParams
+from nwp500.sim.physics import stratified as st
+from nwp500.sim.physics.draw import delivery_temp_f
 
 
 @dataclass(frozen=True)
 class Deliverable:
-    """Deliverable volume, and what it rests on."""
+    """Deliverable volume, delivered gallons at the line, and what it
+    rests on: the tank's ``layers``, or the profile its two ``probes``
+    stand for."""
 
     gal: float
-    #: ``energy`` when the tank's booked heat answered (``sim.book``),
-    #: ``evidence`` when there was none to book from and the caller has
-    #: evidence, ``probes`` when there was neither (``probes_gal``).
-    basis: Literal["energy", "evidence", "probes"]
-    #: Evidence basis only: the evidence answered (not the probes,
-    #: above it) at its largest volume.
-    at_observed_max: bool
+    basis: Literal["layers", "probes"]
 
 
-def delivered_gal(
-    probe_gal: float, upper_f: float, p: ReadinessParams | None = None
-) -> float:
-    """The delivered line from the probe's (module docstring): the
-    lag on top while the probe line has water left, the lag less the
-    gallons drawn past it once it is spent. A probe reading below the
-    line says the probe line is spent, whatever the book says."""
-    p = p or ReadinessParams()
-    if upper_f < p.line_f:
-        probe_gal = min(probe_gal, 0.0)
-    return max(0.0, probe_gal + p.delivered_lag_gal)
+def _valve(params: HeaterParams) -> tuple[float, float]:
+    d = params.draw
+    return d.delivery_intercept_f, d.delivery_slope
+
+
+def _tank(
+    params: HeaterParams,
+    upper_f: float,
+    lower_f: float,
+    layers_f: Sequence[float] | None,
+) -> tuple[st.Layout, st.TankState]:
+    lay = st.layout(params)
+    if layers_f is None:
+        return lay, st.mix(st.estimate(lay, upper_f, lower_f))
+    if len(layers_f) != lay.layers:
+        raise ValueError(
+            f"{len(layers_f)} layers given, the parameters lay out {lay.layers}"
+        )
+    return lay, st.mix(st.TankState(tuple(float(t) for t in layers_f)))
 
 
 def deliverable(
+    params: HeaterParams,
     upper_f: float,
     lower_f: float,
-    p: ReadinessParams | None = None,
+    layers_f: Sequence[float] | None = None,
     *,
-    heat_btu: float | None = None,
     inlet_f: float | None = None,
-    ep: BookParams | None = None,
 ) -> Deliverable:
-    """Deliverable gallons now, at the delivered line.
-
-    With the tank's booked heat, the drawable heat (above the empty
-    point) over the heat a delivered gallon takes (the book's). Without
-    it, the probes' gallons (``probes_gal``), or the evidence's
-    demonstrated volume where that is larger. Each is the probe's line;
-    ``delivered_gal`` adds the lag. The booked heat is read no higher
-    than ``tank_max_btu``.
-    """
-    p = p or ReadinessParams()
-    ep = ep or BookParams()
-    demonstrated = probes = 0.0
-    if heat_btu is not None:
-        probe = probe_line_gal(
-            heat_btu,
-            upper_f,
-            lower_f,
-            ep.inlet_default_f if inlet_f is None else inlet_f,
-            ep,
-        )
-        gal = delivered_gal(probe, upper_f, p)
-        basis: Literal["energy", "evidence", "probes"] = "energy"
-    else:
-        basis = "evidence" if p.evidence else "probes"
-        if upper_f < p.line_f:
-            gal = 0.0
-        else:
-            demonstrated = demonstrated_gal(upper_f, lower_f, p.evidence)
-            probes = probes_gal(upper_f, lower_f, p, ep)
-            gal = delivered_gal(max(demonstrated, probes), upper_f, p)
+    """Deliverable gallons now, at the delivered line, a tenth of a
+    gallon: from the tank's ``layers_f`` (the bottom first), else from
+    the profile the probes ``upper_f`` and ``lower_f`` stand for; the
+    mains at ``inlet_f``, else ``DrawParams.inlet_temp_f``."""
+    lay, tank = _tank(params, upper_f, lower_f, layers_f)
+    inflow = params.draw.inlet_temp_f if inlet_f is None else inlet_f
+    gal = st.deliverable_gal(
+        lay, tank, params.readiness.line_f, inflow, _valve(params)
+    )
     return Deliverable(
-        gal=round(gal, 1),
-        basis=basis,
-        at_observed_max=(
-            basis == "evidence"
-            and probes <= demonstrated
-            and demonstrated >= observed_max_gal(p.evidence)
-        ),
+        gal=round(gal, 1) if math.isfinite(gal) else gal,
+        basis="probes" if layers_f is None else "layers",
     )
 
 
-#: ``deliverable_gal`` is reported to this; less is none.
-_GAL_RESOLUTION = 0.05
-
-
-def booked_deliverable(
-    booked: Booked,
+def within_resolution(
+    params: HeaterParams,
     upper_f: float,
     lower_f: float,
-    p: ReadinessParams | None = None,
-    ep: BookParams | None = None,
-) -> Deliverable:
-    """``deliverable`` from a booked state: the answer now, and a draw
-    window's at its onset, alike."""
-    return deliverable(
-        upper_f,
-        lower_f,
-        p,
-        heat_btu=booked.heat_btu,
-        inlet_f=booked.inlet_f,
-        ep=ep,
-    )
-
-
-def delivery_temp_f(
-    booked: Booked,
-    upper_f: float,
-    p: ReadinessParams | None = None,
-    ep: BookParams | None = None,
+    layers_f: Sequence[float] | None,
+    gal: float,
     *,
-    lower_f: float | None = None,
-) -> float:
-    """What the tank delivers past the valve, from the booked state
-    (module docstring, *When it runs out*): the upper zone while the
-    delivered line has water left (the line itself, not below it, while
-    only the lag is left under a zone that reads below it); the line
-    once it is spent, falling ``fall_f_per_gal`` per delivered gallon
-    drawn past it, to no colder than the inlet. It is below the line
-    exactly when ``booked_deliverable`` is zero at the same probes: the
-    same heat, read no higher than ``tank_max_btu`` at ``lower_f`` (the
-    upper alone without it), and the same lag."""
-    p = p or ReadinessParams()
-    ep = ep or BookParams()
-    probe = probe_line_gal(
-        booked.heat_btu,
-        upper_f,
-        upper_f if lower_f is None else lower_f,
-        booked.inlet_f,
-        ep,
-    )
-    if probe == -math.inf:
-        return upper_f
-    if upper_f < p.line_f:
-        probe = min(probe, 0.0)
-    left = probe + p.delivered_lag_gal
-    # Reported to a tenth of a gallon: what rounds to none is spent.
-    if left >= _GAL_RESOLUTION:
-        return max(upper_f, p.line_f)
-    fallen = _fallen_f(max(0.0, -left), p)
-    # With a lag the delivered water is warmer than the probe (one
-    # measured bath's spout crossed the line with the probe at ~94.5 °F),
-    # so it
-    # falls from the line per gallon, not to the zone. With none, the
-    # probe is the delivery and bounds it.
-    top = upper_f if p.delivered_lag_gal <= 0.0 else math.inf
-    return min(top, max(booked.inlet_f, fallen))
+    inlet_f: float | None = None,
+) -> bool:
+    """Whether a probe error of ``ReadinessParams.probe_resolution_f``
+    either way, on each probe on its own, would take ``deliverable``
+    across ``gal``: less than the probes can resolve decides the answer.
+    The layers are moved with the probes (``stratified.assimilate``),
+    or the profile is made of the moved probes."""
+    r = params.readiness.probe_resolution_f
+    lay, tank = _tank(params, upper_f, lower_f, layers_f)
+    inflow = params.draw.inlet_temp_f if inlet_f is None else inlet_f
+    line, valve = params.readiness.line_f, _valve(params)
 
+    def enough(state: st.TankState) -> bool:
+        got = st.deliverable_gal(lay, state, line, inflow, valve)
+        return round(got, 1) >= gal
 
-def _fallen_f(past_gal: float, p: ReadinessParams) -> float:
-    """The delivery ``past_gal`` delivered gallons past the delivered
-    crossing: ``fall_f_per_gal`` a gallon below the line, and just below
-    it at the crossing, so zero gallons and a delivery under the line
-    always go together."""
-    fallen = p.line_f - p.fall_f_per_gal * past_gal
-    return min(fallen, math.nextafter(p.line_f, 0.0))
-
-
-def zone_delivery_f(
-    upper_f: float,
-    past_crossing_gal: float | None,
-    p: ReadinessParams | None = None,
-) -> float:
-    """The delivery without a booked state, from the upper zone alone,
-    on the same delivered line: the
-    zone at or above the line; below it, the line itself until
-    ``delivered_lag_gal`` gallons have been delivered since the zone
-    crossed (``past_crossing_gal``, None while it has not), then falling
-    per gallon, never below the zone."""
-    p = p or ReadinessParams()
-    if (
-        upper_f >= p.line_f
-        or past_crossing_gal is None
-        or p.delivered_lag_gal <= 0.0
-    ):
-        return upper_f
-    left = p.delivered_lag_gal - past_crossing_gal
-    if left >= _GAL_RESOLUTION:
-        return p.line_f
-    return max(upper_f, _fallen_f(max(0.0, -left), p))
-
-
-def observed_max_gal(evidence: tuple[EvidenceDraw, ...]) -> float:
-    """The largest volume in ``evidence``: what ``at_observed_max``
-    means; 0 with none."""
-    return max((g for _, _, g in evidence), default=0.0)
-
-
-# ── Example evidence ────────────────────────────────────────────────
-
-#: The line ``EXAMPLE_EVIDENCE`` was measured at, °F.
-EXAMPLE_EVIDENCE_LINE_F = 105.0
-
-#: One NWP500-65 installation's evidence, an example and not a default:
-#: each row one metered draw with the heat pump and both elements off
-#: throughout, the upper and lower probes before it (°F) and the volume
-#: it delivered past the mixing valve before the upper probe crossed
-#: 105 °F (the whole draw if it never did), reduced to the frontier, 19
-#: of 257 draws. It describes that household's mixing valve and draws:
-#: no clean draw in it took the upper probe below 105 °F (the lowest
-#: reached 107.2), so it is a floor, and a low one (a full tank that had
-#: filled a 38 gal bath reads 33.4 gal). Its core assumption, that a
-#: no-colder state delivers at least as much, fails on small drops (15
-#: of 22 later draws over-promised for a 2 °F fall), because two probes
-#: do not see where the hot/cold boundary is.
-EXAMPLE_EVIDENCE: tuple[EvidenceDraw, ...] = (
-    (124.88, 115.34, 8.2),
-    (127.76, 102.20, 7.8),
-    (127.76, 124.16, 11.7),
-    (128.66, 125.24, 15.4),
-    (129.20, 113.36, 8.7),
-    (129.74, 99.32, 12.7),
-    (130.64, 120.92, 13.6),
-    (132.08, 127.76, 16.5),
-    (133.70, 111.38, 14.2),
-    (134.78, 135.86, 18.1),
-    (134.96, 135.50, 18.3),
-    (135.50, 135.68, 18.6),
-    (135.86, 135.50, 23.6),
-    (135.86, 136.76, 24.1),
-    (139.64, 139.28, 25.1),
-    (140.36, 132.98, 22.1),
-    (141.08, 141.44, 33.4),
-    (142.52, 113.00, 14.3),
-    (142.52, 142.52, 38.2),
-)
-
-
-def with_example_evidence(p: ReadinessParams) -> ReadinessParams:
-    """``p`` with ``EXAMPLE_EVIDENCE``. Refused unless ``p.line_f`` is
-    the line it was measured at: at another line its gallons are not
-    the ones a tank delivers before crossing it."""
-    if p.line_f != EXAMPLE_EVIDENCE_LINE_F:
-        raise ValueError(
-            f"EXAMPLE_EVIDENCE was measured at {EXAMPLE_EVIDENCE_LINE_F} °F,"
-            f" not line_f={p.line_f}"
+    ready = enough(tank)
+    seen_u, seen_l = st.observe(lay, tank)
+    for du, dl in itertools.product((-r, 0.0, r), repeat=2):
+        if du == dl == 0.0:
+            continue
+        moved = (
+            st.estimate(lay, upper_f + du, lower_f + dl)
+            if layers_f is None
+            else st.assimilate(lay, tank, seen_u + du, seen_l + dl)
         )
-    return replace(p, evidence=EXAMPLE_EVIDENCE)
+        if enough(st.mix(moved)) != ready:
+            return True
+    return False
 
 
-# ── Along a simulation ──────────────────────────────────────────────
+def delivery_f(
+    params: HeaterParams,
+    upper_f: float,
+    layers_f: Sequence[float] | None = None,
+) -> float:
+    """What the tap gets now: the water leaving the top (the top layer,
+    else the upper probe) through the mixing valve, never warmer than
+    the tank's."""
+    top = upper_f if layers_f is None else float(layers_f[-1])
+    d = params.draw
+    valve = delivery_temp_f(top, d.delivery_intercept_f, d.delivery_slope)
+    return min(top, valve)
 
 
 def _state_before(
@@ -456,60 +250,12 @@ def depletion(
 
 
 def delivery_along(
-    points: Sequence[PathPoint],
-    draws: Sequence[Draw],
-    booked: BookedPath | None = None,
-    p: ReadinessParams | None = None,
-    ep: BookParams | None = None,
+    points: Sequence[PathPoint], params: HeaterParams
 ) -> list[float]:
-    """The delivery temperature at each element of the path: the booked
-    state's (``delivery_temp_f``), or without one the upper zone on the
-    same delivered line, a lag behind it, counted in the walk's
-    ``draws`` (``zone_delivery_f``)."""
-    p = p or ReadinessParams()
-    if booked is None:
-        return _zone_delivery(points, draws, p)
-    return [
-        delivery_temp_f(b, pt.upper_f, p, ep, lower_f=pt.lower_f)
-        for pt, b in zip(points, booked.states, strict=True)
-    ]
-
-
-def _zone_delivery(
-    points: Sequence[PathPoint],
-    draws: Sequence[Draw],
-    p: ReadinessParams,
-) -> list[float]:
-    """``zone_delivery_f`` along the path: the gallons delivered since
-    the zone last crossed below the line, a draw at an instant that has
-    two elements counted after the first (its step). A zone already
-    below the line at the start has no crossing to count from: nothing
-    says how far past it the tank is, so it gets no lag, as
-    ``deliverable`` answers 0 there."""
-    ordered = sorted(draws)
-    at = [d for d, _ in ordered]
-    gal = list(itertools.accumulate(g for _, g in ordered))
-
-    def drawn(i: int) -> float:
-        t = points[i].at
-        before = i + 1 < len(points) and points[i + 1].at == t
-        k = (bisect_left if before else bisect_right)(at, t)
-        return gal[k - 1] if k else 0.0
-
-    out: list[float] = []
-    since: float | None = None
-    above = bool(points) and points[0].upper_f >= p.line_f
-    for i, pt in enumerate(points):
-        if pt.upper_f >= p.line_f:
-            since, above = None, True
-        elif since is None and above:
-            since, above = drawn(i), False
-        out.append(
-            zone_delivery_f(
-                pt.upper_f, None if since is None else drawn(i) - since, p
-            )
-        )
-    return out
+    """The delivery temperature at each element of the path
+    (``delivery_f``), from its layers, or from its upper probe where it
+    has none."""
+    return [delivery_f(params, pt.upper_f, pt.layers_f) for pt in points]
 
 
 @dataclass(frozen=True)
@@ -528,8 +274,8 @@ class DrawWindowResult:
     delivery_f: float
     #: Deliverable gallons at the onset (``deliverable``).
     deliverable_gal: float
-    #: ``deliverable_gal`` less the expected gallons, and less an aged
-    #: book's error band in gallons; None without an expectation.
+    #: ``deliverable_gal`` less the expected gallons; None without an
+    #: expectation.
     margin_gal: float | None
     #: The heating interval overlapping the window, if any.
     recovery: HeatingInterval | None
@@ -544,51 +290,46 @@ class DrawWindowResult:
     draws_until: datetime | None = None
 
 
+def _onset(points: Sequence[PathPoint], at: datetime) -> PathPoint | None:
+    """The path's element in force at ``at``, before anything taken
+    there: the first at that instant, else the last before it."""
+    k = bisect_left([p.at for p in points], at)
+    if k < len(points) and points[k].at == at:
+        return points[k]
+    return points[k - 1] if k > 0 else None
+
+
 def draw_windows(
     sim: Simulation,
     windows: Sequence[tuple[datetime, datetime, float | None]],
     delivery: Sequence[float],
+    params: HeaterParams,
     *,
-    booked: BookedPath | None = None,
-    band_btu: float = 0.0,
-    p: ReadinessParams | None = None,
-    ep: BookParams | None = None,
+    inlet_f: float | None = None,
     forecast: Sequence[tuple[float | None, datetime | None]] = (),
 ) -> list[DrawWindowResult]:
     """One per ``(start, end, expected_gal)`` window; ``forecast`` gives
     each, by index, the draws a forecast expects in it and the end of its
-    long draws in the worst case. ``band_btu`` is
-    taken off ``margin_gal``, in gallons at the window's tank: an aged
-    book's error band. With the booked state walked along the path, the
-    tank at the onset, its ``deliverable_gal`` and the delivery judged
-    over the window all read that state; without it, the zones and the
-    evidence."""
-    p = p or ReadinessParams()
-    ep = ep or BookParams()
+    long draws in the worst case. The tank at the onset (before anything
+    drawn there), its ``deliverable_gal`` and the delivery judged over
+    the window all read the path's layers."""
+    p = params.readiness
     out: list[DrawWindowResult] = []
     for k, (start, end, expected) in enumerate(windows):
         count, draws_until = forecast[k] if k < len(forecast) else (None, None)
         # A window already open at the start is read at the start.
         opened = max(start, sim.points[0].at)
         state = _state_before(sim.points, opened)
-        if state is None:
+        there = _onset(sim.points, opened)
+        if state is None or there is None:
             continue
         upper, lower = state
         judged = depletion(
             sim.points, opened, min(end, sim.points[-1].at), delivery, p
         )
-        band_gal = 0.0
-        if booked is None:
-            gal = deliverable(upper, lower, p, ep=ep).gal
-            at_onset = _at_onset(sim.points, delivery, opened, upper)
-        else:
-            there = booked.before(opened)
-            gal = booked_deliverable(there, upper, lower, p, ep).gal
-            at_onset = delivery_temp_f(there, upper, p, ep, lower_f=lower)
-            per_gal = WATER_BTU_PER_GAL_F * max(
-                1.0, tank_delivery_f(upper, ep) - there.inlet_f
-            )
-            band_gal = band_btu / per_gal
+        gal = deliverable(
+            params, upper, lower, there.layers_f, inlet_f=inlet_f
+        ).gal
         recovery = next(
             (h for h in sim.heating if h.start.at < end and h.end > start),
             None,
@@ -600,11 +341,9 @@ def draw_windows(
                 expected_gal=expected,
                 upper_f=upper,
                 lower_f=lower,
-                delivery_f=at_onset,
+                delivery_f=_at_onset(sim.points, delivery, opened, upper),
                 deliverable_gal=gal,
-                margin_gal=(
-                    None if expected is None else gal - band_gal - expected
-                ),
+                margin_gal=None if expected is None else gal - expected,
                 recovery=recovery,
                 delivery_min_f=judged.min_f,
                 below_line_min=judged.below_min,

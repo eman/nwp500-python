@@ -35,11 +35,10 @@ Four ideas run through the whole simulator:
 - **Events, not time steps.** Nothing the firmware decides happens
   between events, so the walk jumps from one event to the next and lets
   the physics carry the tank across each span.
-- **Fitted against the record, scored on later records.** The
-  compressor and heat book fits hold out the latest part of a record and
-  are scored on it, in time order, so a term that only fits its own data
-  shows; with ``keep_better`` the other main terms are scored the same
-  way.
+- **Fitted against the record, scored on later records.** With
+  ``keep_better`` each group of terms holds out the latest part of a
+  record and is scored on it, in time order, so a term that only fits
+  its own data shows.
 - **Say what an answer rests on.** Each answer lists its ``reasons``
   (where it may be less than it seems) and ``defaults_used`` (every
   input it assumed), so a caller can tell a measured answer from an
@@ -367,73 +366,37 @@ back as it left. Runs closer than 10 minutes count as one. The terms
 and their fits are in :doc:`standby-loss`.
 
 
-The heat book
-=============
+The tank now
+============
 
 Two probes can say how much hot water is left while the tank is full
 or nearly so. Once the boundary between hot and cold water sits between
-them, they can't: the upper probe reads hot until the cold reaches it.
-The heat book (``sim.book``) answers by bookkeeping instead.
+them, they can't: the upper probe reads hot until the cold reaches it,
+and after a draw the bottom is the inlet's, which they read as no
+different from a tank that coasted. The record before now can
+(``sim.history``).
 
-**What it books.** Heat above 70 degF, starting from a moment the tank
-is known full. From there it debits each draw (by delivered gallons
-through the valve, or tank gallons at the upper zone), standby loss and
-circulation, and credits the compressor's heat (a fitted rate that
-rises with the air) and the elements'. Credited heat is drawable
-wherever it lands:
+**The replay.** The last ``REPLAY`` (24 hours) of the heater's record is
+put on a one-minute grid: both probes, the compressor's and the
+elements' runs, the air, the metered draws (a flow over
+``DrawParams.draw_gpm``, in delivered gallons through the valve) and the
+circulation's runs. The tank starts as the profile the probes stand for
+at the span's start and is walked through all of it on the layered
+tank's own physics, corrected toward the probes every 10 minutes they
+are read (``stratified.assimilate``), and the probes' last readings are
+laid over the end. Those layers are the scenario's
+``HeaterState.layers_f``. ``sim_adapters.layers_from_history`` and
+``layers_from_changes`` read them from a record, and
+``sim_home_assistant.HomeAssistantTank`` keeps them current from Home
+Assistant. A meter silent for more than an hour in the span is refused,
+as is a record with no flow reading at all, and the replay starts no
+earlier than the flow's first reading. A span the heater went unheard
+is walked across with its values held; across a span the meter was
+unknown, the flow holds 60 seconds and then is none.
 
-.. math::
-
-   H(t_0) = 8.34\,V\left(\bar T - 70\right), \qquad
-   \frac{dH}{dt} = \dot q_{hp}(T_a) + \dot q_{el}
-   - UA_b \max(0, \bar T - T_a) - \dot q_{\text{draw}}
-   - \dot q_{\text{circ}}
-
-.. math::
-
-   \dot q_{hp}(T_a) = q_0 + q_1\,(T_a - 65), \qquad
-   \dot q_{\text{draw}} = 8.34\,\dot V_{\text{del}}
-   \left(T_{\text{del}}(T_U) - T_{\text{in}}\right)
-
-where :math:`q_0`, :math:`q_1` and the book's own :math:`UA_b` are its
-fitted terms (``BookParams``).
-
-**Anchors.** A book starts, and restarts, only where the tank is known
-full: both probes within ``uniform_band_f`` at the end of a recovery
-with nothing drawn or circulated since, or with the compressor running
-alone, nothing drawn or circulating at that step, once it has run
-``anchor_run_min`` since the last draw. A quiet tank after a draw is
-not an anchor: the lower probe shows only part of a small draw in a
-mixed tank, and an anchor there would credit the draw back. The book's
-error is flat for ``max_anchor_age_h`` (18 h) after its anchor and
-larger beyond, so an older anchor is marked aged and carries a wider
-band.
-
-**Reading a record.** ``book_from_history`` and ``book_from_changes``
-put the recorded statuses, the meter and the air on a 10-second grid
-and walk the book from the last anchor. From statuses, a meter reading
-holds 60 seconds and an inlet reading an hour, and a meter silent for
-more than an hour is refused; from changes, each value holds until the
-next. A span the heater went unheard is walked across with its values
-held; across a span the meter was unknown, the flow holds 60 seconds
-and then is none.
-
-**How much is left.** The empty point (``empty_btu``) is the booked
-heat left when the upper probe crossed the line in recorded drawdowns.
-Deliverable gallons are the heat above it over the heat a delivered
-gallon takes, with the heat read no higher than a whole tank at the
-warmer probe (``tank_max_btu``); the ceiling bounds the read, not the
-booked heat:
-
-.. math::
-
-   D = \frac{\min\left(H, H_{\max}(T_U, T_L)\right) - H_{\text{empty}}}
-   {8.34\left(T_{\text{del}}(T_U) - T_{\text{in}}\right)}
-
-Along a walk the book re-anchors where the walk's tank is full: at the
-end of a recovery the heater stopped itself, quiet after one with the
-zones within the band, or with the compressor running alone past the
-hold. It reads the walk; the tank's probes are the layered tank's.
+**Without a record** the simulation starts from the profile the two
+probes stand for (``stratified.estimate``) and says so
+(``tank_profile_estimated``).
 
 
 Hot water at the tap
@@ -442,30 +405,35 @@ Hot water at the tap
 **The line.** Water below ``line_f`` (105 degF by default) is not hot.
 Every readiness answer is drawn at it.
 
-**The lag.** The probe is not at the tap. When the upper probe crosses
-the line, the water above it still leaves hot, so the tap runs cold
-``delivered_lag_gal`` gallons later (measured once, 5.3 to 7.3 gal;
-5.0 used).
+**Deliverable gallons** (``delivery.deliverable``). The water leaving
+the top in turn, each tank gallon delivering
+:math:`1/f_{\text{hot}}` at the tap through the mixing valve, to the
+first the valve delivers under the line; the inlet zone's water, which
+warms toward the column as it rises, in closed form. The mains is the
+scenario's inlet, else ``DrawParams.inlet_temp_f``. The tank's outlet
+is its top, above the upper probe: the tap stays hot for the water
+above the probe after the probe has crossed (one measurement: 5.3 to
+7.3 gal; the fitted probe has 6.9 gal above it).
 
-**Deliverable gallons.** With a book: :math:`D` above, plus the lag. Without one: the tank's heat as the two probes
-place it, or the most that recorded draws delivered from probes no
-warmer than now (``evidence``), whichever is more, plus the lag; with
-the upper probe already below the line, none.
+**The delivery along a walk** is the top layer's water through the
+valve, so the gallons and the delivery agree on when the tank runs
+out.
 
 **Ready for a bath.** ``time_to_ready`` compares the deliverable
-gallons with the bath. If the tank is short, it finds the first minute
-the bath is covered along the heat pump's next recovery (from now if
-the compressor runs, else from the heater's own trigger after a coast), and in each element mode as if written now. An
-answer within the book's error band, or one that a 1 degF probe error
-would flip, says so.
+gallons with the bath. If the tank is short, it walks the scenario in
+each mode, the mode written at the start, for up to a day, and takes
+the first instant the walk's layers deliver the bath; in the heat pump
+that is from now if the compressor runs, else from the heater's own
+trigger after a coast. An answer that a 1 degF error on either probe
+would flip says so.
 
 
 Fitting and checking the parameters
 ===================================
 
 ``sim_calibrate.calibrate`` fits a heater's parameters from its
-recorded statuses, and ``sim_calibrate.fit_book`` the heat book's;
-:doc:`/how-to/calibrate-simulator` shows how to run them. The methods,
+recorded statuses; :doc:`/how-to/calibrate-simulator` shows how to run
+it. The methods,
 in the order they run:
 
 **The frame.** One row per status, each holding until the next: the
@@ -517,16 +485,10 @@ run-on, and four measures are read from it:
 The planes are applied only when together they claim nothing no heat
 pump does (*The map*, above).
 
-**The installation's terms.** ``sim_calibrate.fit_book`` fits the heat
-book's terms on pairs of anchors (the heat booked between two full-tank moments against the
-change the probes show) by an L1 linear program; a term the pairs can't
-tell apart from the others stays at the base. The circulation's terms,
-the draw response and the readiness evidence have fits of their own
-(:doc:`/how-to/simulate-heater`).
+**The installation's terms.** The circulation's terms have fits of
+their own (:doc:`/how-to/simulate-heater`).
 
-**Held out, in time order.** The heat book's fit needs 10
-pairs, holds out the latest fifth, and replaces the base only when it
-books those no worse. With ``keep_better``, the tank's terms, the
+**Held out, in time order.** With ``keep_better``, the tank's terms, the
 heat's map, the power's map, the start's hold and the run-on are each
 refitted on their earlier four fifths (the tank's quiet windows, draws
 and recoveries together), and a refit
@@ -542,7 +504,7 @@ engineering ``default``, and whether it describes the **heater** or the
 **installation** (``params.provenance_of``, ``params.scope_of``). A term
 the calibration could not fit is listed in ``HeaterParams.unfitted``,
 and every answer that relies on it says so in its ``reasons``
-(``physics_uncalibrated``, ``book_uncalibrated`` and the rest).
+(``physics_uncalibrated``, ``draw_uncalibrated`` and the rest).
 
 
 How the sensors are used
@@ -579,12 +541,13 @@ is not.
           OF --> SC
           CP --> SC
           FM --> SC
-          P --> BK["Heat book"]
-          F --> BK
-          A --> BK
-          FM --> BK
-          IN --> BK
-          CP --> BK
+          IN --> SC
+          P --> LY["The tank's layers"]
+          F --> LY
+          A --> LY
+          FM --> LY
+          CP --> LY
+          LY --> SC
           P --> CAL["Calibration"]
           F --> CAL
           A --> CAL
@@ -603,9 +566,9 @@ The heater's readings
    * - Reading
      - How the simulator uses it
    * - The upper and lower tank probes
-     - The tank's state at the start, what every fit is scored
-       against, and the heat book's anchors (both within
-       ``uniform_band_f`` is a full tank). Required.
+     - The tank's state at the start (laid over the replayed layers),
+       what the replay is corrected toward, and what every fit is
+       scored against. Required.
    * - The compressor's running flag
      - Whether a recovery is in progress; its last stop starts the
        restart lockout and dates the last heating. In a record it
@@ -618,8 +581,8 @@ The heater's readings
        element in it, or in the 10 minutes before it, is left out of the
        heat pump's fit.
    * - The heater's air reading
-     - While the compressor runs, the air drawn over the coil. The heat
-       book and the Home Assistant air fit use it from 5 minutes into a
+     - While the compressor runs, the air drawn over the coil. The
+       replay and the Home Assistant air fit use it from 5 minutes into a
        run, once it has settled; the heat pump's fit reads it minute by
        minute. From August to October it read within about 0.35 degF
        of a sensor beside the heater, up to about 2 degF warm from May
@@ -677,10 +640,9 @@ An installation's sensors
        the record it moved a recovery's heat by no more than the
        probes resolve. Without it: 50 %, named in ``defaults_used``.
    * - A probe on the cold supply
-     - Two uses. A recorded draw debits the heat book at the inlet
-       reading of its own step. The mains, which turns the book's heat
-       into gallons ahead, is never a raw reading, since at rest the
-       pipe tracks the air: it is the median plateau of long draws
+     - The mains a draw meets and the deliverable gallons are drawn
+       against. It is never a raw reading, since at rest the pipe
+       tracks the air: it is the median plateau of long draws
        (11 minutes or more, circulation off) that ended in the last
        72 hours, each draw's plateau the median of its last 2 minutes,
        none earlier than minute 9. Without the probe: the parameters'
@@ -688,12 +650,12 @@ An installation's sensors
        ``inlet_temp_modelled``.
    * - A flow meter on the hot line
      - The draws, in delivered gallons (or tank gallons, with
-       ``flow_volume="tank"``), which move the tank and debit the heat
-       book. From statuses a reading holds 60 seconds and then counts
-       as no flow; from a change history it holds until the next
-       change.
-       Without one there is no heat book (``no_heat_book``), and in a
-       fit the heater's "in use" flag stands in for the quiet test.
+       ``flow_volume="tank"``), which move the tank in the replay and
+       the fits. From statuses a reading holds 60 seconds and then
+       counts as no flow; from a change history it holds until the next
+       change. Without one there is no replay, so the tank starts from
+       the probes (``tank_profile_estimated``), and in a fit the
+       heater's "in use" flag stands in for the quiet test.
    * - The circulation pump
      - Its runs, from its speed (10 rpm or more is running), priced as
        above. Without them, an installation that circulates says
@@ -711,4 +673,4 @@ An installation's sensors
 Where a sensor's record has a gap, the value before it holds across a
 short silence (a Home Assistant restart, say); a span nobody heard is
 left out of the fits, and the air across an air sensor's outage is
-65 degF in the heat book.
+65 degF in the replay.

@@ -37,17 +37,12 @@ def test_the_65_round_trips_as_a_document() -> None:
 
 
 @pytest.mark.parametrize(("code", "gal"), [(1, 45.2), (3, 76.1)])
-def test_other_sizes_scale_the_tank_and_its_empty_point(
-    code: int, gal: float
-) -> None:
-    """The tank volume, and the empty point that is per gallon of it,
-    scale by the manual's rated storage; nothing else does."""
+def test_other_sizes_scale_the_tank(code: int, gal: float) -> None:
+    """The tank volume scales by the manual's rated storage; nothing
+    else does."""
     base, other = default_params(2), default_params(code)
-    scale = gal / 63.2
     assert other.tank.volume_gal == pytest.approx(gal)
-    assert other.book.tank_gal == pytest.approx(gal)
-    assert other.book.empty_btu == pytest.approx(base.book.empty_btu * scale)
-    assert replace(other, tank=base.tank, book=base.book) == base
+    assert replace(other, tank=base.tank) == base
 
 
 def test_an_unknown_size_is_refused() -> None:
@@ -114,58 +109,37 @@ def test_a_fitted_document_writes_back_as_it_was() -> None:
 def test_the_site_example_is_that_fitted_model() -> None:
     """The document carries no circulation (its bundle keeps that
     apart); the site example adds the installation's."""
-    # Nor its readiness evidence, which the model kept in its code.
     site = site_example_params()
     assert params_from_document(json.loads(FITTED_DOC.read_text())) == (
-        replace(
-            site,
-            circulation=None,
-            readiness=replace(site.readiness, evidence=()),
-        )
+        replace(site, circulation=None)
     )
-    assert len(site.readiness.evidence) == 19
     assert site_example_params().circulation == SITE_CIRCULATION
 
 
 def test_the_default_is_the_site_without_its_mixing_valve() -> None:
     d, site = default_params(), site_example_params()
     assert (d.draw.delivery_intercept_f, d.draw.delivery_slope) == NO_VALVE
-    book = d.book_terms()
-    assert (book.delivery_intercept_f, book.delivery_slope) == NO_VALVE
-    site_book = site.book_terms()
-    assert (site_book.delivery_intercept_f, site_book.delivery_slope) == (
+    site_draw = site.draw
+    assert (site_draw.delivery_intercept_f, site_draw.delivery_slope) == (
         SITE_VALVE
     )
-    assert d.circulation is None and d.readiness.evidence == ()
+    assert d.circulation is None
     assert with_valve(d, SITE_VALVE) == replace(
-        site,
-        circulation=None,
-        readiness=d.readiness,
-        unfitted=INSTALLATION_TERMS,
+        site, circulation=None, unfitted=INSTALLATION_TERMS
     )
 
 
 def test_the_defaults_installation_terms_are_named_unfitted() -> None:
-    """The replacement review of #162: one installation's book,
-    readiness and draw terms stand in for another's, and every answer
-    they reach says so; the site's own example is its fit."""
+    """One installation's draw terms stand in for another's, and every
+    answer they reach says so; the site's own example is its fit."""
     assert default_params().unfitted == INSTALLATION_TERMS
     assert site_example_params().unfitted == ()
-
-
-def test_one_valve_drives_the_draw_and_the_book() -> None:
-    p = replace(
-        default_params(),
-        draw=replace(default_params().draw, delivery_intercept_f=50.0),
-    )
-    assert p.book_terms().delivery_intercept_f == 50.0
-    assert p.book_terms().delivery_slope == 1.0
 
 
 def test_without_a_valve_every_gallon_is_tank_water() -> None:
     """The same tank delivers fewer gallons through no valve: each one is
     all tank water."""
-    from nwp500.sim import HeaterState, Settings, full_tank_book, readiness
+    from nwp500.sim import HeaterState, Settings, readiness
 
     state, settings = (
         HeaterState(upper_f=140.5, lower_f=139.6),
@@ -176,8 +150,7 @@ def test_without_a_valve_every_gallon_is_tank_water() -> None:
         ("none", default_params()),
         ("site", site_example_params()),
     ):
-        book = full_tank_book(140.5, 139.6, p.book_terms())
-        gal[name] = readiness(state, settings, p, book=book).gal
+        gal[name] = readiness(state, settings, p).gal
     assert 0.0 < gal["none"] < gal["site"] / 1.2
 
 
@@ -190,8 +163,8 @@ def test_without_a_valve_every_gallon_is_tank_water() -> None:
         ("draw", "delivery_intercept_f", INSTALLATION),
         ("draw", "inlet_temp_f", INSTALLATION),
         ("draw", "delivery_slope", INSTALLATION),
-        ("book", "empty_btu", INSTALLATION),
-        ("readiness", "delivered_lag_gal", HEATER),
+        ("draw", "draw_gpm", INSTALLATION),
+        ("readiness", "line_f", INSTALLATION),
     ],
 )
 def test_each_parameter_says_what_it_describes(

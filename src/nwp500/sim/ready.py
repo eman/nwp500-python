@@ -1,53 +1,35 @@
 """Time to ready: when the tank can run a bath, and how many showers it
 is ready for, by heating mode (``sim.ready``).
 
-``sim.delivery`` knows how many gallons a tank state can deliver. This
+``sim.delivery`` knows how many gallons the tank's layers deliver. This
 turns that into the answer: the bath and shower answers, the time to
-bath-ready along the next heat-pump recovery and in each element mode,
-and the reasons that say what the numbers rest on.
+bath-ready in each mode, and the reasons that say what the numbers rest
+on. Each mode's time is the simulator's own walk in that mode from now
+(``api.time_to_ready``, ``ModeRun``): the first instant its layers
+deliver the bath, and the electricity to then.
 
-The recovery it scores (``Recovery``) is the one the heater runs next:
-from now if the compressor runs, else from the heater's own trigger on
-the coast to it, with the TOU cap judged where it ends. The heat it adds
-to the book is the book's own compressor term, by the air now. The
-element modes are the element model's (``physics.element.mode_recovery``).
-Every mode is scored by the same deliverable rule on a one-minute grid.
+The recovery it reports (``Recovery``) is the heat-pump recovery the
+heater runs next: from now if the compressor runs, else from the
+heater's own trigger on the coast to it, with the TOU cap judged where
+it ends. Its outcome says why a bath is not reached.
 """
 
-import itertools
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from nwp500.sim.book import (
-    BTU_PER_WH,
-    Booked,
-    delivery_f,
-)
-from nwp500.sim.delivery import (
-    Deliverable,
-    booked_deliverable,
-    deliverable,
-)
-from nwp500.sim.params import BookParams, ElementParams, ReadinessParams
-from nwp500.sim.physics.element import (
-    DEVICE_MODE,
-    ElementMode,
-    HeaterMode,
-    mode_recovery,
-    upper_rise_f,
-)
-from nwp500.sim.units import WATER_BTU_PER_GAL_F
+from nwp500.sim.delivery import Deliverable
+from nwp500.sim.params import ReadinessParams
+from nwp500.sim.physics.element import HeaterMode
 
 #: Present on every answer while the model and the line are provisional:
-#: the outlet lag rests on one measurement, the line is a choice, and the
-#: upper probe stands in for the outlet.
+#: the deliverable volume rests on the layered tank's draws, checked on
+#: few drawdowns, and the line is a choice.
 ALWAYS: tuple[str, ...] = (
     "readiness_model_provisional",
     "depletion_threshold_provisional",
-    "upper_probe_stand_in",
 )
 
 TrajectoryOutcome = Literal["ok", "not_scheduled", "unavailable", "idle"]
@@ -87,17 +69,6 @@ class Recovery:
     #: Minutes from now until the heat pump starts: 0 if it is running,
     #: else when the heater's own trigger fires.
     start_minute: float = 0.0
-    #: Heat the tank loses before then to standby, in the book's frame;
-    #: taken off pro rata over the coast.
-    coast_btu: float = 0.0
-    #: The draws up to then, delivered gallons, the one tripping the
-    #: start included, taken the same way: the book takes their heat
-    #: (``book.Booked.drawn``).
-    coast_draw_gal: float = 0.0
-    #: The book's compressor heat rate, by the air now. The recovery
-    #: adds heat at this rate from its start to its end: the book's own
-    #: term, not the physics' apparent-frame stored energy.
-    hp_btu_per_h: float = 0.0
     #: The recovery as ``forecast`` gives it, each point with its
     #: electricity, stored heat and COP over the interval ending there
     #: (``heating_trajectory.HeatingPoint``): a projection's heating
@@ -111,25 +82,13 @@ class Recovery:
 def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:
     """``rec``, computed at ``then``, as seen from ``now``: for a
     caller that keeps a recovery and reuses it. ``points`` are absolute
-    instants, but ``start_minute``, ``coast_btu`` and ``coast_draw_gal``
-    run from the instant it was computed. Reused unchanged, the start
-    comes ``now - then`` minutes late and the whole coast is charged
-    again, though the book at ``now`` already holds what has happened:
-    time to ready runs late by up to the age of the copy kept. The
-    remaining coast keeps its pro-rata share; one with the start at
-    ``then`` (a draw there tripping it) has none left."""
+    instants, but ``start_minute`` runs from the instant it was
+    computed: reused unchanged, the start comes ``now - then`` minutes
+    late."""
     elapsed = (now - then).total_seconds() / 60.0
-    if rec.outcome != "ok" or elapsed <= 0.0:
+    if rec.outcome != "ok" or elapsed <= 0.0 or rec.start_minute <= 0.0:
         return rec
-    if rec.start_minute <= 0.0:
-        return replace(rec, coast_btu=0.0, coast_draw_gal=0.0)
-    remaining = max(0.0, rec.start_minute - elapsed)
-    return replace(
-        rec,
-        start_minute=remaining,
-        coast_btu=rec.coast_btu * remaining / rec.start_minute,
-        coast_draw_gal=rec.coast_draw_gal * remaining / rec.start_minute,
-    )
+    return replace(rec, start_minute=max(0.0, rec.start_minute - elapsed))
 
 
 #: The modes time to ready is reported for (``BathReady.by_mode``), in
@@ -143,9 +102,6 @@ MODES: tuple[HeaterMode, ...] = (
 
 ELEMENT_MODES: tuple[HeaterMode, ...] = MODES[1:]
 
-#: One-minute grid for every mode, so none looks faster for its spacing.
-_GRID_MIN = 1.0
-
 
 def showers_ready_for(deliverable_gal: float, shower_gal: float) -> float:
     """Showers the tank is ready for, two decimals."""
@@ -158,27 +114,42 @@ def whole_showers(ready_for: float) -> int:
     """``floor``: a shower the tank cannot finish is not one it is ready
     for. The epsilon keeps 2.00 from flooring to 1 on a float that came
     back as 1.9999999."""
-    return max(0, math.floor(ready_for + 1e-9))
+    # Mains at the line never runs the tap under it: no end to count to.
+    return max(0, math.floor(min(ready_for, 1e9) + 1e-9))
+
+
+@dataclass(frozen=True)
+class ModeRun:
+    """A mode's walk from now (``api.time_to_ready``): minutes until its
+    layers deliver the bath and the electricity to then, kWh; None for
+    both when it does not get there within the walk."""
+
+    mode: HeaterMode
+    ready_in_minutes: float | None
+    energy_kwh: float | None
+    reasons: tuple[str, ...] = ()
 
 
 def assess(
     now: datetime,
     tank: TankNow,
     recovery: Recovery,
+    now_gal: Deliverable,
+    runs: Sequence[ModeRun],
     *,
     bath_gal: float,
     bath_source: Literal["configured", "request"],
     shower_gal: float,
     shower_source: Literal["weekly_forecast", "default", "request"],
     valid_s: float,
-    setpoint_f: float | None = None,
-    booked: Booked | None = None,
-    inlet_measured: bool = False,
+    within_resolution: bool = False,
     params: ReadinessParams | None = None,
-    element_params: ElementParams | None = None,
-    book_params: BookParams | None = None,
 ) -> dict[str, Any]:
-    """The readiness answer as a mapping (``time_to_ready`` types it).
+    """The readiness answer as a mapping (``time_to_ready`` types it):
+    ``now_gal`` the deliverable gallons now, ``runs`` each mode's walk
+    (``ModeRun``, by ``MODES``; none needed with the bath ready now),
+    ``within_resolution`` whether a probe error would flip the bath's
+    answer (``delivery.within_resolution``).
 
     Its keys: ``generated_at`` (``now``), ``valid_until`` (``now`` plus
     ``valid_s``), ``status`` (``low_confidence`` with any reason, else
@@ -193,46 +164,25 @@ def assess(
     ``ready_for_whole``.
 
     ``reasons`` begins with ``ALWAYS``, then, as they apply:
-    ``no_heat_book`` or ``heat_book_aged``; ``inlet_temp_modelled``
-    (a book, and ``inlet_measured`` False); ``bath_volume_inferred``
-    (``bath_source`` ``configured``); ``shower_volume_default``;
-    ``capped_at_observed_volume``; ``bath_ready_within_estimate_error``
-    (a book's error band) or ``bath_ready_within_probe_resolution``
-    (without one); ``draw_in_progress``; ``element_running``;
-    ``tou_window_in_force``; and, the bath not ready,
-    ``heating_not_scheduled``, ``time_to_ready_unavailable``,
-    ``heating_not_triggered``, ``bath_waits_for_tou_window_end`` or
+    ``tank_profile_estimated`` (the gallons from the two probes alone);
+    ``bath_volume_inferred`` (``bath_source`` ``configured``);
+    ``shower_volume_default``; ``bath_ready_within_probe_resolution``;
+    ``draw_in_progress``; ``element_running``; ``tou_window_in_force``;
+    and, the bath not ready, ``heating_not_scheduled``,
+    ``time_to_ready_unavailable``, ``heating_not_triggered``,
+    ``bath_waits_for_tou_window_end`` or
     ``bath_not_reached_by_full_recovery``."""
     p = params or ReadinessParams()
-    bp = book_params or BookParams()
-    score = _scorer(booked, tank, p, bp)
-    d = score(tank.upper_f, tank.lower_f, NOTHING_ADDED)
     bath_gal = round(bath_gal, 1)  # compared as it is reported
     reasons = list(ALWAYS)
-    if booked is None:
-        reasons.append("no_heat_book")
-    elif booked.aged(bp):
-        reasons.append("heat_book_aged")
-    if booked is not None and not inlet_measured:
-        reasons.append("inlet_temp_modelled")
+    if now_gal.basis == "probes":
+        reasons.append("tank_profile_estimated")
     if bath_source == "configured":
         reasons.append("bath_volume_inferred")
     if shower_source == "default":
         reasons.append("shower_volume_default")
-    if d.at_observed_max:
-        reasons.append("capped_at_observed_volume")
-
-    ready = d.gal >= bath_gal
-    if booked is not None:
-        # The book's own error, not the probe's, is what decides a close
-        # call here: its 90th percentile, in gallons at this tank.
-        per_gal = WATER_BTU_PER_GAL_F * max(
-            1.0, delivery_f(tank.upper_f, bp) - booked.inlet_f
-        )
-        # An aged book's band is wider (``aged_error_btu``).
-        if abs(d.gal - bath_gal) < booked.error_band_btu(bp) / per_gal:
-            reasons.append("bath_ready_within_estimate_error")
-    elif _flips_within_resolution(tank, bath_gal, ready, p, score):
+    ready = now_gal.gal >= bath_gal
+    if within_resolution:
         reasons.append("bath_ready_within_probe_resolution")
     if tank.drawing:
         reasons.append("draw_in_progress")
@@ -241,23 +191,41 @@ def assess(
     if tank.tou_window:
         reasons.append("tou_window_in_force")
 
-    by_mode = _by_mode(
-        now,
-        tank,
-        recovery,
-        bath_gal,
-        ready,
-        setpoint_f,
-        score,
-        element_params or ElementParams(),
-    )
+    not_heating = recovery.outcome == "not_scheduled"
+    by_run = {r.mode: r for r in runs}
+    by_mode: list[dict[str, Any]] = []
+    for mode in MODES:
+        # A mode write inside a TOU window may not take, and nothing is
+        # entered while the appliance is not heating.
+        reachable = not not_heating and (
+            mode == "heat_pump" or not tank.tou_window
+        )
+        run = by_run.get(mode)
+        minutes = 0.0 if ready else None
+        energy = 0.0 if ready else None
+        if not ready and not not_heating and run is not None:
+            minutes, energy = run.ready_in_minutes, run.energy_kwh
+        by_mode.append(
+            {
+                "mode": mode,
+                "reachable_now": reachable,
+                "ready_in_minutes": minutes,
+                "ready_at": (
+                    None
+                    if minutes is None
+                    else now + timedelta(minutes=minutes)
+                ),
+                "energy_kwh": energy,
+                "reasons": [] if run is None or ready else list(run.reasons),
+            }
+        )
     ready_in = by_mode[0]["ready_in_minutes"]
     if not ready:
         if recovery.outcome == "not_scheduled":
             reasons.append("heating_not_scheduled")
         elif recovery.outcome == "unavailable" and not recovery.hp_unavailable:
             reasons.append("time_to_ready_unavailable")
-        elif recovery.outcome == "idle":
+        elif recovery.outcome == "idle" and ready_in is None:
             reasons.append("heating_not_triggered")
         elif ready_in is None:
             reasons.append(
@@ -266,7 +234,7 @@ def assess(
                 else "bath_not_reached_by_full_recovery"
             )
 
-    ready_for = showers_ready_for(d.gal, shower_gal)
+    ready_for = showers_ready_for(now_gal.gal, shower_gal)
     return {
         "generated_at": now,
         "valid_until": now + timedelta(seconds=valid_s),
@@ -275,16 +243,14 @@ def assess(
         "line_f": p.line_f,
         "tank_upper_f": round(tank.upper_f, 2),
         "tank_lower_f": round(tank.lower_f, 2),
-        "deliverable_gal": d.gal,
+        "deliverable_gal": now_gal.gal,
         "bath": {
             "volume_gal": bath_gal,
             "volume_source": bath_source,
             "ready": ready,
-            "margin_gal": round(d.gal - bath_gal, 1),
+            "margin_gal": round(now_gal.gal - bath_gal, 1),
             "ready_in_minutes": ready_in,
-            "ready_at": (
-                None if ready_in is None else now + timedelta(minutes=ready_in)
-            ),
+            "ready_at": by_mode[0]["ready_at"],
             "by_mode": by_mode,
         },
         "showers": {
@@ -294,319 +260,6 @@ def assess(
             "ready_for_whole": whole_showers(ready_for),
         },
     }
-
-
-@dataclass(frozen=True)
-class Added:
-    """What a projection does to the booked state from now (``sim.book``):
-    heat in from the compressor and the elements, heat out to standby,
-    and delivered gallons drawn."""
-
-    heat_btu: float = 0.0
-    lost_btu: float = 0.0
-    drawn_gal: float = 0.0
-
-    def __add__(self, other: Added) -> Added:
-        return Added(
-            self.heat_btu + other.heat_btu,
-            self.lost_btu + other.lost_btu,
-            self.drawn_gal + other.drawn_gal,
-        )
-
-    def scaled(self, f: float) -> Added:
-        return Added(
-            self.heat_btu * f,
-            self.lost_btu * f,
-            self.drawn_gal * f,
-        )
-
-
-NOTHING_ADDED = Added()
-
-#: Deliverable volume at ``(upper, lower, added)`` (``_scorer``).
-Scorer = Callable[[float, float, Added], Deliverable]
-
-
-def _scorer(
-    booked: Booked | None,
-    tank: TankNow,
-    p: ReadinessParams,
-    ep: BookParams | None = None,
-) -> Scorer:
-    """Deliverable volume at a tank state ``added`` has moved the booked
-    state to since now: from the booked state when there is one, else
-    from the probes and the evidence (which cannot use added heat, and
-    do not need to: they read the state). The draws are drawn first:
-    they are the coast's, which comes before any heating."""
-
-    def score(upper: float, lower: float, added: Added) -> Deliverable:
-        if booked is None:
-            return deliverable(upper, lower, p, ep=ep)
-        state = (
-            booked.drawn(added.drawn_gal, tank.upper_f, ep)
-            .heated(added.heat_btu)
-            .lost(added.lost_btu)
-        )
-        return booked_deliverable(state, upper, lower, p, ep)
-
-    return score
-
-
-def _flips_within_resolution(
-    tank: TankNow,
-    bath_gal: float,
-    ready: bool,
-    p: ReadinessParams,
-    score: Scorer,
-) -> bool:
-    """Whether a probe error of ``probe_resolution_f`` either way, on
-    each probe on its own, would flip ``bath.ready``: near an evidence
-    step, or with the bath that close to the probes' gallons
-    (``delivery.probes_gal``), less than the probe can resolve decides
-    the answer."""
-    r = p.probe_resolution_f
-    for up, low in itertools.product((-r, 0.0, r), repeat=2):
-        if up == low == 0.0:
-            continue
-        other = score(tank.upper_f + up, tank.lower_f + low, NOTHING_ADDED)
-        if (other.gal >= bath_gal) != ready:
-            return True
-    return False
-
-
-#: ``(minute, upper, lower, cumulative input Wh, heat-pump heat BTU)``.
-Path = list[tuple[float, float, float, float, float]]
-
-
-def _coast_share(t: float, recovery: Recovery) -> Added:
-    """What the coast has taken by minute ``t``, pro rata."""
-    if recovery.coast_btu <= 0.0 and recovery.coast_draw_gal <= 0.0:
-        return NOTHING_ADDED
-    f = (
-        1.0
-        if recovery.start_minute <= 0.0
-        else min(1.0, t / recovery.start_minute)
-    )
-    return Added(
-        lost_btu=recovery.coast_btu * f,
-        drawn_gal=recovery.coast_draw_gal * f,
-    )
-
-
-def _hp_path(now: datetime, tank: TankNow, recovery: Recovery) -> Path:
-    """The heat-pump recovery as ``(minute, upper, lower, cumulative
-    input Wh, heat-pump heat BTU)`` from now. It starts from the live
-    state at minute 0, so a trajectory whose first point is later never
-    reads as ready now. The heat is the book's: compressor heat from the
-    recovery's start to its end."""
-    out = [(0.0, tank.upper_f, tank.lower_f, 0.0, 0.0)]
-    n = len(recovery.points)
-    wh = list(recovery.input_wh) or [0.0] * n
-    start = recovery.start_minute
-    cum_in = 0.0
-    for (at, u, lo), e in zip(recovery.points, wh, strict=False):
-        cum_in += e
-        minute = (at - now).total_seconds() / 60.0
-        if minute <= 0.0:
-            continue
-        heated = recovery.hp_btu_per_h * max(0.0, minute - start) / 60.0
-        out.append((minute, u, lo, cum_in, heated))
-    return out
-
-
-def _at(path: Path, t: float) -> tuple[float, float, float, float]:
-    """``(upper, lower, input Wh, heat-pump heat BTU)`` at minute ``t``,
-    linear between points; held at the end once the recovery is over
-    and the tank stays where it finished."""
-    if t <= path[0][0]:
-        return path[0][1:]
-    for a, b in itertools.pairwise(path):
-        if a[0] <= t <= b[0]:
-            f = 0.0 if b[0] == a[0] else (t - a[0]) / (b[0] - a[0])
-            return tuple(  # type: ignore[return-value]
-                x + (y - x) * f for x, y in zip(a[1:], b[1:], strict=True)
-            )
-    return path[-1][1:]
-
-
-def _mode_state(
-    mode: str,
-    t: float,
-    tank: TankNow,
-    hp: Path | None,
-    setpoint: float | None,
-    upper_min: float | None,
-    ep: ElementParams,
-    recovery: Recovery | None = None,
-    top: float | None = None,
-    delay: float = 0.0,
-) -> tuple[float, float, float, Added] | None:
-    """Tank state, input energy (Wh) and what has been added to the
-    booked state ``t`` minutes into ``mode``.
-
-    Heat pump: its trajectory and its heat. Energy Saver and High
-    Demand: the upper element heats the upper zone at its measured
-    rate, while the heat pump carries the lower zone along its
-    trajectory. Electric: the upper element, then the lower, and no
-    heat pump.
-    ``upper_min`` is when the upper element stops (None: it does not
-    start), which in Energy Saver is short of the setpoint: its input
-    ends there while the zone coasts on at the same rate to ``top``,
-    the setpoint or, after a short run, below it (2026-10-02).
-    The element's input starts at ``t`` = 0 and the upper zone's rise
-    only after the dead time (``upper_rise_f``, 2026-10-02).
-    None when the mode cannot be projected here.
-    """
-    coast = _coast_share(t, recovery) if recovery is not None else NOTHING_ADDED
-    # Heating starts ``delay`` minutes in; the coast runs until then.
-    t = max(0.0, t - delay)
-    if mode == "heat_pump":
-        if hp is None:
-            return None
-        u, lo, wh, heat = _at(hp, t)
-        return u, lo, wh, coast + Added(heat_btu=heat)
-    if setpoint is None:
-        return None
-    el_w = ep.element_w
-    if mode == "electric":
-        up_done = 0.0 if upper_min is None else upper_min
-        if t <= up_done:
-            u = min(setpoint, tank.upper_f + upper_rise_f(ep, t))
-            wh = el_w * t / 60.0
-            return u, tank.lower_f, wh, coast + Added(heat_btu=wh * BTU_PER_WH)
-        lo_t = t - up_done
-        lo_need = max(0.0, setpoint - tank.lower_f) / ep.lower_f_per_min
-        lo_on = min(lo_t, lo_need)
-        lo = min(setpoint, tank.lower_f + ep.lower_f_per_min * lo_t)
-        u = setpoint if upper_min is not None else tank.upper_f
-        top_wh = el_w * up_done / 60.0
-        low_wh = el_w * lo_on / 60.0
-        return (
-            u,
-            lo,
-            top_wh + low_wh,
-            coast + Added(heat_btu=(top_wh + low_wh) * BTU_PER_WH),
-        )
-    if hp is None:
-        return None
-    hu, hl, hwh, heat = _at(hp, t)
-    added = coast + Added(heat_btu=heat)
-    if upper_min is None:
-        return hu, hl, hwh, added
-    ceiling = setpoint if top is None else min(setpoint, top)
-    eu = min(ceiling, tank.upper_f + upper_rise_f(ep, t))
-    el_wh = el_w * min(t, upper_min) / 60.0
-    return (
-        max(hu, eu),
-        hl,
-        hwh + el_wh,
-        added + Added(heat_btu=el_wh * BTU_PER_WH),
-    )
-
-
-def _by_mode(
-    now: datetime,
-    tank: TankNow,
-    recovery: Recovery,
-    bath_gal: float,
-    ready: bool,
-    setpoint: float | None,
-    score: Scorer,
-    ep: ElementParams,
-) -> list[dict[str, Any]]:
-    """Time to bath-ready and the energy to get there, per heating mode,
-    all scored by the same deliverable rule."""
-    not_heating = recovery.outcome == "not_scheduled"
-    hp = _hp_path(now, tank, recovery) if recovery.outcome == "ok" else None
-    horizon = 0.0
-    if hp:
-        horizon = hp[-1][0]
-    rows = []
-    for mode in MODES:
-        # A mode write inside a TOU window may not take, and nothing is
-        # entered while the appliance is not heating.
-        reachable = not not_heating and (
-            mode == "heat_pump" or not tank.tou_window
-        )
-        row: dict[str, Any] = {
-            "mode": mode,
-            "reachable_now": reachable,
-            "ready_in_minutes": 0.0 if ready else None,
-            "ready_at": now if ready else None,
-            "energy_kwh": 0.0 if ready else None,
-            "reasons": [],
-        }
-        rows.append(row)
-        if ready or not_heating:
-            continue
-        upper_min = None
-        top: float | None = None
-        end = horizon
-        # Outside the heat pump's range every mode heats as Electric: a
-        # write to an element mode at once, Heat Pump from the heater's
-        # own start.
-        heats: HeaterMode = "electric" if recovery.hp_unavailable else mode
-        delay = (
-            recovery.start_minute
-            if recovery.hp_unavailable and mode == "heat_pump"
-            else 0.0
-        )
-        # Heat Pump mode heats from the tank its coast leaves.
-        start = (
-            replace(
-                tank,
-                upper_f=recovery.points[0][1],
-                lower_f=recovery.points[0][2],
-            )
-            if delay > 0.0 and recovery.points
-            else tank
-        )
-        if heats != "heat_pump" and setpoint is not None:
-            device: ElementMode = DEVICE_MODE[heats]  # type: ignore[assignment]
-            rec = mode_recovery(
-                device,
-                start.upper_f,
-                start.lower_f,
-                setpoint,
-                params=ep,
-            )
-            # When the upper element stops; the zone itself ends at
-            # `upper_end_f`, by coasting the last stretch in Energy Saver,
-            # the setpoint unless less than that is in transit.
-            upper_min = rec.upper_element_minutes
-            top = rec.upper_end_f
-            # The element model's own caveats.
-            row["reasons"] = list(rec.confidence_reasons)
-            if heats == "electric":
-                end = delay + (rec.full_minutes or 0.0)
-            else:
-                end = max(horizon, rec.upper_end_minutes or 0.0)
-        # The grid, and always the projection's own end: a recovery that
-        # finishes between two grid points must still be scored at its
-        # finished state.
-        steps = int(end // _GRID_MIN) + 1
-        for t in [k * _GRID_MIN for k in range(steps)] + [end]:
-            state = _mode_state(
-                heats,
-                t,
-                start,
-                hp,
-                setpoint,
-                upper_min,
-                ep,
-                recovery,
-                top,
-                delay,
-            )
-            if state is None:
-                break
-            u, lo, wh, added = state
-            if score(u, lo, added).gal >= bath_gal:
-                row["ready_in_minutes"] = round(t, 1)
-                row["ready_at"] = now + timedelta(minutes=t)
-                row["energy_kwh"] = round(wh / 1000.0, 2)
-                break
-    return rows
 
 
 # ── The answer, typed ───────────────────────────────────────────────

@@ -596,27 +596,24 @@ class TestRunsWithoutAir:
 
 
 END = T0 + timedelta(days=3)
-BOOK_HEATER = ha.HeaterEntities(
+TANK_HEATER = ha.HeaterEntities(
     heard="sensor.last_status",
     upper="sensor.upper",
     lower="sensor.lower",
     compressor="binary_sensor.compressor",
 )
 FLOW = "sensor.draw_flow"
-BOOK_UNITS: dict[str, str | None] = {
+TANK_UNITS: dict[str, str | None] = {
     "sensor.upper": "°F",
     "sensor.lower": "°F",
     FLOW: "gal/min",
-    "sensor.inlet": "°F",
     "sensor.pump": "rpm",
 }
 
 
-def _book_rows(*, mains: bool = False) -> list[dict[str, Any]]:
+def _tank_rows() -> list[dict[str, Any]]:
     """Three days of a full tank: heard every minute, a recovery 4 h
-    before ``END``, a draw of 2 gal/min for 15 minutes 2 h before it.
-    With ``mains``, an inlet probe settling to 58 °F through the draw
-    and the demand entity on through it."""
+    before ``END``, a draw of 2 gal/min for 15 minutes 2 h before it."""
     rows = []
     t = T0
     while t <= END:
@@ -634,69 +631,36 @@ def _book_rows(*, mains: bool = False) -> list[dict[str, Any]]:
         _row(FLOW, draw + timedelta(minutes=15), "0.0", "gal/min"),
         _row("sensor.pump", T0, "0.0", "rpm"),
     ]
-    if mains:
-        rows += [
-            _row("sensor.inlet", T0, "66.0", "°F"),
-            _row("sensor.inlet", draw + timedelta(minutes=5), "58.0", "°F"),
-            _row("sensor.inlet", draw + timedelta(minutes=30), "65.0", "°F"),
-            _row("binary_sensor.demand", T0, "off"),
-            _row("binary_sensor.demand", draw, "on"),
-            _row("binary_sensor.demand", draw + timedelta(minutes=15), "off"),
-        ]
     return rows
 
 
-def _keeper(client: WindowedClient, **entities: Any) -> ha.HomeAssistantBook:
-    return ha.HomeAssistantBook(
+def _keeper(client: WindowedClient, **entities: Any) -> ha.HomeAssistantTank:
+    return ha.HomeAssistantTank(
         cast(ha.HomeAssistantClient, client),
-        BOOK_HEATER,
+        TANK_HEATER,
         FLOW,
         ha.Entities(**entities),
     )
 
 
-class TestTheBookKeptCurrent:
+class TestTheLayersKeptCurrent:
     P = sim.default_params()
 
-    def test_it_books_as_book_from_changes(self) -> None:
-        client = WindowedClient(_book_rows(), BOOK_UNITS)
-        keeper = _keeper(client)
-        asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        history = asyncio.run(
-            ha.read_heater_history(
-                cast(ha.HomeAssistantClient, client),
-                BOOK_HEATER,
-                END - ha.BOOK_WINDOW,
-                END,
-            )
-        )
-        flow = asyncio.run(
-            client.read_history([FLOW], END - ha.BOOK_WINDOW, END)
-        )
-        readings, _ = flow.converted(FLOW, "gal/min", ha.to_gpm, END)
-        want = sa.book_from_changes(
-            history.rows, history.observed, self.P, at=END, flow=readings
-        )
-        assert want is not None and got.booked is not None
-        assert got.booked.heat_btu == pytest.approx(want.heat_btu)
-        assert not got.inlet_measured
-
     def test_its_layers_are_layers_from_changes(self) -> None:
-        client = WindowedClient(_book_rows(), BOOK_UNITS)
+        client = WindowedClient(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         asyncio.run(keeper.read(END))
         got = keeper.layers(END, self.P)
         history = asyncio.run(
             ha.read_heater_history(
                 cast(ha.HomeAssistantClient, client),
-                BOOK_HEATER,
-                END - ha.BOOK_WINDOW,
+                TANK_HEATER,
+                END - ha.TANK_WINDOW,
                 END,
             )
         )
         flow = asyncio.run(
-            client.read_history([FLOW], END - ha.BOOK_WINDOW, END)
+            client.read_history([FLOW], END - ha.TANK_WINDOW, END)
         )
         readings, _ = flow.converted(FLOW, "gal/min", ha.to_gpm, END)
         want = sa.layers_from_changes(
@@ -707,40 +671,40 @@ class TestTheBookKeptCurrent:
         assert laid is not None and laid != got.layers_f
 
     def test_no_history_read_gives_no_layers(self) -> None:
-        keeper = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        keeper = _keeper(WindowedClient(_tank_rows(), TANK_UNITS))
         got = keeper.layers(END, self.P)
         assert got.layers_f is None
         assert "layers: no history read" in got.notes
 
-    def test_a_tank_flow_books_as_book_from_changes(self) -> None:
-        """``flow_volume="tank"`` goes through to the book: each gallon
-        tank water, more heat out than a delivered one through the
-        valve."""
+    def test_a_tank_flow_replays_as_layers_from_changes(self) -> None:
+        """``flow_volume="tank"`` goes through to the replay: each
+        gallon tank water, more heat out than a delivered one through
+        the valve."""
         p = sim.site_example_params()
-        client = WindowedClient(_book_rows(), BOOK_UNITS)
-        keeper = ha.HomeAssistantBook(
+        client = WindowedClient(_tank_rows(), TANK_UNITS)
+        keeper = ha.HomeAssistantTank(
             cast(ha.HomeAssistantClient, client),
-            BOOK_HEATER,
+            TANK_HEATER,
             FLOW,
             flow_volume="tank",
         )
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, p).booked
+        got = keeper.layers(END, p).layers_f
         history = asyncio.run(
             ha.read_heater_history(
                 cast(ha.HomeAssistantClient, client),
-                BOOK_HEATER,
-                END - ha.BOOK_WINDOW,
+                TANK_HEATER,
+                END - ha.TANK_WINDOW,
                 END,
             )
         )
         flow = asyncio.run(
-            client.read_history([FLOW], END - ha.BOOK_WINDOW, END)
+            client.read_history([FLOW], END - ha.TANK_WINDOW, END)
         )
         readings, _ = flow.converted(FLOW, "gal/min", ha.to_gpm, END)
 
         def want(volume: Any) -> Any:
-            return sa.book_from_changes(
+            return sa.layers_from_changes(
                 history.rows,
                 history.observed,
                 p,
@@ -751,36 +715,36 @@ class TestTheBookKeptCurrent:
 
         tank, delivered = want("tank"), want("delivered")
         assert got is not None and tank is not None and delivered is not None
-        assert got.heat_btu == pytest.approx(tank.heat_btu)
-        assert tank.heat_btu < delivered.heat_btu
+        assert got == pytest.approx(tank)
+        assert tank != pytest.approx(delivered)
 
     def test_without_an_air_entity_the_heaters_own(self) -> None:
         from dataclasses import replace
 
-        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        heater = replace(TANK_HEATER, ambient="sensor.heater_air")
         rows = [
-            *_book_rows(),
+            *_tank_rows(),
             # 50 °F running, the cabinet's 80 idle.
             _row("sensor.heater_air", T0, "80.0", "°F"),
             _row("sensor.heater_air", END - 4 * H, "50.0", "°F"),
             _row("sensor.heater_air", END - 3.5 * H, "80.0", "°F"),
         ]
-        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
-        own = ha.HomeAssistantBook(
+        units = TANK_UNITS | {"sensor.heater_air": "°F"}
+        own = ha.HomeAssistantTank(
             cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
             heater,
             FLOW,
             ha.Entities(),
         )
         asyncio.run(own.read(END))
-        got = own.book(END, self.P)
-        plain = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        got = own.layers(END, self.P)
+        plain = _keeper(WindowedClient(_tank_rows(), TANK_UNITS))
         asyncio.run(plain.read(END))
-        default = plain.book(END, self.P)
-        assert got.booked is not None and default.booked is not None
-        assert got.booked.heat_btu != pytest.approx(default.booked.heat_btu)
+        default = plain.layers(END, self.P)
+        assert got.layers_f is not None and default.layers_f is not None
+        assert got.layers_f != pytest.approx(default.layers_f)
         assert (
-            "book: the air is the heater's own reading while its compressor "
+            "layers: the air is the heater's own reading while its compressor "
             "runs"
         ) in got.notes
         assert not any("heater's own" in n for n in default.notes)
@@ -788,40 +752,40 @@ class TestTheBookKeptCurrent:
     def test_without_a_settled_reading_it_says_the_default(self) -> None:
         from dataclasses import replace
 
-        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        heater = replace(TANK_HEATER, ambient="sensor.heater_air")
         # Its first reading after the only run: none while it ran.
         rows = [
-            *_book_rows(),
+            *_tank_rows(),
             _row("sensor.heater_air", END - 3 * H, "80.0", "°F"),
         ]
-        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
-        keeper = ha.HomeAssistantBook(
+        units = TANK_UNITS | {"sensor.heater_air": "°F"}
+        keeper = ha.HomeAssistantTank(
             cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
             heater,
             FLOW,
             ha.Entities(),
         )
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is not None
         assert not any("is the heater's own" in n for n in got.notes)
         assert (
-            "book: the heater's air not read while its compressor ran 5 "
+            "layers: the heater's air not read while its compressor ran 5 "
             "minutes: the air is the default, 65 °F"
         ) in got.notes
 
     def test_a_run_heard_only_across_a_silence_gives_no_air(self) -> None:
         """Heard at the run's first minute and its last two, silent in
         between: never five minutes heard, so the air is the default,
-        as the book takes it."""
+        as the steps take it."""
         from dataclasses import replace
 
-        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        heater = replace(TANK_HEATER, ambient="sensor.heater_air")
         run = END - 4 * H
         silent = (run + timedelta(minutes=1), run + timedelta(minutes=28))
         rows = [
             r
-            for r in _book_rows()
+            for r in _tank_rows()
             if not (
                 r["entity_id"] == "sensor.last_status"
                 and silent[0]
@@ -830,71 +794,58 @@ class TestTheBookKeptCurrent:
             )
         ]
         rows.append(_row("sensor.heater_air", run, "50.0", "°F"))
-        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
-        keeper = ha.HomeAssistantBook(
+        units = TANK_UNITS | {"sensor.heater_air": "°F"}
+        keeper = ha.HomeAssistantTank(
             cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
             heater,
             FLOW,
             ha.Entities(),
         )
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
+        got = keeper.layers(END, self.P)
         assert not any("is the heater's own" in n for n in got.notes)
         assert any("the air is the default" in n for n in got.notes)
 
     def test_later_reads_ask_only_for_what_is_new(self) -> None:
-        once = WindowedClient(_book_rows(), BOOK_UNITS)
+        once = WindowedClient(_tank_rows(), TANK_UNITS)
         whole = _keeper(once)
         asyncio.run(whole.read(END))
-        client = WindowedClient(_book_rows(), BOOK_UNITS)
+        client = WindowedClient(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         for at in (END - 3 * H, END - 1 * H, END):
             asyncio.run(keeper.read(at))
         # Each read from the last: none reaches back past it.
         assert client.windows[-1][0] == END - 1 * H
-        a = whole.book(END, self.P).booked
-        b = keeper.book(END, self.P).booked
+        a = whole.layers(END, self.P).layers_f
+        b = keeper.layers(END, self.P).layers_f
         assert a is not None and b is not None
-        assert b.heat_btu == pytest.approx(a.heat_btu)
-
-    def test_the_mains_from_the_inlet_and_demand(self) -> None:
-        client = WindowedClient(_book_rows(mains=True), BOOK_UNITS)
-        keeper = _keeper(
-            client, inlet="sensor.inlet", demand="binary_sensor.demand"
-        )
-        asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None
-        assert got.inlet_measured
-        assert got.booked.inlet_f == pytest.approx(58.0)
-
-    def test_without_demand_no_conversion_at_the_mains(self) -> None:
-        client = WindowedClient(_book_rows(mains=True), BOOK_UNITS)
-        keeper = _keeper(client, inlet="sensor.inlet")
-        asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None and not got.inlet_measured
+        # The whole read hears the heater from a minute into its window
+        # (the window's opening row is no response), so its replay
+        # starts a minute later.
+        assert b == pytest.approx(a, abs=0.01)
 
     def test_the_pump_gives_the_runs(self) -> None:
-        client = WindowedClient(_book_rows(), BOOK_UNITS)
+        client = WindowedClient(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client, circulation_speed="sensor.pump")
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is not None
         assert not any("circulation" in n for n in got.notes)
 
-    def test_no_flow_history_is_no_book(self) -> None:
-        rows = [r for r in _book_rows() if r["entity_id"] != FLOW]
-        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+    def test_no_flow_history_is_no_layers(self) -> None:
+        rows = [r for r in _tank_rows() if r["entity_id"] != FLOW]
+        keeper = _keeper(WindowedClient(rows, TANK_UNITS))
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is None
-        assert f"book: no history of {FLOW} read" in got.notes
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is None
+        assert f"layers: no history of {FLOW} read" in got.notes
 
-    def test_before_a_read_there_is_no_book(self) -> None:
-        keeper = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
-        got = keeper.book(END, self.P)
-        assert got.booked is None and got.notes == ("book: no history read",)
+    def test_before_a_read_there_are_no_layers(self) -> None:
+        keeper = _keeper(WindowedClient(_tank_rows(), TANK_UNITS))
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is None and got.notes == (
+            "layers: no history read",
+        )
 
     def test_a_failed_read_is_noted_and_read_again(self) -> None:
         class Failing(WindowedClient):
@@ -907,24 +858,24 @@ class TestTheBookKeptCurrent:
                     raise ha.HomeAssistantError("down")
                 return await super().read_history(entities, start, end)
 
-        client = Failing(_book_rows(), BOOK_UNITS)
+        client = Failing(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         asyncio.run(keeper.read(END - H))
-        assert keeper.book(END - H, self.P).booked is None
+        assert keeper.layers(END - H, self.P).layers_f is None
         client.fail = False
         asyncio.run(keeper.read(END))
         # The flow is read again from the window's start, not from the
         # failed read.
-        assert client.windows[-1][0] == END - ha.BOOK_WINDOW
-        assert keeper.book(END, self.P).booked is not None
+        assert client.windows[-1][0] == END - ha.TANK_WINDOW
+        assert keeper.layers(END, self.P).layers_f is not None
 
 
 class TestARestart:
     P = sim.default_params()
 
-    def test_the_book_is_walked_across_it(self) -> None:
+    def test_the_replay_walks_across_it(self) -> None:
         """Home Assistant restarting an hour ago: the heater unavailable
-        for three minutes, the flow for four. The book holds."""
+        for three minutes, the flow for four. The replay holds."""
         back = END - H + timedelta(minutes=3)
         restart = [
             _row("sensor.last_status", END - H, "unavailable"),
@@ -933,34 +884,32 @@ class TestARestart:
             _row(FLOW, END - H, "unavailable"),
             _row(FLOW, back + timedelta(minutes=1), "0.0", "gal/min"),
         ]
-        whole = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        whole = _keeper(WindowedClient(_tank_rows(), TANK_UNITS))
         asyncio.run(whole.read(END))
-        keeper = _keeper(WindowedClient(_book_rows() + restart, BOOK_UNITS))
+        keeper = _keeper(WindowedClient(_tank_rows() + restart, TANK_UNITS))
         asyncio.run(keeper.read(END))
-        want = whole.book(END, self.P)
-        got = keeper.book(END, self.P)
-        assert want.booked is not None and got.booked is not None, got.notes
-        assert got.booked.heat_btu == pytest.approx(want.booked.heat_btu)
+        want = whole.layers(END, self.P)
+        got = keeper.layers(END, self.P)
+        assert want.layers_f is not None and got.layers_f is not None, got.notes
+        assert got.layers_f == pytest.approx(want.layers_f)
 
 
 class TestAPumpOutageInARun:
     P = replace(
         sim.default_params(),
-        circulation=sim.CirculationParams(
-            displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
-        ),
+        circulation=sim.CirculationParams(displaced_gal=1.0, flow_gpm=2.0),
     )
 
-    def heat(self, pump: list[dict[str, Any]]) -> float:
-        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"]
+    def heat(self, pump: list[dict[str, Any]]) -> tuple[float, ...]:
+        rows = [r for r in _tank_rows() if r["entity_id"] != "sensor.pump"]
         keeper = _keeper(
-            WindowedClient(rows + pump, BOOK_UNITS),
+            WindowedClient(rows + pump, TANK_UNITS),
             circulation_speed="sensor.pump",
         )
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None, got.notes
-        return got.booked.heat_btu
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is not None, got.notes
+        return got.layers_f
 
     def test_a_run_going_in_holds_only_as_a_sampled_speed(self) -> None:
         start, down = END - 2 * H, END - 2 * H + timedelta(minutes=2)
@@ -978,14 +927,14 @@ class TestAPumpOutageInARun:
         assert self.heat(outage) == pytest.approx(self.heat(stopped))
 
 
-class TestTheBookFirstReview:
+class TestTheKeeperFirstReview:
     P = sim.default_params()
 
     def test_the_flow_is_never_taken_off_as_circulation(self) -> None:
         from dataclasses import replace
 
         rows = [
-            *_book_rows(),
+            *_tank_rows(),
             _row(
                 "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
             ),
@@ -994,53 +943,38 @@ class TestTheBookFirstReview:
             ),
         ]
 
-        def heat(share: float) -> float:
+        def heat(share: float) -> tuple[float, ...]:
             p = replace(
                 self.P,
                 circulation=sim.CirculationParams(
-                    displaced_gal=1.0,
-                    flow_gpm=2.0,
-                    loss_btu_per_gal=50.0,
-                    meter_share=share,
+                    displaced_gal=1.0, flow_gpm=2.0, meter_share=share
                 ),
             )
             keeper = _keeper(
-                WindowedClient(rows, BOOK_UNITS),
+                WindowedClient(rows, TANK_UNITS),
                 circulation_speed="sensor.pump",
             )
             asyncio.run(keeper.read(END))
-            got = keeper.book(END, p)
-            assert got.booked is not None
-            return got.booked.heat_btu
+            got = keeper.layers(END, p)
+            assert got.layers_f is not None
+            return got.layers_f
 
         assert heat(0.81) == pytest.approx(heat(0.0))
 
     def test_an_optional_unit_unread_leaves_the_rest(self) -> None:
-        class NoInlet(WindowedClient):
+        class NoAir(WindowedClient):
             async def state(self, entity: str) -> ha.State:
-                if entity == "sensor.inlet":
+                if entity == "sensor.air":
                     raise ha.HomeAssistantError("404")
                 return await super().state(entity)
 
-        client = NoInlet(_book_rows(mains=True), BOOK_UNITS)
-        keeper = _keeper(
-            client, inlet="sensor.inlet", demand="binary_sensor.demand"
-        )
+        rows = [*_tank_rows(), _row("sensor.air", T0, "60.0", "°F")]
+        client = NoAir(rows, TANK_UNITS | {"sensor.air": "°F"})
+        keeper = _keeper(client, air="sensor.air")
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None and not got.inlet_measured
-        assert any("sensor.inlet's unit not read" in n for n in got.notes)
-
-    def test_an_inlet_in_no_unit_books_without_the_mains(self) -> None:
-        client = WindowedClient(
-            _book_rows(mains=True), BOOK_UNITS | {"sensor.inlet": "lux"}
-        )
-        keeper = _keeper(
-            client, inlet="sensor.inlet", demand="binary_sensor.demand"
-        )
-        asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None and not got.inlet_measured
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is not None
+        assert any("sensor.air's unit not read" in n for n in got.notes)
 
     def test_after_a_failed_read_the_unread_flow_is_unknown(self) -> None:
         class Failing(WindowedClient):
@@ -1053,55 +987,39 @@ class TestTheBookFirstReview:
                     raise ha.HomeAssistantError("down")
                 return await super().read_history(entities, start, end)
 
-        client = Failing(_book_rows(), BOOK_UNITS)
+        client = Failing(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         # Read before the draw, then fail across it.
         asyncio.run(keeper.read(END - 3 * H))
         client.fail = True
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
+        got = keeper.layers(END, self.P)
         assert any("nothing read since" in n for n in got.notes)
-        # The unread span is an outage of the flow: no book rather than
-        # one that holds the flow at zero through the draw.
-        assert got.booked is None
-
-    def test_a_short_window_reads_the_mains_within_it(self) -> None:
-        client = WindowedClient(_book_rows(mains=True), BOOK_UNITS)
-        keeper = ha.HomeAssistantBook(
-            cast(ha.HomeAssistantClient, client),
-            BOOK_HEATER,
-            FLOW,
-            ha.Entities(
-                inlet="sensor.inlet",
-                demand="binary_sensor.demand",
-                circulation_speed="sensor.pump",
-            ),
-            window=timedelta(hours=24),
-        )
-        asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None
-        assert got.inlet_measured, got.notes
+        # The unread span is an outage of the flow: no layers rather
+        # than a replay that holds the flow at zero through the draw.
+        assert got.layers_f is None
 
 
-class TestTheBookAir:
+class TestTheReplaysAir:
     """An air unknown, unavailable or in no unit this reads, is the
     default air, not the last reading held."""
 
     P = sim.default_params()
-    OUT = END - 30 * H
+    OUT = END - 12 * H
 
-    def _heat(self, air_rows: list[dict[str, Any]], unit: str) -> float:
+    def _heat(
+        self, air_rows: list[dict[str, Any]], unit: str
+    ) -> tuple[float, ...]:
         client = WindowedClient(
-            [*_book_rows(), *air_rows], BOOK_UNITS | {"sensor.air": unit}
+            [*_tank_rows(), *air_rows], TANK_UNITS | {"sensor.air": unit}
         )
         keeper = _keeper(client, air="sensor.air")
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is not None, got.notes
-        return got.booked.heat_btu
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is not None, got.notes
+        return got.layers_f
 
-    def _default_from_out(self) -> float:
+    def _default_from_out(self) -> tuple[float, ...]:
         return self._heat(
             [
                 _row("sensor.air", T0, "40.0", "°F"),
@@ -1141,7 +1059,7 @@ class TestThePumpThirdReview:
             _row("sensor.pump", T0, "500", "lux"),
             _row("sensor.pump", T0 + H, "0", "rpm"),
         ]
-        client = WindowedClient(rows, BOOK_UNITS)
+        client = WindowedClient(rows, TANK_UNITS)
         got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
         runs, unknown, why = ha.known_runs(
             got, "sensor.pump", "rpm", T0 + 2 * H, END
@@ -1155,31 +1073,29 @@ class TestThePumpThirdReview:
 
         p = replace(
             self.P,
-            circulation=sim.CirculationParams(
-                displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
-            ),
+            circulation=sim.CirculationParams(displaced_gal=1.0, flow_gpm=2.0),
         )
-        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"] + [
+        rows = [r for r in _tank_rows() if r["entity_id"] != "sensor.pump"] + [
             # Unavailable from the start: the runs are unknown.
             _row("sensor.pump", T0, "unavailable"),
             _row("sensor.pump", END - H, "0", "rpm"),
         ]
 
-        def heat(pump: bool) -> float:
+        def heat(pump: bool) -> tuple[float, ...]:
             keeper = _keeper(
-                WindowedClient(rows, BOOK_UNITS),
+                WindowedClient(rows, TANK_UNITS),
                 **({"circulation_speed": "sensor.pump"} if pump else {}),
             )
             asyncio.run(keeper.read(END))
-            got = keeper.book(END, p)
-            assert got.booked is not None, got.notes
-            return got.booked.heat_btu
+            got = keeper.layers(END, p)
+            assert got.layers_f is not None, got.notes
+            return got.layers_f
 
         # Across its outage the pump's speed holds: no run.
         assert heat(True) == pytest.approx(heat(False))
 
 
-class TestTheBookFourthReview:
+class TestTheKeeperFourthReview:
     P = sim.default_params()
 
     def test_a_read_without_the_flow_is_read_again(self) -> None:
@@ -1194,23 +1110,23 @@ class TestTheBookFourthReview:
                     got.readings[FLOW] = []
                 return got
 
-        client = Dropping(_book_rows(), BOOK_UNITS)
+        client = Dropping(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         asyncio.run(keeper.read(END - 3 * H))
         client.drop = True
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert f"book: no history of {FLOW} read" in got.notes
-        # Not booked as if the flow held at zero through the draw.
-        assert got.booked is None
+        got = keeper.layers(END, self.P)
+        assert f"layers: no history of {FLOW} read" in got.notes
+        # Not replayed as if the flow held at zero through the draw.
+        assert got.layers_f is None
         client.drop = False
         asyncio.run(keeper.read(END))
         # Read again from the last read that held the flow.
         assert client.windows[-1][0] == END - 3 * H
-        assert keeper.book(END, self.P).booked is not None
+        assert keeper.layers(END, self.P).layers_f is not None
 
 
-class TestTheBookFifthReview:
+class TestTheKeeperFifthReview:
     P = sim.default_params()
 
     def test_an_omitted_pump_is_unknown_not_held(self) -> None:
@@ -1218,9 +1134,7 @@ class TestTheBookFifthReview:
 
         p = replace(
             self.P,
-            circulation=sim.CirculationParams(
-                displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
-            ),
+            circulation=sim.CirculationParams(displaced_gal=1.0, flow_gpm=2.0),
         )
 
         class Dropping(WindowedClient):
@@ -1236,15 +1150,15 @@ class TestTheBookFifthReview:
                 ]
                 return await super().read_history(names, start, end)
 
-        def heat(drop: bool) -> float:
-            client = Dropping(_book_rows(), BOOK_UNITS)
+        def heat(drop: bool) -> tuple[float, ...]:
+            client = Dropping(_tank_rows(), TANK_UNITS)
             keeper = _keeper(client, circulation_speed="sensor.pump")
             asyncio.run(keeper.read(END - 3 * H))
             client.drop = drop
             asyncio.run(keeper.read(END))
-            got = keeper.book(END, p)
-            assert got.booked is not None, got.notes
-            return got.booked.heat_btu
+            got = keeper.layers(END, p)
+            assert got.layers_f is not None, got.notes
+            return got.layers_f
 
         # Unread, the pump's speed holds, idle.
         assert heat(True) == pytest.approx(heat(False))
@@ -1260,7 +1174,7 @@ class TestTheBookFifthReview:
         assert marked.states[FLOW] == [(T0, "0.0")]
 
 
-class TestTheBookSixthReview:
+class TestTheKeeperSixthReview:
     P = sim.default_params()
 
     def test_an_omitted_compressor_is_no_heating_credited(self) -> None:
@@ -1277,18 +1191,19 @@ class TestTheBookSixthReview:
                 ]
                 return await super().read_history(names, start, end)
 
-        client = Dropping(_book_rows(), BOOK_UNITS)
+        client = Dropping(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         # Read while the compressor runs, then omit it across its stop.
         asyncio.run(keeper.read(END - 3.75 * H))
         client.drop = True
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
+        got = keeper.layers(END, self.P)
         assert any(
             n.startswith("compressor_on: nothing read") for n in got.notes
         )
-        # Unobserved to the end: no book, not one heated throughout.
-        assert got.booked is None
+        # Unobserved to the end: no layers, not a tank heated
+        # throughout.
+        assert got.layers_f is None
 
     def test_a_compressor_omitted_from_one_window_is_unobserved(self) -> None:
         class Dropping(WindowedClient):
@@ -1308,7 +1223,7 @@ class TestTheBookSixthReview:
 
         rows = [
             r
-            for r in _book_rows()
+            for r in _tank_rows()
             if r["entity_id"] != "binary_sensor.compressor"
         ] + [
             _row("binary_sensor.compressor", T0, "off"),
@@ -1317,8 +1232,8 @@ class TestTheBookSixthReview:
         ]
         history = asyncio.run(
             ha.read_heater_history(
-                cast(ha.HomeAssistantClient, Dropping(rows, BOOK_UNITS)),
-                BOOK_HEATER,
+                cast(ha.HomeAssistantClient, Dropping(rows, TANK_UNITS)),
+                TANK_HEATER,
                 T0,
                 END,
             )
@@ -1329,7 +1244,7 @@ class TestTheBookSixthReview:
         )
 
 
-class TestTheBookEighthReview:
+class TestTheKeeperEighthReview:
     P = sim.default_params()
 
     def test_after_a_failed_heater_read_no_heating_is_credited(self) -> None:
@@ -1344,7 +1259,7 @@ class TestTheBookEighthReview:
                     raise ha.HomeAssistantError("down")
                 return await super().read_history(names, start, end)
 
-        client = Failing(_book_rows(), BOOK_UNITS)
+        client = Failing(_tank_rows(), TANK_UNITS)
         keeper = _keeper(client)
         # The compressor is on; a minute later the heater can't be read,
         # though the flow can.
@@ -1353,25 +1268,25 @@ class TestTheBookEighthReview:
         client.fail = True
         later = on + timedelta(minutes=1)
         asyncio.run(keeper.read(later))
-        got = keeper.book(later, self.P)
-        assert got.booked is None
+        got = keeper.layers(later, self.P)
+        assert got.layers_f is None
         assert any("none past the heater's last read" in n for n in got.notes)
         client.fail = False
         asyncio.run(keeper.read(END))
-        assert keeper.book(END, self.P).booked is not None
+        assert keeper.layers(END, self.P).layers_f is not None
 
 
 class TestCirculationTermsDefaulted:
     P = sim.default_params()
 
-    def test_runs_without_terms_are_priced_and_noted(self) -> None:
+    def test_runs_without_terms_take_the_sites_and_say_so(self) -> None:
         from dataclasses import replace
 
         from nwp500.sim.defaults import SITE_CIRCULATION
 
         assert self.P.circulation is None
         rows = [
-            *[r for r in _book_rows() if r["entity_id"] != "sensor.pump"],
+            *[r for r in _tank_rows() if r["entity_id"] != "sensor.pump"],
             _row("sensor.pump", T0, "0", "rpm"),
             _row(
                 "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
@@ -1379,27 +1294,28 @@ class TestCirculationTermsDefaulted:
             _row("sensor.pump", END - H, "0", "rpm"),
         ]
 
-        def book(p: Any) -> ha.BookAnswer:
+        def layers(p: Any) -> ha.LayersAnswer:
             keeper = _keeper(
-                WindowedClient(rows, BOOK_UNITS),
+                WindowedClient(rows, TANK_UNITS),
                 circulation_speed="sensor.pump",
             )
             asyncio.run(keeper.read(END))
-            return keeper.book(END, p)
+            return keeper.layers(END, p)
 
-        bare = book(self.P)
-        site = book(
+        bare = layers(self.P)
+        site = layers(
             replace(
                 self.P, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
             )
         )
-        assert bare.booked is not None and site.booked is not None
-        assert bare.booked.heat_btu == pytest.approx(site.booked.heat_btu)
+        assert bare.layers_f is not None and site.layers_f is not None
+        assert bare.layers_f == pytest.approx(site.layers_f)
         assert any("one installation's terms" in n for n in bare.notes)
-        quiet = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        quiet = _keeper(WindowedClient(_tank_rows(), TANK_UNITS))
         asyncio.run(quiet.read(END))
-        none = quiet.book(END, self.P).booked
-        assert none is not None and bare.booked.heat_btu < none.heat_btu
+        none = quiet.layers(END, self.P).layers_f
+        # The runs move water through the tank: other layers.
+        assert none is not None and bare.layers_f != pytest.approx(none)
 
 
 class TestAShortPumpHistory:
@@ -1411,14 +1327,14 @@ class TestAShortPumpHistory:
             _row("sensor.pump", END - 2 * H, "2000", "rpm"),
             _row("sensor.pump", END - H, "0", "rpm"),
         ]
-        client = WindowedClient(rows, BOOK_UNITS)
+        client = WindowedClient(rows, TANK_UNITS)
         got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
         runs, unknown, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
         assert why is None
         assert runs == [(END - 2 * H, END - H)]
         assert unknown == [(T0, END - 30 * H)]
 
-    def test_the_book_prices_the_runs_it_knows(self) -> None:
+    def test_the_replay_takes_the_runs_it_knows(self) -> None:
         from dataclasses import replace
 
         from nwp500.sim.defaults import SITE_CIRCULATION
@@ -1427,59 +1343,72 @@ class TestAShortPumpHistory:
             self.P, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
         )
         pump = [
-            _row("sensor.pump", END - 30 * H, "0", "rpm"),
+            _row("sensor.pump", END - 20 * H, "0", "rpm"),
             _row(
                 "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
             ),
             _row("sensor.pump", END - H, "0", "rpm"),
         ]
-        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"]
+        rows = [r for r in _tank_rows() if r["entity_id"] != "sensor.pump"]
 
-        def heat(with_pump: bool) -> ha.BookAnswer:
+        def heat(with_pump: bool) -> ha.LayersAnswer:
             keeper = _keeper(
                 WindowedClient(
-                    [*rows, *(pump if with_pump else [])], BOOK_UNITS
+                    [*rows, *(pump if with_pump else [])], TANK_UNITS
                 ),
                 **({"circulation_speed": "sensor.pump"} if with_pump else {}),
             )
             asyncio.run(keeper.read(END))
-            return keeper.book(END, p)
+            return keeper.layers(END, p)
 
         short, none = heat(True), heat(False)
-        assert short.booked is not None and none.booked is not None
-        assert short.booked.heat_btu < none.booked.heat_btu
+        assert short.layers_f is not None and none.layers_f is not None
+        assert short.layers_f != pytest.approx(none.layers_f)
         assert any("known only from" in n for n in short.notes)
 
 
 class TestTheFlowsHistory:
     P = sim.default_params()
 
-    def test_a_flow_recorded_only_lately_books_after_it(self) -> None:
-        # The flow sensor has 3 h of history; the recovery ended 3.5 h
-        # ago, so its anchor is before it.
-        rows = [r for r in _book_rows() if r["entity_id"] != FLOW] + [
+    def test_a_flow_recorded_only_lately_replays_after_it(self) -> None:
+        # The flow sensor has 3 h of history: the replay starts there.
+        rows = [r for r in _tank_rows() if r["entity_id"] != FLOW] + [
             _row(FLOW, END - 3 * H, "0.0", "gal/min"),
             _row(FLOW, END - 2 * H, "2.0", "gal/min"),
             _row(FLOW, END - 2 * H + timedelta(minutes=15), "0.0", "gal/min"),
         ]
-        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+        keeper = _keeper(WindowedClient(rows, TANK_UNITS))
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        # No anchor since the flow began: none, and the note says so,
-        # rather than an error.
-        assert got.booked is None
-        assert any("no anchor in the history" in n for n in got.notes)
+        got = keeper.layers(END, self.P)
+        history = asyncio.run(
+            ha.read_heater_history(
+                cast(ha.HomeAssistantClient, WindowedClient(rows, TANK_UNITS)),
+                TANK_HEATER,
+                END - ha.TANK_WINDOW,
+                END,
+            )
+        )
+        flow = [
+            (END - 3 * H, 0.0),
+            (END - 2 * H, 2.0),
+            (END - 2 * H + timedelta(minutes=15), 0.0),
+        ]
+        want = sa.layers_from_changes(
+            history.rows, history.observed, self.P, at=END, flow=flow
+        )
+        assert got.layers_f is not None and want is not None
+        assert got.layers_f == pytest.approx(want)
 
     def test_a_flow_unknown_now_says_so(self) -> None:
         rows = [
-            *_book_rows(),
+            *_tank_rows(),
             _row(FLOW, END - timedelta(minutes=10), "unavailable"),
         ]
-        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+        keeper = _keeper(WindowedClient(rows, TANK_UNITS))
         asyncio.run(keeper.read(END))
-        got = keeper.book(END, self.P)
-        assert got.booked is None
-        assert f"book: {FLOW} is unknown now" in got.notes
+        got = keeper.layers(END, self.P)
+        assert got.layers_f is None
+        assert f"layers: {FLOW} is unknown now" in got.notes
 
 
 class TestAPartialAirRecord:
@@ -1505,20 +1434,20 @@ class TestAPartialAirRecord:
 class TestAnUnrecordedFlag:
     def test_a_flag_with_no_history_is_left_out(self) -> None:
         heater = ha.HeaterEntities(
-            heard=BOOK_HEATER.heard,
-            upper=BOOK_HEATER.upper,
-            lower=BOOK_HEATER.lower,
-            compressor=BOOK_HEATER.compressor,
+            heard=TANK_HEATER.heard,
+            upper=TANK_HEATER.upper,
+            lower=TANK_HEATER.lower,
+            compressor=TANK_HEATER.compressor,
             lower_element="binary_sensor.lower_element",
         )
         history = asyncio.run(
             ha.read_heater_history(
                 cast(
                     ha.HomeAssistantClient,
-                    WindowedClient(_book_rows(), BOOK_UNITS),
+                    WindowedClient(_tank_rows(), TANK_UNITS),
                 ),
                 heater,
-                END - ha.BOOK_WINDOW,
+                END - ha.TANK_WINDOW,
                 END,
             )
         )

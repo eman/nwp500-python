@@ -21,7 +21,6 @@ valve, passes its own ``HeaterParams``.
 
 from dataclasses import replace
 
-from nwp500.sim.delivery import with_example_evidence
 from nwp500.sim.params import (
     INSTALLATION_TERMS,
     CirculationParams,
@@ -51,8 +50,7 @@ SITE_VALVE = (53.56, 0.485)
 NO_VALVE = (0.0, 1.0)
 
 #: The installation's circulation: 1.397 gal/min (the median over the
-#: 14 days before a retrain), and the book's 159 BTU per gallon
-#: circulated. The run model's three terms are fitted together
+#: 14 days before a retrain). The run model's three terms are fitted together
 #: (``calibration.fit_return``) on 123 runs with the compressor off,
 #: 2026-04-04 to 2026-10-24: the return rests 7.84 °F above the heater's
 #: air, and the pipe a run warmed cools back to rest on 0.464 h. The
@@ -66,12 +64,8 @@ SITE_CIRCULATION = CirculationParams(
     flow_gpm=1.397,
     return_rest_offset_f=7.84,
     return_cool_tau_h=0.464,
-    loss_btu_per_gal=159.0,
-    # Fitted on the book's re-anchors with runs merged within 10 min:
-    # an effective volume, apart from ``displaced_gal``.
-    book_circuit_gal=1.47,
     # Its household meter read a run at 0.81 of the run's own flow
-    # (median of 47 runs), but the flow the book takes is the
+    # (median of 47 runs), but the flow a history's replay takes is the
     # household's draws alone (``sim_home_assistant`` reads them from
     # the draw detector), which no run passes.
     meter_share=0.0,
@@ -162,8 +156,7 @@ def with_valve(
 ) -> HeaterParams:
     """``params`` with the mixing valve ``(intercept_f, slope)``:
     delivered water at ``intercept_f + slope × upper``, never above the
-    tank; ``NO_VALVE`` for none. The draw terms' line, which the book
-    takes too (``HeaterParams.book_terms``)."""
+    tank; ``NO_VALVE`` for none: the draw terms' line."""
     intercept, slope = valve
     return replace(
         params,
@@ -176,19 +169,15 @@ def with_valve(
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
-    with no mixing valve (``NO_VALVE``), no circulation and no readiness
-    evidence (the site's was metered through its valve, and over-promises
-    without one: the probes answer alone until your own is measured).
-    Every other installation term is still that site's, labelled so
+    with no mixing valve (``NO_VALVE``) and no circulation. Every other
+    installation term is still that site's, labelled so
     (``params.scope_of``) and named in ``unfitted``
     (``INSTALLATION_TERMS``), so every answer they reach says
-    ``book_uncalibrated``, ``readiness_uncalibrated`` or
     ``draw_uncalibrated`` until your own meter fits them."""
     site = site_example_params(volume_code)
     return replace(
         with_valve(site, NO_VALVE),
         circulation=None,
-        readiness=replace(site.readiness, evidence=()),
         unfitted=INSTALLATION_TERMS,
     )
 
@@ -201,32 +190,17 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     Several of its values move with every refit there (the
     circulation's displaced volume and flow, the heat pump's map, the
     tank's losses), so read it as an example, not as that
-    installation's current state. The 50 and 80 gal models scale by
-    rated storage (``RATED_GAL``) its tank volume (the tank's, and the
-    heat book's count of it) and the book's empty point
-    (``BookParams.empty_btu``, about 256 BTU per gallon of it), and
-    nothing else. Its readiness
-    evidence is the site's 19-draw frontier
-    (``delivery.EXAMPLE_EVIDENCE``), measured on the 65 gal tank, which
-    the model served for every heater."""
+    installation's current state. The 50 and 80 gal models scale its
+    tank volume by rated storage (``RATED_GAL``), and nothing else."""
     rated = dict(RATED_GAL)
     if volume_code not in rated:
         raise ValueError(f"unknown volume_code {volume_code!r}")
     site = _nwp500_65()
-    base = replace(
-        with_valve(site, SITE_VALVE),
-        circulation=SITE_CIRCULATION,
-        readiness=with_example_evidence(site.readiness),
-    )
+    base = replace(with_valve(site, SITE_VALVE), circulation=SITE_CIRCULATION)
     if volume_code == VOLUME_65:
         return base
     scale = rated[volume_code] / rated[VOLUME_65]
     return replace(
         base,
         tank=replace(base.tank, volume_gal=base.tank.volume_gal * scale),
-        book=replace(
-            base.book,
-            tank_gal=base.book.tank_gal * scale,
-            empty_btu=base.book.empty_btu * scale,
-        ),
     )
