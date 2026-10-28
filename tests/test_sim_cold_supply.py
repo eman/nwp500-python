@@ -198,6 +198,14 @@ class TestTheClimateOfAYear:
         )
         assert climate_of(gap) is None
 
+    def test_a_short_month_sends_it_back_to_a_whole_year(self) -> None:
+        """A month cut short among the latest twelve: the year before it
+        stands."""
+        air = _daily([50.0] + [60.0] * 12, date(2024, 1, 1))
+        air += _daily([99.0], date(2025, 2, 1), days=10)
+        air += _daily([70.0] * 3, date(2025, 3, 1))
+        assert climate_of(air) == (60.0, 0.0)
+
     def test_a_missing_reading_is_none_taken(self) -> None:
         air = _daily([60.0] * 12, date(2025, 1, 1))
         assert climate_of([*air, (air[0][0], math.nan)]) == (60.0, 0.0)
@@ -224,6 +232,16 @@ class TestTheParametersMains:
                 inlet_from_probe=False,
                 climate_f=(60.0, -1.0),
             )
+
+    @pytest.mark.parametrize(
+        "climate", [(math.nan, 10.0), (61.3, math.inf), (3.0, 10.0)]
+    )
+    def test_a_climate_off_the_correlation_is_refused(
+        self, climate: tuple[float, float]
+    ) -> None:
+        d = site_example_params().draw
+        with pytest.raises(ValueError, match="climate_f"):
+            replace(d, climate_f=climate)
 
     def test_a_document_carries_the_climate(self) -> None:
         params = site_example_params()
@@ -259,3 +277,28 @@ class TestTheParametersMains:
             modelled.defaults_used
         )
         assert not any(d.startswith("inlet_f") for d in given.defaults_used)
+
+    def test_each_modes_time_reads_the_days_mains(self) -> None:
+        """A mode's bath is judged at the mains its walk meets: the same
+        answer as one given that day's mains."""
+        from nwp500.sim import time_to_ready
+
+        params = site_example_params()
+        start = datetime(2026, 2, 1, 19, tzinfo=UTC)
+        base = {
+            "start": start,
+            "horizon": timedelta(hours=6),
+            "tz": "UTC",
+            "state": {"upper_f": 111.0, "lower_f": 107.0},
+            "settings": {"setpoint_f": 140.0},
+        }
+        mains = params.draw.mains_on(start)
+        modelled, given = (
+            time_to_ready(
+                Scenario(**base, environment=Environment(ambient_f=65.0, **kw)),
+                params,
+                bath_gal=40.0,
+            )
+            for kw in ({}, {"inlet_f": mains})
+        )
+        assert modelled.bath.by_mode == given.bath.by_mode

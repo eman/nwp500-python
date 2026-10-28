@@ -280,7 +280,7 @@ Entry points
 ``standby(state, environment, loads, params, start=..., until=...)``
    The tank coasting with no heating: jacket loss and draws.
 
-``readiness(state, settings, params, inlet_f=...)``
+``readiness(state, settings, params, inlet_f=..., on=...)``
    "How much hot water is left?": deliverable gallons now, and what the
    answer rests on: the tank's layers, or the probes alone.
 
@@ -396,7 +396,8 @@ Limitations
 ===========
 
 - **The inlet temperature.** The device's inlet field reads 0, so the
-  inlet is an input, or the parameters' fitted value.
+  inlet is an input, or the parameters' mains on the day: their
+  climate's (``DrawParams.climate_f``), else ``inlet_temp_f``.
 - **Draw volume.** The device does not report how much water was
   drawn, so draws are an input: a forecast, or a flow meter's record.
 - **Supply voltage.** Element power is the fitted 240 V figure.

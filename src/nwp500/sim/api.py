@@ -1316,7 +1316,7 @@ def _mode_run(
             pt.upper_f,
             pt.lower_f,
             pt.layers_f,
-            inlet_f=s.environment.inlet_f,
+            inlet_f=_inlet_f(s, params),
         )
         if got.gal < bath_gal:
             continue

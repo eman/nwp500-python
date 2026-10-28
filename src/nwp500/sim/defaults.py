@@ -34,6 +34,7 @@ from nwp500.sim.params import (
     LossParams,
     TankParams,
 )
+from nwp500.sim.physics.draw import DEFAULT_INLET_TEMP_F
 
 #: The device's ``volume_code``: NWP500-50, -65 and -80.
 VOLUME_50 = 1
@@ -149,7 +150,7 @@ def _nwp500_65() -> HeaterParams:
         draw=DrawParams(
             delivery_intercept_f=53.56,
             delivery_slope=0.485,
-            inlet_temp_f=72.4,
+            inlet_temp_f=DEFAULT_INLET_TEMP_F,
             inlet_from_probe=True,
             climate_f=SITE_CLIMATE,
         ),

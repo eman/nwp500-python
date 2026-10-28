@@ -31,8 +31,10 @@ tank water straight through; on the measured line that is below
 about 104 °F.
 """
 
-#: The cold inlet's reference, °F: the median plateau of the
-#: cold-supply probe's long draws over 2026-09-19..26, seven draws,
+#: One installation's September mains, °F (``site_example_params``'
+#: ``draw.inlet_temp_f``; its climate places them by the day, and the
+#: defaults for another take the rating test's): the median plateau of
+#: the cold-supply probe's long draws over 2026-09-19..26, seven draws,
 #: 71.3-73.1, bootstrap CI on the median [71.8, 73.0]. A September
 #: value: the plateaus fell to 69.3-69.6 °F by 2026-10-20, and the
 #: lower probe's 68.0 and 69.4 °F in January and February bound the

@@ -204,7 +204,7 @@ Hot water and calibration
 .. automodule:: nwp500.sim.cold_supply
    :members: plateau_t_cold, ColdSupply, ColdSupplyParams, mains_f,
       climate_of, MAINS_OFFSET_F, MAINS_REFERENCE_AIR_F,
-      CLIMATE_MONTH_DAYS
+      CLIMATE_MONTH_DAYS, CLIMATE_MEAN_MIN_F
 
 .. automodule:: nwp500.sim.record
    :members: Record, RecordedWrite, Recorded, RecordedStarts, corroborator

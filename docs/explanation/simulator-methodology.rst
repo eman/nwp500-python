@@ -648,7 +648,8 @@ An installation's sensors
        (11 minutes or more, circulation off) that ended in the last
        72 hours, each draw's plateau the median of its last 2 minutes,
        none earlier than minute 9. Without the probe: the parameters'
-       inlet (one installation's September mains) with
+       mains on the day (their climate's, else ``inlet_temp_f``: the
+       rating test's 58 degF in ``default_params``) with
        ``inlet_temp_modelled``.
    * - A flow meter on the hot line
      - The draws, in delivered gallons (or tank gallons, with

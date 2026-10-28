@@ -123,6 +123,9 @@ MAINS_OFFSET_F = 6.0
 MAINS_REFERENCE_AIR_F = 44.0
 #: Days a whole month needs readings on to count toward a climate.
 CLIMATE_MONTH_DAYS = 20
+#: The coldest year's mean air the correlation takes, degF: under it
+#: the swing's ratio turns negative and the seasons invert.
+CLIMATE_MEAN_MIN_F = MAINS_REFERENCE_AIR_F - 40.0
 
 
 def mains_f(annual_mean_f: float, swing_f: float, day: date) -> float:
@@ -149,21 +152,20 @@ def mains_f(annual_mean_f: float, swing_f: float, day: date) -> float:
 def climate_of(air: Readings) -> tuple[float, float] | None:
     """``mains_f``'s climate, ``(annual_mean_f, swing_f)``, from the
     outdoor ``air`` readings, degF: the mean and the range of the monthly
-    means over the latest twelve whole months (by the readings' own
-    calendar), a month whole with readings on ``CLIMATE_MONTH_DAYS``
-    days or more and the twelve consecutive. None without such a year.
-    A reading that is not a number is left out."""
+    means over the latest twelve consecutive whole months (by the
+    readings' own calendar), a month whole with readings on
+    ``CLIMATE_MONTH_DAYS`` days or more. None without such a year. A
+    missing reading (NaN) is left out."""
     days: dict[tuple[int, int], dict[date, list[float]]] = {}
     for t, v in air:
         if math.isfinite(v):
             month = days.setdefault((t.year, t.month), {})
             month.setdefault(t.date(), []).append(v)
     whole = sorted(m for m, d in days.items() if len(d) >= CLIMATE_MONTH_DAYS)
-    if len(whole) < 12:
-        return None
-    year = whole[-12:]
-    first, last = year[0], year[-1]
-    if (last[0] - first[0]) * 12 + last[1] - first[1] != 11:
-        return None
-    means = [fmean(fmean(v) for v in days[m].values()) for m in year]
-    return fmean(means), max(means) - min(means)
+    for end in range(len(whole), 11, -1):
+        year = whole[end - 12 : end]
+        first, last = year[0], year[-1]
+        if (last[0] - first[0]) * 12 + last[1] - first[1] == 11:
+            means = [fmean(fmean(v) for v in days[m].values()) for m in year]
+            return fmean(means), max(means) - min(means)
+    return None

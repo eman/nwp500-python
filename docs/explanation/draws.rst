@@ -366,7 +366,8 @@ gave:
   days of 2026-09-20 to 10-28 (0.1-3.9 degF), and 0.8 degF under from
   10-20 on, the probe's indoor pipe run included. September's 72.4 degF
   held all year was 4.4 degF over the plateau by 10-28.
-* **The year:** 61.6 degF in early February to 73.1 degF in August.
+* **The year:** 61.6 degF in early February to 73.0 degF in early
+  August.
   The winter low, with the 1.5 degF the probe reads over it, is the
   63-64 degF the lower probe points to.
 

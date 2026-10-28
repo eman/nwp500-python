@@ -345,8 +345,12 @@ class TestTimeToReady:
         point = next(p for p in walk.points if p.at == then)
         from nwp500.sim.delivery import deliverable
 
+        mains = params.draw.mains_on(s.start)
+
         def gal(p: Any) -> float:
-            return deliverable(params, p.upper_f, p.lower_f, p.layers_f).gal
+            return deliverable(
+                params, p.upper_f, p.lower_f, p.layers_f, inlet_f=mains
+            ).gal
 
         assert gal(point) >= 40.0
         # The first: no earlier instant of the walk delivers it.

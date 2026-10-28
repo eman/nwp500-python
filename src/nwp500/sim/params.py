@@ -32,8 +32,9 @@ consumer reads the parameters without the model that was trained with
 them. Floats are kept as they are, so a document read back is the
 value written.
 
-This module imports only the standard library and one leaf of the core
-(``units``), which imports nothing back.
+This module imports only the standard library and two leaves of the
+core: ``units``, and ``cold_supply`` for the mains by the day (it
+imports ``circulation`` alone); none imports it back.
 """
 
 import math
@@ -45,7 +46,7 @@ from itertools import pairwise
 from types import MappingProxyType, NoneType, UnionType
 from typing import Any, cast, get_args, get_origin, get_type_hints
 
-from nwp500.sim.cold_supply import mains_f
+from nwp500.sim.cold_supply import CLIMATE_MEAN_MIN_F, mains_f
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 
@@ -447,8 +448,17 @@ class DrawParams:
             if v is not None:
                 low, high = v
                 object.__setattr__(self, name, (float(low), float(high)))
-        if self.climate_f is not None and self.climate_f[1] < 0.0:
-            raise ValueError("climate_f's swing is negative")
+        if self.climate_f is not None:
+            mean, swing = self.climate_f
+            if not (math.isfinite(mean) and math.isfinite(swing)):
+                raise ValueError("climate_f is not a number")
+            if swing < 0.0:
+                raise ValueError("climate_f's swing is negative")
+            if mean < CLIMATE_MEAN_MIN_F:
+                # Under it the correlation's seasons invert.
+                raise ValueError(
+                    f"climate_f's mean is under {CLIMATE_MEAN_MIN_F} °F"
+                )
 
     def mains_on(self, day: date) -> float:
         """The mains on ``day``, °F: the climate's (``climate_f``,
