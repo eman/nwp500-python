@@ -2552,8 +2552,8 @@ class HomeAssistantBook:
             notes.append(
                 f"layers: {self.flow} is unknown now"
                 if any(a <= at <= b for a, b in g.flow_out)
-                else "layers: the heater not heard now, or its probes "
-                "not read in the history"
+                else "layers: the heater not heard now, or its probes or "
+                f"{self.flow} not read long enough before it"
             )
         return LayersAnswer(layers, tuple(notes))
 
