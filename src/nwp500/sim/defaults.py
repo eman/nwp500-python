@@ -15,8 +15,10 @@ draws. ``site_example_params`` is that installation whole;
 ``default_params`` is the same heater with **no mixing valve**, the one
 draw setting with no fitted numbers in it, which errs the safe way for
 a valve owner who leaves it unset (every gallon charged as tank water,
-depletion called early). A caller with its own calibration, or a
-valve, passes its own ``HeaterParams``.
+depletion called early), and the rating test's mains (``RATING_INLET_F``)
+in place of that installation's. A caller with its own calibration, a
+valve or its own climate (``DrawParams.climate_f``) passes its own
+``HeaterParams``.
 """
 
 from dataclasses import replace
@@ -32,6 +34,7 @@ from nwp500.sim.params import (
     LossParams,
     TankParams,
 )
+from nwp500.sim.physics.draw import DEFAULT_INLET_TEMP_F
 
 #: The device's ``volume_code``: NWP500-50, -65 and -80.
 VOLUME_50 = 1
@@ -48,6 +51,18 @@ RATED_GAL = ((VOLUME_50, 45.2), (VOLUME_65, 63.2), (VOLUME_80, 76.1))
 SITE_VALVE = (53.56, 0.485)
 #: No mixing valve: the tap gets the tank's own water.
 NO_VALVE = (0.0, 1.0)
+
+#: The mains of the federal rating test for water heaters (10 CFR 430,
+#: Subpart B, Appendix E), °F: colder than most of the year's mains
+#: south of the northern tier, so the draws it prices err the safe way.
+RATING_INLET_F = 58.0
+#: The installation's climate (``DrawParams.climate_f``): its weather
+#: station's monthly means over 2025-11 to 2026-10
+#: (``cold_supply.climate_of``), a year's mean air of 61.3 °F and a
+#: swing of 19.9 °F between its warmest and coldest month. Its mains
+#: by the day read 1.5 °F under the plateaus of its inlet probe on 25
+#: days of 2026-09-20 to 10-28.
+SITE_CLIMATE = (61.3, 19.9)
 
 #: The installation's circulation: 1.397 gal/min (the median over the
 #: 14 days before a retrain). The run model's three terms are fitted together
@@ -135,8 +150,9 @@ def _nwp500_65() -> HeaterParams:
         draw=DrawParams(
             delivery_intercept_f=53.56,
             delivery_slope=0.485,
-            inlet_temp_f=72.4,
+            inlet_temp_f=DEFAULT_INLET_TEMP_F,
             inlet_from_probe=True,
+            climate_f=SITE_CLIMATE,
         ),
         controller=ControllerParams(
             write_start_lag_s=30.0,
@@ -169,14 +185,21 @@ def with_valve(
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
-    with no mixing valve (``NO_VALVE``) and no circulation. Every other
+    with no mixing valve (``NO_VALVE``), no circulation and the rating
+    test's mains all year (``RATING_INLET_F``, no climate). Every other
     installation term is still that site's, labelled so
     (``params.scope_of``) and named in ``unfitted``
     (``INSTALLATION_TERMS``), so every answer they reach says
     ``draw_uncalibrated`` until your own meter fits them."""
-    site = site_example_params(volume_code)
+    site = with_valve(site_example_params(volume_code), NO_VALVE)
     return replace(
-        with_valve(site, NO_VALVE),
+        site,
+        draw=replace(
+            site.draw,
+            inlet_temp_f=RATING_INLET_F,
+            inlet_from_probe=False,
+            climate_f=None,
+        ),
         circulation=None,
         unfitted=INSTALLATION_TERMS,
     )

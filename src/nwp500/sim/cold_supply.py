@@ -21,13 +21,19 @@ none earlier than ``settle_s`` after its onset, kept within
 draws that ended within ``window_s`` before the instant asked about;
 none without one, and the caller keeps its own inlet rather than the
 raw series.
+
+Without a probe, the mains come from the installation's climate
+(``mains_f``): Burch and Christensen's correlation of the water a
+utility delivers with the year's outdoor air, as the Building America
+House Simulation Protocols and EnergyPlus use it. ``climate_of`` reads
+that climate off a year of outdoor readings.
 """
 
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from statistics import median
+from datetime import date, datetime, timedelta
+from statistics import fmean, median
 
 from nwp500.sim.circulation import merge_runs
 
@@ -109,3 +115,57 @@ def plateau_t_cold(
     if not plateaus:
         return ColdSupply(None)
     return ColdSupply(float(median(plateaus)), len(plateaus), newest)
+
+
+#: Burch and Christensen's mains, above the year's mean air, degF.
+MAINS_OFFSET_F = 6.0
+#: The air the correlation's ratio and lag are measured from, degF.
+MAINS_REFERENCE_AIR_F = 44.0
+#: Days a whole month needs readings on to count toward a climate.
+CLIMATE_MONTH_DAYS = 20
+#: The coldest year's mean air the correlation takes, degF: under it
+#: the swing's ratio turns negative and the seasons invert.
+CLIMATE_MEAN_MIN_F = MAINS_REFERENCE_AIR_F - 40.0
+
+
+def mains_f(annual_mean_f: float, swing_f: float, day: date) -> float:
+    """The mains on ``day``, degF, from the climate (Burch and
+    Christensen, NREL 2007): ``annual_mean_f``, the year's mean outdoor
+    air, and ``swing_f``, its warmest monthly mean less its coldest. The
+    water runs ``MAINS_OFFSET_F`` above the mean air and swings with it,
+    damped and lagging more the colder the climate. A northern
+    hemisphere's year, as the correlation was fitted on.
+
+    At one installation (a year's mean air 61.3 degF, swing 19.9 degF),
+    it read a mean 1.5 degF under the plateaus of an inlet probe at the
+    heater over 25 days of 2026-09-20..10-28 (0.1-3.9), the probe's
+    indoor pipe run included, and 0.8 degF under from 10-20 on."""
+    ratio = 0.4 + 0.01 * (annual_mean_f - MAINS_REFERENCE_AIR_F)
+    lag_d = 35.0 - (annual_mean_f - MAINS_REFERENCE_AIR_F)
+    n = day.timetuple().tm_yday
+    phase = math.radians(0.986 * (n - 15.0 - lag_d) - 90.0)
+    return (
+        annual_mean_f + MAINS_OFFSET_F + ratio * swing_f / 2.0 * math.sin(phase)
+    )
+
+
+def climate_of(air: Readings) -> tuple[float, float] | None:
+    """``mains_f``'s climate, ``(annual_mean_f, swing_f)``, from the
+    outdoor ``air`` readings, degF: the mean and the range of the monthly
+    means over the latest twelve consecutive whole months (by the
+    readings' own calendar), a month whole with readings on
+    ``CLIMATE_MONTH_DAYS`` days or more. None without such a year. A
+    missing reading (NaN) is left out."""
+    days: dict[tuple[int, int], dict[date, list[float]]] = {}
+    for t, v in air:
+        if math.isfinite(v):
+            month = days.setdefault((t.year, t.month), {})
+            month.setdefault(t.date(), []).append(v)
+    whole = sorted(m for m, d in days.items() if len(d) >= CLIMATE_MONTH_DAYS)
+    for end in range(len(whole), 11, -1):
+        year = whole[end - 12 : end]
+        first, last = year[0], year[-1]
+        if (last[0] - first[0]) * 12 + last[1] - first[1] == 11:
+            means = [fmean(fmean(v) for v in days[m].values()) for m in year]
+            return fmean(means), max(means) - min(means)
+    return None

@@ -334,8 +334,8 @@ available by 10-20 %. :doc:`/how-to/simulate-heater` reads the plateau.
 The mains by season
 -------------------
 
-The default inlet, 72.4 degF, is the median of those September
-plateaus, and the mains moves with the season:
+The installation's ``draw.inlet_temp_f``, 72.4 degF, is the median of
+those September plateaus, and the mains moves with the season:
 
 * **October.** The plateaus fell about 0.085 degF a day, from 72.5 degF
   on 2026-10-01 to 69.3-69.6 degF by 10-20.
@@ -347,9 +347,36 @@ plateaus, and the mains moves with the season:
   that, and likely nearer 63-64 degF.
 
 Every 1 degF of inlet moves a delivered gallon's heat by about 2 %, so a
-winter mains 9 degF under the default makes each draw take about a fifth
-more heat than the default says. Give ``Environment.inlet_f`` outside
-September.
+winter mains 9 degF under September's makes each draw take about a fifth
+more heat than September's says.
+
+So the mains are placed by the day from the climate
+(``cold_supply.mains_f``): Burch and Christensen's correlation of a
+utility's water with the year's outdoor air, which the Building America
+House Simulation Protocols and EnergyPlus use. It takes the year's mean
+air and the spread between the warmest and coldest monthly means; the
+water runs 6 degF over the mean air and swings with it, damped and
+lagging more in a colder climate.
+
+The installation's weather station read a mean of 61.3 degF and a
+spread of 19.9 degF over 2025-11 to 2026-10. From them the correlation
+gave:
+
+* **September and October:** a mean 1.5 degF under the plateaus over 25
+  days of 2026-09-20 to 10-28 (0.1-3.9 degF), and 0.8 degF under from
+  10-20 on, the probe's indoor pipe run included. September's 72.4 degF
+  held all year was 4.4 degF over the plateau by 10-28.
+* **The year:** 61.6 degF in early February to 73.0 degF in early
+  August.
+  The winter low, with the 1.5 degF the probe reads over it, is the
+  63-64 degF the lower probe points to.
+
+The installation's parameters carry that climate
+(``draw.climate_f``). ``default_params``, for another installation,
+carries none, and its mains are the rating test's 58 degF all year:
+colder than most of the year's mains away from the northern tier, so
+its draws err the safe way. Give your own climate, or
+``Environment.inlet_f`` from a probe (:doc:`/how-to/simulate-heater`).
 
 
 Limits
@@ -361,4 +388,5 @@ defaults are this one's (:doc:`/reference/simulator-inputs`). The valve
 line rests on five plateaus read from a dial, the hot-tank ones all
 from one evening. Draws were 0.9-1.4 gal/min. The tub figures come from
 four baths. The cold supply was measured in September and October
-only; how the mains moves through the year was not.
+only; how the mains moves through the rest of the year is the
+correlation's, checked against the lower probe's winter bound alone.

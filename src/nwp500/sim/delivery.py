@@ -10,7 +10,8 @@ tank gallon delivering ``1 / hot_fraction`` at the tap
 (``stratified.deliverable_gal``). The tank's outlet is its top, above
 the upper probe, so the tap stays hot for the water above the probe
 after the probe has crossed. The mains the draw meets is the scenario's
-inlet, else ``DrawParams.inlet_temp_f``.
+inlet, else ``DrawParams.inlet_temp_f`` (a caller that knows the day
+passes ``DrawParams.mains_on``'s).
 
 **The layers** are the state's (``HeaterState.layers_f``: as the tank's
 history left them, ``sim.history``), and ``basis`` says ``layers``;

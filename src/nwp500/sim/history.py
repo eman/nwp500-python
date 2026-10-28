@@ -113,7 +113,8 @@ def drawn_gal(s: Step, params: HeaterParams) -> float:
     under it. Tank gallons (``Step.flow_volume``) are the valve's
     delivery of them: each takes a hot share of tank water
     (``physics.draw.hot_fraction``) at the step's upper probe, with the
-    parameters' inlet."""
+    parameters' mains on its day (``DrawParams.mains_on``; a step of no
+    known instant, ``inlet_temp_f``)."""
     house = house_gpm(s, params.circulation)
     if house <= params.draw.draw_gpm:
         return 0.0
@@ -124,7 +125,8 @@ def drawn_gal(s: Step, params: HeaterParams) -> float:
     delivered = delivery_temp_f(
         s.upper_f, d.delivery_intercept_f, d.delivery_slope
     )
-    share = hot_fraction(s.upper_f, min(s.upper_f, delivered), d.inlet_temp_f)
+    inlet = d.inlet_temp_f if s.at is None else d.mains_on(s.at)
+    share = hot_fraction(s.upper_f, min(s.upper_f, delivered), inlet)
     return gal / share if share > 0.0 else 0.0
 
 

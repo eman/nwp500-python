@@ -1760,7 +1760,8 @@ def _steps_on(
     the next), an inlet reading none inside ``inlet_unknown`` and an air
     reading none inside ``air_unknown``. ``flow_volume`` is what the
     meter's gallons count (``history.FlowVolume``). Without an inlet
-    reading, a step's inlet is ``DrawParams.inlet_temp_f``."""
+    reading, a step's inlet is the parameters' mains on its day
+    (``DrawParams.mains_on``)."""
     p = params if params is not None else default_params()
     terms = None if params is None else params.circulation
 
@@ -1824,7 +1825,7 @@ def _steps_on(
                 compressor_on=bool(comp[i]),
                 element_on=bool(up_el[i]) or bool(lo_el[i]),
                 ambient_f=a_f if a_f is not None else AMBIENT_DEFAULT_F,
-                inlet_f=in_f if in_f is not None else p.draw.inlet_temp_f,
+                inlet_f=in_f if in_f is not None else p.draw.mains_on(grid[i]),
                 circulating=on,
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,

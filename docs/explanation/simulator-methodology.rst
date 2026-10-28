@@ -410,7 +410,9 @@ the top in turn, each tank gallon delivering
 :math:`1/f_{\text{hot}}` at the tap through the mixing valve, to the
 first the valve delivers under the line; the inlet zone's water, which
 warms toward the column as it rises, in closed form. The mains is the
-scenario's inlet, else ``DrawParams.inlet_temp_f``. The tank's outlet
+scenario's inlet, else the parameters' mains on its first day
+(``DrawParams.mains_on``: the climate's, else ``inlet_temp_f``). The
+tank's outlet
 is its top, above the upper probe: the tap stays hot for the water
 above the probe after the probe has crossed (one measurement: 5.3 to
 7.3 gal; the fitted probe has 6.9 gal above it).
@@ -646,7 +648,8 @@ An installation's sensors
        (11 minutes or more, circulation off) that ended in the last
        72 hours, each draw's plateau the median of its last 2 minutes,
        none earlier than minute 9. Without the probe: the parameters'
-       inlet (one installation's September mains) with
+       mains on the day (their climate's, else ``inlet_temp_f``: the
+       rating test's 58 degF in ``default_params``) with
        ``inlet_temp_modelled``.
    * - A flow meter on the hot line
      - The draws, in delivered gallons (or tank gallons, with

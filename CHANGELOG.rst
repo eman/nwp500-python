@@ -8,6 +8,22 @@ Unreleased
 Added
 -----
 
+- **The mains by the day, from the climate.** ``cold_supply.mains_f``
+  is Burch and Christensen's correlation of a utility's water with the
+  year's outdoor air (its mean, and its warmest monthly mean less its
+  coldest), and ``cold_supply.climate_of`` reads that climate off a
+  year of outdoor readings. ``DrawParams.climate_f`` carries it:
+  ``DrawParams.mains_on(day)`` gives that day's mains, else
+  ``inlet_temp_f``. A scenario without an inlet takes the mains on its
+  first day, and ``defaults_used`` names it; the history's replay, the
+  tank's fits and ``readiness(..., on=day)`` take each day's. At one
+  installation (mean air 61.3 °F, swing 19.9 °F, its weather
+  station's 2025-11 to 2026-10) the correlation read 1.5 °F under its
+  inlet probe's plateaus on 25 days of 2026-09-20 to 10-28, and 0.8 °F
+  under from 10-20 on; September's 72.4 °F held all year was 4.4 °F
+  over by 10-28. ``site_example_params`` carries that climate
+  (``SITE_CLIMATE``).
+
 - **The tank's layers from a recorded history, for any caller.**
   ``sim_adapters.layers_from_history`` and ``layers_from_changes`` give
   ``HeaterState.layers_f`` at an instant from a heater's statuses or its
@@ -150,6 +166,13 @@ Added
 
 Changed
 -------
+
+- **Another installation's mains are the rating test's 58 °F**
+  (``defaults.RATING_INLET_F``, 10 CFR 430, Subpart B, Appendix E), in
+  ``default_params``, in place of one installation's September 72.4 °F:
+  colder than most of the year's mains away from the northern tier, so
+  its draws err the safe way. Give ``DrawParams.climate_f`` to place
+  them by the day.
 
 - **Hot water at the tap from the tank's layers** (breaking).
   Deliverable gallons (``delivery.deliverable``), the delivered

@@ -505,7 +505,7 @@ Then check what the answer rests on:
 
 .. code-block:: python
 
-   print(result.defaults_used)  # e.g. ('humidity=50.0', 'inlet_f=72.4', ...)
+   print(result.defaults_used)  # e.g. ('humidity=50.0', 'inlet_f=58.0', ...)
    print(result.reasons)        # e.g. ('tou_cap_projected',)
 
 ``defaults_used`` names every input the simulator had to assume.
@@ -665,7 +665,9 @@ The tank's water leaves the top in turn, each gallon tempered by the
 mixing valve, until what the valve delivers falls below the line; the
 gallons include the water above the upper probe, which still leaves hot
 after the probe crosses the line. ``inlet_f`` is the mains the draw
-meets, else ``DrawParams.inlet_temp_f``: through a valve, a colder
+meets, else the parameters' mains on the day ``on``
+(``DrawParams.mains_on``), else ``DrawParams.inlet_temp_f``: through a
+valve, a colder
 inlet takes more tank water a gallon. The water standing in your pipe is
 not in them. ``delivery.within_resolution`` says whether a probe error
 of ``ReadinessParams.probe_resolution_f`` would take the answer across a
@@ -1083,7 +1085,21 @@ draw late reaches the replay late: it replays what the history holds at
 ``circulation_speed`` gives the circulation's runs, and ``air`` the air
 beside the heater.
 
-**The inlet.** Without one, a draw meets ``DrawParams.inlet_temp_f``.
+**The inlet.** Without one, a scenario's draws meet the parameters'
+mains on its first day, and the replay's each its own day's: the
+climate's (``DrawParams.climate_f``), else ``DrawParams.inlet_temp_f``. Give the climate once, as the year's mean
+outdoor air and its warmest monthly mean less its coldest, in °F: from
+your weather station's last year (``cold_supply.climate_of``) or a
+nearby station's climate normals:
+
+.. code-block:: python
+
+   from dataclasses import replace
+   from nwp500.sim.cold_supply import climate_of
+
+   climate = climate_of(outdoor_readings)  # a year of (instant, °F)
+   params = replace(params, draw=replace(params.draw, climate_f=climate))
+
 With an inlet probe on the cold supply, take the mains from its plateau
 over the long draws, and give it as the scenario's inlet:
 

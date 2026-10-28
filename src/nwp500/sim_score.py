@@ -803,6 +803,7 @@ def _delivery_score(
             sim.Settings(setpoint_f=e.setpoint_f),
             params,
             inlet_f=inlet_f,
+            on=e.at,
         )
     except SimulationError, ValueError:
         return False, False

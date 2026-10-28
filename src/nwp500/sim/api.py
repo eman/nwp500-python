@@ -15,7 +15,7 @@ import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -235,6 +235,22 @@ HP_LOWER_ON_UNKNOWN = "hp_lower_on_unknown"
 TANK_PROFILE_ESTIMATED = "tank_profile_estimated"
 
 
+def _mains(
+    environment: Environment, params: HeaterParams, at: datetime
+) -> float:
+    """The mains from ``at``: the environment's own
+    (``Environment.inlet_f``), else the parameters' on that day
+    (``DrawParams.mains_on``), held over the span."""
+    if environment.inlet_f is not None:
+        return environment.inlet_f
+    return params.draw.mains_on(at.date())
+
+
+def _inlet_f(s: Scenario, params: HeaterParams) -> float:
+    """The scenario's mains (``_mains`` from its start)."""
+    return _mains(s.environment, params, s.start)
+
+
 def _physics(
     params: HeaterParams,
     environment: Environment,
@@ -248,8 +264,12 @@ def _physics(
 ) -> TankPhysics:
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
+    inlet_f = _mains(environment, params, start)
     if environment.inlet_f is None:
-        defaults.append(f"inlet_f={params.draw.inlet_temp_f}")
+        defaults.append(
+            f"inlet_f={inlet_f:.1f}"
+            + (" (the climate's mains)" if params.draw.climate_f else "")
+        )
     if (
         circulation is not None
         and (params.circulation or SITE_CIRCULATION) == SITE_CIRCULATION
@@ -263,7 +283,7 @@ def _physics(
         draws_on=draws_on,
         circulation=circulation,
         circulation_terms=SITE_CIRCULATION,
-        draw_inlet_temp_f=environment.inlet_f,
+        draw_inlet_temp_f=inlet_f,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
         # Where the air leaves the heat pump's range, on the readings
@@ -544,7 +564,7 @@ def simulate(
                 [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
                 delivery,
                 params,
-                inlet_f=s.environment.inlet_f,
+                inlet_f=_inlet_f(s, params),
                 forecast=[
                     (w.expected_count, w.draws_until) for w in s.loads.windows
                 ],
@@ -560,13 +580,17 @@ def readiness(
     params: HeaterParams,
     *,
     inlet_f: float | None = None,
+    on: date | None = None,
 ) -> Deliverable:
     """How much hot water the tank can deliver now, in delivered gallons
     at the line (``ReadinessParams.line_f``), and what the answer rests
     on (``sim.delivery``): the tank's layers (``HeaterState.layers_f``,
     ``basis`` ``layers``), else the profile its two probes stand for
-    (``probes``). The mains is ``inlet_f``, else
+    (``probes``). The mains is ``inlet_f``, else the parameters' on the
+    day ``on`` (``DrawParams.mains_on``), else
     ``DrawParams.inlet_temp_f``."""
+    if inlet_f is None and on is not None:
+        inlet_f = params.draw.mains_on(on)
     return deliverable(
         params, state.upper_f, state.lower_f, state.layers_f, inlet_f=inlet_f
     )
@@ -1292,7 +1316,7 @@ def _mode_run(
             pt.upper_f,
             pt.lower_f,
             pt.layers_f,
-            inlet_f=s.environment.inlet_f,
+            inlet_f=_inlet_f(s, params),
         )
         if got.gal < bath_gal:
             continue
@@ -1388,7 +1412,7 @@ def time_to_ready(
         ambient_f=_ambient_at(s.environment, s.start),
         compressor_on=s.state.compressor_running,
     )
-    inlet = s.environment.inlet_f
+    inlet = _inlet_f(s, params)
     now_gal = deliverable(
         params, tank.upper_f, tank.lower_f, s.state.layers_f, inlet_f=inlet
     )

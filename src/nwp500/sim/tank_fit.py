@@ -352,7 +352,7 @@ def _span(
         heating=st.Heating(compressor=compressor, elements=elements),
         flowing=_flows(params, record, i, j),
         draws=[
-            st.Delivered(at=t, gal=g, inflow_f=d.inlet_temp_f)
+            st.Delivered(at=t, gal=g, inflow_f=d.mains_on(t))
             for t, g in record.draws[lo:hi]
         ],
         valve=(d.delivery_intercept_f, d.delivery_slope),
@@ -512,7 +512,7 @@ def errors(
         ),
         flowing=coast.flowing,
         draws=[
-            st.Delivered(at=t, gal=g, inflow_f=d.inlet_temp_f)
+            st.Delivered(at=t, gal=g, inflow_f=d.mains_on(t))
             for t, g in coast.draws
         ],
         valve=(d.delivery_intercept_f, d.delivery_slope),
