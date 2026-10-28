@@ -33,6 +33,7 @@ import pandas as pd
 from scipy.optimize import least_squares
 
 from nwp500.sim.circulation import cooled_share
+from nwp500.sim.history import REPLAY
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
@@ -50,8 +51,6 @@ Run = tuple[int, int]
 
 #: The record's grid.
 MINUTE = timedelta(minutes=1)
-#: How far back ``replay`` starts before an event.
-REPLAY = timedelta(hours=24)
 #: How often ``replay`` corrects the layers to the probes.
 ASSIMILATE_EVERY = timedelta(minutes=10)
 #: How far before a record's part its element runs are kept: an

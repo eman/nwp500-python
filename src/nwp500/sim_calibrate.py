@@ -52,7 +52,7 @@ from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim import heat_pump_fit as hpf
 from nwp500.sim import tank_fit as tf
-from nwp500.sim.book import FlowVolume
+from nwp500.sim.history import FlowVolume
 from nwp500.sim.params import (
     UNFITTED_TERMS,
     BookParams,

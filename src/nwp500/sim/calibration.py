@@ -65,12 +65,12 @@ from nwp500.sim.book import (
     anchor_held,
     compressing,
     full_tank,
-    house_gpm,
     is_full,
 )
-from nwp500.sim.book import Step as BookStep
 from nwp500.sim.circulation import RUN_GAP, cooled_share, merge_runs
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
+from nwp500.sim.history import Step as BookStep
+from nwp500.sim.history import house_gpm
 from nwp500.sim.history_frame import Interval
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (

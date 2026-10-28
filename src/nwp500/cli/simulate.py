@@ -330,6 +330,36 @@ def booked(
     return dataclasses.replace(answer.booked, inlet_f=inlet)
 
 
+def layered(
+    keeper: HomeAssistantBook | None, built: Built, now: datetime
+) -> Built:
+    """``built`` starting from the tank's layers its history leaves
+    (``HomeAssistantBook.layers``), the scenario's probes laid over
+    them: only for a scenario that starts ``now``, whose state is the
+    heater's now, and gives no layers of its own. Without them, ``built``
+    as it is, which the simulator starts from the two probes. Its own
+    notes are logged (``booked`` logs the history's)."""
+    state = built.scenario.state
+    if (
+        keeper is None
+        or built.scenario.start != now
+        or state.layers_f is not None
+    ):
+        return built
+    answer = keeper.layers(now, built.params, (state.upper_f, state.lower_f))
+    for note in (n for n in answer.notes if n.startswith("layers:")):
+        if answer.layers_f is None:
+            _logger.warning(note)
+        else:
+            _logger.info(note)
+    if answer.layers_f is None:
+        return built
+    scenario = built.scenario.model_copy(
+        update={"state": state.model_copy(update={"layers_f": answer.layers_f})}
+    )
+    return Built(scenario, built.params, built.notes)
+
+
 def window(inputs: Inputs, now: datetime) -> tuple[datetime, timedelta]:
     """The start and horizon ``build`` will give the scenario: a flag,
     then the scenario document's, then ``now`` and ``DEFAULT_HOURS``.
@@ -568,8 +598,9 @@ def run(
     keeper: HomeAssistantBook | None = None,
 ) -> sim.SimulationResult:
     """Build the scenario, walk it and print the result: from the tank's
-    booked heat when ``keeper`` (``read_book``) books one."""
-    built = build(inputs, live, now)
+    layers and its booked heat when ``keeper`` (``read_book``) gives
+    them."""
+    built = layered(keeper, build(inputs, live, now), now)
     for note in built.notes:
         _logger.warning(note)
     book = booked(keeper, built, now)

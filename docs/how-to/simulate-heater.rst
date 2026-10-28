@@ -197,7 +197,16 @@ give:
   the two probes. Without it, the probes answer from the heat they
   place in the tank, apart or not (``probes``). With no full
   tank in the 72 hours, or a scenario that doesn't start now, the run
-  walks without the book, and a warning says why.
+  walks without the book, and a warning says why;
+- **the tank's layers:** with the same entities, the layers the last
+  24 hours leave (``HomeAssistantBook.layers``): the heat pump's runs,
+  the elements', the draws and the circulation's walked through the
+  tank, corrected to the probes as they were read, the probes now laid
+  over them. The run starts from them, so the water below the lower
+  probe is where the history left it: cold after a draw, hot after a
+  recovery. Without them, or for a scenario that doesn't start now, it
+  starts from the two probes, and ``reasons`` says
+  ``tank_profile_estimated``.
 
 Under "deliverable now", the table gives the bath and the showers the
 tank is ready for (``sim.time_to_ready``): the bath ready with its
@@ -915,6 +924,35 @@ schedule, give the runs and what each takes
        circulation=runs)})
    mine = replace(params, circulation=sim.CirculationParams(
        displaced_gal=5.0, flow_gpm=1.5, loss_btu_per_gal=150.0))
+
+**The tank's layers.** Two probes don't say where the water below the
+lower one is: a tank coasting after a draw and one coasting after a
+recovery read alike and behave apart. With a hot-water flow meter and
+a record of the heater's statuses, give the simulation the layers the
+record leaves (``HeaterState.layers_f``), as ``sim.history.replay``
+walks the last 24 hours of it:
+
+.. code-block:: python
+
+   layers = sa.layers_from_history(
+       recorded,              # [(instant, DeviceStatus), ...]
+       params,
+       at=now,
+       flow=meter_flow,       # [(instant, flow per minute), ...]
+       circulation=runs,      # [(start, end), ...], if you circulate
+       air=air_readings,      # where the heater stands, if you have it
+   )
+   state = sa.heater_state(status).model_copy(update={"layers_f": layers})
+
+``sa.layers_from_changes`` takes the history as changes, with the same
+arguments as ``book_from_changes`` below, and refuses the same way: None
+while the heater isn't heard now or the flow is unknown now. The replay
+starts no earlier than the flow's first reading, and a meter that is
+silent for an hour (``layers_from_history``), or has no reading at all,
+raises a ValueError: it would replay as no draw. Either
+lays the record's last probe readings over the layers; ``probes=(upper,
+lower)`` lays others, such as the state's. A None leaves ``layers_f``
+None, and the simulator starts from the two probes.
 
 **The heat book.** With a hot-water flow meter and a record of the
 heater's statuses, book the tank's heat from the record and pass it as
