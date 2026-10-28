@@ -1311,3 +1311,57 @@ class TestARunsGallonsForTheCircuit:
         )
         assert steps[0].circulating
         assert steps[0].run_gal_before == pytest.approx(3 * 1.2)
+
+
+class TestTheLayers:
+    """``layers_from_history`` and ``layers_from_changes``: the layers
+    the record leaves, refused where the meter does not cover it."""
+
+    def test_the_statuses_and_their_changes_leave_the_same_layers(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        readings = heater(26, recovery_at=4)
+        flow = with_a_draw(meter(26), 2.0)
+        rows, observed = as_changes(readings)
+        want = sa.layers_from_history(readings, p, at=T0, flow=flow)
+        got = sa.layers_from_changes(rows, observed, p, at=T0, flow=flow)
+        assert want is not None and got is not None
+        assert len(got) == p.tank.layers
+        assert got == pytest.approx(want, abs=0.05)
+
+    def test_a_silent_meter_is_refused(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """A silence would replay as no draw."""
+        p = site_example_params()
+        readings = heater(26, recovery_at=4)
+        quiet = [r for r in meter(26) if r[0] < T0 - timedelta(hours=3)]
+        for flow in ([], quiet):
+            with pytest.raises(ValueError, match="silent"):
+                sa.layers_from_history(readings, p, at=T0, flow=flow)
+
+    def test_no_flow_reading_is_refused(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(26, recovery_at=4))
+        with pytest.raises(ValueError, match="no flow reading"):
+            sa.layers_from_changes(rows, observed, p, at=T0, flow=[])
+
+    def test_the_replay_starts_at_the_flows_first_reading(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """Before it, the draws are unknown: a draw there is not
+        replayed, nor is the rest of the record before it."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(26, recovery_at=4))
+        late = meter(1)
+        whole = with_a_draw(meter(26), 2.0)
+        got = sa.layers_from_changes(rows, observed, p, at=T0, flow=late)
+        trimmed = [t for t in observed if t >= late[0][0]]
+        want = sa.layers_from_changes(rows, trimmed, p, at=T0, flow=late)
+        other = sa.layers_from_changes(rows, observed, p, at=T0, flow=whole)
+        assert got is not None and want is not None and other is not None
+        assert got == pytest.approx(want)
+        assert got != pytest.approx(other)

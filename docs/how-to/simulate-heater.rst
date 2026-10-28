@@ -946,7 +946,10 @@ walks the last 24 hours of it:
 
 ``sa.layers_from_changes`` takes the history as changes, with the same
 arguments as ``book_from_changes`` below, and refuses the same way: None
-while the heater isn't heard now or the flow is unknown now. Either
+while the heater isn't heard now or the flow is unknown now. The replay
+starts no earlier than the flow's first reading, and a meter that is
+silent for an hour (``layers_from_history``), or has no reading at all,
+raises a ValueError: it would replay as no draw. Either
 lays the record's last probe readings over the layers; ``probes=(upper,
 lower)`` lays others, such as the state's. A None leaves ``layers_f``
 None, and the simulator starts from the two probes.

@@ -2427,7 +2427,8 @@ class HomeAssistantBook:
             if known is None:
                 notes.append(
                     f"{what}: the circulation's runs are unknown ({why}); "
-                    "taken with only its outages"
+                    f"{'booked' if what == 'book' else 'replayed'} with "
+                    "only its outages"
                 )
             if unknown:
                 notes.append(
@@ -2444,7 +2445,7 @@ class HomeAssistantBook:
             runs = busy(_without(known or [], stale), unseen)
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
-        if e.inlet is not None:
+        if e.inlet is not None and what == "book":
             try:
                 inlet, bad = got.converted(
                     e.inlet, self._units.get(e.inlet), to_f, at

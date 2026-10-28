@@ -684,6 +684,26 @@ class TestTheHeatBook:
         assert "tank_profile_estimated" in result.reasons
         assert "layers: a note" in caplog.text
 
+    def test_the_scenarios_own_layers_are_kept(self) -> None:
+        n = sim.default_params(2).tank.layers
+        own = tuple(90.0 + 3.0 * k for k in range(n))
+        keeper = _Keeper(None, (120.0,) * n)
+        out = io.StringIO()
+        s = _scenario()
+        s = s.model_copy(
+            update={"state": s.state.model_copy(update={"layers_f": own})}
+        )
+        result = sim_cli.run(
+            sim_cli.Inputs(scenario=scenario_to_document(s)),
+            None,
+            NOW,
+            "table",
+            out,
+            keeper=cast(Any, keeper),
+        )
+        assert not keeper.probes
+        assert "tank_profile_estimated" not in result.reasons
+
     def test_a_scenario_not_starting_now_takes_no_layers(self) -> None:
         n = sim.default_params(2).tank.layers
         keeper = _Keeper(None, (120.0,) * n)

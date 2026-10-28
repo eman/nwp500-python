@@ -2153,15 +2153,26 @@ def layers_from_history(
     ``book_from_history`` takes them, on its steps
     (``book_steps_from_history``), the ``probes`` (upper, lower) °F laid
     over them, by default the record's last. None when the record reads
-    both probes at no instant in that span."""
+    both probes at no instant in that span. Raises ValueError for a
+    meter silent over ``METER_MAX_GAP`` in the span, which would replay
+    as no draw, as ``book_from_history`` does."""
     at = at.astimezone(UTC)
+    start = at - sim_history.REPLAY
+    flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    beats = [start, *(t for t, _ in flows if start <= t <= at), at]
+    gap = max(b - a for a, b in itertools.pairwise(beats))
+    if gap > METER_MAX_GAP:
+        # A silent meter would replay as no draw.
+        raise ValueError(
+            f"the meter was silent for {gap}; the history is incomplete"
+        )
     runs = list(circulation)
     params = with_circulation_terms(params, runs)
     steps = book_steps_from_history(
         readings,
-        start=at - sim_history.REPLAY,
+        start=start,
         end=at,
-        flow=flow,
+        flow=flows,
         circulation=runs,
         circulation_flow=circulation_flow,
         air=air,
@@ -2191,8 +2202,10 @@ def layers_from_changes(
     """``layers_from_history`` from a heater's values' changes, as
     ``book_from_changes`` takes them, with the same refusals: None when
     the heater is not heard at ``at``, or it or the flow is in an
-    outage then. Across a span nobody saw, each value holds from before
-    it, the flow for ``FLOW_HOLD`` and then none."""
+    outage then, and a ValueError with no flow reading at all. The
+    replay starts no earlier than the flow's first reading: before it,
+    the draws are unknown. Across a span nobody saw, each value holds
+    from before it, the flow for ``FLOW_HOLD`` and then none."""
     at = at.astimezone(UTC)
     flow_outages = list(flow_outages)
     found = _heard_until(rows, observed, heard, at, flow_outages)
@@ -2201,6 +2214,10 @@ def layers_from_changes(
     since, unseen = found
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     flows = _ended_in(flows, flow_outages, FLOW_HOLD)
+    if not flows or flows[0][0] > at:
+        raise ValueError("no flow reading; the history is incomplete")
+    # Before the flow's first reading, its draws are unknown.
+    since = max(since, flows[0][0])
     runs = list(circulation)
     params = with_circulation_terms(params, runs)
     steps = book_steps_from_changes(

@@ -336,13 +336,18 @@ def layered(
     """``built`` starting from the tank's layers its history leaves
     (``HomeAssistantBook.layers``), the scenario's probes laid over
     them: only for a scenario that starts ``now``, whose state is the
-    heater's now. Without them, ``built`` as it is, which the simulator
-    starts from the two probes. The notes are logged."""
-    if keeper is None or built.scenario.start != now:
-        return built
+    heater's now, and gives no layers of its own. Without them, ``built``
+    as it is, which the simulator starts from the two probes. Its own
+    notes are logged (``booked`` logs the history's)."""
     state = built.scenario.state
+    if (
+        keeper is None
+        or built.scenario.start != now
+        or state.layers_f is not None
+    ):
+        return built
     answer = keeper.layers(now, built.params, (state.upper_f, state.lower_f))
-    for note in answer.notes:
+    for note in (n for n in answer.notes if n.startswith("layers:")):
         if answer.layers_f is None:
             _logger.warning(note)
         else:
