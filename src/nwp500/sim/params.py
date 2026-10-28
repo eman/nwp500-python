@@ -39,12 +39,13 @@ This module imports only the standard library and one leaf of the core
 import math
 from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, field, fields
-from datetime import timedelta
+from datetime import date, timedelta
 from enum import StrEnum
 from itertools import pairwise
 from types import MappingProxyType, NoneType, UnionType
 from typing import Any, cast, get_args, get_origin, get_type_hints
 
+from nwp500.sim.cold_supply import mains_f
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 
@@ -106,7 +107,12 @@ _VALVE_LINE = (
 )
 _MAINS = (
     "one installation's September mains, the median plateau of a "
-    "probe's long draws over 2026-09-19..26"
+    "probe's long draws over 2026-09-19..26; the defaults for another "
+    "installation take the rating test's 58 degF"
+)
+_CLIMATE = (
+    "one installation's outdoor air, the monthly means of a weather "
+    "station's readings over 2025-11..2026-10"
 )
 
 
@@ -403,7 +409,8 @@ class DrawParams:
     delivery_slope: float = field(
         metadata=_p(FITTED, "1", INSTALLATION, _VALVE_LINE)
     )
-    #: The cold inlet's reference temperature, °F.
+    #: The cold inlet's temperature, °F, all year, when ``climate_f``
+    #: does not place the mains by the day.
     inlet_temp_f: float = field(metadata=_p(FITTED, "°F", INSTALLATION, _MAINS))
     #: Whether ``inlet_temp_f`` was read from the inlet probe.
     inlet_from_probe: bool = field(metadata=_p(MEASURED, "flag", INSTALLATION))
@@ -424,14 +431,31 @@ class DrawParams:
     draw_gpm: float = field(
         default=0.3, metadata=_p(DEFAULT, "gal/min", INSTALLATION)
     )
+    #: The installation's climate, which places the mains by the day
+    #: (``cold_supply.mains_f``): the year's mean outdoor air and its
+    #: warmest monthly mean less its coldest, °F
+    #: (``cold_supply.climate_of``). None: the mains are
+    #: ``inlet_temp_f`` all year.
+    climate_f: tuple[float, float] | None = field(
+        default=None, metadata=_p(MEASURED, "°F", INSTALLATION, _CLIMATE)
+    )
 
     def __post_init__(self) -> None:
         # A document carries the ranges as lists.
-        for name in ("domain_upper_f", "domain_volume_gal"):
+        for name in ("domain_upper_f", "domain_volume_gal", "climate_f"):
             v = getattr(self, name)
             if v is not None:
                 low, high = v
                 object.__setattr__(self, name, (float(low), float(high)))
+        if self.climate_f is not None and self.climate_f[1] < 0.0:
+            raise ValueError("climate_f's swing is negative")
+
+    def mains_on(self, day: date) -> float:
+        """The mains on ``day``, °F: the climate's (``climate_f``,
+        ``cold_supply.mains_f``) when given, else ``inlet_temp_f``."""
+        if self.climate_f is None:
+            return self.inlet_temp_f
+        return mains_f(*self.climate_f, day)
 
     def out_of_domain(self, upper_f: float, volume_gal: float) -> bool:
         """Whether a draw of ``volume_gal`` (its own volume, never a

@@ -2,13 +2,16 @@
 
 import json
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from nwp500.sim.defaults import (
     NO_VALVE,
+    RATING_INLET_F,
     SITE_CIRCULATION,
+    SITE_CLIMATE,
     SITE_VALVE,
     default_params,
     site_example_params,
@@ -108,12 +111,14 @@ def test_a_fitted_document_writes_back_as_it_was() -> None:
 
 def test_the_site_example_is_that_fitted_model() -> None:
     """The document carries no circulation (its bundle keeps that
-    apart); the site example adds the installation's."""
+    apart) and no climate (a weather station's, not the heater's
+    record); the site example adds the installation's."""
     site = site_example_params()
     assert params_from_document(json.loads(FITTED_DOC.read_text())) == (
-        replace(site, circulation=None)
+        replace(site, circulation=None, draw=replace(site.draw, climate_f=None))
     )
-    assert site_example_params().circulation == SITE_CIRCULATION
+    assert site.circulation == SITE_CIRCULATION
+    assert site.draw.climate_f == SITE_CLIMATE
 
 
 def test_the_default_is_the_site_without_its_mixing_valve() -> None:
@@ -124,9 +129,24 @@ def test_the_default_is_the_site_without_its_mixing_valve() -> None:
         SITE_VALVE
     )
     assert d.circulation is None
-    assert with_valve(d, SITE_VALVE) == replace(
-        site, circulation=None, unfitted=INSTALLATION_TERMS
+    rated = replace(
+        site.draw,
+        inlet_temp_f=RATING_INLET_F,
+        inlet_from_probe=False,
+        climate_f=None,
     )
+    assert with_valve(d, SITE_VALVE) == replace(
+        site, draw=rated, circulation=None, unfitted=INSTALLATION_TERMS
+    )
+
+
+def test_another_installations_mains_are_the_rating_tests_all_year() -> None:
+    """No climate, so the rating's 58 degF on any day; the site's move
+    with its own climate's season."""
+    d, site = default_params().draw, site_example_params().draw
+    assert {d.mains_on(date(2026, m, 1)) for m in (2, 8)} == {RATING_INLET_F}
+    winter, summer = (site.mains_on(date(2026, m, 1)) for m in (2, 8))
+    assert winter < 63.0 < 72.0 < summer
 
 
 def test_the_defaults_installation_terms_are_named_unfitted() -> None:

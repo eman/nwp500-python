@@ -462,7 +462,11 @@ def print_table(
     s = built.scenario
     tz = s.tz
     ready = sim.readiness(
-        s.state, s.settings, built.params, inlet_f=s.environment.inlet_f
+        s.state,
+        s.settings,
+        built.params,
+        inlet_f=s.environment.inlet_f,
+        on=s.start.date(),
     )
     console.print(
         f"[bold]{_local(s.start, tz)} to {_local(s.until, tz)}[/bold] ({tz}): "

@@ -137,7 +137,7 @@ Parameters
 
 .. automodule:: nwp500.sim.defaults
    :members: site_example_params, with_valve, SITE_VALVE, NO_VALVE,
-      RATED_GAL
+      RATED_GAL, RATING_INLET_F, SITE_CLIMATE
 
 
 Extension points
@@ -202,7 +202,9 @@ Hot water and calibration
       draws_first, forecast_loads, shower_gal
 
 .. automodule:: nwp500.sim.cold_supply
-   :members: plateau_t_cold, ColdSupply, ColdSupplyParams
+   :members: plateau_t_cold, ColdSupply, ColdSupplyParams, mains_f,
+      climate_of, MAINS_OFFSET_F, MAINS_REFERENCE_AIR_F,
+      CLIMATE_MONTH_DAYS
 
 .. automodule:: nwp500.sim.record
    :members: Record, RecordedWrite, Recorded, RecordedStarts, corroborator

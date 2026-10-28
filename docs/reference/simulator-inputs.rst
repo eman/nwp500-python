@@ -372,11 +372,15 @@ The environment: ``Environment``
        the heater averaged 53 % (monthly 45-70 %).
    * - ``inlet_f``
      - degF
-     - the parameters' ``draw.inlet_temp_f``
+     - the parameters' mains on the start's day
      - The mains water temperature. **Not reported**: the device's
-       inlet field reads 0. It prices every draw. The default is one
-       installation's September mains; give your own outside September
-       (:ref:`the mains by season <mains-by-season>`).
+       inlet field reads 0. It prices every draw. The default is the
+       mains of the parameters' climate on the scenario's first day
+       (``draw.climate_f``, ``DrawParams.mains_on``), held over the
+       span; without a climate, ``draw.inlet_temp_f`` all year: 58 degF
+       in ``default_params``, the rating test's
+       (:ref:`the mains by season <mains-by-season>`). ``defaults_used``
+       names the value.
 
 
 Draws: ``Loads``
@@ -605,7 +609,7 @@ the tap gets at the line or warmer: the water leaving the top in turn,
 each tank gallon delivering ``1 / hot_fraction`` through the mixing
 valve, to the first that the valve delivers under the line
 (``stratified.deliverable_gal``). The mains it meets is the scenario's
-inlet, else ``DrawParams.inlet_temp_f``. The tank is its layers
+inlet, else the parameters' on its first day. The tank is its layers
 (``HeaterState.layers_f``, ``Deliverable.basis`` ``layers``), else the
 profile its two probes stand for (``basis`` ``probes``, and
 ``tank_profile_estimated`` in the reasons). The outlet is above the
@@ -860,7 +864,15 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
    * - ``draw.inlet_temp_f``, the valve line
      - 72.4 degF, (53.56, 0.485)
      - Long-draw plateaus on the cold supply, and five plateaus at the
-       valve outlet (:doc:`/explanation/draws`).
+       valve outlet (:doc:`/explanation/draws`). ``default_params``
+       takes no valve and the rating test's 58 degF
+       (``RATING_INLET_F``, 10 CFR 430, Subpart B, Appendix E).
+   * - ``draw.climate_f``
+     - (61.3, 19.9) degF
+     - The installation's weather station: its monthly means over
+       2025-11 to 2026-10 (``cold_supply.climate_of``). Not in
+       ``default_params``: give your own (:ref:`the mains by season
+       <mains-by-season>`).
    * - ``readiness``
      - the Readiness section above
      - The bath tests (:doc:`/explanation/draws`).

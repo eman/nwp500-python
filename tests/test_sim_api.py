@@ -490,7 +490,7 @@ class TestWhatTheResultSays:
         )
         used = simulate(s, params).defaults_used
         assert "humidity=50.0" in used
-        assert "inlet_f=72.4" in used
+        assert "inlet_f=58.0" in used
         assert any(d.startswith("compressor_stopped_at=None") for d in used)
         assert any(d.startswith("hp_lower_on_f=None") for d in used)
 

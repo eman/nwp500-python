@@ -410,7 +410,9 @@ the top in turn, each tank gallon delivering
 :math:`1/f_{\text{hot}}` at the tap through the mixing valve, to the
 first the valve delivers under the line; the inlet zone's water, which
 warms toward the column as it rises, in closed form. The mains is the
-scenario's inlet, else ``DrawParams.inlet_temp_f``. The tank's outlet
+scenario's inlet, else the parameters' mains on its first day
+(``DrawParams.mains_on``: the climate's, else ``inlet_temp_f``). The
+tank's outlet
 is its top, above the upper probe: the tap stays hot for the water
 above the probe after the probe has crossed (one measurement: 5.3 to
 7.3 gal; the fitted probe has 6.9 gal above it).

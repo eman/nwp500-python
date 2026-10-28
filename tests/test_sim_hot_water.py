@@ -100,7 +100,13 @@ def _by_hand(params: HeaterParams, s: Scenario) -> Any:
     flat ambient."""
     stamps = pd.date_range(at(-2), s.until + timedelta(hours=24), freq="1h")
     frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
-    physics = TankPhysics(params, frame, s.environment.humidity, draws_on=True)
+    physics = TankPhysics(
+        params,
+        frame,
+        s.environment.humidity,
+        draws_on=True,
+        draw_inlet_temp_f=params.draw.mains_on(s.start),
+    )
     return walk(
         start=s.start,
         upper_f=s.state.upper_f,
@@ -258,8 +264,10 @@ class TestDrawWindows:
         assert w.depleted
         assert w.delivery_min_f < params.readiness.line_f
         assert w.margin_gal is not None and w.margin_gal < 0.0
-        # Half an hour's standby from the full tank's.
-        full = deliverable(params, *FULL).gal
+        # Half an hour's standby from the full tank's, at the day's
+        # mains.
+        mains = params.draw.mains_on(T0)
+        full = deliverable(params, *FULL, inlet_f=mains).gal
         assert full - 1.0 < w.deliverable_gal < full
 
     def test_a_window_the_tank_can_supply_does_not(
