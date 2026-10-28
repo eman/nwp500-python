@@ -389,7 +389,9 @@ Fixed
 - In Electric, an upper element a lowered setpoint stops at its new off
   point hands over to the lower element, as one stopping at its own
   does; the lower zone was left where it was. Not when a mode write at
-  the same instant changes the mode: the new mode's rule decides.
+  the same instant changes the mode at once: the new mode's rule
+  decides; a mode write held to a TOU window's end decides nothing
+  then.
 - An element heating in the heat pump's place stops with
   ``HeatingInterval.stop`` ``heat_pump`` when the heat pump takes the
   recovery back, not ``mode``, so ``element_mode`` does not count that

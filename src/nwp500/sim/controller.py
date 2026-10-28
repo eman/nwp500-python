@@ -1063,8 +1063,8 @@ def _stop_element(
     brought to the zone, the zone coasts on with the heat in transit.
     In Electric the upper element hands over to the lower, at its own
     off point or a lowered setpoint's, unless a mode write at the same
-    instant changes the mode (``mode_follows``): the new mode's rule
-    decides then."""
+    instant changes the mode at once (``mode_follows``; not one held to
+    a window's end): the new mode's rule decides then."""
     zone = s.state.element.zone
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
@@ -1208,6 +1208,24 @@ def _setpoint(
         s.pend(None)
 
 
+def _holds(s: _Step, mode: HeaterMode, owner: Owner) -> bool:
+    """Whether a write of ``mode`` now is held to the window's end
+    (``_mode_write``): inside a TOU window, a mode not in force that an
+    entry writes, or an element mode a direct write names."""
+    return (
+        mode != s.mode
+        and (owner != "raw" or mode in ELEMENT_MODES)
+        and s.in_tou()
+    )
+
+
+def _takes(s: _Step, mode: HeaterMode, owner: Owner) -> bool:
+    """Whether a write of ``mode`` now changes the mode in force at
+    once: not to the mode in force, not held, not while heating is
+    disabled."""
+    return not s.disabled and mode != s.mode and not _holds(s, mode, owner)
+
+
 def _mode_write(
     s: _Step,
     mode: HeaterMode,
@@ -1259,7 +1277,7 @@ def _mode_write(
     if held is not None:
         s.act(ModeWithdrawn(held.ref, s.at))
     entry = owner != "raw"
-    if mode != s.mode and (entry or mode in ELEMENT_MODES) and s.in_tou():
+    if _holds(s, mode, owner):
         s.act(ModeHeld(ref))
         if entry and mode == HEAT_PUMP:
             s.note("heat_pump_entry_held_spec_only")
@@ -1381,9 +1399,13 @@ def _entry_fires(s: _Step, ev: EntryFires) -> None:
     changes_mode = powering_on or (
         ev.mode is not None and ev.mode != s.state.mode.commanded
     )
+    # The new mode decides only when it takes now.
+    follows = powering_on or (
+        ev.mode is not None and _takes(s, ev.mode, "plan")
+    )
     value = ev.setpoint_f
     if value is not None and abs(value - s.sp) > 1e-6:
-        _setpoint(s, value, ev.serves, mode_follows=changes_mode)
+        _setpoint(s, value, ev.serves, mode_follows=follows)
     if changes_mode:
         _mode_write(
             s,
@@ -1401,9 +1423,9 @@ def _raw_writes(s: _Step, ev: RawWrites) -> None:
     device's own order at one instant is unmeasured (no mode and
     setpoint write on the record share an instant; the three pairs
     17-67 ms apart come in either order)."""
+    # A mode the writes change at once decides; a held one does not.
     follows = any(
-        w.mode is not None and w.mode != s.state.mode.commanded
-        for w in ev.writes
+        w.mode is not None and _takes(s, w.mode, "raw") for w in ev.writes
     )
     for w in ev.writes:
         if w.setpoint_f is not None:

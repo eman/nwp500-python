@@ -505,6 +505,37 @@ class TestWhatEndsTheRecovery:
             element_mode(s, params, mode=ELECTRIC).reasons
         )
 
+    @pytest.mark.parametrize("mode", [2, 3])
+    def test_a_held_mode_write_leaves_the_handover_to_the_mode_in_force(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """Heat Pump in force, the air too cold for it so the elements
+        heat as Electric, inside a TOU window: an element mode written
+        with a lowered setpoint is held to the window's end, so the
+        upper element still hands over to the lower."""
+        s = _scenario(
+            110.0,
+            105.0,
+            mode=1,
+            given={
+                "environment": Environment(ambient_f=35.0, humidity=48.0),
+                "schedules": _tou_opening_at(11, 30),
+                "commands": Commands(
+                    writes=(
+                        Write(
+                            at=T0 + timedelta(minutes=5),
+                            setpoint_f=112.0,
+                            mode=mode,
+                        ),
+                    )
+                ),
+            },
+        )
+        heating = _walk(s, params)
+        lower = [h for h in heating if h.zone == "lower"]
+        assert lower and lower[0].start.at == T0 + timedelta(minutes=5)
+        assert lower[0].start.trigger == "electric_lower_after_upper"
+
     def test_a_setpoint_write_the_compressor_has_reached_is_not_a_cut(
         self, params: HeaterParams
     ) -> None:
