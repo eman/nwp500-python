@@ -618,9 +618,10 @@ def _without_own_draw(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
 
 def _replayable(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
     """``record`` up to an event at ``at`` (``TankRecord.before``), its
-    draws in the minute ``at`` falls in, before it, moved to that
-    minute's start. The replay to ``at`` stops there
-    (``tank_fit.replay``) and an event's own draws start at ``at``: so
+    draws in the minute ``at`` falls in, before it, moved to a
+    microsecond before that minute's start. The replay to ``at`` stops
+    at that start, its last span taking what comes before it
+    (``tank_fit.replay``), and an event's own draws start at ``at``: so
     every draw before an event is replayed, then corrected to the
     probes it starts from, which were read after it."""
     part = record.before(at)
