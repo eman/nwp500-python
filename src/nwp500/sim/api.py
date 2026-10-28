@@ -902,18 +902,11 @@ def _stint_end(
 def _cut(simulation: Simulation, h: HeatingInterval) -> bool:
     """Whether ``h`` stopped short of its target: on the mode changing
     then (a write, or the heater dropping it at a window), not on the
-    heat pump taking over from an element standing in for it; or, the
-    compressor, on a setpoint write with the lower zone short of the new
-    setpoint (the engine's own ``reached``). An element stops on a
+    heat pump taking over from an element standing in for it (``stop``
+    "heat_pump"); or, the compressor, on a setpoint write with the lower
+    zone short of the new setpoint (the engine's own ``reached``). An element stops on a
     setpoint write only at its new off point."""
     if h.stop == "mode":
-        if h.source == "element" and any(
-            c.source == "compressor" and c.start.at == h.end
-            for c in simulation.heating
-        ):
-            # The heat pump took over at that instant: a mode write
-            # landing then does not make it a cut.
-            return False
         return any(
             m.end == h.end and m.ended_by != "horizon" for m in simulation.modes
         ) or any(at == h.end for at, _ in simulation.drops)

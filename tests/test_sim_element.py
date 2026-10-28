@@ -404,6 +404,17 @@ class TestWhatEndsTheRecovery:
         assert "heat_pump_unavailable" in r.reasons
         assert r.full_minutes is not None
         assert "recovery_cut_short" not in r.reasons
+        assert any(
+            h.stop == "heat_pump"
+            for h in _walk(
+                s.model_copy(
+                    update={
+                        "commands": Commands(writes=(Write(at=T0, mode=mode),))
+                    }
+                ),
+                params,
+            )
+        )
 
     def test_a_mode_write_landing_on_the_handover_is_not_a_cut(
         self, params: HeaterParams
@@ -434,6 +445,65 @@ class TestWhatEndsTheRecovery:
         assert quiet.full_minutes is not None
         assert r.full_minutes is not None
         assert "recovery_cut_short" not in r.reasons
+
+    def test_a_mode_write_on_a_pending_compressor_start_still_cuts(
+        self, params: HeaterParams
+    ) -> None:
+        """Heat Pump written as the stint's own compressor start comes
+        due: the element it stops is cut, whatever starts then."""
+        s = _scenario(
+            125.0,
+            110.0,
+            given={
+                "commands": Commands(
+                    writes=(Write(at=T0 + timedelta(seconds=30), mode=1),)
+                )
+            },
+        )
+        r = element_mode(s, params, mode=ENERGY_SAVER)
+        assert r.full_minutes is None
+        assert "recovery_cut_short" in r.reasons
+
+    @pytest.mark.parametrize("mode", [1, 3, 4])
+    def test_a_lowered_setpoint_with_a_mode_change_does_not_hand_over(
+        self, params: HeaterParams, mode: int
+    ) -> None:
+        """Electric's upper element stopped by a setpoint written with
+        another mode: the new mode decides, and only Electric runs the
+        lower element."""
+        s = _scenario(
+            110.0,
+            105.0,
+            given={
+                "commands": Commands(
+                    writes=(
+                        Write(
+                            at=T0 + timedelta(minutes=5),
+                            setpoint_f=112.0,
+                            mode=mode,
+                        ),
+                    )
+                )
+            },
+        )
+        lower = [
+            h
+            for h in _walk(
+                s.model_copy(
+                    update={
+                        "commands": Commands(
+                            writes=(Write(at=T0, mode=2), *s.commands.writes)
+                        )
+                    }
+                ),
+                params,
+            )
+            if h.zone == "lower"
+        ]
+        assert lower == []
+        assert "recovery_cut_short" not in (
+            element_mode(s, params, mode=ELECTRIC).reasons
+        )
 
     def test_a_setpoint_write_the_compressor_has_reached_is_not_a_cut(
         self, params: HeaterParams

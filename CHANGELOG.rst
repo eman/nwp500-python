@@ -388,7 +388,12 @@ Fixed
 
 - In Electric, an upper element a lowered setpoint stops at its new off
   point hands over to the lower element, as one stopping at its own
-  does; the lower zone was left where it was.
+  does; the lower zone was left where it was. Not when a mode write at
+  the same instant changes the mode: the new mode's rule decides.
+- An element heating in the heat pump's place stops with
+  ``HeatingInterval.stop`` ``heat_pump`` when the heat pump takes the
+  recovery back, not ``mode``, so ``element_mode`` does not count that
+  handover as cutting its recovery short.
 - **An element stops where its zone reaches its off point.** Its end
   was set from its fitted rate alone, so where something else lifted the
   zone too, it ran on at the setpoint, charged and lifting nothing. With

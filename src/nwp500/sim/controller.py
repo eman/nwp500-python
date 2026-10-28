@@ -160,7 +160,9 @@ ElementTrigger = Literal[
     "heat_pump_unavailable",
     "heat_pump_available",
 ]
-StopReason = Literal["target", "cap", "write", "mode", "envelope", "horizon"]
+StopReason = Literal[
+    "target", "cap", "write", "mode", "heat_pump", "envelope", "horizon"
+]
 #: How a mode interval ended: a write, the heater dropping the mode at a
 #: window, or the horizon.
 ModeEnd = Literal["write", "dropped", "horizon"]
@@ -850,7 +852,7 @@ def _start_compressor(
     ):
         # An element heating in the heat pump's place, which this mode
         # would not run: the heat pump takes the recovery back.
-        _stop_element(s, "mode")
+        _stop_element(s, "heat_pump")
     c = s.state.compressor
     if hold is None:
         hold = 0.0
@@ -1053,12 +1055,16 @@ def _check_element(s: _Step) -> None:
         s.act(ElementRetarget(off))
 
 
-def _stop_element(s: _Step, reason: StopReason) -> None:
+def _stop_element(
+    s: _Step, reason: StopReason, *, mode_follows: bool = False
+) -> None:
     """An element stops. At its off point short of the setpoint (Energy
     Saver's upper element), the element's own or one a lowered setpoint
     brought to the zone, the zone coasts on with the heat in transit.
     In Electric the upper element hands over to the lower, at its own
-    off point or a lowered setpoint's."""
+    off point or a lowered setpoint's, unless a mode write at the same
+    instant changes the mode (``mode_follows``): the new mode's rule
+    decides then."""
     zone = s.state.element.zone
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
@@ -1069,6 +1075,7 @@ def _stop_element(s: _Step, reason: StopReason) -> None:
     # element's own run does: the lower takes over either way.
     if (
         reason in ("target", "write")
+        and not mode_follows
         and zone == "upper"
         and s.heats_as == ELECTRIC
         and s.lower < s.sp - ELEMENT_DONE_F
@@ -1173,7 +1180,7 @@ def _setpoint(
     if e.running:
         temp = s.upper if e.zone == "upper" else s.lower
         if temp >= value - _off_deficit(s, e.zone) - ELEMENT_DONE_F:
-            _stop_element(s, "write")
+            _stop_element(s, "write", mode_follows=mode_follows)
         else:
             s.act(ElementRetarget(s.sp - _off_deficit(s, e.zone)))
     elif (

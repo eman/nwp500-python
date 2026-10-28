@@ -105,7 +105,7 @@ class TestTheAir:
         assert back and back[0].start.at >= at(0.2)
         # The element the cold started stops as the heat pump returns,
         # and the compressor carries the recovery on from there.
-        assert r.heating[0].stop == "mode"
+        assert r.heating[0].stop == "heat_pump"
         assert back[0].start.at == r.heating[0].end
         assert back[0].start.trigger == "heat_pump_available"
 
@@ -119,7 +119,7 @@ class TestTheAir:
         lower = [h for h in r.heating if h.zone == "lower"]
         hp = [h for h in r.heating if h.source == "compressor"]
         assert lower and hp
-        assert lower[0].stop == "mode"
+        assert lower[0].stop == "heat_pump"
         assert all(e.end <= c.start.at for e in lower for c in hp)
 
     def test_nothing_restarts_a_finished_tank(self) -> None:

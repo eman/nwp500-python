@@ -486,8 +486,10 @@ What a result holds:
    setpoint or mode write, its ``id`` in ``start.serves``) or
    ``running`` (it was already heating at the start). ``source`` is
    ``compressor`` or ``element``. ``stop`` is ``target``, ``cap`` (the
-   TOU cap ended it, and ``capped`` is true), ``write``, ``mode`` or
-   ``horizon``. ``input_wh`` is its electricity.
+   TOU cap ended it, and ``capped`` is true), ``write``, ``mode``,
+   ``heat_pump`` (an element heating in the heat pump's place, which the
+   heat pump took back), ``envelope`` (the heat pump left its operating
+   range) or ``horizon``. ``input_wh`` is its electricity.
 ``result.points``
    The tank along the walk, in degF: ``upper_f``, ``lower_f``, the
    setpoint, the mode, and whether it is heating. ``sa.path(result)``
