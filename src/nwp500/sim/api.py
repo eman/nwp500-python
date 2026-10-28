@@ -904,8 +904,8 @@ def _cut(simulation: Simulation, h: HeatingInterval) -> bool:
     then (a write, or the heater dropping it at a window), not on the
     heat pump taking over from an element standing in for it (``stop``
     "heat_pump"); or, the compressor, on a setpoint write with the lower
-    zone short of the new setpoint (the engine's own ``reached``). An element stops on a
-    setpoint write only at its new off point."""
+    zone short of the new setpoint (the engine's own ``reached``). An
+    element stops on a setpoint write only at its new off point."""
     if h.stop == "mode":
         return any(
             m.end == h.end and m.ended_by != "horizon" for m in simulation.modes
