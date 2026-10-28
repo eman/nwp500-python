@@ -596,7 +596,7 @@ def _state(
     if record is not None:
         lay = st.layout(params)
         layers = tf.start_state(
-            lay, params, record, at, upper_f, lower_f
+            lay, params, _replayable(record, at), at, upper_f, lower_f
         ).layers_f
     return sim.HeaterState(
         upper_f=upper_f, lower_f=lower_f, layers_f=layers, **kw
@@ -616,18 +616,22 @@ def _without_own_draw(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
     )
 
 
-def _unreplayed(
-    record: tf.TankRecord, at: datetime
-) -> tuple[tuple[datetime, float], ...]:
-    """The record's draws in the minute ``at`` falls in, before it. The
-    replay to ``at`` stops at that minute's start (``tank_fit.replay``)
-    and an event's own draws start at ``at``, so an event that starts
-    there takes these at its start."""
-    lo = bisect_left(
-        record.draws, (record.instant(record.minute(at)), -math.inf)
-    )
-    hi = bisect_left(record.draws, (at, -math.inf))
-    return record.draws[lo:hi]
+def _replayable(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
+    """``record`` up to an event at ``at`` (``TankRecord.before``), its
+    draws in the minute ``at`` falls in, before it, moved to that
+    minute's start. The replay to ``at`` stops there
+    (``tank_fit.replay``) and an event's own draws start at ``at``: so
+    every draw before an event is replayed, then corrected to the
+    probes it starts from, which were read after it."""
+    part = record.before(at)
+    cut = part.instant(part.minute(at))
+    lo = bisect_left(part.draws, (cut, -math.inf))
+    hi = bisect_left(part.draws, (at, -math.inf))
+    if lo == hi:
+        return part
+    edge = cut - timedelta(microseconds=1)
+    moved = tuple((edge, g) for _, g in part.draws[lo:hi])
+    return replace(part, draws=part.draws[:lo] + moved + part.draws[hi:])
 
 
 def _loads(
@@ -662,10 +666,7 @@ def _recovery_score(
     ``params`` give a start after the time off it had; False when the
     simulator could not answer."""
     horizon = (e.end - e.start) + RECOVERY_SLACK
-    early = () if record is None else _unreplayed(record, e.start)
-    draws = tuple(sim.Draw(at=e.start, gallons=g) for _, g in early) + tuple(
-        sim.Draw(at=t, gallons=g) for t, g in e.draws
-    )
+    draws = tuple(sim.Draw(at=t, gallons=g) for t, g in e.draws)
     hold = start_hold_min(
         params.compressor,
         None
@@ -937,10 +938,9 @@ def score(
     over its events (``Stat``, days in ``tz``). ``inlet_f`` is the mains
     the draws meet; None, the parameters'. With the ``record``
     (``tank_fit.tank_record``), each event starts from the layers its
-    replay leaves (``HeaterState.layers_f``), a recovery taking the
-    record's draws its replay stopped short of at its start and a
-    delivery's replay leaving out its own draw; with none, from the two
-    probes.
+    replay leaves (``HeaterState.layers_f``), every draw before its
+    start replayed and a delivery's own left out; with none, from the
+    two probes.
 
     The metrics, lower is better unless a bias:
 

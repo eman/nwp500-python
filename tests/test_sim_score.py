@@ -359,25 +359,43 @@ class TestADrawJustBeforeARecovery:
     """A recovery starts at a compressor edge, any second of a minute,
     and its replay stops at that minute's start."""
 
-    def test_is_walked_at_its_start(
+    def test_is_replayed_as_one_in_the_minute_before(
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
     ) -> None:
         ready, _ = history
         (r,) = ss.events(ready).recoveries
         r = replace(r, start=r.start + timedelta(seconds=40))
-        onset = r.start - timedelta(seconds=8)
-        assert onset.second == 32
-        with_it = tank_fit.tank_record(ready.frame, [(onset, 10.0)])
-        without = tank_fit.tank_record(ready.frame, [])
 
-        def minutes(e: ss.Recovery, record: tank_fit.TankRecord) -> Any:
-            return ss.score(
-                ss.Events(recoveries=(e,)), site, record=record
-            ).metrics["recovery_minutes_bias.all"]
+        def bias(seconds: float | None) -> float:
+            draws = (
+                []
+                if seconds is None
+                else [(r.start - timedelta(seconds=seconds), 10.0)]
+            )
+            record = tank_fit.tank_record(ready.frame, draws)
+            return (
+                ss.score(ss.Events(recoveries=(r,)), site, record=record)
+                .metrics["recovery_minutes_bias.all"]
+                .value
+            )
 
-        moved = replace(r, draws=((r.start, 10.0), *r.draws))
-        assert minutes(r, with_it) == minutes(moved, without)
-        assert minutes(r, with_it) != minutes(r, without)
+        # 8 s before, in the start's minute; 41 s before, in the one
+        # before it.
+        assert bias(8.0) == pytest.approx(bias(41.0), abs=0.5)
+        assert bias(8.0) != bias(None)
+
+    def test_is_not_walked_again(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+        at = r.start + timedelta(seconds=40)
+        record = tank_fit.tank_record(
+            ready.frame, [(at - timedelta(seconds=8), 10.0)]
+        )
+        moved = ss._replayable(record, at)  # pyright: ignore[reportPrivateUsage]
+        edge = record.instant(record.minute(at))
+        assert [t for t, _ in moved.draws] == [edge - timedelta(microseconds=1)]
 
 
 class TestTheInterval:

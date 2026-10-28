@@ -386,9 +386,9 @@ Changed
 Fixed
 -----
 
-- ``sim_score`` places a draw near an event's start where it happened.
-  The replay an event starts from stops at the start of the minute the
-  event starts in.
+- ``sim_score`` replays every draw before an event's start, and leaves
+  a delivery's own draw out. The replay an event starts from stops at
+  the start of the minute the event starts in.
 
   - **A delivery:** the meter's delivery starts and the detector's draw
     onsets run on different clocks, the onset 5–10 s earlier and, in 3
@@ -399,8 +399,9 @@ Fixed
     left out.
   - **A recovery:** it starts at a compressor edge, any second of a
     minute, and keeps the draws from its start, so a draw earlier in
-    that minute reached neither its replay nor its walk. The walk now
-    takes it at the start.
+    that minute reached neither its replay nor its walk. It is now
+    replayed at that minute's start, then corrected to the probes the
+    recovery starts from, as one a minute earlier is.
 
   No held-out metric moves on this heater's record.
 - In Electric, an upper element a lowered setpoint stops at its new off
