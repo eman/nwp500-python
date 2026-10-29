@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
-from nwp500.sim.circulation import cooled_share
+from nwp500.sim.circulation import cooled_share, steady_share
 from nwp500.sim.history import REPLAY
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics import stratified as st
@@ -259,7 +259,8 @@ def _flows(
     circuit's pipe cooled comes back first, at the return's rest
     (``CirculationParams.return_rest_offset_f`` above the air), as much
     as the pipe cooled since the last run (``circulation.cooled_share``);
-    then the run's own water, back at the upper probe's reading."""
+    then the run's own water, back at the rest plus its
+    ``circulation.steady_share`` of the upper probe's lift over it."""
     c = params.circulation
     if c is None or c.flow_gpm <= 0.0:
         return []
@@ -271,25 +272,27 @@ def _flows(
         cooled = c.displaced_gal * cooled_share(rest, c.return_cool_tau_h)
         turn = record.instant(a) + timedelta(minutes=cooled / c.flow_gpm)
         lo, hi = record.instant(max(a, i)), record.instant(min(b, j))
-        air = float(record.air_f[a])
+        rest_f = float(record.air_f[a]) + c.return_rest_offset_f
         if lo < min(turn, hi):
             out.append(
                 st.Flowing(
-                    start=lo,
-                    end=min(turn, hi),
-                    gpm=c.flow_gpm,
-                    inflow_f=air + c.return_rest_offset_f,
+                    start=lo, end=min(turn, hi), gpm=c.flow_gpm, inflow_f=rest_f
                 )
             )
         if max(turn, lo) < hi:
             m = max(record.minute(max(turn, lo)), 0)
-            back = float(record.upper_f[m])
+            up = float(record.upper_f[m])
+            share = steady_share(c.pipe_ua_btu_hr_f, c.flow_gpm)
             out.append(
                 st.Flowing(
                     start=max(turn, lo),
                     end=hi,
                     gpm=c.flow_gpm,
-                    inflow_f=back if math.isfinite(back) else air,
+                    inflow_f=(
+                        rest_f + share * (up - rest_f)
+                        if math.isfinite(up)
+                        else rest_f
+                    ),
                 )
             )
     return out

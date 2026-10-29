@@ -163,7 +163,7 @@ Hot water and calibration
 
 .. automodule:: nwp500.sim.circulation
    :members: Circulation, merge_runs, RUN_GAP, cooled_share,
-      displaced_gal
+      steady_share, displaced_gal
 
 .. automodule:: nwp500.sim.location_air
    :members: LocationAirModel, SITE_LOCATION_AIR, project, fit,
@@ -172,7 +172,8 @@ Hot water and calibration
 .. automodule:: nwp500.sim.calibration
    :members: calibrate, Calibration, clean_draws, CleanDraw, crossing,
       demonstrated, MeasuredRun,
-      measure_runs, run_heat_btu, fit_return, fit_displaced_gal,
+      measure_runs, run_heat_btu, fit_return, Pipe, measure_pipe,
+      PIPE_STEADY_GAL,
       REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS, MIN_TERM_INDEPENDENCE,
       recent_flow_gpm,
       flow_lookup, element_stints, fit_element_lag, ElementLagFit,

@@ -47,6 +47,13 @@ book and the element-mode planner are gone. To move a caller over:
   ``physics.element.mode_plan`` and ``mode_recovery`` are gone.
 - **A custom ``Physics``** implements ``estimate``, ``observe``,
   ``advance`` and ``draw`` on a ``TankState``.
+- **The circulation's terms.** ``CirculationParams.displaced_gal`` is
+  the pipe's measured volume, no longer an effective one: measure it
+  and the new ``pipe_ua_btu_hr_f`` on one run after a rest
+  (``calibration.measure_pipe``), then fit the return's rest and
+  cooling with ``calibration.fit_return(runs, displaced_gal,
+  pipe_ua_btu_hr_f)``, which returns those two. ``fit_displaced_gal``
+  is gone.
 
 Added
 -----
@@ -209,6 +216,45 @@ Added
 
 Changed
 -------
+
+- **A circulation run returns its pipe, then the tank's own water a
+  little cooler.** A run was priced on an effective volume (19.36 gal
+  at the site) back at the return's rest, then the tank's own water as
+  hot as it left; a run held on for 35.7 min after a 4 h rest on
+  2026-10-29 brought the pipe's water back for 5 gal, rose half way to
+  its steady value at 6.86 gal and held 1.6 °F under the upper probe at
+  1.08 gal/min. ``CirculationParams.displaced_gal`` is now that measured
+  volume and the new ``pipe_ua_btu_hr_f`` the pipe's loss: the run's
+  own water comes back at the rest plus ``circulation.steady_share``
+  of the top's lift over it (``exp(−UA / ṁc)``), in the walk
+  (``tank_physics.circulation_flows``, ``stratified.Flowing``'s new
+  ``rest_f`` and ``share``), the tank's fit and ``run_heat_btu``.
+  ``calibration.measure_pipe`` measures the two on such a run, and
+  ``fit_return`` fits the return's rest and cooling given them (3.74 °F
+  and 0.72 h at the site, on 122 runs). The run's readings are a test
+  fixture, ``circulation_run_2026-10-29.json``. Fitted before
+  2026-09-18 and scored after, a recovery's duration comes out 27.2
+  min off against 30.9 (5.45 against 5.69 with no draw) and its energy
+  4.4 % against 4.5. Refitted on the whole record with it, the site's
+  tank fits to 2.26 °F RMS (from 2.50): the bottom's loss 0.445 to
+  0.559 BTU/h·°F, the condenser's span 0.148-0.323 to 0.154-0.289, the
+  lower probe 0.469 to 0.476; its power map takes +1.02 W per °F of
+  air and +2.72 per °F of the condenser's water (12.7 W RMS, from
+  13.0).
+
+- **Water warmer than the tank's inlet zone rises past it.** The
+  layered tank took every flow in at the bottom and pushed the column
+  up as a plug, so a run's warm return lifted the cold water the pipe
+  had brought back through the whole tank, and the upper probe of the
+  run above read 2.0 °F RMS off. Water warmer than the inlet zone now
+  goes in where the column is as warm and pushes out only the water
+  above (``stratified.flow``); on that run the upper probe reads
+  0.8 °F RMS off, and the tank gives up the heat the return line
+  measured but 3.2 %. Only circulation flows this way; draws do not. The
+  lower probe, at its fitted height (0.48), cannot read the 105.8 °F
+  it fell to on that run: no stable column with a probe that high
+  holds so little heat below it, which places the probe lower than
+  the tank's fit does.
 
 - **The upper element's height, documented.** An element's heat turns
   its layer over into the ones above, so its height acts in whole
@@ -594,6 +640,9 @@ Fixed
 Removed
 -------
 
+- ``calibration.fit_displaced_gal``, ``DISPLACED_BOUNDS`` and
+  ``DISPLACED_GRID_POINTS``: the pipe's volume is measured
+  (``measure_pipe``), not fitted.
 - The element-mode planner: ``physics.element.mode_recovery``,
   ``ModeRecovery``, ``mode_plan``, ``ModePlan``, ``coast_f``,
   ``upper_rise_f`` and ``MAX_PROFILE_SLOTS`` (``api.MAX_PROFILE_SLOTS``

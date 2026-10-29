@@ -939,16 +939,26 @@ class CirculationParams:
     they describe one installation's plumbing, and nothing measured
     carries to another; ``site_example_params`` has one's."""
 
-    #: Gallons a run displaces before hot water comes back: an effective
-    #: volume, fitted with ``return_rest_offset_f`` and
-    #: ``return_cool_tau_h`` (``calibration.fit_return``), so refit the
-    #: three together.
-    displaced_gal: float = field(metadata=_p(FITTED, "gal", INSTALLATION))
+    #: The pipe's volume, gallons: what a run brings back from the pipe
+    #: before the tank's own water returns, measured on the return line
+    #: of a run after a long rest (``calibration.measure_pipe``: where
+    #: the return is half way from its rest to its steady value).
+    displaced_gal: float = field(metadata=_p(MEASURED, "gal", INSTALLATION))
     #: The flow a run is priced at, gal/min.
     flow_gpm: float = field(metadata=_p(MEASURED, "gal/min", INSTALLATION))
+    #: The pipe's loss to its surroundings once the tank's own water is
+    #: coming back, BTU/h·°F: that water returns at the rest plus
+    #: ``circulation.steady_share`` of the tank's lift over it, measured
+    #: with the volume (``calibration.measure_pipe``). 0 returns it as
+    #: hot as it left.
+    pipe_ua_btu_hr_f: float = field(
+        default=0.0, metadata=_p(MEASURED, "BTU/h·°F", INSTALLATION)
+    )
     #: How far above the air at the heater the return rests between
     #: runs, °F: the pipe runs through warmer or cooler space than the
-    #: heater's. 0 rests it at the air.
+    #: heater's. 0 rests it at the air. Fitted with ``return_cool_tau_h``
+    #: on the runs' heat (``calibration.fit_return``), so refit the two
+    #: together.
     return_rest_offset_f: float = field(
         default=0.0, metadata=_p(FITTED, "°F", INSTALLATION)
     )
@@ -967,8 +977,8 @@ class CirculationParams:
         default=0.0, metadata=_p(MEASURED, "1", INSTALLATION)
     )
     #: Runs closer than this are one run, minutes: a restart displaces
-    #: water the last run warmed. ``displaced_gal`` is fitted on runs
-    #: merged at this gap, so change them together.
+    #: water the last run warmed. The return's rest and cooling are
+    #: fitted on runs merged at this gap, so change them together.
     run_gap_min: float = field(
         default=10.0, metadata=_p(MEASURED, "min", INSTALLATION)
     )

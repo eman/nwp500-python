@@ -30,10 +30,12 @@ Summary
        top, each layer's to the air: **4.45** in all. For a mixed
        140 degF tank in 65 degF air that is about **0.63 degF an hour**.
    * - A circulation run
-     - Priced on an effective loop of **19.36 gal**, its return at the
-       air plus 7.84 degF. At the loop fitted in September (6.38 gal), a
-       typical run was about 5 degF of the whole tank, and the probes
-       showed 0.44 of it.
+     - The pipe's **6.86 gal** back at the return's rest, the air plus
+       3.74 degF, then the tank's own water **1.6 degF** under the top
+       at 1.08 gal/min (a loss of **14.6 BTU/hr per degF**), measured on
+       one run after a 4 h rest. At the loop fitted in September
+       (6.38 gal), a typical run was about 5 degF of the whole tank,
+       and the probes showed 0.44 of it.
    * - Where a run's heat shows
      - Ten minutes after a run, the lower probe had fallen **0.9 degF** in
        a mixed tank and **7.0 degF** in a stratified one. The upper probe
@@ -191,27 +193,59 @@ How much heat a run removes
 ---------------------------
 
 A run first displaces the water standing in the loop, which has cooled
-toward the air, and then recirculates water it has already warmed. The
-cooled water it returns to the tank is at most about one loop volume,
-fitted from the runs themselves. After that, the warmed pipe keeps
-losing heat for as long as the pump runs. Runs less than 10 minutes
-apart count as one, because the loop has not cooled in between.
+toward the air, and then brings back the tank's own water, a little
+cooler for the pipe it passed through. Runs less than 10 minutes apart
+count as one, because the loop has not cooled in between.
 
-The loop's water does not cool all the way to the air beside the
-heater, and a run soon after another finds it still warm. On 123 runs
-with the compressor off (2026-04-04 to 2026-10-24):
+**The pipe, measured.** On 2026-10-29 the pump was held at constant
+pressure (1.0 m) for 35.7 minutes after the loop had rested 4 hours,
+with the compressor, both elements, the draws and the pump's scheduler
+off (the readings are ``tests/fixtures/sim/circulation_run_2026-10-29.json``):
+
+* The return read its rest, **68.8 degF** (5.0 degF above the garage
+  air), for the first 5 gal, dipping to 64.6 degF at 4 gal where the
+  pipe passes cooler space.
+* It rose half way to its steady value at **6.86 gal** (the pipe's
+  volume, ``calibration.measure_pipe``) and was 95 % of the way by
+  12 gal.
+* Its steady value was **1.6 degF** under the tank's upper probe at
+  1.08 gal/min, a loss of **14.6 BTU/hr per degF**. Later in the run
+  the return slid to 5 degF under, but the upper probe fell with it:
+  the tank's top was cooling, not the pipe losing more.
+* The tank gave up 4,589 BTU to the run, as its flow times the drop
+  from the upper probe to the return.
+
+**The return's rest and cooling**, fitted with that pipe on 122 runs
+with the compressor off (2026-04-04 to 2026-10-24, ``fit_return``): the
+return rests **3.74 degF** above the air and the warmed pipe cools back
+to it on **0.72 h**. The runs before these terms were measured were
+priced on an effective loop of 19.36 gal, its return back at the
+tank's own temperature after it. That form prices the record's run heat
+better (300 BTU a run in five-fold cross-validation, against 399), but
+its volume is three times the measured pipe's, and with the measured
+pipe the held-out recoveries come out closer: fitted before 2026-09-18
+and scored after, 27.2 minutes from the measured duration against 30.9
+(5.45 against 5.69 with no draw), and 4.4 % of the energy against 4.5.
 
 * Before a run that followed 16 h or more without one, the return
   probe read a median **6.9 degF** above the heater's air, and it
   followed that air with a slope of 0.95 (49 runs).
 * A run within an hour of the last took a median **1,583 BTU**; one
   after 8 h or more, **3,223 BTU**.
-* Fitted together, the return rests **7.84 degF** above the air and the
-  warmed pipe cools back to that on **0.46 h**.
-* The longest runs never brought hot water back: after 16 to 20 gal,
-  the return still read 17 to 38 degF under the tank's upper probe.
-  The fitted volume (19.4 gal) is therefore above the typical 4 minute
-  run (5.9 gal), and a run takes heat as long as it runs.
+* Most of the record's runs end as the front arrives: the pump's
+  temperature control stops it once the return reaches its 102 degF
+  maximum. The front is not sharp (from 5 to 12 gal in the measured
+  run), so a run that ends in it takes more than a sharp step at the
+  volume says.
+
+**What the pump's flow says.** The volume is in the pump's own
+gallons. The house's meter (a Droplet) reads the loop: through
+2026-09-12 it read within 3 % of the pump's flow, and from 2026-09-14
+about 0.3 gal/min less at every flow, steadily, after a single shift.
+It read nothing through the measured run. In the meter's gallons the
+pipe is 5.14 gal and its loss 10.5 BTU/hr per degF, but the record's
+runs then fit only with a return resting 7 degF under the air, and the
+held-out recoveries are no closer, so the pump's gallons are kept.
 
 The fitted volume of the same loop grew between two measurements:
 

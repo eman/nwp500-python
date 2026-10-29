@@ -477,11 +477,17 @@ class TestFlow:
     ) -> None:
         """The remap keeps the heat: what the tank loses is the water
         that left the top, read off the column before (the plug's, then
-        what the inlet zone passed up), less what came in."""
+        what the inlet zone passed up; or, for water warmer than the
+        inlet zone, the column above where it settles, then itself),
+        less what came in."""
         out = S.flow(L, state, gal, inflow)
         col = S._Column(L, state.layers_f, inflow)
         top, plug = L.volume_gal, col.plug_gal
-        if gal <= plug:
+        if inflow > col.mix_start_f:
+            g = min(gal, top - S._settles_at(col))
+            left = col.integral(top) - col.integral(top - g)
+            left += (gal - g) * inflow
+        elif gal <= plug:
             left = col.integral(top) - col.integral(top - gal)
         else:
             left = col.integral(top) - col.integral(col.mix_gal)
@@ -526,6 +532,44 @@ class TestFlow:
         assert min(out.layers_f) >= inflow - 1e-9
         assert max(out.layers_f) <= max(state.layers_f) + 1e-9
 
+    @given(stable, st.floats(0.0, 250.0))
+    def test_water_warmer_than_the_inlet_zone_rises_past_it(
+        self, state: S.TankState, gal: float
+    ) -> None:
+        """It settles where the column is as warm: the water below that
+        stays as it was, and none of the tank is pushed out from under
+        it."""
+        col = S._Column(L, state.layers_f, 0.0)
+        warm = max(state.layers_f)
+        inflow = col.mix_start_f + 0.5 * (warm - col.mix_start_f) + 0.1
+        foot = S._settles_at(S._Column(L, state.layers_f, inflow))
+        out = S.flow(L, state, gal, inflow).state
+        assert _monotone(out)
+        assert max(out.layers_f) <= max(warm, inflow) + 1e-9
+        for i in range(int(foot // L.layer_gal)):
+            assert out.layers_f[i] == pytest.approx(state.layers_f[i], abs=1e-9)
+
+    def test_a_draw_keeps_to_the_plug_its_outlet_is_solved_on(self) -> None:
+        """Mains warmer than a cold bottom: the tank the draw leaves is
+        the plug's, as the water it delivered was read off."""
+        state = S.mix(S.TankState((60.0, 70.0, *([125.0] * 10))))
+        out = S.draw(L, state, 4.0, 90.0)
+        plug = S.flow(L, state, out.withdrawn_gal, 90.0, rises=False)
+        risen = S.flow(L, state, out.withdrawn_gal, 90.0)
+        assert out.state.layers_f == pytest.approx(plug.state.layers_f)
+        assert risen.state.layers_f != pytest.approx(plug.state.layers_f)
+
+    def test_a_warm_return_leaves_a_cold_bottom_cold(self) -> None:
+        """A run's own water after the pipe's: the cold the pipe's water
+        brought stays at the bottom, and the warm water goes in above
+        it, where a plug would have lifted the cold through the
+        column."""
+        state = S.TankState.uniform(12, 128.0)
+        cold = S.flow(L, state, 6.0, 68.0).state
+        warm = S.flow(L, cold, 20.0, 125.0).state
+        assert warm.layers_f[0] == pytest.approx(cold.layers_f[0], abs=1e-9)
+        assert S.observe(L, warm)[0] > 127.0
+
     def test_three_tank_volumes_bring_the_probes_to_the_inlet(self) -> None:
         state = S.TankState.uniform(12, 140.0)
         out = S.draw(L, state, 3 * 63.2, 55.0)
@@ -565,7 +609,8 @@ class TestDraw:
         assert 0.0 <= out.withdrawn_gal <= gal + 1e-9
         if valve == S.NO_VALVE:
             assert out.withdrawn_gal == pytest.approx(gal)
-        assert out.state == S.flow(L, state, out.withdrawn_gal, inflow).state
+        plug = S.flow(L, state, out.withdrawn_gal, inflow, rises=False)
+        assert out.state == plug.state
 
     @given(
         temps,

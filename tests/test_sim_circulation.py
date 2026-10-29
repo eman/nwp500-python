@@ -5,11 +5,13 @@ The terms are held to their source by the parity check run with the
 port; these hold the API to the core and the runs to their schedule.
 """
 
+import bisect
 import json
 import math
 from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
+from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -27,6 +29,7 @@ from nwp500.sim import (
     Loads,
     Scenario,
     Settings,
+    calibration,
     default_params,
     simulate,
     site_example_params,
@@ -37,6 +40,7 @@ from nwp500.sim.circulation import (
     Circulation,
     cooled_share,
     merge_runs,
+    steady_share,
 )
 from nwp500.sim.codec import (
     scenario_from_document,
@@ -47,6 +51,7 @@ from nwp500.sim.params import (
     params_from_document,
     params_to_document,
 )
+from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
 from nwp500.sim.schedules import weekly_runs
 from nwp500.sim.tank_physics import circulation_flows, point_at
@@ -154,6 +159,16 @@ class TestTheRuns:
         )
         # A span holding the second alone still finds the first.
         assert _flows([first, second], at(0.4), at(2), tau=0.5)[0] == warm
+
+    def test_its_own_water_comes_back_at_its_steady_share(self) -> None:
+        terms = replace(TERMS, pipe_ua_btu_hr_f=40.0)
+        (_, own) = circulation_flows(
+            Circulation(((at(0), at(1)),)), terms, lambda _: 68.0, at(0), at(2)
+        )
+        assert own.inflow_f is None and own.rest_f == 70.0
+        assert own.share == pytest.approx(math.exp(-40.0 / (1.5 * 60 * 8.34)))
+        assert steady_share(0.0, 1.5) == 1.0
+        assert steady_share(40.0, 0.0) == 0.0
 
     def test_a_run_under_way_is_returned_whole(self) -> None:
         (cooled, _) = _flows([(at(0), at(1))], at(0.5), at(2))
@@ -408,3 +423,237 @@ class TestASplitCoast:
         end, split = whole.points[-1], b.points[-1]
         assert split.lower_f == pytest.approx(end.lower_f, abs=0.05)
         assert split.upper_f == pytest.approx(end.upper_f, abs=0.05)
+
+
+FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sim"
+    / "circulation_run_2026-10-29.json"
+)
+
+
+def _instant(text: str) -> datetime:
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+@pytest.fixture(scope="module")
+def measured_run() -> dict[str, Any]:
+    """The 2026-10-29 run: each reading's change rows, and the run's
+    start and end."""
+    doc = json.loads(FIXTURE.read_text())
+    return {
+        "start": _instant(doc["run"]["start"]),
+        "end": _instant(doc["run"]["end"]),
+        **{
+            k: [(_instant(t), float(v)) for t, v in rows]
+            for k, rows in doc["series"].items()
+        },
+    }
+
+
+class TestThePipe:
+    """The pipe measured on the return line of a run after a rest
+    (``calibration.measure_pipe``), and what it prices."""
+
+    def test_the_measured_run_gives_its_volume_and_loss(
+        self, measured_run: dict[str, Any]
+    ) -> None:
+        r = measured_run
+        got = calibration.measure_pipe(
+            r["start"],
+            r["end"],
+            flow=r["flow_gpm"],
+            return_f=r["return_f"],
+            upper_f=r["upper_f"],
+        )
+        assert got is not None
+        # Half way up its front at 6.9 gal; steady 1.6 degF under the
+        # upper probe at 1.08 gal/min.
+        assert got.volume_gal == pytest.approx(6.86, abs=0.01)
+        assert got.ua_btu_hr_f == pytest.approx(14.6, abs=0.1)
+        assert got.flow_gpm == pytest.approx(1.078, abs=0.001)
+        assert got.rest_f == pytest.approx(68.84, abs=0.01)
+
+    def test_a_run_cut_before_its_return_settles_says_nothing(
+        self, measured_run: dict[str, Any]
+    ) -> None:
+        r = measured_run
+        end = r["start"] + timedelta(minutes=12)
+        rows = {k: r[k] for k in ("flow_gpm", "return_f", "upper_f")}
+        cut = calibration.measure_pipe(
+            r["start"],
+            end,
+            flow=rows["flow_gpm"],
+            return_f=[x for x in rows["return_f"] if x[0] <= end],
+            upper_f=rows["upper_f"],
+        )
+        assert cut is None
+        no_rest = calibration.measure_pipe(
+            r["start"],
+            r["end"],
+            flow=rows["flow_gpm"],
+            return_f=[x for x in rows["return_f"] if x[0] > r["start"]],
+            upper_f=rows["upper_f"],
+        )
+        assert no_rest is None
+
+    def test_a_run_held_from_before_its_start_is_measured(
+        self, measured_run: dict[str, Any]
+    ) -> None:
+        """A flow read once before the run and held through it is the
+        same run as one read at its start."""
+        r = measured_run
+
+        def measured(at_t: datetime) -> calibration.Pipe | None:
+            return calibration.measure_pipe(
+                r["start"],
+                r["end"],
+                flow=[(at_t, 1.078)],
+                return_f=r["return_f"],
+                upper_f=r["upper_f"],
+            )
+
+        before = measured(r["start"] - timedelta(seconds=30))
+        assert before is not None
+        assert before.flow_gpm == 1.078
+        assert before == measured(r["start"])
+
+    def test_a_short_run_takes_the_cooled_gallons_the_walk_returns(
+        self,
+    ) -> None:
+        """Half cooled, a 6 gal pipe returns 3 gal at its rest: a run of
+        3 gal is all of it, as the walk moves it."""
+        rest = 0.5 * math.log(2.0)
+        heat = calibration.run_heat_btu(
+            2.0, 130.0, 60.0, 6.0, 1.5, rest_h=rest, cool_tau_h=0.5
+        )
+        assert heat == pytest.approx(3.0 * 8.34 * 70.0)
+        terms = replace(TERMS, displaced_gal=6.0, return_cool_tau_h=0.5)
+        first = (
+            at(0) - timedelta(hours=rest + 0.1),
+            at(0) - timedelta(hours=rest),
+        )
+        (cooled, *_) = circulation_flows(
+            Circulation((first, (at(0), at(0) + MIN * 2))),
+            terms,
+            lambda _: 68.0,
+            at(0),
+            at(1),
+        )
+        assert (cooled.end - cooled.start) / MIN * 1.5 == pytest.approx(3.0)
+
+    def test_past_its_volume_a_run_takes_the_pipes_loss(self) -> None:
+        lift = 130.0 - 60.0 - 5.0
+
+        def heat(minutes: float, ua: float = 0.0) -> float:
+            return calibration.run_heat_btu(
+                minutes,
+                130.0,
+                60.0,
+                6.0,
+                1.5,
+                rest_offset_f=5.0,
+                pipe_ua_btu_hr_f=ua,
+            )
+
+        # Within the volume, the pipe's water at its rest alone.
+        assert heat(2.0) == pytest.approx(3.0 * 8.34 * lift)
+        assert heat(2.0, 30.0) == pytest.approx(heat(2.0))
+        # Past it, nothing without a loss; with one, its share.
+        assert heat(10.0) == pytest.approx(heat(4.0))
+        lost = 1.0 - steady_share(30.0, 1.5)
+        assert heat(10.0, 30.0) == pytest.approx(
+            (6.0 + lost * 9.0) * 8.34 * lift
+        )
+
+    def test_the_rest_and_the_cooling_are_found_again(self) -> None:
+        def run(k: int) -> calibration.MeasuredRun:
+            minutes = (3.0, 4.5, 6.0, 9.0)[k % 4]
+            rest = (0.2, 0.6, 1.5, 6.0, 20.0)[k % 5]
+            up, air = 120.0 + k % 7, 60.0 + k % 9
+            return calibration.MeasuredRun(
+                start=T0 + timedelta(hours=k),
+                end=T0 + timedelta(hours=k, minutes=minutes),
+                minutes=minutes,
+                btu=calibration.run_heat_btu(
+                    minutes,
+                    up,
+                    air,
+                    6.0,
+                    1.3,
+                    rest_offset_f=4.0,
+                    rest_h=rest,
+                    cool_tau_h=0.5,
+                    pipe_ua_btu_hr_f=15.0,
+                ),
+                flow_gpm=1.3,
+                upper_f=float(up),
+                air_f=float(air),
+                rest_h=rest,
+            )
+
+        runs = [run(k) for k in range(40)]
+        got = calibration.fit_return(runs, 6.0, 15.0)
+        assert got is not None
+        assert got[0] == pytest.approx(4.0, abs=0.05)
+        assert got[1] == pytest.approx(0.5, abs=0.01)
+        assert calibration.fit_return(runs[:10], 6.0, 15.0) is None
+        # With no rest known the cooling is not seen.
+        unrested = [replace(r, rest_h=None) for r in runs]
+        assert calibration.fit_return(unrested, 6.0, 15.0) is None
+
+
+class TestTheMeasuredRunThroughTheTank:
+    def test_the_return_rises_past_the_cold_it_brought(
+        self, measured_run: dict[str, Any], params: HeaterParams
+    ) -> None:
+        """The run walked with its own flow and return as the inflow:
+        the warm return goes in above the pipe's cold water rather than
+        lifting it through the column, so the top stays as hot as the
+        upper probe read (0.8 degF RMS, against 2.0 with every inflow a
+        plug), and the tank gives up the heat the return line measured
+        (4,589 BTU) but 3.2 %. The lower probe, at its fitted height, does
+        not see the cold the run left below it: it fell to 105.8 degF,
+        which no stable column with the probe that high can read on the
+        heat that had left."""
+        r = measured_run
+        lay = st.layout(params)
+
+        def held(key: str, t: datetime) -> float:
+            rows = r[key]
+            return rows[bisect.bisect_right([x[0] for x in rows], t) - 1][1]
+
+        step = timedelta(seconds=10)
+        flows, t = [], r["start"]
+        while t < r["end"]:
+            e = min(t + step, r["end"])
+            flows.append(
+                st.Flowing(
+                    start=t,
+                    end=e,
+                    gpm=held("flow_gpm", t),
+                    inflow_f=held("return_f", t),
+                )
+            )
+            t = e
+        start = st.estimate(
+            lay, held("upper_f", r["start"]), held("lower_f", r["start"])
+        )
+        w = st.walk(
+            lay,
+            start,
+            r["start"],
+            r["end"],
+            air_f=lambda _: 63.8,
+            flowing=flows,
+        )
+        times = [p for p, _ in w.path]
+        errors = [
+            st.observe(lay, w.path[bisect.bisect_right(times, at) - 1][1])[0]
+            - v
+            for at, v in r["upper_f"]
+            if r["start"] < at <= r["end"]
+        ]
+        assert math.sqrt(sum(e * e for e in errors) / len(errors)) < 1.0
+        assert w.books.flowing_btu == pytest.approx(4589.0, rel=0.04)
