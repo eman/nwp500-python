@@ -178,10 +178,9 @@ The simulator's layered tank tracks the water itself: a draw pushes the
 column up through an inlet zone (12.2 gal, fitted on the record from
 2026-04-16 to 10-26) and out of the top, and the probes read the layers
 where they sit (:doc:`simulator-methodology`). On the 46 metered draws
-after
-2026-09-18, each followed for an hour from the layers the record's
-replay leaves at its start, fitted on the record before them, its
-upper probe's RMS error was 0.299 degF (0.192-0.463) and its lower
+after 2026-09-18, each followed for an hour from the layers the
+record's replay leaves at its start, fitted on the record before them,
+its upper probe's RMS error was 0.299 degF (0.192-0.463) and its lower
 2.08 (1.42-2.84). Tracking the water a draw takes from the top of the
 tank is what lets an estimate see the tank run out.
 
