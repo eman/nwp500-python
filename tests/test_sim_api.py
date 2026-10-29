@@ -457,6 +457,26 @@ class TestAModelsInputs:
         assert got == want
         assert got != simulate(s, params, recovery=_Model()).simulation
 
+    def test_a_running_compressor_starting_now_stirs(
+        self, params: HeaterParams
+    ) -> None:
+        # Under way, its cold bottom was stirred as its heating began;
+        # starting at the scenario's start (a recorded start replayed),
+        # the stir is its own, and the condenser heats the pool back.
+        n = params.tank.layers
+        layers = [80.0, 90.0, *([115.0] * (n - 4)), 130.0, 132.0]
+        s = _scenario(
+            state=HeaterState(
+                upper_f=130.0,
+                lower_f=115.0,
+                layers_f=layers,
+                compressor_running=True,
+            )
+        )
+        going = simulate(s, params).simulation.heating[0]
+        starting = simulate(s, params, running_starts=True).simulation
+        assert starting.heating[0].end - going.end > timedelta(minutes=5)
+
     def test_with_no_model_the_physics_follows_the_hold(
         self, params: HeaterParams
     ) -> None:

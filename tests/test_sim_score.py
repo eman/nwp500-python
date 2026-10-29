@@ -68,6 +68,7 @@ def model_history(params: sim.HeaterParams) -> tuple[Prepared, datetime]:
         ),
         params,
         running_hold=start_hold_min(params.compressor, None),
+        running_starts=True,
     )
     run = result.heating[0]
     assert run.input_wh is not None
@@ -181,6 +182,31 @@ class TestTheEvents:
 
 
 class TestTheScore:
+    def test_a_recorded_start_is_walked_as_a_start(
+        self,
+        history: tuple[Prepared, datetime],
+        site: sim.HeaterParams,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Seeded running from the layers before it, the start's stir is
+        # its own (``running_starts``), as a start the engine makes.
+        ready, _ = history
+        seen: list[Any] = []
+        walk = sim.simulate
+
+        def spy(*args: Any, **kw: Any) -> Any:
+            seen.append(kw.get("running_starts"))
+            return walk(*args, **kw)
+
+        monkeypatch.setattr(sim, "simulate", spy)
+        record = tank_fit.tank_record(ready.frame, [])
+        ss.score(
+            ss.Events(recoveries=ss.events(ready).recoveries),
+            site,
+            record=record,
+        )
+        assert seen == [True]
+
     def test_with_the_record_each_event_starts_from_its_replay(
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
     ) -> None:

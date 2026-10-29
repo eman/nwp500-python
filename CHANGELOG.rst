@@ -400,8 +400,12 @@ Changed
   colder the bottom has grown, as the record's holds are (0 to 22 min),
   with nothing fitted to them. A compressor already running at the
   walk's start is not stirred again (in ``simulate``, ``active_cycle``
-  and ``forecast``) unless some of a ``running_hold`` is left, nor one
-  that stops before its heating begins. On the record's 84 clean starts the
+  and ``forecast``) unless some of a ``running_hold`` is left or
+  ``simulate``'s new ``running_starts`` says it starts there (a
+  recorded start replayed, as ``sim_score`` does), nor one that stops
+  before its heating begins. ``forecast`` keeps a running compressor
+  going, ready early, where stopping it and starting again later (a
+  start, stirred) could not be ready by the target. On the record's 84 clean starts the
   model holds a median 3, 23, 18, 18 and 21 min after under 15, 60,
   180 and 720 min off and beyond, against 0, 5, 10, 18 and 22; the
   upper probe holds still through the record's holds, as the model's

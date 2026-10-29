@@ -226,6 +226,38 @@ class TestTheRunningCycle:
             a.remaining_minutes, abs=0.2
         )
 
+    def test_a_run_goes_on_where_putting_it_off_is_too_late(
+        self, params: HeaterParams
+    ) -> None:
+        # Put off, the run stops and starts again, its cold bottom
+        # stirred: longer than the run going on now. A target between
+        # the two is met by the run going on, ready early; one past the
+        # later start's own duration puts it off.
+        n = params.tank.layers
+        state = HeaterState(
+            upper_f=130.0,
+            lower_f=115.0,
+            layers_f=[80.0, 90.0, *([115.0] * (n - 4)), 130.0, 132.0],
+            compressor_running=True,
+        )
+        going = active_cycle(state, SETTINGS, ENV, params, at=T0)
+        assert going.remaining_minutes is not None
+        late = forecast(state, SETTINGS, ENV, params, at=T0, target_time=at(5))
+        assert late.start_at is not None and late.start_at > T0
+        assert late.duration_minutes > going.remaining_minutes + 5.0
+        between = T0 + timedelta(
+            minutes=(going.remaining_minutes + late.duration_minutes) / 2
+        )
+        f = forecast(state, SETTINGS, ENV, params, at=T0, target_time=between)
+        assert f.status == "ok" and f.feasible
+        assert f.start_at == T0
+        assert f.duration_minutes == pytest.approx(
+            going.remaining_minutes, abs=1.0
+        )
+        assert f.ready_at is not None and f.ready_at < between
+        assert f.trajectory is not None
+        assert f.trajectory[-1].at == f.ready_at
+
     @pytest.mark.parametrize("past", [0.0, 1.0])
     def test_a_cycle_past_its_run_on_has_nothing_left(
         self, params: HeaterParams, past: float
