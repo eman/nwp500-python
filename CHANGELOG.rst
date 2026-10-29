@@ -302,8 +302,8 @@ Changed
   RMS in 25 trials and scored within each of those intervals. The
   record does not split the bottom's loss from the sides' well: the
   bottom came out 0.89 to 2.35 across the fits. Refitted against the
-  layered loss, the heat map moves under 0.1 %, and the shipped one
-  stays.
+  layered loss, the heat map moves 0.05 % at 65 °F air and 120 °F
+  water and under 0.2 % across its span, and the shipped one stays.
 
 - **The simulator walks the layered tank** (breaking).
   ``tank_physics.TankPhysics`` is the stratified tank
