@@ -353,12 +353,18 @@ of the volume from the bottom (17.5 gal of the 63.2 above it), the
 lower's at 0.15. The upper's heat reaches the water 1.21 minutes after
 it starts, and goes on as long after it stops. The heat rises from its
 layer as the layers turn over, so the upper element heats the water
-above it and the lower the whole tank. It runs to its off point (the
-setpoint; Energy Saver's upper element stops 1.62 degF short, and its
-heat still in transit lands after). Its heat is walked with whatever
-else the tank is doing: a coast with its losses and draws, or a
-recovery. When an element starts, and in which mode, is the
-controller's (:doc:`heating-elements`).
+above it and the lower the whole tank. The height therefore acts in
+whole layers: the upper's layer and those above it hold 21.1 gal, so
+its heat climbs the upper probe 1.59 degF/min, where the record's clean
+runs climb it 2.01 (the next layer up, 15.8 gal, gives 2.00). The
+record's element runs mostly come with water drawn or the compressor
+running, and replayed they read the upper probe closer from the lower
+layer (7.9 degF RMS on 24 runs against 10.2), so that one is kept.
+It runs to its off point (the setpoint; Energy Saver's upper element
+stops 1.62 degF short, and its heat still in transit lands after). Its
+heat is walked with whatever else the tank is doing: a coast with its
+losses and draws, or a recovery. When an element starts, and in which
+mode, is the controller's (:doc:`heating-elements`).
 
 
 Draws

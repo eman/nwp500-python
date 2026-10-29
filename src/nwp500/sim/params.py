@@ -213,9 +213,18 @@ class TankParams:
     #: What the lower probe reads above the water it feels, °F: the
     #: probes' disagreement in a mixed tank.
     lower_probe_offset_f: float = field(default=0.0, metadata=_p(DEFAULT, "°F"))
-    #: Where the elements heat, the same way: the upper element with
-    #: 17.5 gal of the 63.2 above it, the lower near the bottom. Priors;
-    #: fitted on the element runs.
+    #: Where the elements heat, the same way, each into the layer at its
+    #: height: the upper element with 17.5 gal of the 63.2 above it, the
+    #: volume its rise on 29 clean runs (2.01 °F/min at 5,148 W) heats,
+    #: and the lower near the bottom. Priors, not fitted: an element's
+    #: heat turns its layer over into the ones above, so the height
+    #: acts in whole layers. Of twelve, the upper's 0.667-0.75 heats
+    #: 21.1 gal (the upper probe climbs 1.59 °F/min) and 0.75-0.833 15.8
+    #: gal (2.00). The clean runs' rise is the higher layer's, but the
+    #: record's 24 element runs from 2026-04-16, most with water drawn
+    #: or the compressor running, each from its replayed layers, read
+    #: the upper probe to 7.9 °F RMS from the lower against 10.2, and
+    #: the lower is kept.
     upper_element_height: float = field(
         default=0.72, metadata=_p(DEFAULT, "fraction")
     )

@@ -210,6 +210,17 @@ Added
 Changed
 -------
 
+- **The upper element's height, documented.** An element's heat turns
+  its layer over into the ones above, so its height acts in whole
+  layers: of twelve, the upper element's 0.72 heats 21.1 gal and climbs
+  the upper probe 1.59 °F/min, where the record's 29 clean runs climb it
+  2.01 (0.75-0.833, 15.8 gal, gives 2.00). The record's 24 element runs
+  from 2026-04-16, most with water drawn or the compressor running,
+  each walked from its replayed layers, read the upper probe to 7.9 °F
+  RMS at 0.72 against 10.2 at 0.79, so 0.72 is kept;
+  ``TankParams.upper_element_height`` and the simulator's docs say so,
+  and no longer call it fitted.
+
 - **The heat pump's maps are read along their planes.** The heat's and
   the power's maps were held at the edges of the span each was fitted
   on: a 45 °F air heated as 61 °F does, the condenser's water below 114
