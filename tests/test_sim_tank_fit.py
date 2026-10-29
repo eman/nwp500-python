@@ -316,6 +316,30 @@ class TestTheCondenserWater:
         # It heats through the run.
         assert got[-1] > got[0] + 5.0
 
+    def test_it_reads_the_layers_as_corrected(self, record) -> None:
+        """Where a walk ends at a correction to the probes, the path
+        holds the corrected layers alone, once: the replay of another
+        tank than the one that wrote the record is corrected at every
+        reading."""
+        lay = S.layout(PRIORS)
+        first, end = record.minute(_at(19.0)), record.minute(_at(22.0))
+        path: list[tuple[datetime, S.TankState]] = []
+        tf._replayed(lay, PRIORS, record, first, end, path=path)  # pyright: ignore[reportPrivateUsage]
+        times = [t for t, _ in path]
+        assert times == sorted(set(times))
+        at = dict(path)
+        moved = 0
+        for k in range(1, 18):
+            j = first + 10 * k
+            corrected = tf._replayed(lay, PRIORS, record, first, j)  # pyright: ignore[reportPrivateUsage]
+            assert corrected is not None
+            assert at[record.instant(j)] == corrected
+            uncorrected = tf._span(  # pyright: ignore[reportPrivateUsage]
+                lay, PRIORS, record, at[record.instant(j - 10)], j - 10, j
+            )
+            moved += uncorrected != corrected
+        assert moved > 10
+
     def test_outside_the_record_it_is_unknown(self, record) -> None:
         before = (T0 - timedelta(hours=3), T0 - timedelta(hours=2))
         got = tf.condenser_water(TRUE, record, [before, (_at(21), _at(21.2))])

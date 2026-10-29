@@ -318,7 +318,9 @@ def _span(
 ) -> st.TankState:
     """``state`` walked over minutes ``[i, j)`` of the record: split
     where a second compressor run starts, so each walk has one. The
-    walks' paths are added to ``path`` where it is given."""
+    walks' paths are added to ``path`` where it is given, a walk's
+    first point in place of the one before at the same instant: there
+    the state it starts from, corrected to the probes (``replay``)."""
     runs = _overlapping(record.compressor, i, j)
     if len(runs) > 1:
         cut = record.compressor[runs[1]][0]
@@ -360,6 +362,8 @@ def _span(
         valve=(d.delivery_intercept_f, d.delivery_slope),
     )
     if path is not None:
+        if path and path[-1][0] == walked.path[0][0]:
+            path.pop()
         path.extend(walked.path)
     return walked.state
 

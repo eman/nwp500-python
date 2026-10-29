@@ -753,11 +753,11 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 3,562 ten-minute blocks of metered climbs over 211 runs,
        2026-04-16 to 10-26, each at the condenser's water on the
        record's replay (``heat_pump_fit.in_condenser_water``), where the
-       walk reads the map: 68.3 to 144.4 degF, 4.5 degF under the lower
+       walk reads the map: 68.4 to 144.4 degF, 4.5 degF under the lower
        probe on average, the air 53.6 to 89.3 degF: 12.8 W RMS. Read
        there, the map fitted on the lower probe (401.7 W, +0.21, +2.85)
        priced these blocks at 407.6 W against the 418.2 W metered, at
-       17.5 W RMS. The runs before 2026-04-16 have no record to replay.
+       17.4 W RMS. The runs before 2026-04-16 have no record to replay.
      - 2026-10-29
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``
