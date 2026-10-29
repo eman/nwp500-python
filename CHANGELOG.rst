@@ -386,6 +386,26 @@ Changed
 Fixed
 -----
 
+- ``sim_score`` replays every draw before an event's start, and leaves
+  a delivery's own draw out. The replay an event starts from stops at
+  the start of the minute the event starts in.
+
+  - **A delivery:** the meter's delivery starts and the detector's draw
+    onsets run on different clocks, the onset 5–10 s earlier and, in 3
+    of 34 held-out deliveries, in the minute before, so the replay took
+    the delivery's own draw from the tank it then scored. A draw whose
+    onset falls in the settle before a delivery
+    (``calibration.DRAW_SETTLE_S``, when the meter saw no flow) is now
+    left out.
+  - **A recovery:** it starts at a compressor edge, any second of a
+    minute, and keeps the draws from its start, so a draw earlier in
+    that minute reached neither its replay nor its walk. It is now
+    replayed at that minute's start, then corrected to the probes the
+    recovery starts from, as one a minute earlier is.
+  - **A quiet window:** a draw in its first minute, before its start,
+    was dropped. It is now replayed the same way.
+
+  No held-out metric moves on this heater's record.
 - In Electric, an upper element a lowered setpoint stops at its new off
   point hands over to the lower element, as one stopping at its own
   does; the lower zone was left where it was. Not when a mode write at

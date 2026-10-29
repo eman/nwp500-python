@@ -49,8 +49,9 @@ metered draws.
 import hashlib
 import json
 import math
+from bisect import bisect_left
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
@@ -595,11 +596,44 @@ def _state(
     if record is not None:
         lay = st.layout(params)
         layers = tf.start_state(
-            lay, params, record, at, upper_f, lower_f
+            lay, params, _replayable(record, at), at, upper_f, lower_f
         ).layers_f
     return sim.HeaterState(
         upper_f=upper_f, lower_f=lower_f, layers_f=layers, **kw
     )
+
+
+def _without_own_draw(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
+    """``record`` up to a delivery at ``at`` (``TankRecord.before``),
+    without the draws whose onset falls in the settle before it: the
+    meter saw no flow there (``calibration.DRAW_SETTLE_S``), so a draw
+    another clock places there is the delivery's own, which the replay
+    would otherwise take from the tank it starts."""
+    part = record.before(at)
+    settle = at - timedelta(seconds=cal.DRAW_SETTLE_S)
+    return replace(
+        part, draws=tuple(d for d in part.draws if not settle <= d[0] <= at)
+    )
+
+
+def _replayable(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
+    """``record`` up to an event at ``at`` (``TankRecord.before``), its
+    draws in the minute ``at`` falls in, before it, moved to a
+    microsecond before that minute's start. The replay to ``at`` stops
+    at that start, its last span taking what comes before it
+    (``tank_fit.replay``), and an event's own draws start at ``at`` (a
+    delivery's is left out first, ``_without_own_draw``): so every draw
+    before an event is replayed, then corrected to the probes it starts
+    from, which were read after it."""
+    part = record.before(at)
+    cut = part.instant(part.minute(at))
+    lo = bisect_left(part.draws, (cut, -math.inf))
+    hi = bisect_left(part.draws, (at, -math.inf))
+    if lo == hi:
+        return part
+    edge = cut - timedelta(microseconds=1)
+    moved = tuple((edge, g) for _, g in part.draws[lo:hi])
+    return replace(part, draws=part.draws[:lo] + moved + part.draws[hi:])
 
 
 def _loads(
@@ -797,6 +831,8 @@ def _delivery_score(
     """Scored, and whether it promised more than a crossing delivered.
     A draw that did not cross delivered at least its gallons: only a
     prediction under them is an error, an under-promise."""
+    if record is not None:
+        record = _without_own_draw(record, e.at)
     try:
         got = sim.readiness(
             _state(params, record, e.at, e.upper_f, e.lower_f),
@@ -903,9 +939,10 @@ def score(
     public simulator, its error against the record, and each metric
     over its events (``Stat``, days in ``tz``). ``inlet_f`` is the mains
     the draws meet; None, the parameters'. With the ``record``
-    (``tank_fit.tank_record``), each recovery, window and draw starts
-    from the layers its replay leaves (``HeaterState.layers_f``); with
-    none, from the two probes.
+    (``tank_fit.tank_record``), each event starts from the layers its
+    replay leaves (``HeaterState.layers_f``), every draw before its
+    start replayed and a delivery's own left out; with none, from the
+    two probes.
 
     The metrics, lower is better unless a bias:
 

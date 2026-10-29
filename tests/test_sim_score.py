@@ -307,6 +307,97 @@ class TestTheDeliveries:
         assert got.over_promised == 1
 
 
+class TestADeliverysOwnDraw:
+    """A delivery starts on the meter's clock, its draw's onset on the
+    detector's: seconds earlier, and in the minute before."""
+
+    AT = T0 + timedelta(hours=2, seconds=5)
+
+    def _record(
+        self, ready: Prepared, draws: list[tuple[datetime, float]]
+    ) -> tank_fit.TankRecord:
+        return tank_fit.tank_record(ready.frame, draws)
+
+    def test_its_onset_is_left_out_of_the_replay(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        own = (self.AT - timedelta(seconds=10), 15.0)
+        record = self._record(ready, [own])
+        kept = ss._without_own_draw(record, self.AT)  # pyright: ignore[reportPrivateUsage]
+        assert kept.draws == ()
+
+        def layers(r: tank_fit.TankRecord) -> tuple[float, ...] | None:
+            return ss._state(site, r, self.AT, 140.0, 138.0).layers_f  # pyright: ignore[reportPrivateUsage]
+
+        assert layers(kept) == layers(self._record(ready, []))
+        assert layers(record) != layers(kept)
+
+    def test_an_earlier_draw_is_kept(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, _ = history
+        earlier = (self.AT - timedelta(minutes=30), 5.0)
+        own = (self.AT - timedelta(seconds=10), 15.0)
+        record = self._record(ready, [earlier, own])
+        kept = ss._without_own_draw(record, self.AT)  # pyright: ignore[reportPrivateUsage]
+        assert kept.draws == (earlier,)
+
+    def test_it_is_scored_as_if_it_had_not_happened(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        e = ss.Delivery(self.AT, 140.0, 138.0, 140.0, True, 5.0)
+        found = ss.Events(deliveries=(e,))
+        own = (self.AT - timedelta(seconds=10), 15.0)
+        with_own = ss.score(found, site, record=self._record(ready, [own]))
+        without = ss.score(found, site, record=self._record(ready, []))
+        assert with_own.metrics == without.metrics
+
+
+class TestADrawJustBeforeARecovery:
+    """A recovery starts at a compressor edge, any second of a minute,
+    and its replay stops at that minute's start."""
+
+    def test_is_replayed_as_one_in_the_minute_before(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+        r = replace(r, start=r.start + timedelta(seconds=40))
+
+        def bias(seconds: float | None) -> float:
+            draws = (
+                []
+                if seconds is None
+                else [(r.start - timedelta(seconds=seconds), 10.0)]
+            )
+            record = tank_fit.tank_record(ready.frame, draws)
+            return (
+                ss.score(ss.Events(recoveries=(r,)), site, record=record)
+                .metrics["recovery_minutes_bias.all"]
+                .value
+            )
+
+        # 8 s before, in the start's minute; 41 s before, in the one
+        # before it.
+        assert bias(8.0) == pytest.approx(bias(41.0), abs=0.5)
+        assert bias(8.0) != bias(None)
+
+    def test_is_not_walked_again(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+        at = r.start + timedelta(seconds=40)
+        record = tank_fit.tank_record(
+            ready.frame, [(at - timedelta(seconds=8), 10.0)]
+        )
+        moved = ss._replayable(record, at)  # pyright: ignore[reportPrivateUsage]
+        edge = record.instant(record.minute(at))
+        assert [t for t, _ in moved.draws] == [edge - timedelta(microseconds=1)]
+
+
 class TestTheInterval:
     def test_one_day_has_no_spread(self) -> None:
         s = ss._stat([1.0, 3.0], [5, 5])  # pyright: ignore[reportPrivateUsage]
