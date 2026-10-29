@@ -44,7 +44,7 @@ Summary
        closes it and the bottom's loss opens it.
 
 All figures come from one NWP500-65 and its recorded status history to
-2026-10-24, with the air beside the heater measured separately. The
+2026-10-26, with the air beside the heater measured separately. The
 circulation figures are that installation's loop.
 
 
