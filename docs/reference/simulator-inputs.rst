@@ -912,8 +912,15 @@ with. Heights are shares of the volume from the bottom.
      - Where the record's draws first move each probe.
    * - ``tank.upper_element_height``, ``tank.lower_element_height``
      - 0.72, 0.15
-     - The upper element with 17.5 gal of the 63.2 above it; the lower
-       near the bottom. Not fitted.
+     - The upper element with 17.5 gal of the 63.2 above it, the volume
+       its rise on 29 clean runs (2.01 degF/min) heats; the lower near
+       the bottom. Not fitted: an element heats its layer and the ones
+       above, so the height acts in whole layers. Of twelve, 0.72 heats
+       21.1 gal and the upper probe climbs 1.59 degF/min; 0.75-0.833
+       heats 15.8 gal, 2.00 degF/min. The record's 24 element runs from
+       2026-04-16, most with water drawn or the compressor running,
+       read the upper probe to 7.9 degF RMS at 0.72 against 10.2 at
+       0.79, so 0.72 is kept.
    * - ``tank.condenser_span``
      - 0-0.45
      - The coil wraps the lower stratum: recoveries heat 0.44-0.48 of

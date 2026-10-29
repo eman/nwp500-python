@@ -232,6 +232,37 @@ class TestHeat:
         )
         assert _monotone(after)
 
+    @staticmethod
+    def _upper_climb(height: float) -> float:
+        """The upper probe's climb under the upper element from a mixed
+        120 °F tank, °F/min, the element's height ``height``."""
+        lay = S.layout(
+            replace(P, tank=replace(P.tank, upper_element_height=height))
+        )
+        on = S.Element(
+            zone="upper",
+            watts=P.element.element_w,
+            on_at=T0,
+            off_at=T0 + timedelta(minutes=10),
+        )
+        w = S.walk(
+            lay,
+            S.TankState.uniform(L.layers, 120.0),
+            T0,
+            T0 + timedelta(minutes=10),
+            air_f=_air,
+            heating=S.Heating(elements=(on,)),
+        )
+        return (S.observe(lay, w.state)[0] - 120.0) / 10.0
+
+    def test_an_elements_height_acts_in_whole_layers(self) -> None:
+        # Its heat turns its layer over into the ones above: anywhere in
+        # a layer heats the same water.
+        assert self._upper_climb(0.68) == self._upper_climb(0.74)
+        assert self._upper_climb(0.76) == self._upper_climb(0.82)
+        # A layer higher, 5.3 gal less water to heat.
+        assert self._upper_climb(0.76) > 1.2 * self._upper_climb(0.74)
+
     def test_an_element_heats_the_water_above_it(self) -> None:
         state = S.TankState(tuple(100.0 + i for i in range(12)))
         after = S.add_heat(L, state, S.element_heat(L, "upper", 2000.0))
