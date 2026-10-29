@@ -418,10 +418,12 @@ class TestAtTheEdges:
 
     def test_a_draw_from_the_top_hands_back(self) -> None:
         # Over 149 °F the elements heat; a draw takes the tank back into
-        # range with plenty to do, and the heat pump does it.
+        # range with plenty to do, and the heat pump does it. The upper
+        # starts over the setpoint, not at it, so the lower trigger's
+        # hold while the upper is not short does not rest on a tie.
         r = _run(
             65.0,
-            upper=149.9,
+            upper=150.0,
             lower=149.3,
             setpoint=149.9,
             on=149.5,

@@ -187,10 +187,10 @@ Hot water and calibration
       power_blocks, PHASES, CLIMB_HELD, MIXED_BELOW_F, MIXED_ABOVE_F,
       MIN_STRETCH_MINUTES, POWER_BLOCK_MINUTES, Evidence, evidence,
       Plane, fit_heat_map, fit_power_map, heat_map_error,
-      power_map_error, fit_start_hold, start_hold_error, fit_overshoot,
+      power_map_error, fit_overshoot,
       overshoot_error, violations, with_planes, HeatPumpFit,
       fit_heat_pump, with_heat_pump, MIN_HEAT_STRETCHES,
-      MIN_POWER_BLOCKS, MIN_BAND_STARTS, MIN_RUN_ONS, CARNOT_SHARE,
+      MIN_POWER_BLOCKS, MIN_RUN_ONS, CARNOT_SHARE,
       MIN_POWER_W, CHECK_POINTS
 
 .. automodule:: nwp500.sim.history_frame

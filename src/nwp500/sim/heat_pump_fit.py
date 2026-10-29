@@ -17,8 +17,11 @@ minute grid, with each minute's phase:
 ``start_holds``, ``run_ons``, ``climb_heat`` and ``power_blocks``
 measure from that frame, and ``fit_heat_pump`` fits the heat pump's
 parameters on them (``evidence``): the heat's and the power's maps
-(``physics.heat_pump``), the hold by time off, and the overshoot at
-the stop.
+(``physics.heat_pump``) and the overshoot at the stop. The hold is
+measured (``start_holds``) and not fitted: the simulator's hold is the
+layers' own, the stir a compressor's start gives the cold bottom
+(``physics.stratified.stir``) and the time the condenser takes to heat
+it back, so the record's holds are what that is checked against.
 """
 
 import math
@@ -565,11 +568,9 @@ def power_blocks(
 # ── the heat pump's parameters, fitted on these measures ────────────
 
 #: Fewer than these and a part is not fitted: stretches for the heat,
-#: climb blocks for the power, starts in a band for its hold, and
-#: draw-free run-ons for the overshoot.
+#: climb blocks for the power, and draw-free run-ons for the overshoot.
 MIN_HEAT_STRETCHES = 10
 MIN_POWER_BLOCKS = 30
-MIN_BAND_STARTS = 3
 MIN_RUN_ONS = 5
 #: What a fitted map may claim anywhere over its domain, checked on a
 #: ``CHECK_POINTS`` × ``CHECK_POINTS`` grid: a COP no more than
@@ -585,13 +586,11 @@ CHECK_POINTS = 8
 class Evidence:
     """What the heat pump's parameters are fitted on, each in time
     order: ``climb_heat``'s stretches, ``power_blocks``' climb blocks
-    with their air, lower tank and power read, the clean starts with
-    their time off and hold known (``start_holds``), and the draw-free
+    with their air, lower tank and power read, and the draw-free
     run-ons (``run_ons``)."""
 
     heat: pd.DataFrame
     power: pd.DataFrame
-    holds: pd.DataFrame
     runs: pd.DataFrame
 
 
@@ -612,16 +611,12 @@ def evidence(
     power = blocks.loc[blocks["phase"] == "climb"].dropna(
         subset=["air_f", "lower_f", "power_w"]
     )
-    holds = start_holds(frame)
-    holds = holds.loc[holds["start_clean"].astype(bool)].dropna(
-        subset=["minutes_off", "hold_minutes"]
-    )
     runs, _ = run_ons(frame)
     runs = runs.loc[runs["draw_free"].astype(bool)]
     return Evidence(
         *(
             cast(pd.DataFrame, d.sort_values("start").reset_index(drop=True))
-            for d in (heat, power, holds, runs)
+            for d in (heat, power, runs)
         )
     )
 
@@ -719,37 +714,6 @@ def power_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
     return float(np.sqrt(np.mean((got - power) ** 2)))
 
 
-def fit_start_hold(
-    rows: pd.DataFrame, c: CompressorParams
-) -> tuple[float, ...] | None:
-    """The hold by time off: each of ``c``'s bands
-    (``CompressorParams.start_hold_after_min``) the median of
-    ``Evidence.holds``' starts in it, or ``c``'s own with fewer than
-    ``MIN_BAND_STARTS`` there; None when no band has as many."""
-    off, held = _columns(rows, "minutes_off", "hold_minutes")
-    band = np.searchsorted(c.start_hold_after_min, off, side="right")
-    out: list[float] = []
-    fitted = False
-    for i, base in enumerate(c.start_hold_min):
-        inside = held[band == i]
-        if len(inside) >= MIN_BAND_STARTS:
-            out.append(float(np.median(inside)))
-            fitted = True
-        else:
-            out.append(base)
-    return tuple(out) if fitted else None
-
-
-def start_hold_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
-    """``c``'s hold against ``Evidence.holds``' starts: the mean
-    absolute error, minutes; None with none."""
-    if rows.empty:
-        return None
-    off, held = _columns(rows, "minutes_off", "hold_minutes")
-    got = np.array([hp.start_hold_min(c, float(o)) for o in off])
-    return float(np.mean(np.abs(got - held)))
-
-
 def fit_overshoot(rows: pd.DataFrame) -> float | None:
     """The median overshoot at the stop of ``Evidence.runs``' run-ons,
     °F (``run_ons``), at least 0: a heater does not stop short of its
@@ -828,21 +792,19 @@ def with_planes(
 @dataclass(frozen=True)
 class HeatPumpFit:
     """The heat pump's parameters fitted on ``Evidence``, each None
-    where it had too little to go on: the heat's and the power's planes,
-    the hold by time off, and the overshoot at the stop; how many of
-    each they were fitted on; and the in-sample errors
-    (``heat_map_error``, ``power_map_error``). ``heat_violations`` and
-    ``power_violations``: what each plane, with the other it is applied
-    with, claims that no heat pump does (``violations``), in which case
-    it is not applied; ``violations`` is either's."""
+    where it had too little to go on: the heat's and the power's planes
+    and the overshoot at the stop; how many of each they were fitted
+    on; and the in-sample errors (``heat_map_error``,
+    ``power_map_error``). ``heat_violations`` and ``power_violations``:
+    what each plane, with the other it is applied with, claims that no
+    heat pump does (``violations``), in which case it is not applied;
+    ``violations`` is either's."""
 
     heat: Plane | None
     power: Plane | None
-    start_hold_min: tuple[float, ...] | None
     overshoot_f: float | None
     n_heat: int
     n_power: int
-    n_holds: int
     n_runs: int
     heat_error: float | None
     power_error: float | None
@@ -863,11 +825,9 @@ def fit_heat_pump(found: Evidence, base: CompressorParams) -> HeatPumpFit:
     return HeatPumpFit(
         heat=heat,
         power=power,
-        start_hold_min=fit_start_hold(found.holds, base),
         overshoot_f=fit_overshoot(found.runs),
         n_heat=len(found.heat),
         n_power=len(found.power),
-        n_holds=len(found.holds),
         n_runs=len(found.runs),
         heat_error=None if heat is None else heat_map_error(found.heat, planes),
         power_error=(
@@ -884,8 +844,6 @@ def with_heat_pump(params: HeaterParams, fit: HeatPumpFit) -> HeaterParams:
     c = params.compressor
     if not fit.violations:
         c = with_planes(c, fit.heat, fit.power)
-    if fit.start_hold_min is not None:
-        c = replace(c, start_hold_min=fit.start_hold_min)
     controller = params.controller
     if fit.overshoot_f is not None:
         controller = replace(controller, hp_stop_overshoot_f=fit.overshoot_f)

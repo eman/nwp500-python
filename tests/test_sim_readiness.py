@@ -133,7 +133,9 @@ class TestDeliverable:
 
 class TestWithinResolution:
     def test_at_the_answer_it_is_within(self) -> None:
-        for layers in (None, _drawn(15.0)):
+        # From the probes alone, and from layers after a draw that
+        # leaves the line's crossing where a degree on a probe moves it.
+        for layers in (None, _drawn(14.0)):
             upper, lower = (
                 (140.0, 120.0)
                 if layers is None

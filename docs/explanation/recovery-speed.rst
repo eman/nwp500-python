@@ -354,9 +354,9 @@ it again. :doc:`tank-energy` gives the heat a tank is short.
 The start of a recovery
 =======================
 
-At a compressor start the lower tank dips, then holds while the
-refrigerant circuit and the condenser warm, and only then climbs. The
-hold is longer the longer the compressor has been off. There were 94
+At a compressor start the lower tank dips about 0.5 degF, then holds,
+and only then climbs. The hold is longer the longer the compressor has
+been off. There were 94
 starts with no water in use from 30 minutes before to the end of the
 hold, 2025-12-28 to 2026-10-26. For the 84 of them with the time off
 known and a climb, the minutes until the lower tank read above its
@@ -397,6 +397,25 @@ only once it holds for 5 minutes. Counting the first step instead, as
 an earlier version of this page did over 121 starts to 2026-09-26
 (3.0, 4.5, 11.5, 11.4 and 17.8 minutes), gives 6 minutes at 3-12 hours
 and 18 beyond.
+
+Through the hold the upper tank holds still too: over the 57 holds
+after 3 hours or more off it moved a median -0.18 degF, and -0.18 to
+-0.54 degF over the first 30 minutes. The compressor's heat is going
+into water below the lower probe, not up the tank, and the dip at the
+lower probe is the same 0.5 degF after an hour off as after a day
+(median 0.54 degF after 15-60 minutes and after 12 hours or more). The
+condenser does not wrap the tank's bottom, so a recovery leaves the
+water under it cold and a stand cools it further, and at the start that
+cold is heated before the lower probe moves. The simulator stirs it at
+the start (``physics.stratified.stir``, :doc:`simulator-methodology`)
+and holds, with nothing fitted to these holds, a median 3, 23, 18, 18
+and 21 minutes in the five bands, 7.8 minutes from the record's holds
+on average; the bands' own medians, taken as a fitted hold, were 6.0.
+The short-stop bands are where it misses: after 15 to 60 minutes off
+the tank is uniform near its setpoint with a cold bottom, the record's
+probe steps 0.9 degF in the first 9 minutes and then creeps about
+1 degF over the next 20 while the heat goes below, and the model holds
+through all of it.
 
 A short top-off after a long idle spends much of its run in this hold,
 and the start-up energy above goes into the same warming.

@@ -241,15 +241,24 @@ own threshold, not a partial charge's), or after 16 hours, reported as
 truncated. Each step reads the air at its start, so a recovery runs in
 the air its own span has.
 
-**The start's hold.** After a start the compressor runs some minutes
-before the lower probe climbs, while the refrigerant circuit and the
-condenser warm. The hold is ``CompressorParams.start_hold_min``, a
-value for each band of time the compressor was off (under 15, 60, 180
-and 720 minutes, and beyond): 0, 5, 10, 18 and 22 minutes on the
-record (:doc:`recovery-speed`). The tank holds as it started through
-it, drawing the map's power there, and the climb follows. A caller may
-pass its own ``start_hold`` by time off, or ``running_hold`` for a
-compressor already running.
+**The start's stir.** After a start the compressor runs some minutes
+before the lower probe climbs, longer the longer it was off (0 to 22
+minutes on the record, :doc:`recovery-speed`), while the upper probe
+holds still: the heat is going into water below the lower probe. The
+condenser does not wrap the tank's bottom, so the water under it is
+left cold by a recovery and cools on through a stand, and the layers
+carry that cold. At the instant the condenser's heating begins the walk
+pools the water the condenser wraps with the water below it
+(``stratified.stir``: each layer by its share under the condenser's
+top, ``Layout.stir_weights``), the same heat spread over the pool, and
+the climb follows from there. The lower probe, above the pool, holds
+until the condenser has heated the pool past its reading, and the
+upper probe holds as the record's does. The hold is nothing of its
+own, so a stand's cold costs the heat it does and no more: a 22-minute
+hold at the map's power with no heat credited was 165 Wh and 3 degF of
+tank a start. ``CompressorParams.start_hold_min`` imposes no hold by
+default; a caller may still pass ``start_hold`` by time off, or
+``running_hold`` for a compressor already running.
 
 **The run-on.** The heat pump does not stop the moment the lower probe
 reaches its target: on the record it stops a median 0.9 degF past it
@@ -490,10 +499,6 @@ run-on, and four measures are read from it:
 - **the power**, on 10-minute blocks of a climb's metered power,
   stratified or not, at the air and the lower probe: a least-squares
   plane with 30 blocks or more;
-- **the hold**, on clean starts (no water moving from 30 minutes
-  before them to the end of the hold): the minutes until the lower probe stays 5
-  minutes above its reading from before the start. Each band's hold is
-  the median of 3 starts or more in it, the base's otherwise;
 - **the run-on**: the median of the lower probe's overshoot past the
   target at the stop of draw-free runs, with 5 runs or more.
 
@@ -504,7 +509,7 @@ pump does (*The map*, above).
 their own (:doc:`/how-to/simulate-heater`).
 
 **Held out, in time order.** With ``keep_better``, the tank's terms, the
-heat's map, the power's map, the start's hold and the run-on are each
+heat's map, the power's map and the run-on are each
 refitted on their earlier four fifths (the tank's quiet windows, draws
 and recoveries together), and a refit
 replaces the base's value only where it scores better on the latest

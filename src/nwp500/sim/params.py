@@ -8,7 +8,8 @@ or a module constant:
   from it;
 - ``LossParams``: the jacket's UA law;
 - ``CompressorParams``: the heat pump's performance map, the heat it
-  puts in and the power it draws, and the hold at its start;
+  puts in and the power it draws, and any hold a caller imposes at its
+  start;
 - ``ElementParams``: the resistance elements;
 - ``DrawParams``: a draw through the tank, delivered through the
   mixing valve or flowing from it, and its inflow;
@@ -300,8 +301,8 @@ DOMAINS = (
 class CompressorParams:
     """The heat pump as a performance map (``physics.heat_pump``): the
     heat it puts into the tank and the electricity it draws, each a
-    plane in the air at the heater and the lower tank's water, and the
-    hold at its start.
+    plane in the air at the heater and the lower tank's water, and any
+    hold a caller imposes at its start.
 
     The heat is what the tank gains plus its standby loss: the
     condenser's output. The heat taken from the air is the heat less
@@ -359,17 +360,19 @@ class CompressorParams:
     power_domain_water_f: tuple[float, float] = field(
         default=(73.0, 148.0), metadata=_p(FITTED, "°F", note=_POWER_MAP)
     )
-    #: The hold at a start, minutes, by how long the compressor was off:
-    #: ``start_hold_min[i]`` from ``start_hold_after_min[i - 1]``
-    #: minutes off (the first from 0), and the last for a stop not
-    #: known. On the record's 84 starts with no water in use and the
-    #: time off known, the medians under 15 min, 15-60 min, 1-3 h,
-    #: 3-12 h and over 12 h off.
+    #: A hold imposed at a start, minutes, by how long the compressor
+    #: was off: ``start_hold_min[i]`` from ``start_hold_after_min[i -
+    #: 1]`` minutes off (the first from 0), and the last for a stop not
+    #: known. None by default: the lower probe's hold after a start is
+    #: the layers' own, the stir the compressor's start gives the cold
+    #: bottom (``physics.stratified.stir``) and the time the condenser
+    #: takes to heat it back. A caller whose recovery model was trained
+    #: with a hold may still impose one.
     start_hold_after_min: tuple[float, ...] = field(
         default=(15.0, 60.0, 180.0, 720.0), metadata=_p(DEFAULT, "min")
     )
     start_hold_min: tuple[float, ...] = field(
-        default=(0.0, 5.0, 10.0, 18.0, 22.0), metadata=_p(FITTED, "min")
+        default=(0.0, 0.0, 0.0, 0.0, 0.0), metadata=_p(DEFAULT, "min")
     )
 
     def __post_init__(self) -> None:

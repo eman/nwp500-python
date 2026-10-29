@@ -72,11 +72,12 @@ recoveries: the heat into the tank and the electricity drawn, each a
 plane in the air at the heater and the lower tank's water, each held
 to the range it was fitted over. What the condenser gives is what the air gives
 plus the electricity, and a fit that claims more than a real heat pump
-could is not applied. A start holds for a time set by how long the
-compressor was off (0 to 22 minutes on the record), drawing power while
-the tank holds; the tank is then walked a minute at a time with the
-condenser heating it until the lower thermistor is a fitted run-on
-(0.9 degF) past its target.
+could is not applied. A start stirs the water the condenser wraps
+with the cold water below it, so the lower thermistor holds while the
+condenser heats that pool back, longer the longer the compressor was
+off, as the record's does (0 to 22 minutes); the tank is walked a
+minute at a time with the condenser heating it until the lower
+thermistor is a fitted run-on (0.9 degF) past its target.
 Outside the manual's operating range (41-113 degF air, 50-149 degF
 water) it does not run, and the elements heat the tank as in Electric.
 
@@ -328,8 +329,9 @@ was trained with, beside ``recovery=``:
    hold, minutes.
 
 With no model, or one that declines, the served duration is the hold
-(the parameters' by time off, unless ``start_hold`` or ``running_hold``
-is given) plus the physics' climb.
+(none unless ``start_hold`` or ``running_hold`` is given: the
+parameters impose none, the layers' own start stir holding the lower
+probe instead) plus the physics' climb.
 
 
 Accuracy

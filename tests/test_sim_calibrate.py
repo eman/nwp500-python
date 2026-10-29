@@ -148,11 +148,9 @@ class TestTheFits:
         fit = hpf.HeatPumpFit(
             heat=hpf.Plane(4400.0, 50.0, -15.0),
             power=None,
-            start_hold_min=(0.0, 4.0, 9.0, 17.0, 21.0),
             overshoot_f=None,
             n_heat=12,
             n_power=4,
-            n_holds=40,
             n_runs=2,
             heat_error=210.0,
             power_error=None,
@@ -170,9 +168,7 @@ class TestTheFits:
         power = terms["Power at 65 °F air, 120 °F water (W)"]
         assert not power.fitted
         assert power.why == "4 metered climb blocks; 30 needed"
-        hold = terms["Start hold by time off (min)"]
-        assert hold.fitted and hold.value == "0/4/9/17/21"
-        assert hold.note == "under 15, 60, 180, 720 min off, and beyond"
+        assert "Start hold by time off (min)" not in terms
         assert not terms["Run-on overshoot (°F)"].fitted
         claims = replace(
             fitted,
@@ -976,7 +972,6 @@ class TestKeepBetterSecondReview:
                 "Power at 65 °F air, 120 °F water (W)",
                 f"{base.compressor.power_w:.3g}",
             ),
-            ("Start hold by time off (min)", "0/5/10/18/22"),
         ):
             assert terms[name].value == value
             assert terms[name].why.startswith("kept the base: ")
@@ -997,25 +992,23 @@ class TestKeepBetterSecondReview:
 
 
 #: Two heat pumps the planted evidence follows: the heat's and the
-#: power's planes, the hold by time off, and the overshoot.
+#: power's planes, and the overshoot.
 PUMP_A = (
     hpf.Plane(4500.0, 55.0, -16.0),
     hpf.Plane(400.0, 0.2, 2.8),
-    (0.0, 5.0, 10.0, 18.0, 22.0),
     0.9,
 )
 PUMP_B = (
     hpf.Plane(3900.0, 30.0, -5.0),
     hpf.Plane(460.0, 1.0, 1.5),
-    (2.0, 8.0, 14.0, 25.0, 30.0),
     1.8,
 )
 
 
 def planted_evidence(law_at: Any, n: int = 50) -> hpf.Evidence:
     """``n`` of each of the heat pump's measures a day apart, each what
-    ``law_at(day)`` (a ``PUMP_*``) gives: a climb, a metered block, a
-    clean start and a run-on."""
+    ``law_at(day)`` (a ``PUMP_*``) gives: a climb, a metered block and
+    a run-on."""
     import pandas as pd
 
     days = range(n)
@@ -1023,7 +1016,6 @@ def planted_evidence(law_at: Any, n: int = 50) -> hpf.Evidence:
     air = [55.0 + 3 * (d % 7) for d in days]
     water = [118.0 + 4 * (d % 6) for d in days]
     lower = [80.0 + 11 * (d % 6) for d in days]
-    off = [5.0, 30.0, 100.0, 300.0, 1000.0]
     law = [law_at(d) for d in days]
 
     def at(plane: hpf.Plane, a: float, w: float) -> float:
@@ -1052,26 +1044,16 @@ def planted_evidence(law_at: Any, n: int = 50) -> hpf.Evidence:
             ],
         }
     )
-    holds = pd.DataFrame(
-        {
-            "start": starts,
-            "minutes_off": [off[d % 5] for d in days],
-            "hold_minutes": [law[d][2][d % 5] for d in days],
-        }
-    )
-    runs = pd.DataFrame({"start": starts, "overshoot_f": [x[3] for x in law]})
-    return hpf.Evidence(heat, power, holds, runs)
+    runs = pd.DataFrame({"start": starts, "overshoot_f": [x[2] for x in law]})
+    return hpf.Evidence(heat, power, runs)
 
 
 def _with_pump(pump: Any, unfitted: tuple[str, ...] = ()) -> sim.HeaterParams:
-    heat, power, hold, over = pump
+    heat, power, over = pump
     base = _fitted(UA)
     return replace(
         base,
-        compressor=replace(
-            hpf.with_planes(base.compressor, heat, power),
-            start_hold_min=hold,
-        ),
+        compressor=hpf.with_planes(base.compressor, heat, power),
         controller=replace(base.controller, hp_stop_overshoot_f=over),
         unfitted=unfitted,
     )
@@ -1089,7 +1071,7 @@ def _keep_pump(
     return done.params, {j.group: j for j in judged}, held
 
 
-PUMP_GROUPS = ("heat_map", "power_map", "start_hold", "run_on")
+PUMP_GROUPS = ("heat_map", "power_map", "run_on")
 
 
 class TestKeepBetterTheHeatPump:
@@ -1106,7 +1088,6 @@ class TestKeepBetterTheHeatPump:
         assert c.heat_btu_h == pytest.approx(4500.0)
         assert c.heat_btu_h_per_water_f == pytest.approx(-16.0)
         assert c.power_w == pytest.approx(400.0)
-        assert c.start_hold_min == (0.0, 5.0, 10.0, 18.0, 22.0)
         assert params.controller.hp_stop_overshoot_f == 0.9
 
     def test_a_base_the_latest_evidence_favours_stays(self) -> None:
