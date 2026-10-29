@@ -2,10 +2,12 @@
 and the electricity it draws, each a plane in the air at the heater and
 the lower tank's water about ``params.MAP_REF_AIR_F`` and
 ``params.MAP_REF_WATER_F``. Each is read along its plane wherever the
-heat pump runs, past the span it was fitted on (``CompressorParams``'
-domains) as within it: held at the span's edge, a plane would give the
-heat a 41 °F air does at 61 °F, and the heat and the power, fitted over
-different water, a COP neither measured. A fit's slopes take the sign
+heat pump runs (the walk holds its reads to the controller's envelope,
+``stratified.Layout.map_air_f`` and ``map_water_f``), past the span it
+was fitted on (``CompressorParams``' domains) as within it: held at
+the span's edge, a plane would give the heat a 41 °F air does at 61 °F,
+and the heat and the power, fitted over different water, a COP neither
+measured. A fit's slopes take the sign
 the cycle gives them (``heat_pump_fit.HEAT_SLOPE_SIGNS``,
 ``POWER_SLOPE_SIGNS``), so the plane
 carried past its evidence moves the way the heat pump does.

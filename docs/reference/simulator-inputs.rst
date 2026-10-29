@@ -714,8 +714,8 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        against a sensor of the air beside the heater: both probes'
        error every 10 minutes, 2.50 degF RMS over the events. Fitted on
        the record to 2026-09-18, they scored on the 59 quiet windows
-       after it 0.190 and 0.497 degF RMS (upper, lower), and on 46
-       draws 0.286 and 2.18 (:doc:`/explanation/simulator`). The
+       after it 0.199 and 0.494 degF RMS (upper, lower), and on 46
+       draws 0.289 and 2.16 (:doc:`/explanation/simulator`). The
        bottom's loss fell from 0.887 with the hold imposed to 0.168
        with the maps held at their spans' edges: the start's stir
        brings the bottom's cold to the lower probe. Read along its

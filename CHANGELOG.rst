@@ -216,7 +216,10 @@ Changed
   °F got the heat at 114 °F, and the heat and the power, held at
   different water, gave a COP that bent where neither was measured.
   ``physics.heat_pump`` now reads each along its plane wherever the
-  heat pump runs; ``heat_map_out_of_domain`` still marks a recovery
+  heat pump runs, the walk holding its reads to the controller's
+  envelope (``stratified.Layout``'s new ``map_air_f`` and
+  ``map_water_f``: a cold bottom can leave the condenser's water under
+  the envelope the controller judges at the lower probe); ``heat_map_out_of_domain`` still marks a recovery
   whose air is outside the heat's span, its heat the plane carried past
   the record. A fit's slopes take the sign the cycle gives them (the
   heat rising with the air and falling with the water, the power rising
@@ -239,9 +242,9 @@ Changed
   2.50 °F RMS over the events), and its power map on that tank (408.9 W,
   +1.03 per °F of air, +2.70 per °F of water). Held out after
   2026-09-18, the 11 draw-free recoveries' duration error went from 6.9
-  to 5.8 min and their electricity's from 5.0 % to 4.7 %, its bias from
-  0.4 % to 0.0 %; the 16 with draws went from 47.2 to 48.0 min and the
-  lower probe after a draw from 2.16 to 2.18 °F RMS.
+  to 5.7 min and their electricity's from 5.0 % to 4.5 %, its bias from
+  0.4 % high to 0.6 % low; the 16 with draws went from 47.2 to 48.2 min,
+  and the lower probe after a draw stayed at 2.16 °F RMS.
 
 - **The power is fitted where it is read.** The walk reads the power's
   map at the condenser's water, which is below the lower probe the map

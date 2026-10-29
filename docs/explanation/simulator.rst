@@ -400,9 +400,9 @@ The maps are now read along their planes past the spans they were
 fitted on, so a recovery from a cold tank gets the heat its cold water
 gives rather than the heat at 114 degF: with the tank refitted so, on
 the same 11 recoveries the duration's mean absolute error went from 6.9
-to 5.8 min (5.0 to 4.0 min long on average) and the electricity's from
-5.0 % to 4.7 %, its bias from 0.4 % to 0.0 %; the 16 with draws inside
-them went from 47.2 to 48.0 min.
+to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
+5.0 % to 4.5 %, from 0.4 % high to 0.6 % low on average; the 16 with
+draws inside them went from 47.2 to 48.2 min.
 
 Not yet measured on the layered tank: recorded starts and daily energy
 from replaying recorded writes, depletions called over the whole
