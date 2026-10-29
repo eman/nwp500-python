@@ -480,7 +480,8 @@ def condenser_water(
     out: list[float] = []
     for a, b in spans:
         hours = water = 0.0
-        for lo, hi, books in steps[max(0, bisect_right(starts, a) - 1) :]:
+        for k in range(max(0, bisect_right(starts, a) - 1), len(steps)):
+            lo, hi, books = steps[k]
             if lo >= b:
                 break
             share = _share(lo, hi, a, b)
