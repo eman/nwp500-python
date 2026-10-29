@@ -297,6 +297,32 @@ class TestTheReplay:
         assert a.layers_f == pytest.approx(b.layers_f, abs=0.05)
 
 
+class TestTheCondenserWater:
+    def test_it_is_the_tanks_own_through_a_recovery(
+        self, history, record
+    ) -> None:
+        """The water the condenser heats, which no probe reads, comes
+        back from the replay: the tank's own, minute by minute, through
+        the compressor's run."""
+        _, _, path = history
+        lay = S.layout(TRUE)
+        spans = [
+            (_at(20.0 + k / 6), _at(20.0 + (k + 1) / 6)) for k in range(17)
+        ]
+        got = tf.condenser_water(TRUE, record, spans)
+        for (a, b), water in zip(spans, got, strict=True):
+            own = [S.condenser_water_f(lay, s) for t, s in path if a <= t < b]
+            assert water == pytest.approx(sum(own) / len(own), abs=1.0)
+        # It heats through the run.
+        assert got[-1] > got[0] + 5.0
+
+    def test_outside_the_record_it_is_unknown(self, record) -> None:
+        before = (T0 - timedelta(hours=3), T0 - timedelta(hours=2))
+        got = tf.condenser_water(TRUE, record, [before, (_at(21), _at(21.2))])
+        assert math.isnan(got[0]) and math.isfinite(got[1])
+        assert tf.condenser_water(TRUE, record, []) == []
+
+
 class TestTheErrors:
     def test_the_tank_that_wrote_it_tracks_it(self, history, record) -> None:
         _, _, path = history

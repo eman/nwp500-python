@@ -210,17 +210,40 @@ Added
 Changed
 -------
 
+- **The power is fitted where it is read.** The walk reads the power's
+  map at the condenser's water, which is below the lower probe the map
+  was fitted on (4.5 °F on the record's climbs on average): read there,
+  the map priced them at 407.6 W against the 418.2 W metered.
+  ``sim_calibrate`` now reads each metered block at the condenser's
+  water on the record's replay (``heat_pump_fit.in_condenser_water``,
+  over ``tank_fit.condenser_water``, one replay through the record),
+  and the power's plane is fitted there; ``power_blocks``' new
+  ``water_f`` is the water a block is read at, the lower probe's with
+  no record to replay, and ``calibration.calibrate`` takes the
+  ``evidence`` to fit on. The site's map is refitted so (408.2 W at 65
+  °F air and 120 °F water, +1.03 per °F of air, +2.71 per °F of water,
+  3,562 blocks, 2026-04-16 to 10-26, 12.8 W RMS); its air span is 53
+  to 90 °F, the runs before 2026-04-16 having no record to replay. On
+  the 11 held-out draw-free recoveries the electricity went from 2.7 %
+  low to 0.3 % high on average and its mean absolute error from 4.5 %
+  to 5.0 %. The heat's map is left on the mixed climbs: on the record's
+  replay a draw-free recovery's layers gain 1.006 times the heat the
+  map credits, and a refit on the probes through the replayed layers
+  lengthened the held-out draw-free recoveries' error from 6.9 to 7.6
+  min or more.
+
 - **What a recovery gets wrong, documented.**
   :doc:`/explanation/simulator` gives two errors in a heat-pump recovery
   that partly cancel. After 40 minutes or more of heating the upper and
   lower probes read about 0.5 and 0.9 °F higher than at rest, and the
   model's probes carry nothing for it, so the stop, judged against an
-  overshoot measured on the reading, comes late. The power is read at
+  overshoot measured on the reading, comes late. The power was read at
   the condenser's water: 392 W against the 417 W metered, pooled over
   the 11 held-out draw-free recoveries. Modelling both cut those
   recoveries' bias from 6.6 to 2.5 min but raised their mean absolute
   error from 11.9 to 12.7 min and the electricity's from 5.7 % to 9.9 %,
-  so neither is applied. :doc:`/explanation/recovery-speed` gives the
+  so the offset is not applied; the power is now fitted at the
+  condenser's water (above). :doc:`/explanation/recovery-speed` gives the
   probes' step at a quiet stop, and that the heat pump cools its room a
   little: the air rose 0.49 °F less on average over a run than over the
   same hours on nearby days with nothing running (90 % interval

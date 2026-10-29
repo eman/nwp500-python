@@ -1038,7 +1038,7 @@ def planted_evidence(law_at: Any, n: int = 50) -> hpf.Evidence:
         {
             "start": starts,
             "air_f": air,
-            "lower_f": lower,
+            "water_f": lower,
             "power_w": [
                 at(x[1], a, w) for x, a, w in zip(law, air, lower, strict=True)
             ],
@@ -1064,7 +1064,7 @@ def _keep_pump(
 ) -> tuple[sim.HeaterParams, dict[str, sc.Judged], sc.HeldOut]:
     found = planted_evidence(law_at)
     with pytest.MonkeyPatch.context() as m:
-        m.setattr(hpf, "evidence", lambda *_, **__: found)
+        m.setattr(sc, "_heat_pump_evidence", lambda *_, **__: found)
         done, _, judged, held = sc._keep_better(
             _ready(recovery_days(1)), base, (), map
         )
@@ -1072,6 +1072,25 @@ def _keep_pump(
 
 
 PUMP_GROUPS = ("heat_map", "power_map", "run_on")
+
+
+class TestThePowersWater:
+    def test_with_a_record_it_is_the_condensers(self) -> None:
+        # The tank is replayed through the record, and the power read at
+        # the water the walk reads its map at, under the lower probe.
+        ready = _ready(recovery_days(2))
+        base = _fitted(UA)
+        record = tf.tank_record(ready.frame, [])
+        found = sc._heat_pump_evidence(  # pyright: ignore[reportPrivateUsage]
+            ready.frame, base, ready.recovery_air, record
+        )
+        plain = sc._heat_pump_evidence(  # pyright: ignore[reportPrivateUsage]
+            ready.frame, base, ready.recovery_air, None
+        )
+        assert len(found.power) and len(found.power) <= len(plain.power)
+        assert (plain.power["water_f"] == plain.power["lower_f"]).all()
+        assert (found.power["water_f"] != found.power["lower_f"]).any()
+        assert found.heat.equals(plain.heat)
 
 
 class TestKeepBetterTheHeatPump:
@@ -1122,7 +1141,7 @@ class TestKeepBetterTheHeatPump:
         base = _with_pump(PUMP_B)
         found = planted_evidence(lambda _: greedy)
         with pytest.MonkeyPatch.context() as m:
-            m.setattr(hpf, "evidence", lambda *_, **__: found)
+            m.setattr(sc, "_heat_pump_evidence", lambda *_, **__: found)
             done, tank, judged, held = sc._keep_better(
                 _ready(recovery_days(1)), base, (), map
             )

@@ -349,6 +349,8 @@ class TestThePower:
         water = (got["upper_f"] + got["lower_f"]) / 2.0
         assert np.abs(got["power_w"] - water.map(power)).max() < 5.0
         assert set(got["phase"]) <= set(hpf.PHASES)
+        # Read at the lower probe, until a replay places the condenser.
+        assert (got["water_f"] == got["lower_f"]).all()
 
 
 @pytest.fixture(scope="module")
@@ -398,6 +400,27 @@ class TestTheFits:
         assert not hasattr(fit, "start_hold_min")
         got = hpf.with_heat_pump(sim.default_params(), fit)
         assert got.compressor.start_hold_min == (0.0,) * 5
+
+    def test_a_replay_reads_it_at_the_condenser(
+        self, found: hpf.Evidence, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Each block at the replay's condenser water over its minutes;
+        # one the replay has no point in is left out.
+        asked: list[tuple[datetime, datetime]] = []
+
+        def water(_p: object, _r: object, spans: list) -> list[float]:
+            asked.extend(spans)
+            return [math.nan, *(100.0 + k for k in range(1, len(spans)))]
+
+        monkeypatch.setattr(hpf.tf, "condenser_water", water)
+        got = hpf.in_condenser_water(found, PARAMS, None)  # type: ignore[arg-type]
+        span = timedelta(minutes=hpf.POWER_BLOCK_MINUTES)
+        assert asked == [(t, t + span) for t in found.power["start"]]
+        assert len(got.power) == len(found.power) - 1
+        assert list(got.power["water_f"]) == [
+            100.0 + k for k in range(1, len(found.power))
+        ]
+        assert got.heat is found.heat and got.runs is found.runs
 
     def test_too_little_fits_nothing(self) -> None:
         empty = hpf.evidence(planted(CYCLES[:2]), PARAMS)

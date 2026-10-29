@@ -71,6 +71,7 @@ from nwp500.sim.record import Record
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 if TYPE_CHECKING:
+    from nwp500.sim.heat_pump_fit import Evidence as HeatPumpEvidence
     from nwp500.sim.heat_pump_fit import HeatPumpFit
 
 # ── quiet windows ───────────────────────────────────────────────────
@@ -547,13 +548,17 @@ def calibrate(
     base: HeaterParams,
     *,
     recovery_air: str = "heater_air_f",
+    evidence: HeatPumpEvidence | None = None,
 ) -> Calibration:
     """``base``'s heat pump refitted on ``history``: its performance
-    map, the hold at its starts and the overshoot at its stops from its
-    recoveries (``heat_pump_fit.fit_heat_pump``), the heat priced
-    against the loss of the tank ``base`` lays out, the air read from
-    ``recovery_air``. The tank's own terms are fitted on the history's
-    events (``sim_calibrate``, ``sim.tank_fit``): fit them first.
+    map and the overshoot at its stops from its recoveries
+    (``heat_pump_fit.fit_heat_pump``), the heat priced against the loss
+    of the tank ``base`` lays out, the air read from ``recovery_air``.
+    ``evidence`` is what it is fitted on, ``heat_pump_fit.evidence`` of
+    the history by default (``sim_calibrate`` reads the power at the
+    replay's condenser water, ``heat_pump_fit.in_condenser_water``).
+    The tank's own terms are fitted on the history's events
+    (``sim_calibrate``, ``sim.tank_fit``): fit them first.
 
     What could not be fitted keeps ``base``'s value, the best prior
     there is for the same product, and is named in the result's
@@ -564,9 +569,9 @@ def calibrate(
     from nwp500.sim import heat_pump_fit as hpf
 
     found = recoveries(history, air=recovery_air)
-    hp_fit = hpf.fit_heat_pump(
-        hpf.evidence(history, base, air=recovery_air), base.compressor
-    )
+    if evidence is None:
+        evidence = hpf.evidence(history, base, air=recovery_air)
+    hp_fit = hpf.fit_heat_pump(evidence, base.compressor)
     params = hpf.with_heat_pump(base, hp_fit)
     unfitted = [t for t in base.unfitted if t not in ("compressor", "power")]
     if hp_fit.heat is None or hp_fit.violations:

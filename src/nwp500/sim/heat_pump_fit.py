@@ -33,6 +33,7 @@ import numpy as np
 import pandas as pd
 
 from nwp500.sim import history_frame as hf
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.calibration import (
     DRAW_LEAD,
     REACHED_TOLERANCE_F,
@@ -524,6 +525,7 @@ _POWER_COLUMNS = (
     "gap_f",
     "mixed",
     "air_f",
+    "water_f",
     "power_w",
     "draw_free",
 )
@@ -536,8 +538,10 @@ def power_blocks(
     ``block_minutes`` within one phase (``recovery_frame``), the tank
     stratified or mixed: ``cycle``, ``start``, ``phase``, the probes'
     and the gap's means, ``mixed`` (every minute of it), ``air_f``,
-    ``power_w`` and the run's ``draw_free``. A block with a minute
-    unmetered is left out."""
+    ``water_f`` (the water the power is read at: the lower probe's
+    mean, until a replay places the condenser's,
+    ``in_condenser_water``), ``power_w`` and the run's ``draw_free``. A
+    block with a minute unmetered is left out."""
     rows: list[dict[str, object]] = []
     for g in _cycles(frame):
         phase = g["phase"].to_numpy()
@@ -558,6 +562,7 @@ def power_blocks(
                             "gap_f": float(s["gap_f"].mean()),
                             "mixed": bool(s["mixed"].all()),
                             "air_f": float(s["air_f"].mean()),
+                            "water_f": float(s["lower_f"].mean()),
                             "power_w": float(watts.mean()),
                             "draw_free": bool(s["draw_free"].iloc[0]),
                         }
@@ -586,8 +591,8 @@ CHECK_POINTS = 8
 class Evidence:
     """What the heat pump's parameters are fitted on, each in time
     order: ``climb_heat``'s stretches, ``power_blocks``' climb blocks
-    with their air, lower tank and power read, and the draw-free
-    run-ons (``run_ons``)."""
+    with their air, water and power read, and the draw-free run-ons
+    (``run_ons``)."""
 
     heat: pd.DataFrame
     power: pd.DataFrame
@@ -609,7 +614,7 @@ def evidence(
     )
     blocks = power_blocks(frame)
     power = blocks.loc[blocks["phase"] == "climb"].dropna(
-        subset=["air_f", "lower_f", "power_w"]
+        subset=["air_f", "water_f", "power_w"]
     )
     runs, _ = run_ons(frame)
     runs = runs.loc[runs["draw_free"].astype(bool)]
@@ -619,6 +624,27 @@ def evidence(
             for d in (heat, power, runs)
         )
     )
+
+
+def in_condenser_water(
+    found: Evidence, params: HeaterParams, record: tf.TankRecord
+) -> Evidence:
+    """``found`` with its power blocks read at the water the walk reads
+    the power map at, the condenser's (``tank_fit.condenser_water``,
+    on the record's replay with the tank ``params`` lay out), not the
+    lower probe's: the condenser wraps the water below the probe, which
+    a recovery leaves colder. A block the replay has no point in is
+    left out."""
+    blocks = found.power
+    if blocks.empty:
+        return found
+    span = timedelta(minutes=POWER_BLOCK_MINUTES)
+    starts = [
+        cast(datetime, pd.Timestamp(t).to_pydatetime()) for t in blocks["start"]
+    ]
+    water = tf.condenser_water(params, record, [(t, t + span) for t in starts])
+    power = blocks.assign(water_f=water).dropna(subset=["water_f"])
+    return replace(found, power=power.reset_index(drop=True))
 
 
 @dataclass(frozen=True)
@@ -681,10 +707,11 @@ def fit_heat_map(rows: pd.DataFrame) -> Plane | None:
 
 def fit_power_map(rows: pd.DataFrame) -> Plane | None:
     """The power's plane through ``Evidence.power``'s blocks, in the
-    air and the lower tank; None with fewer than ``MIN_POWER_BLOCKS``."""
+    air and the water they were read at (``power_blocks``' ``water_f``);
+    None with fewer than ``MIN_POWER_BLOCKS``."""
     if len(rows) < MIN_POWER_BLOCKS:
         return None
-    air, water, power = _columns(rows, "air_f", "lower_f", "power_w")
+    air, water, power = _columns(rows, "air_f", "water_f", "power_w")
     return _fit_plane(air, water, power, np.ones(len(rows)))
 
 
@@ -707,7 +734,7 @@ def power_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
     error, W; None with none."""
     if rows.empty:
         return None
-    air, water, power = _columns(rows, "air_f", "lower_f", "power_w")
+    air, water, power = _columns(rows, "air_f", "water_f", "power_w")
     got = np.array(
         [hp.power_w(c, a, w) for a, w in zip(air, water, strict=True)]
     )

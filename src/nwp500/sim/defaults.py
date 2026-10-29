@@ -113,25 +113,30 @@ def _nwp500_65() -> HeaterParams:
             ua_bottom_btu_hr_f=0.1675409344227829,
             ua_top_btu_hr_f=0.553916158090328,
         ),
-        # The performance map and run-on fitted on its record,
+        # The heat's map and the run-on fitted on its record,
         # 2025-12-28 to 2026-10-26 (``heat_pump_fit.fit_heat_pump``),
         # the heat against the two-zone tank's loss: refitted against
         # the loss above, from 2026-04-16, it moves 0.05 % at 65 °F air
         # and 120 °F water and under 0.2 % across its span (4,497
-        # BTU/h, +55.5 per °F of air, -16.1 per °F of water).
+        # BTU/h, +55.5 per °F of air, -16.1 per °F of water). The
+        # power's map fitted on 3,562 metered climb blocks of 211 runs,
+        # 2026-04-16 to 10-26, at the condenser's water on the record's
+        # replay through the tank above
+        # (``heat_pump_fit.in_condenser_water``), where the walk reads
+        # it: 4.5 °F under the lower probe on average.
         compressor=CompressorParams(
             heat_btu_h=4499.436604500702,
             heat_btu_h_per_air_f=55.49795247502065,
             heat_btu_h_per_water_f=-15.948333659761246,
             heat_btu_h_per_air_water_f=0.0,
-            power_w=401.7270566837221,
-            power_w_per_air_f=0.21405638109110056,
-            power_w_per_water_f=2.8460496649489793,
+            power_w=408.2483895084962,
+            power_w_per_air_f=1.0344922391969091,
+            power_w_per_water_f=2.7089582536797705,
             power_w_per_air_water_f=0.0,
             heat_domain_air_f=(61.0, 89.0),
             heat_domain_water_f=(114.0, 144.0),
-            power_domain_air_f=(45.0, 90.0),
-            power_domain_water_f=(73.0, 148.0),
+            power_domain_air_f=(53.0, 90.0),
+            power_domain_water_f=(68.0, 145.0),
             start_hold_after_min=(15.0, 60.0, 180.0, 720.0),
             start_hold_min=(0.0, 0.0, 0.0, 0.0, 0.0),
         ),

@@ -314,14 +314,16 @@ def _span(
     state: st.TankState,
     i: int,
     j: int,
+    path: list[tuple[datetime, st.TankState]] | None = None,
 ) -> st.TankState:
     """``state`` walked over minutes ``[i, j)`` of the record: split
-    where a second compressor run starts, so each walk has one."""
+    where a second compressor run starts, so each walk has one. The
+    walks' paths are added to ``path`` where it is given."""
     runs = _overlapping(record.compressor, i, j)
     if len(runs) > 1:
         cut = record.compressor[runs[1]][0]
-        state = _span(lay, params, record, state, i, cut)
-        return _span(lay, params, record, state, cut, j)
+        state = _span(lay, params, record, state, i, cut, path)
+        return _span(lay, params, record, state, cut, j, path)
     compressor = (
         _compressor(params, record, record.compressor[runs[0]], runs[0])
         if runs
@@ -357,6 +359,8 @@ def _span(
         ],
         valve=(d.delivery_intercept_f, d.delivery_slope),
     )
+    if path is not None:
+        path.extend(walked.path)
     return walked.state
 
 
@@ -383,11 +387,29 @@ def replay(
     (``stratified.assimilate``) every ``ASSIMILATE_EVERY`` they are
     read. None when the record does not reach back to a reading of both
     probes and the air before ``until``."""
-    step = ASSIMILATE_EVERY // MINUTE
     end = record.minute(until)
     if end <= 0 or end > len(record):
         return None
-    i = max(0, record.minute(until - span))
+    return _replayed(
+        lay, params, record, record.minute(until - span), end, gain=gain
+    )
+
+
+def _replayed(
+    lay: st.Layout,
+    params: HeaterParams,
+    record: TankRecord,
+    first: int,
+    end: int,
+    *,
+    gain: float = 1.0,
+    path: list[tuple[datetime, st.TankState]] | None = None,
+) -> st.TankState | None:
+    """``replay``'s walk from minute ``first`` to ``end``, its walks'
+    paths added to ``path`` where it is given; None with no reading of
+    both probes and the air before ``end``."""
+    step = ASSIMILATE_EVERY // MINUTE
+    i = max(0, first)
     # On the clock's grid, as every walk is.
     i += (record.minute(datetime(1970, 1, 1, tzinfo=UTC)) - i) % step
     while i < end and not _known(record, i):
@@ -399,7 +421,7 @@ def replay(
     )
     while i < end:
         j = min(end, i + step)
-        state = _span(lay, params, record, state, i, j)
+        state = _span(lay, params, record, state, i, j, path)
         if j < len(record) and _known(record, j):
             state = st.mix(
                 st.assimilate(
@@ -429,6 +451,34 @@ def start_state(
     if state is None:
         return st.mix(st.estimate(lay, upper_f, lower_f))
     return st.mix(st.assimilate(lay, state, upper_f, lower_f))
+
+
+def condenser_water(
+    params: HeaterParams,
+    record: TankRecord,
+    spans: Sequence[tuple[datetime, datetime]],
+) -> list[float]:
+    """The water the condenser reads over each of ``spans``
+    (``stratified.condenser_water_f``), °F: its mean over the span's
+    points on one ``replay`` through the record, from ``REPLAY`` before
+    the first span to the last's end; NaN for a span the replay has no
+    point in."""
+    if not spans:
+        return []
+    lay = st.layout(params)
+    first = min(a for a, _ in spans)
+    end = min(len(record), record.minute(max(b for _, b in spans)) + 1)
+    path: list[tuple[datetime, st.TankState]] = []
+    _replayed(
+        lay, params, record, record.minute(first - REPLAY), end, path=path
+    )
+    times = [t for t, _ in path]
+    water = [st.condenser_water_f(lay, s) for _, s in path]
+    out: list[float] = []
+    for a, b in spans:
+        lo, hi = bisect_left(times, a), bisect_left(times, b)
+        out.append(math.fsum(water[lo:hi]) / (hi - lo) if hi > lo else math.nan)
+    return out
 
 
 # ── the events and their errors ──

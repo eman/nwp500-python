@@ -27,9 +27,9 @@
     "heat_btu_h_per_air_f": 55.49795247502065,
     "heat_btu_h_per_water_f": -15.948333659761246,
     "heat_btu_h_per_air_water_f": 0.0,
-    "power_w": 401.7270566837221,
-    "power_w_per_air_f": 0.21405638109110056,
-    "power_w_per_water_f": 2.8460496649489793,
+    "power_w": 408.2483895084962,
+    "power_w_per_air_f": 1.0344922391969091,
+    "power_w_per_water_f": 2.7089582536797705,
     "power_w_per_air_water_f": 0.0,
     "heat_domain_air_f": [
       61.0,
@@ -40,12 +40,12 @@
       144.0
     ],
     "power_domain_air_f": [
-      45.0,
+      53.0,
       90.0
     ],
     "power_domain_water_f": [
-      73.0,
-      148.0
+      68.0,
+      145.0
     ],
     "start_hold_after_min": [
       15.0,

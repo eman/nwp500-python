@@ -186,6 +186,7 @@ Hot water and calibration
    :members: recovery_frame, start_holds, run_ons, RunOnFit, climb_heat,
       power_blocks, PHASES, CLIMB_HELD, MIXED_BELOW_F, MIXED_ABOVE_F,
       MIN_STRETCH_MINUTES, POWER_BLOCK_MINUTES, Evidence, evidence,
+      in_condenser_water,
       Plane, fit_heat_map, fit_power_map, heat_map_error,
       power_map_error, fit_overshoot,
       overshoot_error, violations, with_planes, HeatPumpFit,
@@ -281,7 +282,8 @@ The pieces the entry points are built from.
       Flowing, Delivered, IDLE_STEP, ACTIVE_STEP, CUT_RESOLUTION, NO_VALVE
 
 .. automodule:: nwp500.sim.tank_fit
-   :members: TankRecord, tank_record, replay, start_state, Coast, errors,
+   :members: TankRecord, tank_record, replay, start_state, condenser_water,
+      Coast, errors,
       rmse, event_rmse, fit, TankFit, TERMS, CONDENSER_TERMS, term_values,
       with_terms, ASSIMILATE_EVERY, MINUTE
 

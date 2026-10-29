@@ -169,7 +169,9 @@ fitted or kept the base's value, and why:
        power, it claims more than a heat pump can.
    * - Power at 65 °F air, 120 °F water, and per °F of each
      - The heater's own power readings in 10-minute blocks of the
-       climbs; it needs 30. The error is the RMS power error, W.
+       climbs, each at the condenser's water on the record's replay
+       (the lower probe's without the air to replay with); it needs
+       30. The error is the RMS power error, W.
    * - Run-on overshoot
      - The lower probe past the target at the stop: the median of 5
        draw-free runs or more.
