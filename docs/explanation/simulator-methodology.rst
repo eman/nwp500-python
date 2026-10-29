@@ -58,7 +58,10 @@ element's dead time ending, a draw window's edge. It also looks ahead
 along the tank's predicted path for the events the tank itself causes:
 the lower probe falling to the heater's start threshold, the upper
 probe falling to where an element mode starts again, a recovery reaching its
-target. The nearest of these is the next event.
+target. The nearest of these is the next event. A coast looks at most
+3 hours ahead, to a 10-minute mark of the clock, and goes on from
+there, so a simulation's cost grows with its span, not its square; the
+tank split at such a mark is the tank walked whole.
 
 **Between events.** The walk moves the tank to that instant with the
 physics: a coast when nothing heats, a recovery when the compressor

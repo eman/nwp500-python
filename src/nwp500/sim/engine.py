@@ -54,6 +54,7 @@ reconciliation against the record tests.
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -79,6 +80,7 @@ from nwp500.sim.controller import (
 )
 from nwp500.sim.params import ControllerParams, ElementParams
 from nwp500.sim.physics.element import HeaterMode
+from nwp500.sim.physics.stratified import IDLE_STEP
 from nwp500.sim.tank_physics import (
     CompressorRun,
     Delivered,
@@ -110,6 +112,14 @@ _INSTANT = timedelta(microseconds=1)
 _ENTRY_MINUTE = timedelta(minutes=1)
 #: How far ahead a recovery is walked to judge the TOU cap on it.
 _RECOVERY_AHEAD = timedelta(hours=16)
+#: How far a coast walks ahead at most, to the clock's ``IDLE_STEP``
+#: grid at or before it: the heater's own start is found on the walk
+#: after it, and the walk is taken again to there, so a coast walked to
+#: a distant event would cost the horizon at every start. A split on
+#: the grid is a step's end, so the tank walked in pieces is the tank
+#: walked whole.
+_COAST_AHEAD = timedelta(hours=3)
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 #: A walk that has not reached the horizon after this many steps is a
 #: bug, not a long simulation (a week of 10-minute events is ~1,000).
 _MAX_STEPS = 20_000
@@ -330,6 +340,10 @@ def _layers_of(state: object) -> tuple[float, ...] | None:
 #: The heater's setpoint resolution, °C: the NWP500 holds a setpoint in
 #: half degrees Celsius, so 146 °F is held as 146.3 (2026-09-20).
 SETPOINT_RESOLUTION_C = 0.5
+
+
+def _onset(draw: Draw) -> datetime:
+    return draw[0]
 
 
 def quantise(f: float, resolution_c: float = SETPOINT_RESOLUTION_C) -> float:
@@ -812,14 +826,27 @@ class _Engine:
             )
         self._adopt(points[-1])
 
+    def _draws_in(self, start: datetime, end: datetime) -> slice:
+        """Where the draws with onsets in ``[start, end)`` sit."""
+        return slice(
+            bisect_left(self.draws, start, key=_onset),
+            bisect_left(self.draws, end, key=_onset),
+        )
+
     def _take_draws(self, start: datetime, end: datetime) -> list[Draw]:
         """Remove and return the draws with onsets in ``[start, end)``."""
-        taken = [d for d in self.draws if start <= d[0] < end]
-        self.draws = [d for d in self.draws if not start <= d[0] < end]
+        at = self._draws_in(start, end)
+        taken = self.draws[at]
+        del self.draws[at]
         return taken
 
     def _peek_draws(self, end: datetime) -> list[Draw]:
-        return [d for d in self.draws if self.t <= d[0] < end]
+        return self.draws[self._draws_in(self.t, end)]
+
+    def _next_draw_after(self, at: datetime) -> datetime | None:
+        """The first draw's onset after ``at``, if any is left."""
+        k = bisect_right(self.draws, at, key=_onset)
+        return self.draws[k][0] if k < len(self.draws) else None
 
     def _lag(self, zone: Literal["upper", "lower"]) -> timedelta:
         """How long an element's heat takes to reach the water."""
@@ -977,7 +1004,8 @@ class _Engine:
                 self._recovery_done()
                 continue
             nxt = end if cycle.stop_at is None else min(end, cycle.stop_at)
-            later = [d[0] for d in self.draws if self.t < d[0] < nxt]
+            draw = self._next_draw_after(self.t)
+            later = [] if draw is None or draw >= nxt else [draw]
             later += [x for w in self.withheld for x in w if self.t < x < nxt]
             nxt = min([nxt, *later])
             stretch = self._advance(nxt, stop=self._stop())
@@ -1234,7 +1262,12 @@ class _Engine:
         """The tank with no recovery running, to ``end``, or to where
         the heater starts itself, an element's later start reads its
         zone, the running element reaches its off point, or the water
-        leaves or enters the heat pump's range, whichever is first."""
+        leaves or enters the heat pump's range, whichever is first, or
+        to ``_COAST_AHEAD`` on, the walk going on from there."""
+        ahead = _EPOCH + IDLE_STEP * math.floor(
+            (self.t + _COAST_AHEAD - _EPOCH) / IDLE_STEP
+        )
+        end = min(end, ahead)
         stretch = self._advance(end, self._peek_draws(end), stop=self._stop())
         at: datetime | None = None
         own = self._trigger_ahead(stretch)

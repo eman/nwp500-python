@@ -949,10 +949,7 @@ class Books:
 
     def __add__(self, other: Books) -> Books:
         return Books(
-            *(
-                getattr(self, f.name) + getattr(other, f.name)
-                for f in fields(self)
-            )
+            *(getattr(self, n) + getattr(other, n) for n in _BOOK_FIELDS)
         )
 
     @property
@@ -965,6 +962,11 @@ class Books:
             - self.flowing_btu
             - self.drawn_btu
         )
+
+
+#: ``Books``' fields in order, read once: a walk adds books at every
+#: step.
+_BOOK_FIELDS = tuple(f.name for f in fields(Books))
 
 
 @dataclass(frozen=True)
@@ -1013,6 +1015,20 @@ class _Walk:
     flowing: tuple[Flowing, ...]
     draws: tuple[Delivered, ...]
     valve: tuple[float, float]
+    #: The draws at each instant some are, in order of size.
+    at: dict[datetime, tuple[Delivered, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        at: dict[datetime, list[Delivered]] = {}
+        for d in self.draws:
+            at.setdefault(d.at, []).append(d)
+        object.__setattr__(
+            self,
+            "at",
+            {t: tuple(sorted(ds, key=lambda d: d.gal)) for t, ds in at.items()},
+        )
 
     def instants(self, start: datetime, end: datetime) -> list[datetime]:
         """Where a step must end: wherever what acts on the tank
@@ -1048,9 +1064,7 @@ class _Walk:
     def drawn(self, t: datetime, state: TankState) -> tuple[TankState, Books]:
         """The draws at ``t`` taken, in order of size."""
         books = Books()
-        for d in sorted(
-            (d for d in self.draws if d.at == t), key=lambda d: d.gal
-        ):
+        for d in self.at.get(t, ()):
             out = draw(self.lay, state, d.gal, d.inflow_f, self.valve)
             state = out.state
             books += Books(
@@ -1188,7 +1202,7 @@ def walk(
     while t < end:
         step = active_step if w.active(t) else idle_step
         nxt = min([_grid_after(t, step), end, *(x for x in instants if x > t)])
-        if any(d.at == t for d in w.draws):
+        if t in w.at:
             taken, b = w.drawn(t, state)
             drops.append((t, state, taken))
             if stop is not None and stop(taken):
