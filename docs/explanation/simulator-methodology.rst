@@ -147,7 +147,9 @@ the bottom), weighted by :math:`e^{-d/s}` with the distance :math:`d`
 along the column and its spread :math:`s`, and the lower one reads a
 fixed offset above them. A walk that starts from the two probes alone
 builds a profile they read back exactly (``estimate``) and says
-``tank_profile_estimated``.
+``tank_profile_estimated``. While the compressor heats, the real
+probes also read above the water, about 0.5 degF the upper and 0.9 the
+lower (:doc:`recovery-speed`); the model's probes do not.
 
 **Standby.** Each layer relaxes toward the air beside the heater, at
 :math:`T_a`, through its share of the sides' loss, the bottom layer
@@ -202,6 +204,12 @@ air and 120 degF water (``physics.heat_pump``):
 where :math:`T_c` is the water the condenser heats: the layers it
 wraps, weighted by how much of each.
 
+The power is fitted on the lower probe's reading
+(``heat_pump_fit.power_blocks``) but read here at :math:`T_c`, which is
+below it while the tank is stratified: over the held-out draw-free
+recoveries a recovery's mean power comes to 392 W against the 417 W
+metered.
+
 Each is read with the air and the water held to the span it was
 fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
 the power's 45 to 90 degF air and 73 to 148 degF water, on the record),
@@ -245,7 +253,10 @@ compressor already running.
 **The run-on.** The heat pump does not stop the moment the lower probe
 reaches its target: on the record it stops a median 0.9 degF past it
 (``ControllerParams.hp_stop_overshoot_f``). The climb is integrated to
-the target plus that overshoot. The TOU window's cap on the lower probe
+the target plus that overshoot. The overshoot is the probe's reading,
+which runs high while the compressor heats, and the model's probe
+reads the water, so a long recovery's water ends warmer than the real
+one's and the recovery runs a few minutes long (:doc:`simulator`). The TOU window's cap on the lower probe
 is still judged at the target.
 
 **The operating range.** The heat pump runs only with the air at the

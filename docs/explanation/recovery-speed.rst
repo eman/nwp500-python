@@ -307,6 +307,17 @@ heating rate, stratified tank included, rose about 0.75 % per degF of
 air (1.18x from 53.6 to 75.1 degF). The compressor's power mid-cycle
 was flat across the air range, a median 392-431 W.
 
+**The heat pump does not measurably cool its room.** Over 230 runs of
+30 minutes or more with no element, 2026-04-16 to 2026-10-26, the air
+beside the heater rose 2.09 degF (1.46-2.73, 90 % bootstrap) from the
+10 minutes before the start to the run's last 10 minutes. Over 185
+stretches of the same length at the same hour on a nearby day, with
+nothing running, it rose 2.28 degF (1.71-2.87). The difference, 0.19
+degF at the end and 0.49 degF over the run, is inside both intervals.
+At 55.5 BTU/hr per degF, 0.49 degF is 0.6 % of the heat, about a
+minute on a three-hour recovery. The simulator reads the air as given
+and does not cool it.
+
 The air matters more to the electricity than to the time. Over whole
 recoveries, metered (below), heat per unit of electricity was 2.50 with
 the air below 65 degF, 2.84 between 65 and 75 degF, and 3.12 above
@@ -409,6 +420,19 @@ run, 2026-09-21; see :doc:`what-starts-a-recovery`).
 
 Inside a TOU window the device ends a recovery short of the setpoint
 instead (see :doc:`tou-recovery-cap`).
+
+**The probes read high while the compressor heats.** In the 5 minutes
+after a quiet stop (no element, circulation, draw or restart from 5
+minutes before the start to 15 minutes after the stop), the upper
+probe steps down 0.54 degF and the lower 0.89 degF, each net of its
+standby fall over the 10 minutes after, and then holds: 74 stops,
+2026-04-24 to 2026-10-22. The water changes little in 5 minutes, so the
+step is what each probe reads above the water while the compressor
+runs. It is smaller after a short run: 0.25 and 0.30 degF after under
+10 minutes of heating (12 stops), 0.56 and 0.59 after 10-40 minutes
+(15), 0.51 and 0.91 after 40 minutes or more (47). On a long recovery
+the lower probe's step is the size of the overshoot above, so the water
+at the stop is close to the setpoint.
 
 
 Limits
