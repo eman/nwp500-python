@@ -431,9 +431,9 @@ stops, 2026-04-24 to 2026-10-22. The water changes little in 5 minutes,
 so the step is how much higher each probe reads while the compressor
 runs than at rest. It is smaller after a short run: 0.25 and 0.30 degF
 after under 10 minutes of heating (12 stops), 0.56 and 0.59 after 10-40
-minutes (15), 0.51 and 0.91 after 40 minutes or more (47). On a long
-recovery the lower probe's step is the size of the overshoot above, so
-the water at the stop is close to the setpoint.
+minutes (15), 0.51 and 0.91 after 40 minutes or more (47). After 40
+minutes or more the lower probe's step is the size of the overshoot
+above, so the water at the stop is close to the setpoint.
 
 
 Limits
