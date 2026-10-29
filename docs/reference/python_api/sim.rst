@@ -192,7 +192,7 @@ Hot water and calibration
       overshoot_error, violations, with_planes, HeatPumpFit,
       fit_heat_pump, with_heat_pump, MIN_HEAT_STRETCHES,
       MIN_POWER_BLOCKS, MIN_RUN_ONS, CARNOT_SHARE,
-      MIN_POWER_W, CHECK_POINTS
+      MIN_POWER_W, CHECK_POINTS, HEAT_SLOPE_SIGNS, POWER_SLOPE_SIGNS
 
 .. automodule:: nwp500.sim.history_frame
    :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
@@ -272,7 +272,8 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.physics.heat_pump
    :members: heat_btu_h, power_w, cop, evaporator_btu_h, start_hold_min,
-      carnot_cop, heat_air_outside, HEAT_MAP_OUT_OF_DOMAIN
+      carnot_cop, refrigerant_carnot_cop, EVAPORATOR_APPROACH_F,
+      heat_air_outside, HEAT_MAP_OUT_OF_DOMAIN
 
 .. automodule:: nwp500.sim.physics.stratified
    :members: TankState, Layout, layout, energy_btu, mix, lose, conduct,

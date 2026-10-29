@@ -589,7 +589,11 @@ def _keep_better_heat_pump(
     runs, held_runs = _split_frame(found.runs, not open_heat)
     held = hpf.Evidence(held_heat, held_power, held_runs)
     base = params.compressor
-    refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, runs), base)
+    envelope = (
+        params.controller.hp_air_range_f,
+        params.controller.hp_water_range_f,
+    )
+    refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, runs), base, *envelope)
     # What each plane claims with the other it would be applied with.
     found_claims: dict[str, tuple[str, ...]] = {}
 
@@ -619,7 +623,7 @@ def _keep_better_heat_pump(
                     )
                 )
             return False
-        claims = hpf.violations(candidate)
+        claims = hpf.violations(candidate, *envelope)
         found_claims[group] = claims
         if claims:
             if term not in unfitted:

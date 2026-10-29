@@ -260,6 +260,33 @@ class TestCalibrate:
         assert site.params.unfitted == ("compressor", "power", "tank")
         assert len(got.recoveries) == 1
 
+    def test_the_fit_is_checked_where_this_heater_runs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The heat pump's claims are checked over the base's own
+        # envelope, not the manual's.
+        from nwp500.sim import heat_pump_fit as hpf
+
+        seen: list[tuple[Any, ...]] = []
+        fit = hpf.fit_heat_pump
+
+        def spy(*args: Any) -> hpf.HeatPumpFit:
+            seen.append(args[2:])
+            return fit(*args)
+
+        monkeypatch.setattr(hpf, "fit_heat_pump", spy)
+        base = default_params()
+        base = replace(
+            base,
+            controller=replace(
+                base.controller,
+                hp_air_range_f=(50.0, 100.0),
+                hp_water_range_f=(60.0, 140.0),
+            ),
+        )
+        cal.calibrate(recovery_history([(2, 100, 100.0)]), base)
+        assert seen == [((50.0, 100.0), (60.0, 140.0))]
+
     def test_what_was_not_fitted_says_so_in_its_answers(self) -> None:
         got = cal.calibrate(
             recovery_history([(2, 100, 100.0)]), default_params()

@@ -307,10 +307,10 @@ class CompressorParams:
     The heat is what the tank gains plus its standby loss: the
     condenser's output. The heat taken from the air is the heat less
     the electricity (``heat_pump.evaporator_btu_h``), so the cycle
-    conserves energy by construction. The maps are read with the air
-    and the water held to the span each was fitted on
-    (``heat_domain_*``, ``power_domain_*``): a plane is not carried past
-    the record it was fitted on.
+    conserves energy by construction. The maps are read along their
+    planes past the span each was fitted on (``heat_domain_*``,
+    ``power_domain_*``) as within it; a recovery whose air is outside
+    the heat's span says so (``heat_map_out_of_domain``).
 
     Defaults: one NWP500-65's record, 2025-12-28 to 2026-10-26
     (``heat_pump_fit``, ``docs/explanation/recovery-speed.rst``).
@@ -346,8 +346,9 @@ class CompressorParams:
     power_w_per_air_water_f: float = field(
         default=0.0, metadata=_p(DEFAULT, "W/°F²")
     )
-    #: The air and the water each map is read at are held to these, °F:
-    #: the span of the evidence it was fitted on, to the whole degree.
+    #: The span of the air and the water each map was fitted on, to the
+    #: whole degree, °F: read outside it, a map is its plane carried
+    #: past its evidence.
     heat_domain_air_f: tuple[float, float] = field(
         default=(61.0, 89.0), metadata=_p(FITTED, "°F", note=_HEAT_MAP)
     )

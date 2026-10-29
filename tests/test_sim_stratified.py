@@ -803,6 +803,59 @@ class TestTheWalk:
         assert first.compressor_water_f_h == pytest.approx(stirred * hours)
         assert w.steps[0].compressor_h == 0.0
 
+    def test_a_cold_bottom_reads_the_map_at_the_envelopes_edge(
+        self,
+    ) -> None:
+        # The controller judges the water at the lower probe; a cold
+        # bottom can leave the condenser's colder than the envelope it
+        # allows the heat pump (50 °F) while the compressor runs. A map
+        # checked over the envelope, whose power is negative at 35 °F
+        # water, still draws its power at 50 °F there.
+        c = replace(
+            P.compressor,
+            heat_btu_h=2000.0,
+            heat_btu_h_per_air_f=0.0,
+            heat_btu_h_per_water_f=0.0,
+            power_w=420.0,
+            power_w_per_air_f=0.0,
+            power_w_per_water_f=5.0,
+        )
+        assert S.power_w(c, 65.0, 35.0) < 0.0
+        assert L.map_water_f == P.controller.hp_water_range_f
+        cold = S.TankState(tuple([35.0] * 6 + [125.0] * (L.layers - 6)))
+        assert S.condenser_water_f(L, cold) < 40.0
+        w = S.walk(
+            L,
+            cold,
+            T0,
+            T0 + timedelta(minutes=10),
+            air_f=_air,
+            heating=S.Heating(
+                compressor=S.Compressor(
+                    params=c, on_at=T0, heats_at=T0, stirs=False
+                )
+            ),
+        )
+        assert w.books.compressor_wh == pytest.approx(
+            S.power_w(c, 65.0, 50.0) * w.books.compressor_h
+        )
+        assert w.books.compressor_water_f_h == pytest.approx(
+            50.0 * w.books.compressor_h
+        )
+        free = S.walk(
+            dataclasses.replace(L, map_water_f=None),
+            cold,
+            T0,
+            T0 + timedelta(minutes=10),
+            air_f=_air,
+            heating=S.Heating(
+                compressor=S.Compressor(
+                    params=c, on_at=T0, heats_at=T0, stirs=False
+                )
+            ),
+        )
+        assert free.books.compressor_wh < 0.0
+
     def test_the_heat_pump_heats_by_its_map(self) -> None:
         w = _day(S.estimate(L, 125.0, 100.0), draws=(), flowing=())
         cop = w.books.compressor_btu / (w.books.compressor_wh * BTU_PER_WH)

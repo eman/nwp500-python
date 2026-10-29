@@ -148,6 +148,15 @@ class Layout:
     lower_probe_offset_f: float = 0.0
     #: The column's axial conductance, end to end, BTU/hr·°F.
     conductance_btu_hr_f: float
+    #: The air and the condenser's water the heat pump's maps are read
+    #: over, °F: the controller's envelope (``hp_air_range_f``,
+    #: ``hp_water_range_f``), where a fit is checked
+    #: (``heat_pump_fit.violations``). The controller judges the water
+    #: at the lower probe, and a cold bottom can leave the condenser's
+    #: below it while the compressor runs; a read past either edge is
+    #: the edge's. None: read along the planes wherever.
+    map_air_f: tuple[float, float] | None = None
+    map_water_f: tuple[float, float] | None = None
     #: Each layer's volume, gal, and its heat capacity, BTU/°F.
     layer_gal: float = field(init=False, repr=False)
     layer_btu_f: float = field(init=False, repr=False)
@@ -319,6 +328,8 @@ def layout(params: HeaterParams) -> Layout:
         upper_probe_spread_gal=t.upper_probe_spread_gal,
         lower_probe_spread_gal=t.lower_probe_spread_gal,
         lower_probe_offset_f=t.lower_probe_offset_f,
+        map_air_f=params.controller.hp_air_range_f,
+        map_water_f=params.controller.hp_water_range_f,
     )
 
 
@@ -922,6 +933,12 @@ class Walked:
     drops: tuple[tuple[datetime, TankState, TankState], ...] = ()
 
 
+def _within(value: float, bounds: tuple[float, float] | None) -> float:
+    if bounds is None:
+        return value
+    return min(max(value, bounds[0]), bounds[1])
+
+
 def _overlap_h(
     a: datetime, b: datetime, start: datetime, end: datetime | None
 ) -> float:
@@ -1012,15 +1029,16 @@ class _Walk:
                 and self.heating.credited
             ):
                 state = stir(lay, state)
-            water = condenser_water_f(lay, state)
+            water = _within(condenser_water_f(lay, state), lay.map_water_f)
+            read_air = _within(air, lay.map_air_f)
             q = (
                 credit
                 * c.scale
-                * heat_btu_h(c.params, air, water)
+                * heat_btu_h(c.params, read_air, water)
                 * _overlap_h(a, b, c.heats_at, c.off_at)
             )
             on_h = _overlap_h(a, b, c.on_at, c.off_at)
-            wh = power_w(c.params, air, water) * on_h
+            wh = power_w(c.params, read_air, water) * on_h
             heat = [
                 x + y for x, y in zip(heat, condenser_heat(lay, q), strict=True)
             ]
@@ -1086,7 +1104,8 @@ def walk(
     walk whole. Within a step the draws at its start are taken, the
     compressor's start stirs the bottom where its heating begins there
     (``stir``), then the heat goes in (the condenser's by its map at the
-    air and the water at the step's start), the water flows, the jacket
+    air and the water at the step's start, held to the envelope
+    ``Layout.map_air_f`` and ``map_water_f``), the water flows, the jacket
     loses, the layers conduct, and inversions turn over. ``stop``, read
     after each step,
     ends the walk at the first instant it holds, to

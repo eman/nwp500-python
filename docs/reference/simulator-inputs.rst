@@ -704,34 +704,36 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - Range over retrains
    * - ``loss.ua_side_btu_hr_f``, ``ua_bottom_btu_hr_f``,
        ``ua_top_btu_hr_f``; ``tank.conductance_btu_hr_f``
-     - 3.14, 0.168, 0.554 BTU/hr per degF; 0.495 BTU/hr per degF
+     - 3.10, 0.445, 0.556 BTU/hr per degF; 0.500 BTU/hr per degF
      - The layered tank's terms, fitted together
        (``sim_calibrate.calibrate_changes``, ``sim.tank_fit``) on 266
        quiet windows, 254 metered draws and 118 recoveries, 2026-04-16
        to 10-26, each started from the record's replay of the day
-       before it, with the compressor's start stirring the layers and
-       no hold imposed, against a sensor of the air beside the heater:
-       both probes' error every 10 minutes, 2.52 degF RMS over the
-       events. Fitted on the record to 2026-09-18, they scored on the
-       59 quiet windows after it 0.202 and 0.534 degF RMS (upper,
-       lower), and on 46 draws 0.285 and 2.28
-       (:doc:`/explanation/simulator`). The bottom's loss fell from
-       0.887 with the hold imposed: the start's stir brings the
-       bottom's cold to the lower probe, and the probes' record wants
-       little of it from a stand.
+       before it, with the compressor's start stirring the layers, no
+       hold imposed and the heat pump's maps read along their planes,
+       against a sensor of the air beside the heater: both probes'
+       error every 10 minutes, 2.50 degF RMS over the events. Fitted on
+       the record to 2026-09-18, they scored on the 59 quiet windows
+       after it 0.199 and 0.494 degF RMS (upper, lower), and on 46
+       draws 0.289 and 2.16 (:doc:`/explanation/simulator`). The
+       bottom's loss fell from 0.887 with the hold imposed to 0.168
+       with the maps held at their spans' edges: the start's stir
+       brings the bottom's cold to the lower probe. Read along its
+       plane, the heat at the cold water a recovery starts from is
+       more than the edge's, and the bottom gives back 0.445.
      - 2026-10-27 to 10-29
    * - ``tank.upper_probe_height``, ``lower_probe_height``,
        ``upper_probe_spread_gal``, ``lower_probe_spread_gal``,
        ``lower_probe_offset_f``
-     - 0.902, 0.463; 5.97, 2.06 gal; 1.01 degF
-     - The same fit. The upper probe's 0.902 puts 6.2 gal of the 63.2
+     - 0.903, 0.469; 5.65, 2.14 gal; 1.08 degF
+     - The same fit. The upper probe's 0.903 puts 6.1 gal of the 63.2
        above it, against the 5.3-7.3 gal the delivered water lags it by
        (:doc:`/explanation/draws`).
      - 2026-10-27 to 10-29
    * - ``tank.inlet_mix_gal``, ``tank.condenser_span``
-     - 14.3 gal; 0.143-0.351
+     - 14.2 gal; 0.148-0.323
      - The same fit, the span on the recoveries. The span's top sits
-       under the lower probe (0.463): the start's stir pools the water
+       under the lower probe (0.469): the start's stir pools the water
        under it, and the probe, above the pool, holds while the
        condenser heats it back. With the hold imposed it was
        0.147-0.576, over the probe.
@@ -748,23 +750,23 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        (:doc:`/explanation/recovery-speed`).
      - First fitted 2026-10-26
    * - ``compressor.power_w`` and its slopes
-     - 408.6 W at 65 degF air and 120 degF water; +1.04 per degF of
+     - 408.9 W at 65 degF air and 120 degF water; +1.03 per degF of
        air, +2.70 per degF of the condenser's water
      - 3,562 ten-minute blocks of metered climbs over 211 runs,
        2026-04-16 to 10-26, each at the condenser's water on the
        record's replay (``heat_pump_fit.in_condenser_water``), where the
-       walk reads the map: 68.4 to 144.3 degF, 4.7 degF under the lower
-       probe on average, the air 53.6 to 89.3 degF: 12.9 W RMS. Read
+       walk reads the map: 67.5 to 144.0 degF, 4.8 degF under the lower
+       probe on average, the air 53.6 to 89.3 degF: 13.0 W RMS. Read
        there, the map fitted on the lower probe (401.7 W, +0.21, +2.85)
-       priced these blocks at 407.2 W against the 418.2 W metered, at
-       17.8 W RMS. The runs before 2026-04-16 have no record to replay.
+       priced these blocks at 406.9 W against the 418.2 W metered, at
+       18.1 W RMS. The runs before 2026-04-16 have no record to replay.
      - 2026-10-29
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``
-     - 61-89 and 114-144 degF; 53-90 and 68-145 degF
+     - 61-89 and 114-144 degF; 53-90 and 67-145 degF
      - The span each map was fitted over, to the whole degree. Each is
-       read with the air and the water held to its own, so a recovery
-       past an edge takes the edge's value.
+       read along its plane past it as within it; a recovery whose air
+       is outside the heat's span says ``heat_map_out_of_domain``.
      - Set by each fit
    * - ``compressor.start_hold_min`` by ``start_hold_after_min``
      - 0 min in every band
@@ -919,7 +921,7 @@ with. Heights are shares of the volume from the bottom.
    * - ``tank.inlet_mix_gal``
      - 9 gal
      - The water an inflow mixes with as it enters. A starting value;
-       the fit finds 14.3 gal.
+       the fit finds 14.2 gal.
    * - ``tank.conductance_btu_hr_f``
      - 0.89 BTU/hr per degF
      - The water column's, end to end (10.7 between each pair of twelve
@@ -1051,7 +1053,7 @@ The ones about inputs and parameters:
    * - ``heat_map_out_of_domain``
      - A recovery's air is outside the span the heat pump's heat was
        fitted on (``compressor.heat_domain_air_f``), so its heat is the
-       span's edge's.
+       plane carried past the record.
 
 The ones about the heater's own rules, each resting on the device runs
 :doc:`/explanation/what-starts-a-recovery`,

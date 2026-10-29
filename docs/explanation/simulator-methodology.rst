@@ -209,25 +209,52 @@ The power is fitted where it is read, at :math:`T_c`: each metered
 block at the condenser's water on the record's replay
 (``heat_pump_fit.in_condenser_water``), which is below the lower probe,
 by the probe's fixed offset in a mixed tank and by more while the tank
-is stratified (4.7 degF on average over the record's climbs). Fitted on
+is stratified (4.8 degF on average over the record's climbs). Fitted on
 the lower probe's reading and read at :math:`T_c`, it priced the
-record's climbs at 407.2 W against the 418.2 W metered.
+record's climbs at 406.9 W against the 418.2 W metered.
 
-Each is read with the air and the water held to the span it was
-fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
-the power's 53 to 90 degF air and 68 to 145 degF water, on the record),
-so a recovery outside it takes the nearest edge rather than
-extrapolating. The heat is fitted on a mixed tank, where the tank's
-mean and the condenser's water are within a few degrees; while the tank
-is stratified the condenser's water is below the heat's span and the
-heat is the edge's.
+Each is read along its plane over the envelope the heat pump runs in
+(the controller's 41 to 113 degF air and 50 to 149 degF water, the
+region a fit is checked over, below), past the span it was fitted over (the heat's 61 to 89 degF air and 114 to 144 degF
+water, the power's 53 to 90 degF air and 67 to 145 degF water, on the
+record) as within it. The heat is fitted on a mixed tank, where the
+tank's mean and the condenser's water are within a few degrees; while
+the tank is stratified the condenser's water is below the heat's span,
+and the heat there is the plane's. Held at the span's edges instead, a
+45 degF air would heat as 61 degF does, and the heat and the power,
+held at different water, would give a COP that bends where neither was
+measured. The controller judges the water at the lower probe, and a
+cold bottom can leave the condenser's below the envelope while the
+compressor runs; there the maps are read at the envelope's edge
+(``stratified.Layout.map_air_f``, ``map_water_f``), so no read falls
+where no fit was checked. A recovery whose air is outside the heat's
+span says so (``heat_map_out_of_domain``).
+
+A fit's slopes take the sign the cycle gives them: warmer air boils the
+refrigerant warmer and denser, so the heat rises with :math:`T_a`
+(:math:`q_a \ge 0`); warmer water condenses it hotter, so the heat
+falls and the compressor's work rises with :math:`T_c` (:math:`q_w \le
+0`, :math:`p_w \ge 0`). The power in the air is left free: a
+compressor's work rises or falls with the denser gas by how far it
+lifts it. The plane is the least-squares one so constrained: of the
+planes with each slope free or pinned at 0, the best that keeps every
+sign (``heat_pump_fit.HEAT_SLOPE_SIGNS``, ``POWER_SLOPE_SIGNS``).
+
 The COP is :math:`\dot Q_h / 3.412 P`, and the heat taken from the air
 is :math:`\dot Q_h - 3.412 P`: what the condenser gives is what the
 evaporator takes plus the electricity, by construction. A fitted map
-must claim nowhere over its domain a COP above 0.6 of Carnot's between
-the air and the water, heat given to the air, or under 50 W; one that
-does is not applied. Each plane is checked with the one it would be
-applied with.
+must claim nowhere the heat pump runs (the controller's 41 to 113 degF
+air and 50 to 149 degF water) a COP above 0.6 of Carnot's between the
+evaporator's coil and the water, heat given to the air, or under 50 W;
+one that does is not applied. The coil is taken 20.5 degF under the
+air, as close as it ran in 90 % of the record's steady running minutes
+(``heat_pump.EVAPORATOR_APPROACH_F``; median 24.5 degF), and the
+refrigerant condenses no colder than the water, so no cycle between
+them does better (``heat_pump.refrigerant_carnot_cop``). Against the
+coil as read, the site's map runs a steady 0.43 of that ideal from 60
+to 100 degF air and never over 0.46; carried over the whole envelope it
+reaches 0.45. Each plane is checked with the one it would be applied
+with.
 
 **The climb.** The tank is walked a minute at a time with the
 condenser's heat, :math:`\dot Q_h` at the step's air and condenser

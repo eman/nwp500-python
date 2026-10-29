@@ -1,13 +1,22 @@
 """The heat pump as a performance map: the heat it puts into the tank
 and the electricity it draws, each a plane in the air at the heater and
 the lower tank's water about ``params.MAP_REF_AIR_F`` and
-``params.MAP_REF_WATER_F``, each read with both held to the span it was
-fitted on (``CompressorParams``' domains).
+``params.MAP_REF_WATER_F``. Each is read along its plane wherever the
+heat pump runs (the walk holds its reads to the controller's envelope,
+``stratified.Layout.map_air_f`` and ``map_water_f``), past the span it
+was fitted on (``CompressorParams``' domains) as within it: held at
+the span's edge, a plane would give the heat a 41 °F air does at 61 °F,
+and the heat and the power, fitted over different water, a COP neither
+measured. A fit's slopes take the sign
+the cycle gives them (``heat_pump_fit.HEAT_SLOPE_SIGNS``,
+``POWER_SLOPE_SIGNS``), so the plane
+carried past its evidence moves the way the heat pump does.
 
 Energy is conserved by construction: what the condenser gives the tank
 is what the evaporator takes from the air plus the electricity
-(``evaporator_btu_h``). ``carnot_cop`` bounds what a fit may claim; it
-is not part of the model.
+(``evaporator_btu_h``). ``refrigerant_carnot_cop`` bounds what a fit may
+claim over the envelope the heat pump runs in; it is not part of the
+model.
 """
 
 from bisect import bisect_right
@@ -17,23 +26,25 @@ from nwp500.sim.units import BTU_PER_WH
 
 #: °F to °R.
 _RANKINE = 459.67
-
-
-def _held(value: float, bounds: tuple[float, float]) -> float:
-    return min(max(value, bounds[0]), bounds[1])
+#: How far under the air the evaporator's coil runs, at the least, °F:
+#: the coil read at least this far under the heater's air in 90 % of
+#: the steady running minutes on one NWP500-65's record (145,286 minutes
+#: of 416 runs, 15 minutes or more into a run with the elements off and
+#: no draw, 2026-04-16 to 10-26; median 24.5 °F, widening 0.39 °F per °F
+#: of air).
+EVAPORATOR_APPROACH_F = 20.5
 
 
 def _plane(
     air_f: float,
     water_f: float,
-    domain: tuple[tuple[float, float], tuple[float, float]],
     level: float,
     per_air: float,
     per_water: float,
     per_both: float,
 ) -> float:
-    a = _held(air_f, domain[0]) - MAP_REF_AIR_F
-    w = _held(water_f, domain[1]) - MAP_REF_WATER_F
+    a = air_f - MAP_REF_AIR_F
+    w = water_f - MAP_REF_WATER_F
     return level + per_air * a + per_water * w + per_both * a * w
 
 
@@ -43,7 +54,6 @@ def heat_btu_h(c: CompressorParams, air_f: float, water_f: float) -> float:
     return _plane(
         air_f,
         water_f,
-        (c.heat_domain_air_f, c.heat_domain_water_f),
         c.heat_btu_h,
         c.heat_btu_h_per_air_f,
         c.heat_btu_h_per_water_f,
@@ -56,7 +66,6 @@ def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
     return _plane(
         air_f,
         water_f,
-        (c.power_domain_air_f, c.power_domain_water_f),
         c.power_w,
         c.power_w_per_air_f,
         c.power_w_per_water_f,
@@ -94,7 +103,7 @@ def start_hold_min(c: CompressorParams, minutes_off: float | None) -> float:
 
 #: The reason a recovery carries whose air is outside the heat map's
 #: fitted span (``CompressorParams.heat_domain_air_f``): its heat is the
-#: span's edge's, not a reading's.
+#: plane carried past the record, not a reading's.
 HEAT_MAP_OUT_OF_DOMAIN = "heat_map_out_of_domain"
 
 
@@ -111,3 +120,13 @@ def carnot_cop(air_f: float, water_f: float) -> float:
     if lift <= 0.0:
         return float("inf")
     return (water_f + _RANKINE) / lift
+
+
+def refrigerant_carnot_cop(air_f: float, water_f: float) -> float:
+    """The ideal heat pump's COP between the evaporator's coil, at
+    ``EVAPORATOR_APPROACH_F`` under the air, and the water: the
+    refrigerant boils colder than the air and condenses no colder than
+    the water, so no cycle between them does better. On the record the
+    map's COP ran a steady 0.43 of the ideal between the coil as read
+    and the water from 60 to 100 °F air, never over 0.46."""
+    return carnot_cop(air_f - EVAPORATOR_APPROACH_F, water_f)
