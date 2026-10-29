@@ -211,12 +211,12 @@ def test_the_answer_does_not_depend_on_the_pieces(
 
     def answer(ahead: timedelta) -> engine.Simulation:
         monkeypatch.setattr(engine, "_COAST_AHEAD", ahead)
-        try:
-            return engine.simulate(**_case(seed, spans))
-        except engine.SimulationError as e:
-            pytest.skip(str(e))
+        return engine.simulate(**_case(seed, spans))
 
-    whole = answer(timedelta(days=30))
+    try:
+        whole = answer(timedelta(days=30))
+    except engine.SimulationError as e:
+        pytest.skip(f"the case does not simulate: {e}")
     assert answer(timedelta(minutes=20)) == whole
     assert answer(timedelta(hours=3)) == whole
 

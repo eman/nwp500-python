@@ -113,13 +113,14 @@ _INSTANT = timedelta(microseconds=1)
 _ENTRY_MINUTE = timedelta(minutes=1)
 #: How far ahead a recovery is walked to judge the TOU cap on it.
 _RECOVERY_AHEAD = timedelta(hours=16)
-#: How far a coast walks ahead before it looks for the heater's own
-#: start, to the clock's ``IDLE_STEP`` grid at or before it: the start
-#: is found on the walk and the walk is taken again to there, so a coast
-#: walked whole to a distant event would cost the horizon at every
-#: start. A split on the grid is a step's end, so the tank walked in
-#: pieces is the tank walked whole (``_coast_stretch``).
-_COAST_AHEAD = timedelta(hours=3)
+#: How far a coast walks ahead before it first looks for the heater's
+#: own start, to the clock's ``IDLE_STEP`` grid at or before it, each
+#: later piece twice the last: the start is found on the walk and the
+#: walk is taken again to there, so a coast walked whole to a distant
+#: event would cost the horizon at every start. A split on the grid is
+#: a step's end, so the tank walked in pieces is the tank walked whole
+#: (``_coast_stretch``).
+_COAST_AHEAD = timedelta(hours=2)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 #: A walk that has not reached the horizon after this many steps is a
 #: bug, not a long simulation (a week of 10-minute events is ~1,000).
@@ -1337,17 +1338,18 @@ class _Engine:
     def _coast_stretch(self, end: datetime) -> Stretch:
         """The tank walked from now toward ``end`` under what runs now,
         to where the coast's stop holds, as ``_advance`` walks it: in
-        pieces of ``_COAST_AHEAD`` to a mark of the clock's grid, which
-        are the walk whole, and no further than the piece the heater's
-        own start is triggered in. Each of its rules finds its instant
-        from the tank up to it, so one triggered short of a piece's end
-        (with no draw at the end, which the rules read with the step
-        before it, and its start short of it too) is the one the walk to
-        ``end`` finds. With TOU windows that overlap, the upper zone's
-        start at one's opening needs the whole walk. With only an
-        element's later start found, the walk goes on to ``end``: the
-        coast plans the heater's own start too where the whole walk
-        finds one, past the element's."""
+        pieces to a mark of the clock's grid, which are the walk whole,
+        the first ``_COAST_AHEAD`` and each later twice the last, and no
+        further than the piece the heater's own start is triggered in.
+
+        Each of its rules finds its instant from the tank up to it, so a
+        start triggered short of a piece's end, and starting short of it,
+        is the one the walk to ``end`` finds; but not with a draw on the
+        piece's end, which the rules read with the step before it. With
+        TOU windows that overlap, the upper zone's start at one's opening
+        needs the whole walk. With only an element's later start found,
+        the walk goes on to ``end``: the coast plans the heater's own
+        start too where the whole walk finds one, past the element's."""
         self.cooling = [
             e for e in self.cooling if self._heats_until(e) > self.t
         ]
@@ -1355,14 +1357,18 @@ class _Engine:
         stop = self._stop()
         t, state = self.t, self.tank_state
         points: list[Point] = []
+        trajectory: list[tuple[datetime, float, float]] = []
         impulses: list[Impulse] = []
+        ahead = _COAST_AHEAD
         while True:
             upto = min(
                 end,
                 _EPOCH
-                + IDLE_STEP
-                * math.floor((t + _COAST_AHEAD - _EPOCH) / IDLE_STEP),
+                + IDLE_STEP * math.floor((t + ahead - _EPOCH) / IDLE_STEP),
             )
+            # Each piece twice the last, so the rules' searches over the
+            # walk so far cost the walk once over.
+            ahead *= 2
             part = self.physics.advance(
                 t,
                 state,
@@ -1372,7 +1378,9 @@ class _Engine:
                 stop=stop,
                 walk_from=self.t,
             )
-            points += part.points[1:] if points else part.points
+            new = part.points[1:] if points else part.points
+            points += new
+            trajectory += [(p.at, p.upper_f, p.lower_f) for p in new]
             # At the instant pieces meet, the draws there (the new
             # piece's) come before the flow's drop over the step ending
             # there (the last piece's), as one walk orders them.
@@ -1389,7 +1397,7 @@ class _Engine:
                 self.state,
                 self.settings,
                 self.params,
-                [(p.at, p.upper_f, p.lower_f) for p in points],
+                trajectory,
                 impulses,
                 self.t,
             )
