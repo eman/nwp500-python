@@ -18,6 +18,11 @@ past what drives it:
   stepped so no layer passes its neighbours (the maximum principle);
 - ``add_heat``: heat into layers, then ``mix``, so heat put in low
   rises to where it belongs;
+- ``stir``: the compressor's start: the condenser's convection pools
+  the water it wraps with the water below it (``Layout.stir_weights``)
+  to their mean, so the lower probe dips to the cold bottom's share
+  and holds until the condenser has heated the pool back past its
+  reading, the longer the colder the bottom has grown;
 - ``flow``: water in at the bottom pushes the column up and out of the
   top as a plug, through an inlet zone of ``inlet_mix_gal`` that mixes
   it in as it comes, solved exactly and remapped onto the layers by
@@ -151,6 +156,10 @@ class Layout:
     #: The share of the condenser's heat each layer takes: its overlap
     #: with ``condenser_span``.
     condenser_weights: tuple[float, ...] = field(init=False, repr=False)
+    #: How much of each layer a compressor start stirs into the pool
+    #: (``stir``): all of every layer below the condenser's top, the
+    #: share of the layer its top lies in, none above.
+    stir_weights: tuple[float, ...] = field(init=False, repr=False)
     #: What each layer weighs in each probe's reading, summing to 1.
     upper_weights: tuple[float, ...] = field(init=False, repr=False)
     lower_weights: tuple[float, ...] = field(init=False, repr=False)
@@ -210,6 +219,14 @@ class Layout:
         ]
         total = sum(overlap)
         set_(self, "condenser_weights", tuple(w / total for w in overlap))
+        set_(
+            self,
+            "stir_weights",
+            tuple(
+                min(1.0, max(0.0, (high - i / self.layers) * self.layers))
+                for i in range(self.layers)
+            ),
+        )
         set_(
             self,
             "upper_weights",
@@ -407,6 +424,22 @@ def add_heat(lay: Layout, state: TankState, btu: Sequence[float]) -> TankState:
                 t + q / lay.layer_btu_f
                 for t, q in zip(layers, btu, strict=True)
             )
+        )
+    )
+
+
+def stir(lay: Layout, state: TankState) -> TankState:
+    """``state`` as a compressor start leaves it: the water the
+    condenser wraps and the water below it, each layer by its
+    ``Layout.stir_weights`` share, pooled to their mean, then mixed. The
+    same heat; the lower probe reads the pool, below what it read with
+    the cold bottom left alone."""
+    layers = _layers(lay, state)
+    w = lay.stir_weights
+    pool = sum(a * t for a, t in zip(w, layers, strict=True)) / sum(w)
+    return mix(
+        TankState(
+            tuple(t + a * (pool - t) for a, t in zip(w, layers, strict=True))
         )
     )
 
@@ -768,8 +801,10 @@ def assimilate(
 @dataclass(frozen=True, kw_only=True)
 class Compressor:
     """The compressor running: drawing its map's power from ``on_at``,
-    heating from ``heats_at`` (after its start hold), both to ``off_at``
-    (None: past the walk's end). Its map reads the condenser's water
+    heating from ``heats_at`` (after any hold a caller imposes), both to
+    ``off_at`` (None: past the walk's end). As its heating begins the
+    tank is stirred (``stir``), where a walk starts at or steps over
+    ``heats_at`` before ``off_at``. Its map reads the condenser's water
     (``condenser_water_f``)."""
 
     params: CompressorParams
@@ -778,6 +813,9 @@ class Compressor:
     off_at: datetime | None = None
     #: Its map's heat scaled by this (a recovery model's correction).
     scale: float = 1.0
+    #: Its heating begins at ``heats_at``, with the start's stir; False
+    #: for a run under way at the walk's start, already heating.
+    stirs: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -951,6 +989,8 @@ class _Walk:
         self, a: datetime, b: datetime, state: TankState
     ) -> tuple[TankState, Books]:
         """The tank from ``a`` (the draws there taken) to ``b``: the
+        compressor's start stir where its heating begins at ``a`` (it
+        still running), the
         heat in, the flows, the jacket, conduction, then any inversion
         turned over."""
         lay = self.lay
@@ -961,6 +1001,13 @@ class _Walk:
         c = self.heating.compressor
         credit = 1.0 if self.heating.credited else 0.0
         if c is not None:
+            if (
+                c.stirs
+                and a == c.heats_at
+                and (c.off_at is None or a < c.off_at)
+                and self.heating.credited
+            ):
+                state = stir(lay, state)
             water = condenser_water_f(lay, state)
             q = (
                 credit
@@ -1028,10 +1075,12 @@ def walk(
     Steps end on the clock's grid, every ``idle_step`` with nothing
     heating or flowing and every ``active_step`` while something is, and
     wherever what acts changes, so a walk split at a step's end is the
-    walk whole. Within a step the draws at its start are taken, then the
-    heat goes in (the condenser's by its map at the air and the water
-    at the step's start), the water flows, the jacket loses, the layers
-    conduct, and inversions turn over. ``stop``, read after each step,
+    walk whole. Within a step the draws at its start are taken, the
+    compressor's start stirs the bottom where its heating begins there
+    (``stir``), then the heat goes in (the condenser's by its map at the
+    air and the water at the step's start), the water flows, the jacket
+    loses, the layers conduct, and inversions turn over. ``stop``, read
+    after each step,
     ends the walk at the first instant it holds, to
     ``CUT_RESOLUTION``."""
     if start.tzinfo is None or end.tzinfo is None:

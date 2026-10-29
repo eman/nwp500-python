@@ -170,9 +170,6 @@ fitted or kept the base's value, and why:
    * - Power at 65 °F air, 120 °F water, and per °F of each
      - The heater's own power readings in 10-minute blocks of the
        climbs; it needs 30. The error is the RMS power error, W.
-   * - Start hold by time off
-     - Clean starts (no water moving before them): each band's median,
-       with 3 starts in it.
    * - Run-on overshoot
      - The lower probe past the target at the stop: the median of 5
        draw-free runs or more.
@@ -344,7 +341,6 @@ Each group of terms holds out its latest evidence from its refit:
   with the base's power;
 - the power's map: its metered blocks (a run's blocks on one side),
   scored on the RMS power error, judged with the heat kept;
-- the start hold: its clean starts, on the hold's mean absolute error;
 - the run-on: its runs, on the overshoot's mean absolute error.
 
 Once a group has 10 items, the latest fifth (at least 2) is held out.

@@ -97,12 +97,15 @@ class Point:
 class CompressorRun:
     """The compressor on from ``on_at``, heating from ``heats_at`` (its
     start's hold over), to ``off_at`` (None: past the walk), its heat
-    scaled by ``scale`` (a recovery model's, ``Scaled``)."""
+    scaled by ``scale`` (a recovery model's, ``Scaled``). ``stirs``:
+    its heating begins at ``heats_at``, with the start's stir; False
+    for a run under way at the walk's start, already heating."""
 
     on_at: datetime
     heats_at: datetime
     off_at: datetime | None = None
     scale: float = 1.0
+    stirs: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -400,6 +403,7 @@ class TankPhysics:
                 heats_at=c.heats_at,
                 off_at=c.off_at,
                 scale=c.scale,
+                stirs=c.stirs,
             ),
             elements=tuple(
                 st.Element(
@@ -530,11 +534,15 @@ class TankPhysics:
         target_f: float,
         hold_minutes: float,
         scale: float = 1.0,
+        *,
+        under_way: bool = False,
     ) -> st.Walked:
         """The heat pump on from ``start``, heating after
         ``hold_minutes``, until the lower probe reaches ``target_f``,
         within ``RECOVERY_BOUND``: nothing drawn, the circulation as
-        given."""
+        given. ``under_way``: it is running at ``start``, so its heating
+        has begun unless ``hold_minutes`` of its hold are left; begun,
+        the layers are not stirred again."""
         heats = start + timedelta(minutes=max(0.0, hold_minutes))
         end = heats + RECOVERY_BOUND
         lay = self.layout
@@ -550,6 +558,7 @@ class TankPhysics:
                     on_at=start,
                     heats_at=heats,
                     scale=scale,
+                    stirs=not under_way or hold_minutes > 0.0,
                 )
             ),
             flowing=self._flows(start, end),
@@ -564,12 +573,20 @@ class TankPhysics:
         target_f: float,
         *,
         hold_minutes: float = 0.0,
+        under_way: bool = False,
     ) -> PhysicsRecovery:
         """The heat pump's recovery from ``state`` until the lower probe
         reaches ``target_f`` after a hold of ``hold_minutes``: its
-        climb's minutes."""
+        climb's minutes. ``under_way``: the compressor is running at
+        ``start`` (``_climb``)."""
         return _physics(
-            self._climb(start, _layers(state), target_f, hold_minutes),
+            self._climb(
+                start,
+                _layers(state),
+                target_f,
+                hold_minutes,
+                under_way=under_way,
+            ),
             start,
             hold_minutes,
         )
@@ -581,6 +598,7 @@ class TankPhysics:
         target_f: float,
         hold_minutes: float,
         physics: PhysicsRecovery,
+        under_way: bool = False,
     ) -> tuple[Scaled, float, float]:
         """The ``recovery_model``'s answer for ``physics``, with this
         tank's confidence reason, and the air at the start and its mean
@@ -611,7 +629,10 @@ class TankPhysics:
             got = replace(
                 got, reasons=(*got.reasons, "recovery_low_confidence")
             )
-        return self._paced(start, layers, target_f, hold_minutes, got), amb, air
+        paced = self._paced(
+            start, layers, target_f, hold_minutes, got, under_way
+        )
+        return paced, amb, air
 
     def _paced(
         self,
@@ -620,6 +641,7 @@ class TankPhysics:
         target_f: float,
         hold_minutes: float,
         got: Scaled,
+        under_way: bool = False,
     ) -> Scaled:
         """``got``'s scale corrected once, so the scaled climb takes the
         model's: a slower heat loses more to the jacket on the way, so
@@ -630,7 +652,14 @@ class TankPhysics:
         if answer is None or got.scale == 1.0:
             return got
         want = answer.minutes - answer.start_hold_minutes
-        walked = self._climb(start, layers, target_f, hold_minutes, got.scale)
+        walked = self._climb(
+            start,
+            layers,
+            target_f,
+            hold_minutes,
+            got.scale,
+            under_way=under_way,
+        )
         climb = _physics(walked, start, hold_minutes).estimate
         if climb is None or want <= 0.0:
             return got
@@ -644,18 +673,26 @@ class TankPhysics:
         target_f: float,
         *,
         hold_minutes: float = 0.0,
+        under_way: bool = False,
     ) -> Scaled:
         """A recovery starting at ``start`` as served: the
         ``recovery_model``'s scale on the heat pump's heat
         (``heat_pump_recovery.rate_scale``), its confidence and its
-        reasons. Scale 1 and no reasons with no model."""
+        reasons. Scale 1 and no reasons with no model. ``under_way``:
+        the compressor is running at ``start`` (``_climb``)."""
         if self.recovery_model is None:
             return Scaled()
         layers = _layers(state)
         physics = self.recovery(
-            start, layers, target_f, hold_minutes=hold_minutes
+            start,
+            layers,
+            target_f,
+            hold_minutes=hold_minutes,
+            under_way=under_way,
         )
-        return self._ask(start, layers, target_f, hold_minutes, physics)[0]
+        return self._ask(
+            start, layers, target_f, hold_minutes, physics, under_way
+        )[0]
 
     def recover(
         self,
@@ -664,19 +701,29 @@ class TankPhysics:
         target_f: float,
         *,
         hold_minutes: float = 0.0,
+        under_way: bool = False,
     ) -> Recovered:
         """The recovery from ``state`` to ``target_f`` as served: the
         physics' walk at the pace the ``recovery_model`` gives it
-        (``scale``), its duration, the hold included, and its path."""
+        (``scale``), its duration, the hold included, and its path.
+        ``under_way``: the compressor is running at ``start``
+        (``_climb``)."""
         layers = _layers(state)
-        walked = self._climb(start, layers, target_f, hold_minutes)
+        walked = self._climb(
+            start, layers, target_f, hold_minutes, under_way=under_way
+        )
         physics = _physics(walked, start, hold_minutes)
         scaled, amb, air = self._ask(
-            start, layers, target_f, hold_minutes, physics
+            start, layers, target_f, hold_minutes, physics, under_way
         )
         if scaled.scale != 1.0:
             walked = self._climb(
-                start, layers, target_f, hold_minutes, scaled.scale
+                start,
+                layers,
+                target_f,
+                hold_minutes,
+                scaled.scale,
+                under_way=under_way,
             )
         reasons = scaled.reasons
         if heat_air_outside(self.params.compressor, air):

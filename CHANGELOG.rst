@@ -187,8 +187,8 @@ Added
   (the heat a mixed, draw-free climb puts into the tank) and
   ``power_blocks`` (the metered power in 10-minute blocks) measure
   from it. ``evidence`` gathers them, and ``fit_heat_pump`` fits the
-  heat's and the power's maps, the hold by time off and the run-on on
-  them (``with_heat_pump`` applies it). The helpers that read a history
+  heat's and the power's maps and the run-on on them
+  (``with_heat_pump`` applies it). The helpers that read a history
   frame moved to ``sim.history_frame``. ``physics.heat_pump`` reads the
   map.
 
@@ -391,11 +391,34 @@ Changed
   a mean 8.7 % low; now 1.5 % low). See
   :doc:`/explanation/simulator-methodology`.
 
-- **A recovery holds at its start and runs on past its target.** The
-  hold is ``CompressorParams.start_hold_min`` by the time the
-  compressor was off (0, 5, 10, 18 and 22 min on the record), drawing
-  power while the tank holds; ``simulate`` uses it with or without a
-  ``RecoveryModel``, and ``start_hold`` still overrides it. The climb
+- **A recovery holds at its start and runs on past its target.** At
+  the instant the condenser's heating begins the walk stirs the water
+  it wraps with the cold water below it (``physics.stratified.stir``,
+  by ``Layout.stir_weights``), the same heat spread over the pool, and
+  the lower probe holds until the condenser has heated the pool back
+  past its reading: longer the longer the compressor was off and the
+  colder the bottom has grown, as the record's holds are (0 to 22 min),
+  with nothing fitted to them. A compressor already running at the
+  walk's start is not stirred again (in ``simulate``, ``active_cycle``
+  and ``forecast``) unless some of a ``running_hold`` is left or
+  ``simulate``'s new ``running_starts`` says it starts there (a
+  recorded start replayed, as ``sim_score`` does), nor one that stops
+  before its heating begins. ``forecast`` keeps a running compressor
+  going, ready early, where stopping it and starting again later (a
+  start, stirred) could not be ready by the target. On the record's 84 clean starts the
+  model holds a median 3, 23, 18, 18 and 21 min after under 15, 60,
+  180 and 720 min off and beyond, against 0, 5, 10, 18 and 22; the
+  upper probe holds still through the record's holds, as the model's
+  does. ``CompressorParams.start_hold_min`` imposes no hold by default
+  (it was 0, 5, 10, 18 and 22 min, credited no heat, and cost a start
+  after a day off 165 Wh and 3 °F of tank); a caller's ``start_hold``
+  or ``running_hold`` still applies, and ``simulate`` uses it with or
+  without a ``RecoveryModel``. Fitted and scored on the record
+  (2026-04-16 to 10-26) with the stir and no hold, against the model
+  with the hold: the held-out draw-free recoveries' mean absolute error
+  11.9 to 8.7 min and their electricity's 5.7 to 4.4 %, the standby
+  probes' RMS 0.254/0.564 to 0.202/0.534 °F, the draws' lower probe
+  2.08 to 2.28 °F, the recoveries with draws unchanged. The climb
   runs to ``ControllerParams.hp_stop_overshoot_f`` (0.9 °F) past the
   target in ``simulate`` and ``active_cycle``, and in ``forecast`` to
   the heater's own threshold (not a partial charge or a TOU cap's
@@ -407,15 +430,13 @@ Changed
   ``heater-params/1`` document is refused: calibrate again with
   ``nwp-cli simulate calibrate``.
 
-- **``sim_calibrate``'s groups** are ``heat_map``, ``power_map``,
-  ``start_hold`` and ``run_on`` in place of ``compressor``,
-  ``power_scale`` and ``cop``, each refitted and judged on the latest
+- **``sim_calibrate``'s groups** are ``heat_map``, ``power_map`` and
+  ``run_on`` in place of ``compressor``, ``power_scale`` and ``cop``, each refitted and judged on the latest
   fifth with ``keep_better``. ``Calibration.heat_pump``
   (``heat_pump_fit.HeatPumpFit``) replaces ``compressor`` and ``power``.
 
 - **A recovery's trajectory and COP are the map's.** The electricity is
-  the map's power over the hold and the climb; the COP is the map's heat
-  over it.
+  the map's power over the run; the COP is the map's heat over it.
 
 - ``element_mode(scenario, params, *, mode, setpoint_f=None,
   ready_upper_f=None, switch_back_after_minutes=None, slot_minutes=10.0,

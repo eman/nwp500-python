@@ -193,7 +193,7 @@ class Calibrated:
 
 #: The groups of terms ``keep_better`` judges, each kept or replaced
 #: whole: the terms one fit fits together.
-GROUPS = ("tank", "heat_map", "power_map", "start_hold", "run_on")
+GROUPS = ("tank", "heat_map", "power_map", "run_on")
 
 
 @dataclass(frozen=True)
@@ -248,7 +248,6 @@ def score(
       their minutes, BTU/h (``heat_pump_fit.heat_map_error``);
     - ``power_map``: the power's RMS error on the climbs' metered
       blocks, W;
-    - ``start_hold``: the hold's mean absolute error at the starts, min;
     - ``run_on``: the overshoot's mean absolute error at the stops, °F.
 
     Raises ``CalibrationInputError`` for a ``done`` not made with
@@ -263,9 +262,6 @@ def score(
         "heat_map": hpf.heat_map_error(held.heat_pump.heat, params.compressor),
         "power_map": hpf.power_map_error(
             held.heat_pump.power, params.compressor
-        ),
-        "start_hold": hpf.start_hold_error(
-            held.heat_pump.holds, params.compressor
         ),
         "run_on": hpf.overshoot_error(
             held.heat_pump.runs, params.controller.hp_stop_overshoot_f
@@ -559,27 +555,24 @@ def _keep_better_heat_pump(
     unfitted: set[str],
     judged: list[Judged],
 ) -> tuple[HeaterParams, hpf.HeatPumpFit, hpf.Evidence]:
-    """The heat pump's groups (``heat_map``, ``power_map``,
-    ``start_hold``, ``run_on``), each refitted on all but its latest
-    evidence and kept only where it scores better there. The maps are
-    judged one at a time, the heat's with the base's power and the
-    power's with the heat kept, and a plane that would leave the pair
-    claiming what no heat pump does is not applied
-    (``heat_pump_fit.violations``). The groups
-    of a term ``params`` lists as unfitted (``compressor`` for the heat,
-    the hold and the run-on, ``power`` for the power) take their refit
-    unjudged, on all their evidence. Returns the parameters, the refit,
-    and the evidence held out; ``unfitted`` and ``judged`` are updated
-    in place."""
+    """The heat pump's groups (``heat_map``, ``power_map``, ``run_on``),
+    each refitted on all but its latest evidence and kept only where it
+    scores better there. The maps are judged one at a time, the heat's
+    with the base's power and the power's with the heat kept, and a
+    plane that would leave the pair claiming what no heat pump does is
+    not applied (``heat_pump_fit.violations``). The groups of a term
+    ``params`` lists as unfitted (``compressor`` for the heat and the
+    run-on, ``power`` for the power) take their refit unjudged, on all
+    their evidence. Returns the parameters, the refit, and the evidence
+    held out; ``unfitted`` and ``judged`` are updated in place."""
     open_heat = "compressor" in unfitted
     open_power = "power" in unfitted
     heat, held_heat = _split_frame(found.heat, not open_heat)
     power, held_power = _split_frame(found.power, not open_power)
-    holds, held_holds = _split_frame(found.holds, not open_heat)
     runs, held_runs = _split_frame(found.runs, not open_heat)
-    held = hpf.Evidence(held_heat, held_power, held_holds, held_runs)
+    held = hpf.Evidence(held_heat, held_power, held_runs)
     base = params.compressor
-    refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, holds, runs), base)
+    refit = hpf.fit_heat_pump(hpf.Evidence(heat, power, runs), base)
     # What each plane claims with the other it would be applied with.
     found_claims: dict[str, tuple[str, ...]] = {}
 
@@ -657,36 +650,6 @@ def _keep_better_heat_pump(
         heated, None, refit.power if take_power else None
     )
     controller = params.controller
-    if refit.start_hold_min is None:
-        if not open_heat:
-            judged.append(
-                _judge(
-                    "start_hold",
-                    "starts",
-                    len(held_holds),
-                    hpf.start_hold_error(held_holds, base),
-                    None,
-                    refit_exists=False,
-                    needed=hpf.MIN_BAND_STARTS,
-                )
-            )
-    else:
-        with_hold = replace(compressor, start_hold_min=refit.start_hold_min)
-        j = (
-            None
-            if open_heat
-            else _judge(
-                "start_hold",
-                "starts",
-                len(held_holds),
-                hpf.start_hold_error(held_holds, base),
-                hpf.start_hold_error(held_holds, with_hold),
-            )
-        )
-        if j is not None:
-            judged.append(j)
-        if j is None or j.kept == "refit":
-            compressor = with_hold
     if refit.overshoot_f is None:
         if not open_heat:
             judged.append(
@@ -1224,13 +1187,8 @@ _GROUP_TERMS = {
         "Power per °F of air (W)",
         "Power per °F of water (W)",
     ),
-    "start_hold": ("Start hold by time off (min)",),
     "run_on": ("Run-on overshoot (°F)",),
 }
-
-
-def _holds(values: Sequence[float]) -> str:
-    return "/".join(f"{v:g}" for v in values)
 
 
 def _values(params: HeaterParams) -> dict[str, str]:
@@ -1245,7 +1203,6 @@ def _values(params: HeaterParams) -> dict[str, str]:
         _num(c.power_w),
         _num(c.power_w_per_air_f),
         _num(c.power_w_per_water_f),
-        _holds(c.start_hold_min),
         _num(params.controller.hp_stop_overshoot_f),
     )
     names = [n for group in _GROUP_TERMS.values() for n in group]
@@ -1452,23 +1409,6 @@ def report(done: Calibrated) -> list[Term]:
         )
     ]
     terms += [
-        Term(
-            "Start hold by time off (min)",
-            _holds(cp.start_hold_min),
-            f"{pump.n_holds} starts",
-            "-",
-            pump.start_hold_min is not None,
-            ""
-            if pump.start_hold_min is not None
-            else needs(
-                pump.n_holds,
-                "starts with no water in use",
-                hpf.MIN_BAND_STARTS,
-            ),
-            note="under "
-            + ", ".join(f"{m:g}" for m in cp.start_hold_after_min)
-            + " min off, and beyond",
-        ),
         Term(
             "Run-on overshoot (°F)",
             _num(c.params.controller.hp_stop_overshoot_f),

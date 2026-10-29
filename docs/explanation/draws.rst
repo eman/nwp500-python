@@ -175,7 +175,7 @@ the lower probe further the wider the gap between the probes when it
 starts.
 
 The simulator's layered tank tracks the water itself: a draw pushes the
-column up through an inlet zone (12.2 gal, fitted on the record from
+column up through an inlet zone (14.3 gal, fitted on the record from
 2026-04-16 to 10-26) and out of the top, and the probes read the layers
 where they sit (:doc:`simulator-methodology`). On the 46 metered draws
 after 2026-09-18, each followed for an hour from the layers the

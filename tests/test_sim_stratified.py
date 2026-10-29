@@ -246,6 +246,199 @@ class TestHeat:
         )
 
 
+class TestStir:
+    """A compressor's start pools the water the condenser wraps with the
+    water below it: the same heat, the lower probe dipping to the pool."""
+
+    @given(stable)
+    def test_it_keeps_the_heat_and_rises_from_the_bottom(
+        self, state: S.TankState
+    ) -> None:
+        after = S.stir(L, state)
+        assert _energy(after) == pytest.approx(_energy(state), abs=1e-6)
+        assert _monotone(after)
+        still = [i for i, w in enumerate(L.stir_weights) if w == 0.0]
+        for i in still:
+            assert after.layers_f[i] == pytest.approx(
+                state.layers_f[i], abs=1e-9
+            )
+
+    def test_it_reaches_the_top_of_the_condenser(self) -> None:
+        # Whole layers below the condenser's top, the share of the one
+        # its top lies in, none above: continuous in the span.
+        low, high = L.condenser_span
+        w = L.stir_weights
+        top = int(high * L.layers)
+        assert w[:top] == (1.0,) * top
+        assert w[top] == pytest.approx(high * L.layers - top)
+        assert w[top + 1 :] == (0.0,) * (L.layers - top - 1)
+        to_bottom = replace(L, condenser_span=(0.0, high))
+        assert to_bottom.stir_weights == w
+        higher = replace(L, condenser_span=(low, 0.75))
+        assert higher.stir_weights == (1.0,) * 9 + (0.0,) * 3
+
+    def test_a_cold_bottom_dips_the_lower_probe_and_holds_it(self) -> None:
+        # A tank that stood 12 hours: its bottom has cooled through the
+        # bottom's loss. The compressor's start stirs that cold up to
+        # the lower probe, which then climbs back only once the
+        # condenser has heated the pool past its reading.
+        lay = replace(L, ua_bottom_btu_hr_f=3.0)
+        stood = S.walk(
+            lay,
+            S.TankState.uniform(12, 135.0),
+            T0,
+            T0 + timedelta(hours=12),
+            air_f=_air,
+        ).state
+        before = S.observe(lay, stood)[1]
+        assert stood.layers_f[0] < before - 5.0
+        stirred = S.stir(lay, stood)
+        assert S.observe(lay, stirred)[1] < before - 1.0
+        start = T0 + timedelta(hours=12)
+        w = S.walk(
+            lay,
+            stood,
+            start,
+            start + timedelta(hours=3),
+            air_f=_air,
+            heating=S.Heating(
+                compressor=S.Compressor(
+                    params=P.compressor, on_at=start, heats_at=start
+                )
+            ),
+        )
+        # The first step's end reads the dip; the probe is back above
+        # its reading from before the start minutes later, not at once.
+        assert w.path[1][0] <= start + timedelta(minutes=1)
+        assert S.observe(lay, w.path[1][1])[1] < before
+        back = next(
+            (t - start) / timedelta(minutes=1)
+            for t, s in w.path
+            if t > start and S.observe(lay, s)[1] > before
+        )
+        assert 3.0 <= back <= 40.0
+        assert _energy(w.state) - _energy(stood) == pytest.approx(
+            w.books.net_btu, abs=1e-6
+        )
+
+    def test_a_mixed_tank_is_left_as_it_is(self) -> None:
+        state = S.TankState.uniform(12, 130.0)
+        assert S.stir(L, state) == state
+
+    def test_it_happens_once_where_the_heating_begins(self) -> None:
+        start = S.estimate(L, 130.0, 110.0)
+        on = T0 + timedelta(minutes=30)
+        heats = on + timedelta(minutes=10)
+
+        def walk(a: datetime, b: datetime, state: S.TankState) -> S.Walked:
+            return S.walk(
+                L,
+                state,
+                a,
+                b,
+                air_f=_air,
+                heating=S.Heating(
+                    compressor=S.Compressor(
+                        params=P.compressor, on_at=on, heats_at=heats
+                    )
+                ),
+            )
+
+        whole = walk(T0, T0 + timedelta(hours=2), start)
+        # Through the hold the tank coasts as it was; the stir lands as
+        # the heating begins.
+        at = dict(whole.path)
+        pooled = next(s for t, s in whole.path if t > heats)
+        assert max(at[heats].layers_f[:5]) - min(at[heats].layers_f[:5]) > 2.0
+        assert max(pooled.layers_f[:5]) - min(pooled.layers_f[:5]) < 0.5
+        # Split at the heating's start, the walk is the walk whole: the
+        # stir is the later part's first step's, once.
+        first = walk(T0, heats, start)
+        rest = walk(heats, T0 + timedelta(hours=2), first.state)
+        assert rest.state.layers_f == pytest.approx(
+            whole.state.layers_f, abs=1e-9
+        )
+        # Uncredited, the compressor stirs nothing either.
+        held = S.walk(
+            L,
+            start,
+            T0,
+            T0 + timedelta(hours=2),
+            air_f=_air,
+            heating=S.Heating(
+                compressor=S.Compressor(
+                    params=P.compressor, on_at=on, heats_at=heats
+                ),
+                credited=False,
+            ),
+        )
+        coast = S.walk(L, start, T0, T0 + timedelta(hours=2), air_f=_air)
+        assert held.state.layers_f == pytest.approx(
+            coast.state.layers_f, abs=0.2
+        )
+
+    def test_a_run_under_way_is_not_stirred_again(self) -> None:
+        # Its heating began before the walk: the walk is that of a run
+        # begun earlier, whose start it never steps over.
+        start = S.estimate(L, 130.0, 110.0)
+        earlier = T0 - timedelta(hours=1)
+
+        def first(c: S.Compressor) -> tuple[float, ...]:
+            w = S.walk(
+                L,
+                start,
+                T0,
+                T0 + timedelta(hours=1),
+                air_f=_air,
+                heating=S.Heating(compressor=c),
+            )
+            return w.path[1][1].layers_f
+
+        going = first(
+            S.Compressor(
+                params=P.compressor, on_at=T0, heats_at=T0, stirs=False
+            )
+        )
+        begun = first(
+            S.Compressor(params=P.compressor, on_at=earlier, heats_at=earlier)
+        )
+        fresh = first(S.Compressor(params=P.compressor, on_at=T0, heats_at=T0))
+        assert going == pytest.approx(begun, abs=1e-9)
+        assert max(abs(x - y) for x, y in zip(going, fresh, strict=True)) > 1.0
+
+    def test_a_run_stopped_before_its_heating_stirs_nothing(self) -> None:
+        # A hold a caller imposes that outlasts the run: no heating
+        # begins, so nothing is pooled.
+        start = S.estimate(L, 130.0, 110.0)
+        on = T0 + timedelta(minutes=30)
+        heats = on + timedelta(minutes=10)
+
+        def walk(off: datetime, *, stirs: bool) -> S.Walked:
+            return S.walk(
+                L,
+                start,
+                T0,
+                T0 + timedelta(hours=2),
+                air_f=_air,
+                heating=S.Heating(
+                    compressor=S.Compressor(
+                        params=P.compressor,
+                        on_at=on,
+                        heats_at=heats,
+                        off_at=off,
+                        stirs=stirs,
+                    )
+                ),
+            )
+
+        for off in (heats, heats - timedelta(minutes=5)):
+            got = walk(off, stirs=True)
+            assert got.books.compressor_btu == 0.0
+            assert got.state.layers_f == pytest.approx(
+                walk(off, stirs=False).state.layers_f, abs=1e-9
+            )
+
+
 class TestFlow:
     @given(profiles, st.floats(0.0, 250.0), inflows)
     def test_what_leaves_is_the_top_of_the_column(

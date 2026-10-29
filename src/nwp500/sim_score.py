@@ -664,7 +664,8 @@ def _recovery_score(
     day: int,
     record: tf.TankRecord | None = None,
 ) -> bool:
-    """The recovery predicted from its recorded start, with the hold
+    """The recovery predicted from its recorded start, started there
+    (``running_starts``: its stir taken), with the hold
     ``params`` give a start after the time off it had; False when the
     simulator could not answer."""
     horizon = (e.end - e.start) + RECOVERY_SLACK
@@ -698,6 +699,7 @@ def _recovery_score(
             ),
             params,
             running_hold=hold,
+            running_starts=True,
         )
     except SimulationError, ValueError:
         return False

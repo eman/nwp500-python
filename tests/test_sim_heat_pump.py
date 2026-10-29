@@ -81,7 +81,14 @@ class TestTheHold:
         ],
     )
     def test_by_the_minutes_off(self, off: float | None, hold: float) -> None:
-        assert hp.start_hold_min(C, off) == hold
+        held = replace(C, start_hold_min=(0.0, 5.0, 10.0, 18.0, 22.0))
+        assert hp.start_hold_min(held, off) == hold
+
+    def test_none_is_imposed_by_default(self) -> None:
+        # The hold is the layers' own (``stratified.stir``).
+        assert all(v == 0.0 for v in C.start_hold_min)
+        assert hp.start_hold_min(C, None) == 0.0
+        assert hp.start_hold_min(sim.default_params().compressor, 800.0) == 0.0
 
     def test_its_bands_are_checked(self) -> None:
         with pytest.raises(ValueError, match="one more value"):

@@ -405,6 +405,7 @@ def simulate(
     inlet_measured: bool = False,
     start_hold: Callable[[float | None], float] | None = None,
     running_hold: float = 0.0,
+    running_starts: bool = False,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
@@ -425,6 +426,11 @@ def simulate(
     - ``running_hold``: what is left at the start of a running
       compressor's own start's hold, minutes; ignored when it is not
       running.
+
+    A running compressor's heating has begun, its start's stir behind
+    it, unless some of ``running_hold`` is left or ``running_starts``:
+    it starts at the scenario's start (a recorded start replayed, as
+    ``sim_score`` does), its heating beginning after ``running_hold``.
 
     ``inlet_measured``: the scenario's inlet (``Environment.inlet_f``) is
     the mains as measured (``cold_supply``); without it, a scenario with
@@ -533,6 +539,7 @@ def simulate(
             else lambda off: start_hold_min(params.compressor, off)
         ),
         running_hold=running_hold,
+        running_starts=running_starts,
     )
     delivery = delivery_along(sim.points, params)
     out_of_domain_at: datetime | None = None
@@ -1956,12 +1963,16 @@ def forecast(
         """The tank coasted to ``when``."""
         return physics.advance(origin, first, when).state
 
+    def under_way(when: datetime) -> bool:
+        """The start at ``when`` is the compressor running now."""
+        return state.compressor_running and when <= origin
+
     def hold_at(when: datetime) -> float:
         """The hold of a start at ``when``: none for the compressor
         running now, else by the minutes since it last stopped. A
         compressor running now stops no earlier than now, so a later
         start counts its time off from now at most."""
-        if state.compressor_running and when <= origin:
+        if under_way(when):
             return 0.0
         stopped = (
             origin
@@ -1978,10 +1989,15 @@ def forecast(
     def predict(when: datetime) -> tuple[Recovered, Any]:
         tank = coast_to(when)
         return physics.recover(
-            when, tank, stop, hold_minutes=hold_at(when)
+            when,
+            tank,
+            stop,
+            hold_minutes=hold_at(when),
+            under_way=under_way(when),
         ), tank
 
     served, tank = predict(target)
+    served_at = target
     if not served.reached:
         raise _refusal(served)
     for _ in range(_FORECAST_PASSES):
@@ -1992,15 +2008,33 @@ def forecast(
         if not refined.reached:
             break
         converged = abs(refined.minutes - served.minutes) <= _REFINE_MINUTES
-        served, tank = refined, refined_tank
+        served, tank, served_at = refined, refined_tank, when
         if converged:
             break
+    if state.compressor_running:
+        # Put off, the run now stops and starts again with a start's
+        # stir, which the run going on now has had: a later start is
+        # taken where it is ready by the target from there, and
+        # otherwise the run goes on now, ready early. Between the two
+        # the refinement alternates.
+        later = compute_start_time(target, served.minutes)
+        if under_way(served_at) and later > origin:
+            again, _ = predict(later)
+            if again.reached:
+                served, served_at = again, later
+        if not under_way(served_at) and (
+            compute_start_time(target, served.minutes) < origin
+        ):
+            now, _ = predict(origin)
+            if now.reached:
+                served, served_at = now, origin
     start_at = compute_start_time(target, served.minutes)
     feasible = start_at >= origin
     shortfall: float | None = None
     ready_at = target
     if not feasible:
         shortfall = (origin - start_at).total_seconds() / 60.0
+    if not feasible or under_way(served_at):
         start_at = origin
         ready_at = origin + timedelta(minutes=served.minutes)
     tank = coast_to(start_at)
@@ -2028,6 +2062,7 @@ def forecast(
                 tank,
                 stop,
                 hold_minutes=hold_at(scheduled_start),
+                under_way=under_way(scheduled_start),
             ).trajectory,
             scheduled_ready,
         )
@@ -2132,9 +2167,9 @@ def active_cycle(
         # Its defaults are said above: the air and the humidity.
         defaults=[],
     )
-    # The cycle is under way: its hold is over.
+    # The cycle is under way: its hold is over and its layers stirred.
     tank, estimated = _tank(physics, state)
-    served = physics.recover(at, tank, stop)
+    served = physics.recover(at, tank, stop, under_way=True)
     if not served.reached:
         raise _refusal(served)
     reasons = [*estimated, *served.reasons]

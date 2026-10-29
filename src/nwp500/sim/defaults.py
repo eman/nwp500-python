@@ -93,25 +93,27 @@ def _nwp500_65() -> HeaterParams:
         # The layered tank fitted on its record, 2026-04-16 to
         # 2026-10-26 (``sim_calibrate.calibrate_changes``): 266 quiet
         # windows, 254 metered draws and 118 recoveries, each started
-        # from the day's replay before it.
+        # from the day's replay before it, the compressor's start
+        # stirring the layers (``physics.stratified.stir``) and no hold
+        # imposed.
         tank=TankParams(
             volume_gal=63.2,
             layers=12,
-            upper_probe_height=0.8904462277533243,
-            lower_probe_height=0.4778886251218728,
-            upper_probe_spread_gal=5.896071165293375,
-            lower_probe_spread_gal=3.1110738307754477,
-            lower_probe_offset_f=0.7968961082980054,
-            condenser_span=(0.14686601147540912, 0.5759474981060145),
-            inlet_mix_gal=12.212086224812172,
-            conductance_btu_hr_f=0.4244538806083805,
+            upper_probe_height=0.901813885380396,
+            lower_probe_height=0.46296408131161204,
+            upper_probe_spread_gal=5.971337972581407,
+            lower_probe_spread_gal=2.0635540925212172,
+            lower_probe_offset_f=1.008459895282938,
+            condenser_span=(0.14307729589423623, 0.3508032644394711),
+            inlet_mix_gal=14.330242694663644,
+            conductance_btu_hr_f=0.49547263784845164,
         ),
         loss=LossParams(
-            ua_side_btu_hr_f=2.8886640584102756,
-            ua_bottom_btu_hr_f=0.8873047640398399,
-            ua_top_btu_hr_f=0.677778724077633,
+            ua_side_btu_hr_f=3.139115014260317,
+            ua_bottom_btu_hr_f=0.1675409344227829,
+            ua_top_btu_hr_f=0.553916158090328,
         ),
-        # The performance map, hold and run-on fitted on its record,
+        # The performance map and run-on fitted on its record,
         # 2025-12-28 to 2026-10-26 (``heat_pump_fit.fit_heat_pump``),
         # the heat against the two-zone tank's loss: refitted against
         # the loss above, from 2026-04-16, it moves 0.05 % at 65 °F air
@@ -131,7 +133,7 @@ def _nwp500_65() -> HeaterParams:
             power_domain_air_f=(45.0, 90.0),
             power_domain_water_f=(73.0, 148.0),
             start_hold_after_min=(15.0, 60.0, 180.0, 720.0),
-            start_hold_min=(0.0, 5.0, 10.0, 18.0, 22.0),
+            start_hold_min=(0.0, 0.0, 0.0, 0.0, 0.0),
         ),
         element=ElementParams(
             element_w=5148.0,

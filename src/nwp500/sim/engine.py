@@ -369,6 +369,9 @@ class _Cycle:
     scale: float = 1.0
     input_wh: float | None = 0.0
     confidence: float = 1.0
+    #: Its heating begins at ``heats_at``, with the start's stir; False
+    #: for a run under way at the walk's start with no hold left.
+    stirs: bool = True
     #: Its entry in ``heating``.
     interval: HeatingInterval | None = None
 
@@ -408,12 +411,16 @@ class _Engine:
         stopped_at: datetime | None = None,
         start_hold: Callable[[float | None], float] | None = None,
         running_hold: float = 0.0,
+        running_starts: bool = False,
         controller: ControllerParams | None = None,
         state: TankState | None = None,
     ) -> None:
         self.t = start
         #: The rest of a running compressor's hold at the start, minutes.
         self.running_hold = running_hold if running else 0.0
+        #: The running compressor starts at the start: its heating
+        #: begins after ``running_hold``, with the start's stir.
+        self.running_starts = running and running_starts
         #: The tank, as the physics carries it (``_set``), and its
         #: probes, which everything else reads.
         self.tank_state: TankState = (
@@ -583,6 +590,7 @@ class _Engine:
                 on_at=cycle.start.at,
                 heats_at=cycle.heats_at,
                 scale=cycle.scale,
+                stirs=cycle.stirs,
             ),
             elements=(
                 *(e for e in self.cooling if self._heats_until(e) > at),
@@ -889,9 +897,16 @@ class _Engine:
             self.params.hp_water_range_f[1],
         )
         scale, confidence = 1.0, 1.0
+        under_way = start.cause == "running" and not self.running_starts
         scaled = getattr(self.physics, "scale", None)
         if scaled is not None:
-            got = scaled(self.t, self.tank_state, level, hold_minutes=hold)
+            got = scaled(
+                self.t,
+                self.tank_state,
+                level,
+                hold_minutes=hold,
+                under_way=under_way,
+            )
             scale, confidence = got.scale, got.confidence
             self.reasons.update(got.reasons)
         self.cycle = _Cycle(
@@ -902,6 +917,7 @@ class _Engine:
             capped=False,
             scale=scale,
             confidence=confidence,
+            stirs=not under_way or hold > 0.0,
         )
         self._position()
         cycle = self.cycle
@@ -1347,6 +1363,7 @@ def simulate(
     stopped_at: datetime | None = None,
     start_hold: Callable[[float | None], float] | None = None,
     running_hold: float = 0.0,
+    running_starts: bool = False,
     controller: ControllerParams | None = None,
     state: TankState | None = None,
 ) -> Simulation:
@@ -1373,9 +1390,11 @@ def simulate(
     start begins with, minutes, by the minutes since the compressor last
     stopped (None when not known); None holds none. A compressor already
     ``running`` holds for ``running_hold``, what is left of its own
-    start's hold (0.0: none). ``controller`` holds the numbers of the
-    firmware's rules (``sim/controller.py``); None, the measured
-    defaults.
+    start's hold (0.0: none); its heating has begun, its layers stirred,
+    unless some of that hold is left or ``running_starts`` (it starts at
+    ``start``, as a recorded start replayed). ``controller`` holds the
+    numbers of the firmware's rules (``sim/controller.py``); None, the
+    measured defaults.
     """
     return _Engine(
         start=start,
@@ -1396,6 +1415,7 @@ def simulate(
         stopped_at=stopped_at,
         start_hold=start_hold,
         running_hold=running_hold,
+        running_starts=running_starts,
         controller=controller,
         state=state,
     ).run()

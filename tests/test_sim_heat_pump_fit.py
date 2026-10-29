@@ -359,10 +359,9 @@ def found() -> hpf.Evidence:
 
 class TestTheFits:
     def test_the_evidence_in_time_order(self, found: hpf.Evidence) -> None:
-        for rows in (found.heat, found.power, found.holds, found.runs):
+        for rows in (found.heat, found.power, found.runs):
             assert rows["start"].is_monotonic_increasing
         assert (found.power["phase"] == "climb").all()
-        assert found.holds["minutes_off"].notna().all()
 
     def test_it_recovers_the_planted_heat_pump(
         self, found: hpf.Evidence
@@ -390,25 +389,15 @@ class TestTheFits:
         assert applied.power_domain_air_f == fit.power.air_f
         assert fit.heat_error is not None and fit.heat_error < 200.0
 
-    def test_a_band_with_its_starts_takes_their_hold(
+    def test_the_hold_is_measured_and_not_fitted(
         self, found: hpf.Evidence
     ) -> None:
-        c = CompressorParams()
-        held = hpf.fit_start_hold(found.holds, c)
-        assert held is not None
-        band = np.searchsorted(
-            c.start_hold_after_min, found.holds["minutes_off"], side="right"
-        )
-        for i, value in enumerate(held):
-            n = int((band == i).sum())
-            if n >= hpf.MIN_BAND_STARTS:
-                # The band's planted hold, read on the minute grid at the
-                # first 0.18 °F step of a slow climb: up to a few minutes
-                # late, never early (``TestTheHold``).
-                edge = (15, 60, 180, 720, math.inf)[i] - 1e-9
-                assert -0.5 <= value - hold(edge) <= 3.0
-            else:
-                assert value == c.start_hold_min[i]
+        # The record's holds are what the layers' own hold is checked
+        # against (``start_holds``); the fit carries none.
+        fit = hpf.fit_heat_pump(found, CompressorParams())
+        assert not hasattr(fit, "start_hold_min")
+        got = hpf.with_heat_pump(sim.default_params(), fit)
+        assert got.compressor.start_hold_min == (0.0,) * 5
 
     def test_too_little_fits_nothing(self) -> None:
         empty = hpf.evidence(planted(CYCLES[:2]), PARAMS)
@@ -440,7 +429,6 @@ class TestTheFits:
         heat_after = hpf.heat_map_error(found.heat, better)
         assert heat_before is not None and heat_after is not None
         assert heat_after < heat_before
-        assert hpf.start_hold_error(found.holds.iloc[0:0], c) is None
         assert hpf.overshoot_error(found.runs, OVERSHOOT) == pytest.approx(
             0.0, abs=0.2
         )

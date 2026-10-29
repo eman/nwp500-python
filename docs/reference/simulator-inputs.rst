@@ -704,29 +704,38 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - Range over retrains
    * - ``loss.ua_side_btu_hr_f``, ``ua_bottom_btu_hr_f``,
        ``ua_top_btu_hr_f``; ``tank.conductance_btu_hr_f``
-     - 2.889, 0.887, 0.678 BTU/hr per degF; 0.424 BTU/hr per degF
+     - 3.14, 0.168, 0.554 BTU/hr per degF; 0.495 BTU/hr per degF
      - The layered tank's terms, fitted together
        (``sim_calibrate.calibrate_changes``, ``sim.tank_fit``) on 266
        quiet windows, 254 metered draws and 118 recoveries, 2026-04-16
        to 10-26, each started from the record's replay of the day
-       before it, against a sensor of the air beside the heater: both
-       probes' error every 10 minutes, 2.64 degF RMS over the events.
-       Fitted on the record to 2026-09-18, they scored on the 59 quiet
-       windows after it 0.254 and 0.564 degF RMS (upper, lower), and on
-       46 draws 0.299 and 2.08 (:doc:`/explanation/simulator`).
-     - First fitted 2026-10-27
+       before it, with the compressor's start stirring the layers and
+       no hold imposed, against a sensor of the air beside the heater:
+       both probes' error every 10 minutes, 2.52 degF RMS over the
+       events. Fitted on the record to 2026-09-18, they scored on the
+       59 quiet windows after it 0.202 and 0.534 degF RMS (upper,
+       lower), and on 46 draws 0.285 and 2.28
+       (:doc:`/explanation/simulator`). The bottom's loss fell from
+       0.887 with the hold imposed: the start's stir brings the
+       bottom's cold to the lower probe, and the probes' record wants
+       little of it from a stand.
+     - 2026-10-27 to 10-29
    * - ``tank.upper_probe_height``, ``lower_probe_height``,
        ``upper_probe_spread_gal``, ``lower_probe_spread_gal``,
        ``lower_probe_offset_f``
-     - 0.890, 0.478; 5.90, 3.11 gal; 0.797 degF
-     - The same fit. The upper probe's 0.890 puts 6.9 gal of the 63.2
+     - 0.902, 0.463; 5.97, 2.06 gal; 1.01 degF
+     - The same fit. The upper probe's 0.902 puts 6.2 gal of the 63.2
        above it, against the 5.3-7.3 gal the delivered water lags it by
        (:doc:`/explanation/draws`).
-     - First fitted 2026-10-27
+     - 2026-10-27 to 10-29
    * - ``tank.inlet_mix_gal``, ``tank.condenser_span``
-     - 12.2 gal; 0.147-0.576
-     - The same fit, the span on the recoveries.
-     - First fitted 2026-10-27
+     - 14.3 gal; 0.143-0.351
+     - The same fit, the span on the recoveries. The span's top sits
+       under the lower probe (0.463): the start's stir pools the water
+       under it, and the probe, above the pool, holds while the
+       condenser heats it back. With the hold imposed it was
+       0.147-0.576, over the probe.
+     - 2026-10-27 to 10-29
    * - ``compressor.heat_btu_h`` and its slopes per degF of air and
        of water
      - 4,499 BTU/hr at 65 degF air and 120 degF water; +55.5 per degF
@@ -753,11 +762,12 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        past an edge takes the edge's value.
      - Set by each fit
    * - ``compressor.start_hold_min`` by ``start_hold_after_min``
-     - 0, 5, 10, 18 and 22 min after under 15, 60, 180 and 720 min off,
-       and beyond
-     - The medians of 84 clean starts, 2026-04-18 to 10-25
-       (:doc:`/explanation/recovery-speed`).
-     - First fitted 2026-10-26
+     - 0 min in every band
+     - No hold is imposed: the start stirs the cold water under the
+       condenser into the layers it wraps, and the lower probe holds
+       while that is heated back (:doc:`/explanation/recovery-speed`).
+       A caller's own hold still applies.
+     - Default
    * - ``controller.hp_stop_overshoot_f``
      - 0.9 degF
      - The median overshoot at the stop of 31 draw-free run-ons,
@@ -904,7 +914,7 @@ with. Heights are shares of the volume from the bottom.
    * - ``tank.inlet_mix_gal``
      - 9 gal
      - The water an inflow mixes with as it enters. A starting value;
-       the fit finds 12.2 gal.
+       the fit finds 14.3 gal.
    * - ``tank.conductance_btu_hr_f``
      - 0.89 BTU/hr per degF
      - The water column's, end to end (10.7 between each pair of twelve
