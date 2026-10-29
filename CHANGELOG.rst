@@ -212,20 +212,23 @@ Changed
 
 - **The power is fitted where it is read.** The walk reads the power's
   map at the condenser's water, which is below the lower probe the map
-  was fitted on (4.5 °F on the record's climbs on average): read there,
-  the map priced them at 407.6 W against the 418.2 W metered.
+  was fitted on (4.7 °F on the record's climbs on average): read there,
+  the map priced them at 407.2 W against the 418.2 W metered.
   ``sim_calibrate`` now reads each metered block at the condenser's
   water on the record's replay (``heat_pump_fit.in_condenser_water``,
-  over ``tank_fit.condenser_water``, one replay through the record),
-  and the power's plane is fitted there; ``power_blocks``' new
+  over ``tank_fit.condenser_water``, one replay through the record: the
+  water each step read the map at, after its draws and the start's
+  stir, weighted by the hours it ran, ``stratified.Books``' new
+  ``compressor_h`` and ``compressor_water_f_h``), and the power's plane
+  is fitted there; ``power_blocks``' new
   ``water_f`` is the water a block is read at, the lower probe's with
   no record to replay, and ``calibration.calibrate`` takes the
-  ``evidence`` to fit on. The site's map is refitted so (408.2 W at 65
-  °F air and 120 °F water, +1.03 per °F of air, +2.71 per °F of water,
-  3,562 blocks, 2026-04-16 to 10-26, 12.8 W RMS); its air span is 53
+  ``evidence`` to fit on. The site's map is refitted so (408.6 W at 65
+  °F air and 120 °F water, +1.04 per °F of air, +2.70 per °F of water,
+  3,562 blocks, 2026-04-16 to 10-26, 12.9 W RMS); its air span is 53
   to 90 °F, the runs before 2026-04-16 having no record to replay. On
   the 11 held-out draw-free recoveries the electricity went from 2.7 %
-  low to 0.3 % high on average and its mean absolute error from 4.5 %
+  low to 0.4 % high on average and its mean absolute error from 4.5 %
   to 5.0 %. The heat's map is left on the mixed climbs: on the record's
   replay a draw-free recovery's layers gain 1.006 times the heat the
   map credits, and a refit on the probes through the replayed layers

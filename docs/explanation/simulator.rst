@@ -394,7 +394,7 @@ draw-free recoveries from 2026-04-16 (in-sample before 2026-09-18), the
 shorter ones from 1.9 min short to 8.2. The offset is not applied. The
 power is now fitted where it is read, at the condenser's water on the
 record's replay: on the same 11 recoveries, with the start's stir, the
-electricity went from 2.7 % low to 0.3 % high on average and its mean
+electricity went from 2.7 % low to 0.4 % high on average and its mean
 absolute error from 4.5 % to 5.0 %, the long runs no longer offset.
 
 Not yet measured on the layered tank: recorded starts and daily energy

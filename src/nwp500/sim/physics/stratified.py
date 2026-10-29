@@ -873,6 +873,10 @@ class Books:
     loss_btu: float = 0.0
     compressor_btu: float = 0.0
     compressor_wh: float = 0.0
+    #: The hours the compressor drew its map's power, and the
+    #: condenser's water the map was read at times those hours, °F·h.
+    compressor_h: float = 0.0
+    compressor_water_f_h: float = 0.0
     element_btu: float = 0.0
     element_wh: float = 0.0
     flowing_btu: float = 0.0
@@ -1015,13 +1019,17 @@ class _Walk:
                 * heat_btu_h(c.params, air, water)
                 * _overlap_h(a, b, c.heats_at, c.off_at)
             )
-            wh = power_w(c.params, air, water) * _overlap_h(
-                a, b, c.on_at, c.off_at
-            )
+            on_h = _overlap_h(a, b, c.on_at, c.off_at)
+            wh = power_w(c.params, air, water) * on_h
             heat = [
                 x + y for x, y in zip(heat, condenser_heat(lay, q), strict=True)
             ]
-            books += Books(compressor_btu=q, compressor_wh=wh)
+            books += Books(
+                compressor_btu=q,
+                compressor_wh=wh,
+                compressor_h=on_h,
+                compressor_water_f_h=water * on_h,
+            )
         for e in self.heating.elements:
             off = None if e.off_at is None else e.off_at + e.lag
             q = (

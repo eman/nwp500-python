@@ -748,16 +748,16 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        (:doc:`/explanation/recovery-speed`).
      - First fitted 2026-10-26
    * - ``compressor.power_w`` and its slopes
-     - 408.2 W at 65 degF air and 120 degF water; +1.03 per degF of
-       air, +2.71 per degF of the condenser's water
+     - 408.6 W at 65 degF air and 120 degF water; +1.04 per degF of
+       air, +2.70 per degF of the condenser's water
      - 3,562 ten-minute blocks of metered climbs over 211 runs,
        2026-04-16 to 10-26, each at the condenser's water on the
        record's replay (``heat_pump_fit.in_condenser_water``), where the
-       walk reads the map: 68.4 to 144.4 degF, 4.5 degF under the lower
-       probe on average, the air 53.6 to 89.3 degF: 12.8 W RMS. Read
+       walk reads the map: 68.4 to 144.3 degF, 4.7 degF under the lower
+       probe on average, the air 53.6 to 89.3 degF: 12.9 W RMS. Read
        there, the map fitted on the lower probe (401.7 W, +0.21, +2.85)
-       priced these blocks at 407.6 W against the 418.2 W metered, at
-       17.4 W RMS. The runs before 2026-04-16 have no record to replay.
+       priced these blocks at 407.2 W against the 418.2 W metered, at
+       17.8 W RMS. The runs before 2026-04-16 have no record to replay.
      - 2026-10-29
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``

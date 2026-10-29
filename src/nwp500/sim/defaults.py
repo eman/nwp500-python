@@ -123,15 +123,15 @@ def _nwp500_65() -> HeaterParams:
         # 2026-04-16 to 10-26, at the condenser's water on the record's
         # replay through the tank above
         # (``heat_pump_fit.in_condenser_water``), where the walk reads
-        # it: 4.5 °F under the lower probe on average.
+        # it: 4.7 °F under the lower probe on average.
         compressor=CompressorParams(
             heat_btu_h=4499.436604500702,
             heat_btu_h_per_air_f=55.49795247502065,
             heat_btu_h_per_water_f=-15.948333659761246,
             heat_btu_h_per_air_water_f=0.0,
-            power_w=408.2193454012522,
-            power_w_per_air_f=1.0323046333623926,
-            power_w_per_water_f=2.7126193355224806,
+            power_w=408.59956058228266,
+            power_w_per_air_f=1.0381853868143607,
+            power_w_per_water_f=2.696755796440391,
             power_w_per_air_water_f=0.0,
             heat_domain_air_f=(61.0, 89.0),
             heat_domain_water_f=(114.0, 144.0),

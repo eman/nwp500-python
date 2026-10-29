@@ -48,6 +48,8 @@ Reading = tuple[datetime, float]
 Observed = tuple[datetime, float, float]
 #: A run of something on: its first and its last-plus-one minute.
 Run = tuple[int, int]
+#: A walk's step: its start, its end and its books.
+Step = tuple[datetime, datetime, st.Books]
 
 #: The record's grid.
 MINUTE = timedelta(minutes=1)
@@ -314,18 +316,16 @@ def _span(
     state: st.TankState,
     i: int,
     j: int,
-    path: list[tuple[datetime, st.TankState]] | None = None,
+    steps: list[Step] | None = None,
 ) -> st.TankState:
     """``state`` walked over minutes ``[i, j)`` of the record: split
     where a second compressor run starts, so each walk has one. The
-    walks' paths are added to ``path`` where it is given, a walk's
-    first point in place of the one before at the same instant: there
-    the state it starts from, corrected to the probes (``replay``)."""
+    walks' steps are added to ``steps`` where it is given."""
     runs = _overlapping(record.compressor, i, j)
     if len(runs) > 1:
         cut = record.compressor[runs[1]][0]
-        state = _span(lay, params, record, state, i, cut, path)
-        return _span(lay, params, record, state, cut, j, path)
+        state = _span(lay, params, record, state, i, cut, steps)
+        return _span(lay, params, record, state, cut, j, steps)
     compressor = (
         _compressor(params, record, record.compressor[runs[0]], runs[0])
         if runs
@@ -361,10 +361,9 @@ def _span(
         ],
         valve=(d.delivery_intercept_f, d.delivery_slope),
     )
-    if path is not None:
-        if path and path[-1][0] == walked.path[0][0]:
-            path.pop()
-        path.extend(walked.path)
+    if steps is not None:
+        times = [t for t, _ in walked.path]
+        steps.extend(zip(times[:-1], times[1:], walked.steps, strict=True))
     return walked.state
 
 
@@ -407,10 +406,10 @@ def _replayed(
     end: int,
     *,
     gain: float = 1.0,
-    path: list[tuple[datetime, st.TankState]] | None = None,
+    steps: list[Step] | None = None,
 ) -> st.TankState | None:
     """``replay``'s walk from minute ``first`` to ``end``, its walks'
-    paths added to ``path`` where it is given; None with no reading of
+    steps added to ``steps`` where it is given; None with no reading of
     both probes and the air before ``end``."""
     step = ASSIMILATE_EVERY // MINUTE
     i = max(0, first)
@@ -425,7 +424,7 @@ def _replayed(
     )
     while i < end:
         j = min(end, i + step)
-        state = _span(lay, params, record, state, i, j, path)
+        state = _span(lay, params, record, state, i, j, steps)
         if j < len(record) and _known(record, j):
             state = st.mix(
                 st.assimilate(
@@ -462,27 +461,39 @@ def condenser_water(
     record: TankRecord,
     spans: Sequence[tuple[datetime, datetime]],
 ) -> list[float]:
-    """The water the condenser reads over each of ``spans``
-    (``stratified.condenser_water_f``), °F: its mean over the span's
-    points on one ``replay`` through the record, from ``REPLAY`` before
-    the first span to the last's end; NaN for a span the replay has no
-    point in."""
+    """The water the condenser reads over each of ``spans``, °F: on one
+    ``replay`` through the record, from ``REPLAY`` before the first span
+    to the last's end, the water the walk read the power's map at
+    (``stratified.Books.compressor_water_f_h``, after the draws and the
+    start's stir), weighted by the hours it ran in the span; NaN for a
+    span the compressor did not run in."""
     if not spans:
         return []
     lay = st.layout(params)
     first = min(a for a, _ in spans)
     end = min(len(record), record.minute(max(b for _, b in spans)) + 1)
-    path: list[tuple[datetime, st.TankState]] = []
+    steps: list[Step] = []
     _replayed(
-        lay, params, record, record.minute(first - REPLAY), end, path=path
+        lay, params, record, record.minute(first - REPLAY), end, steps=steps
     )
-    times = [t for t, _ in path]
-    water = [st.condenser_water_f(lay, s) for _, s in path]
+    starts = [a for a, _, _ in steps]
     out: list[float] = []
     for a, b in spans:
-        lo, hi = bisect_left(times, a), bisect_left(times, b)
-        out.append(math.fsum(water[lo:hi]) / (hi - lo) if hi > lo else math.nan)
+        hours = water = 0.0
+        for lo, hi, books in steps[max(0, bisect_right(starts, a) - 1) :]:
+            if lo >= b:
+                break
+            share = _share(lo, hi, a, b)
+            hours += share * books.compressor_h
+            water += share * books.compressor_water_f_h
+        out.append(water / hours if hours > 0.0 else math.nan)
     return out
+
+
+def _share(lo: datetime, hi: datetime, a: datetime, b: datetime) -> float:
+    """The share of the step ``[lo, hi)`` inside ``[a, b)``."""
+    inside = (min(hi, b) - max(lo, a)) / (hi - lo)
+    return max(0.0, inside)
 
 
 # ── the events and their errors ──

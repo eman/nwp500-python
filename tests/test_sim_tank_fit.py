@@ -316,29 +316,33 @@ class TestTheCondenserWater:
         # It heats through the run.
         assert got[-1] > got[0] + 5.0
 
-    def test_it_reads_the_layers_as_corrected(self, record) -> None:
-        """Where a walk ends at a correction to the probes, the path
-        holds the corrected layers alone, once: the replay of another
-        tank than the one that wrote the record is corrected at every
-        reading."""
+    def test_it_reads_the_water_the_walk_reads_the_map_at(
+        self, history
+    ) -> None:
+        """A draw during the run cools the condenser's water before the
+        power's map is read: a minute from the draw reads the water
+        after it, not the tank's before."""
+        frame, draws, _ = history
+        at = _at(21.0)
+        spans = [(at, at + timedelta(minutes=1))]
+        dry = tf.condenser_water(TRUE, tf.tank_record(frame, draws), spans)
+        drawn = tf.tank_record(frame, sorted([*draws, (at, 15.0)]))
+        wet = tf.condenser_water(TRUE, drawn, spans)
+        assert wet[0] < dry[0] - 1.0
+
+    def test_its_steps_follow_on(self, record) -> None:
+        """The replay's steps meet end to end: each step's water is read
+        once."""
         lay = S.layout(PRIORS)
         first, end = record.minute(_at(19.0)), record.minute(_at(22.0))
-        path: list[tuple[datetime, S.TankState]] = []
-        tf._replayed(lay, PRIORS, record, first, end, path=path)  # pyright: ignore[reportPrivateUsage]
-        times = [t for t, _ in path]
-        assert times == sorted(set(times))
-        at = dict(path)
-        moved = 0
-        for k in range(1, 18):
-            j = first + 10 * k
-            corrected = tf._replayed(lay, PRIORS, record, first, j)  # pyright: ignore[reportPrivateUsage]
-            assert corrected is not None
-            assert at[record.instant(j)] == corrected
-            uncorrected = tf._span(  # pyright: ignore[reportPrivateUsage]
-                lay, PRIORS, record, at[record.instant(j - 10)], j - 10, j
-            )
-            moved += uncorrected != corrected
-        assert moved > 10
+        steps: list[tuple[datetime, datetime, S.Books]] = []
+        tf._replayed(lay, PRIORS, record, first, end, steps=steps)  # pyright: ignore[reportPrivateUsage]
+        assert steps[0][0] == record.instant(first)
+        assert steps[-1][1] == record.instant(end)
+        assert [b for _, b, _ in steps[:-1]] == [a for a, _, _ in steps[1:]]
+        running = [k for _, _, k in steps if k.compressor_h > 0.0]
+        assert running
+        assert all(k.compressor_water_f_h > 0.0 for k in running)
 
     def test_outside_the_record_it_is_unknown(self, record) -> None:
         before = (T0 - timedelta(hours=3), T0 - timedelta(hours=2))

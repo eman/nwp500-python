@@ -209,9 +209,9 @@ The power is fitted where it is read, at :math:`T_c`: each metered
 block at the condenser's water on the record's replay
 (``heat_pump_fit.in_condenser_water``), which is below the lower probe,
 by the probe's fixed offset in a mixed tank and by more while the tank
-is stratified (4.5 degF on average over the record's climbs). Fitted on
+is stratified (4.7 degF on average over the record's climbs). Fitted on
 the lower probe's reading and read at :math:`T_c`, it priced the
-record's climbs at 407.6 W against the 418.2 W metered.
+record's climbs at 407.2 W against the 418.2 W metered.
 
 Each is read with the air and the water held to the span it was
 fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
