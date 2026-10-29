@@ -148,8 +148,9 @@ along the column and its spread :math:`s`, and the lower one reads a
 fixed offset above them. A walk that starts from the two probes alone
 builds a profile they read back exactly (``estimate``) and says
 ``tank_profile_estimated``. While the compressor heats, the real
-probes also read above the water, about 0.5 degF the upper and 0.9 the
-lower (:doc:`recovery-speed`); the model's probes do not.
+probes also read higher than at rest, after 40 minutes or more of
+heating about 0.5 degF the upper and 0.9 the lower
+(:doc:`recovery-speed`); the model's probes do not.
 
 **Standby.** Each layer relaxes toward the air beside the heater, at
 :math:`T_a`, through its share of the sides' loss, the bottom layer

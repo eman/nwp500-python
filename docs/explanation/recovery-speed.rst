@@ -424,16 +424,16 @@ instead (see :doc:`tou-recovery-cap`).
 
 **The probes read high while the compressor heats.** In the 5 minutes
 after a quiet stop (no element, circulation, draw or restart from 5
-minutes before the run's start to 15 minutes after its stop), the
-upper probe steps down 0.48 degF and the lower 0.75 degF on average,
-each net of its standby trend over the next 10 minutes, scaled to the
-5: 74 stops, 2026-04-24 to 2026-10-22. The water changes little in 5
-minutes, so the step is what each probe reads above the water while
-the compressor runs. It is smaller after a short run: 0.25 and 0.30
-degF after under 10 minutes of heating (12 stops), 0.56 and 0.59 after
-10-40 minutes (15), 0.51 and 0.91 after 40 minutes or more (47). On a
-long recovery the lower probe's step is the size of the overshoot
-above, so the water at the stop is close to the setpoint.
+minutes before the run's start to 15 minutes after its stop), the upper
+probe steps down 0.48 degF and the lower 0.75 degF on average, each net
+of its standby trend over the next 10 minutes, scaled to 5 minutes: 74
+stops, 2026-04-24 to 2026-10-22. The water changes little in 5 minutes,
+so the step is how much higher each probe reads while the compressor
+runs than at rest. It is smaller after a short run: 0.25 and 0.30 degF
+after under 10 minutes of heating (12 stops), 0.56 and 0.59 after 10-40
+minutes (15), 0.51 and 0.91 after 40 minutes or more (47). On a long
+recovery the lower probe's step is the size of the overshoot above, so
+the water at the stop is close to the setpoint.
 
 
 Limits
