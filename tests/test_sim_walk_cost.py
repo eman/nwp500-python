@@ -26,6 +26,8 @@ from nwp500.sim import (
     Settings,
     engine,
 )
+from nwp500.sim.circulation import Circulation
+from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.engine import Entry, Heater, RawWrite
 from nwp500.sim.params import params_from_document
 from nwp500.sim.tank_physics import TankPhysics
@@ -217,3 +219,95 @@ def test_the_answer_does_not_depend_on_the_pieces(
     whole = answer(timedelta(days=30))
     assert answer(timedelta(minutes=20)) == whole
     assert answer(timedelta(hours=3)) == whole
+
+
+T5 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
+
+
+def _flat_air(air_f: float = 60.0) -> pd.DataFrame:
+    stamps = pd.date_range(
+        T5 - timedelta(hours=2), T5 + timedelta(days=2), freq="10min"
+    )
+    return pd.DataFrame({"ambient_f": air_f}, index=stamps)
+
+
+def _circulating(
+    gal: float, lower_on: float, known_until: datetime | None = None
+) -> dict[str, Any]:
+    """A circulation run over a coast. With ``known_until``, the run
+    goes on past where it is known; else a draw of ``gal`` lands on
+    the first piece's end, where the circulation's drop over the step
+    ending there is the last piece's."""
+    run = (
+        (T5 + timedelta(hours=1), T5 + timedelta(hours=6))
+        if known_until
+        else (T5 + timedelta(hours=1), T5 + timedelta(hours=8))
+    )
+    return {
+        "start": T5,
+        "until": T5 + timedelta(hours=8),
+        "setpoint_f": 140.0,
+        "upper_f": 130.0,
+        "lower_f": 125.0,
+        "running": False,
+        "heater": Heater(hp_lower_on_f=lower_on, mode="heat_pump"),
+        "physics": TankPhysics(
+            _PARAMS,
+            _flat_air(),
+            48.0,
+            draws_on=True,
+            circulation=Circulation((run,), known_until=known_until),
+            circulation_terms=SITE_CIRCULATION,
+        ),
+        "draws": [] if known_until else [(T5 + timedelta(hours=3), gal)],
+    }
+
+
+def _overlapping() -> dict[str, Any]:
+    """A coast that begins inside one TOU window, its upper zone less
+    than a probe step past the line, a later window opening inside it:
+    the start is the first window's, crossing past the second's
+    opening."""
+    physics = TankPhysics(_PARAMS, _flat_air(124.0), 48.0, draws_on=True)
+    first = (T5 - timedelta(hours=1), T5 + timedelta(hours=10))
+    second = (T5 + timedelta(hours=1), T5 + timedelta(hours=10))
+    return {
+        "start": T5,
+        "until": T5 + timedelta(hours=12),
+        "setpoint_f": 140.0,
+        "upper_f": 125.55,
+        "lower_f": 125.55,
+        "running": False,
+        "state": physics.layers([125.55] * physics.layout.layers),
+        "heater": Heater(
+            hp_lower_on_f=None, mode="heat_pump", tou_windows=(first, second)
+        ),
+        "physics": physics,
+    }
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: _circulating(10.0, 105.0),
+        lambda: _circulating(0.5, 106.393),
+        lambda: _circulating(0.0, 105.0, known_until=T5 + timedelta(hours=2)),
+        _overlapping,
+    ],
+    ids=["drop-order", "drop-order-small", "known-until", "overlapping-tou"],
+)
+def test_a_piece_answers_as_the_whole_walk(
+    monkeypatch: pytest.MonkeyPatch, build: Any
+) -> None:
+    """Where pieces meet a circulation's drop and a draw at one instant,
+    a circulation run known only from before a piece's start, and TOU
+    windows that overlap: the coast in pieces answers as one walked
+    whole."""
+
+    def answer(ahead: timedelta) -> engine.Simulation:
+        monkeypatch.setattr(engine, "_COAST_AHEAD", ahead)
+        return engine.simulate(**build())
+
+    whole = answer(timedelta(days=30))
+    assert answer(timedelta(hours=3)) == whole
+    assert answer(timedelta(minutes=10)) == whole

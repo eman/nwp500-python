@@ -99,10 +99,19 @@ class Circulation:
     def __post_init__(self) -> None:
         object.__setattr__(self, "runs", tuple(merge_runs(self.runs, self.gap)))
 
-    def over(self, start: datetime, end: datetime) -> list[Run] | None:
+    def over(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        known_from: datetime | None = None,
+    ) -> list[Run] | None:
         """The runs overlapping ``[start, end)``, unclipped, in the order
-        given; None when they are not known there."""
-        if self.known_until is not None and start > self.known_until:
+        given; None when they are not known there: when the span, or the
+        walk it continues (from ``known_from``), starts after
+        ``known_until``."""
+        begins = start if known_from is None else known_from
+        if self.known_until is not None and begins > self.known_until:
             return None
         if end <= start:
             return []

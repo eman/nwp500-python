@@ -227,6 +227,11 @@ Changed
   NWP500-65's parameters with about 30 draws a day, ``simulate`` over
   14 days takes 369 ms against 2.6 s in Heat Pump mode and 449 ms
   against 4.8 s in High Demand; the answers are the same.
+  ``Physics.advance`` takes ``walk_from``, where the walk a piece
+  continues began, and ``Circulation.over`` and
+  ``tank_physics.circulation_flows`` take ``known_from``: a circulation
+  known up to ``known_until`` is charged on every piece of a walk that
+  began inside what is known.
 - **A circulation run returns its pipe, then the tank's own water a
   little cooler.** A run was priced on an effective volume (19.36 gal
   at the site) back at the return's rest, then the tank's own water as

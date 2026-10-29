@@ -347,6 +347,12 @@ def _onset(draw: Draw) -> datetime:
     return draw[0]
 
 
+def _overlapping(windows: Sequence[Window]) -> bool:
+    """Whether any two of ``windows`` overlap."""
+    ordered = sorted(windows)
+    return any(b[0] < a[1] for a, b in pairwise(ordered))
+
+
 def quantise(f: float, resolution_c: float = SETPOINT_RESOLUTION_C) -> float:
     """``f`` as the device will hold it: to the nearest ``resolution_c``
     in °C. 146 °F is held as 146.3, as the device did on
@@ -1336,11 +1342,12 @@ class _Engine:
         own start is triggered in. Each of its rules finds its instant
         from the tank up to it, so one triggered short of a piece's end
         (with no draw at the end, which the rules read with the step
-        before it) is the one the walk to ``end`` finds, and its start,
-        past the lockout of a stop before now, falls short of the end
-        too. With only an element's later start found, the walk goes on
-        to ``end``: the coast plans the heater's own start too where the
-        whole walk finds one, past the element's."""
+        before it, and its start short of it too) is the one the walk to
+        ``end`` finds. With TOU windows that overlap, the upper zone's
+        start at one's opening needs the whole walk. With only an
+        element's later start found, the walk goes on to ``end``: the
+        coast plans the heater's own start too where the whole walk
+        finds one, past the element's."""
         self.cooling = [
             e for e in self.cooling if self._heats_until(e) > self.t
         ]
@@ -1363,9 +1370,18 @@ class _Engine:
                 self.draws[self._draws_in(t, upto)],
                 running=running,
                 stop=stop,
+                walk_from=self.t,
             )
             points += part.points[1:] if points else part.points
-            impulses += part.impulses
+            # At the instant pieces meet, the draws there (the new
+            # piece's) come before the flow's drop over the step ending
+            # there (the last piece's), as one walk orders them.
+            at_t = [i for i in impulses if i.at == t]
+            impulses = [i for i in impulses if i.at < t] + [
+                *(i for i in part.impulses if i.at == t),
+                *at_t,
+                *(i for i in part.impulses if i.at > t),
+            ]
             stretch = Stretch(points, stopped=part.stopped, impulses=impulses)
             if part.stopped or part.end >= end:
                 return stretch
@@ -1380,10 +1396,18 @@ class _Engine:
             if (
                 own is not None
                 and own.trigger_at < upto
+                and own.starts_at < upto
                 and not self.draws[self._draws_in(upto, upto + _INSTANT)]
+                and not (
+                    own.trigger == "upper_at_tou_open"
+                    and _overlapping(self.settings.tou_windows)
+                )
             ):
                 # A draw at the piece's end is the next piece's, but the
                 # rules read the drops at a step's end with the step.
+                # Overlapping windows: the upper zone's start is the
+                # first window's that it crosses in, which may cross
+                # past the piece after a later window opened in it.
                 return stretch
             t, state = part.end, part.state
 
