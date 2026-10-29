@@ -3,13 +3,12 @@ schedule: its runs as water through the tank.
 
 Some installations circulate hot water from the tank around their
 plumbing and back, so a tap runs hot sooner. A run takes heat only
-while it runs: the water returning to the bottom of the tank has cooled
-in the pipe, and once the first ``CirculationParams.displaced_gal`` of
-it has come back the tank loses nothing more to it, though the run still
-carries hot water from the top to the bottom. The volume is an
-effective one: at one installation a run kept taking heat as long as it
-ran, and the fitted volume is above the typical run. With no runs
-given, nothing is charged.
+while it runs. The water first coming back to the tank is the pipe's,
+cooled where it rested: ``CirculationParams.displaced_gal`` of it, the
+pipe's volume. After it the tank's own water comes back, cooler by
+what the pipe loses on the way round (``steady_share``, on
+``CirculationParams.pipe_ua_btu_hr_f``). With no runs given, nothing
+is charged.
 
 The runs are the caller's: a weekly schedule laid out as instants
 (``sim_adapters.circulation``), a record of when it ran, or a run asked
@@ -23,16 +22,20 @@ at the bottom. The first of it comes back at the air where the heater
 stands plus ``CirculationParams.return_rest_offset_f``, where the return
 rests between runs: ``displaced_gal`` of it, scaled by the share that
 has cooled since the last run ended (``cooled_share``, on
-``CirculationParams.return_cool_tau_h``); the rest comes back as hot
-as it left. Runs closer than ``RUN_GAP`` are one run: a restart
-displaces water the last run warmed, and ``displaced_gal`` is fitted on
-runs merged that way.
+``CirculationParams.return_cool_tau_h``); the rest comes back at the
+rest plus ``steady_share`` of the top's lift over it. Water warmer than
+the tank's bottom rises to its own level there
+(``physics.stratified.flow``). Runs closer than ``RUN_GAP`` are one
+run: a restart displaces water the last run warmed, and the return's
+rest and cooling are fitted on runs merged that way.
 """
 
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 #: A run: when it starts and when it ends.
 Run = tuple[datetime, datetime]
@@ -57,6 +60,18 @@ def cooled_share(rest_hours: float | None, cool_tau_h: float) -> float:
     if rest_hours is None or cool_tau_h <= 0.0:
         return 1.0
     return 1.0 - math.exp(-max(rest_hours, 0.0) / cool_tau_h)
+
+
+def steady_share(ua_btu_hr_f: float, flow_gpm: float) -> float:
+    """The share of the tank's lift over the return's rest that the
+    tank's own water keeps on its way round the pipe, at ``flow_gpm``:
+    ``exp(−UA / (ṁ·c))``, the pipe a heat exchanger with surroundings
+    at the rest. 1 with no loss; 0 with no flow."""
+    if ua_btu_hr_f <= 0.0:
+        return 1.0
+    if flow_gpm <= 0.0:
+        return 0.0
+    return math.exp(-ua_btu_hr_f / (flow_gpm * 60.0 * WATER_BTU_PER_GAL_F))
 
 
 def merge_runs(runs: Iterable[Run], gap: timedelta = RUN_GAP) -> list[Run]:

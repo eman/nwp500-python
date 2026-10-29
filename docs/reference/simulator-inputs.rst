@@ -469,13 +469,19 @@ nothing is charged.
    * - Field
      - What it is
    * - ``displaced_gal``
-     - Gallons a run displaces before hot water comes back: an
-       effective volume, fitted together with the two return terms
-       below (``fit_return``).
+     - The pipe's volume: what a run brings back from the pipe before
+       the tank's own water returns, measured on the return line of a
+       run after a long rest (``measure_pipe``).
+   * - ``pipe_ua_btu_hr_f``
+     - The pipe's loss once the tank's own water is coming back, BTU/h
+       per degF, measured with the volume (default 0: back as hot as
+       it left). That water returns at the rest plus
+       ``exp(-UA / (flow x 8.34 x 60))`` of the top's lift over it.
    * - ``return_rest_offset_f``
      - How far above the air at the heater the return rests between
        runs (default 0: at the air). The pipe can run through warmer
-       or cooler space than the heater stands in.
+       or cooler space than the heater stands in. Fitted with the
+       cooling below on the runs' heat (``fit_return``).
    * - ``return_cool_tau_h``
      - The time constant on which the pipe a run warmed cools back to
        rest (default 0: at once). A run this soon after another
@@ -489,18 +495,20 @@ nothing is charged.
        recorded history takes it off the meter to find the draws.
    * - ``run_gap_min``
      - Runs closer than this are one run (default 10 minutes), merged
-       once over the whole input. ``displaced_gal`` is fitted on runs
-       merged at this gap, so change them together.
+       once over the whole input. The return's rest and cooling are
+       fitted on runs merged at this gap, so change them together.
 
-Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
-gallons times the share of the pipe cooled since the last run ended,
-its water returning at the air where the heater stands plus
-``return_rest_offset_f``; runs closer than ``run_gap_min`` are one run,
-as ``displaced_gal`` was fitted.
+Each run first returns ``min(flow x minutes, displaced_gal)`` gallons
+times the share of the pipe cooled since the last run ended, at the air
+where the heater stands plus ``return_rest_offset_f``, then the tank's
+own water at its steady share; water warmer than the tank's inlet zone
+rises past it to where the tank is as warm. Runs closer than
+``run_gap_min`` are one run, as the return's terms were fitted.
 None of these has a default: they
 describe one installation's plumbing. ``site_example_params`` carries
-one installation's (19.36 gal, a return resting 7.84 degF above the air
-and cooling on 0.464 h, 1.397 gal/min).
+one installation's (a 6.86 gal pipe losing 14.6 BTU/h per degF, a
+return resting 4.47 degF above the air and cooling on 0.52 h,
+1.397 gal/min).
 
 
 The tank's layers from a recorded history
@@ -750,13 +758,13 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        (:doc:`/explanation/recovery-speed`).
      - First fitted 2026-10-26
    * - ``compressor.power_w`` and its slopes
-     - 408.9 W at 65 degF air and 120 degF water; +1.03 per degF of
-       air, +2.70 per degF of the condenser's water
+     - 408.9 W at 65 degF air and 120 degF water; +1.02 per degF of
+       air, +2.73 per degF of the condenser's water
      - 3,562 ten-minute blocks of metered climbs over 211 runs,
        2026-04-16 to 10-26, each at the condenser's water on the
        record's replay (``heat_pump_fit.in_condenser_water``), where the
        walk reads the map: 67.5 to 144.0 degF, 4.8 degF under the lower
-       probe on average, the air 53.6 to 89.3 degF: 13.0 W RMS. Read
+       probe on average, the air 53.6 to 89.3 degF: 12.7 W RMS. Read
        there, the map fitted on the lower probe (401.7 W, +0.21, +2.85)
        priced these blocks at 406.9 W against the 418.2 W metered, at
        18.1 W RMS. The runs before 2026-04-16 have no record to replay.
@@ -781,22 +789,24 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        2026-04-21 to 10-22.
      - First fitted 2026-10-26
    * - ``SITE_CIRCULATION``
-     - 19.36 gal, +7.84 degF, 0.464 h, 1.397 gal/min
-     - The run model's three terms fitted together (``fit_return``) on
-       123 runs with the compressor off, 2026-04-04 to 2026-10-24. In
-       five-fold cross-validation the mean absolute error is 268 BTU a
-       run, against 767 for a return at the air (that form refits at
-       6.36 gal). Before a run after 16 h or more, the return probe
-       read a median 6.9 degF above the heater's air, following it
-       with a slope of 0.95. Runs within an hour of another took a
-       median 1,583 BTU, against 3,223 after 8 h. The record's long
-       runs never brought hot water back (the return still 17-38 degF
-       under the tank after 16-20 gal), so the volume is effective and
-       above the typical 4 min (5.9 gal) run. The longest measured run
-       (19.8 gal) sets it: ``fit_return`` refuses a set of runs none of
-       which is longer than the volume found. The flow is the median
-       over the 14 days before a retrain.
-     - folds 14.6-19.5 gal, 7.3-8.2 degF, 0.45-0.51 h
+     - 6.86 gal, 14.6 BTU/h per degF, +4.47 degF, 0.52 h, 1.397 gal/min
+     - The pipe measured on one run on 2026-10-29 (``measure_pipe``):
+       35.7 min at constant pressure after a 4 h rest, nothing else
+       acting on the tank. The return rose half way to its steady
+       value at 6.86 gal of the pump's flow and held 1.6 degF under the
+       upper probe at 1.08 gal/min. The rest and the cooling fitted
+       with it (``fit_return``) on 122 runs with the compressor off,
+       2026-04-04 to 2026-10-24: in five-fold cross-validation the mean
+       absolute error is 379 BTU a run, against 300 for the effective
+       19.36 gal loop it replaces, whose return came back at the tank's
+       own temperature. Most of those runs end as the front arrives
+       (the pump stops at a 102 degF return), and the front spreads
+       over 5 to 12 gal. Held out from 2026-09-18, the recoveries'
+       durations are 27.1 min off against 30.9. The volume is in the
+       pump's gallons; the house's meter has read about 0.3 gal/min
+       less since 2026-09-14. The flow is the median over the 14 days
+       before a retrain.
+     - folds 1.9-5.9 degF, 0.50-0.61 h
 
 **Measured on the heater**
 

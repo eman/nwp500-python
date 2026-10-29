@@ -26,7 +26,9 @@ past what drives it:
 - ``flow``: water in at the bottom pushes the column up and out of the
   top as a plug, through an inlet zone of ``inlet_mix_gal`` that mixes
   it in as it comes, solved exactly and remapped onto the layers by
-  exact integrals;
+  exact integrals; water warmer than the inlet zone rises past it
+  instead, to where the column is as warm, and pushes only the water
+  above that up and out;
 - ``draw``: a delivered draw through the mixing valve
   (``physics.draw.delivery_temp_f``, ``hot_fraction``), the tank water
   it takes solved from the water leaving the top in turn.
@@ -45,8 +47,8 @@ fraction of a layer carries each layer's water as a line through its
 mean, limited so it never passes a neighbour's (``_slope``). A front
 inside a layer is then that line, not the front: two draws are one of
 both to about a degree at the probes on a smooth profile, more on a
-step. Water coming in warmer than the bottom turns over at the end of
-each flow (``mix``), so where such a flow is cut matters.
+step. A flow that leaves an inversion turns it over at its end
+(``mix``), so where such a flow is cut matters.
 
 Water's density and heat capacity are taken constant (8.34 BTU per
 gallon per °F), so a layer's energy is linear in its temperature and
@@ -625,19 +627,57 @@ class Flowed:
     heat_btu: float
 
 
+def _settles_at(col: _Column) -> float:
+    """Where water at ``col.inflow_f`` settles, gallons up: the foot of
+    the column above which all of it is at least as warm, along each
+    layer's line."""
+    h, t = col.lay.layer_gal, col.inflow_f
+    for i in reversed(range(col.lay.layers)):
+        lo, hi = col.at(i, i * h), col.at(i, (i + 1) * h)
+        if lo >= t:
+            continue
+        if hi >= t:
+            return i * h + h * (t - lo) / (hi - lo)
+        return (i + 1) * h
+    return 0.0
+
+
+def _risen(col: _Column, gal: float, a: float, b: float) -> float:
+    """The column after ``gal`` in that rose to where it settles
+    (``_settles_at``), integrated from ``a`` to ``b`` gallons up, gal·°F:
+    the water below as it was, the inflow above it, and the water that
+    was above moved up by as much, the top's leaving."""
+    v = _settles_at(col)
+    g = min(gal, col.lay.volume_gal - v)
+    t = col.inflow_f
+
+    def total(x: float) -> float:
+        if x <= v:
+            return col.integral(x)
+        if x <= v + g:
+            return col.integral(v) + (x - v) * t
+        return g * t + col.integral(x - g)
+
+    return total(b) - total(a)
+
+
 def flow(lay: Layout, state: TankState, gal: float, inflow_f: float) -> Flowed:
     """``gal`` gallons in at the bottom at ``inflow_f``, and as much out
-    at the top: through the inlet zone, then as a plug (``_Column``),
-    solved exactly and remapped onto the layers by exact integrals,
-    then mixed (an inflow warmer than the bottom rises)."""
+    at the top: through the inlet zone, then as a plug (``_Column``);
+    or, warmer than the inlet zone (than the bottom layer with none),
+    risen past it to where it settles (``_risen``). Solved exactly,
+    remapped onto the layers by exact integrals, then mixed."""
     layers = _layers(lay, state)
     if gal <= 0.0:
         return Flowed(state, 0.0)
     col = _Column(lay, layers, inflow_f)
     h = lay.layer_gal
     n = lay.layers
+    bottom = col.mix_start_f if col.mix_gal > 0.0 else layers[0]
+    column = _risen if inflow_f > bottom else _Column.after
     after = tuple(
-        col.after(gal, i * h, lay.volume_gal if i == n - 1 else (i + 1) * h) / h
+        column(col, gal, i * h, lay.volume_gal if i == n - 1 else (i + 1) * h)
+        / h
         for i in range(n)
     )
     new = mix(TankState(after))
@@ -856,14 +896,17 @@ class Heating:
 @dataclass(frozen=True, kw_only=True)
 class Flowing:
     """Water flowing through the tank from ``start`` to ``end`` at
-    ``gpm``, coming in at ``inflow_f``; None, at the top layer's
-    temperature as each step starts (water leaving the top and coming
-    straight back, a circulation run's own)."""
+    ``gpm``, coming in at ``inflow_f``; None, the water leaving the top
+    coming back (a circulation run's own): at ``rest_f`` plus ``share``
+    of the top layer's lift over it as each step starts, so at the top
+    layer's temperature with the default share of 1."""
 
     start: datetime
     end: datetime
     gpm: float
     inflow_f: float | None
+    rest_f: float = 0.0
+    share: float = 1.0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1068,7 +1111,9 @@ class _Walk:
             gal = f.gpm * 60.0 * _overlap_h(a, b, f.start, f.end)
             if gal > 0.0:
                 inflow = (
-                    state.layers_f[-1] if f.inflow_f is None else f.inflow_f
+                    f.rest_f + f.share * (state.layers_f[-1] - f.rest_f)
+                    if f.inflow_f is None
+                    else f.inflow_f
                 )
                 out = flow(lay, state, gal, inflow)
                 state = out.state

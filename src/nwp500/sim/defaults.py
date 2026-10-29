@@ -65,20 +65,23 @@ RATING_INLET_F = 58.0
 SITE_CLIMATE = (61.3, 19.9)
 
 #: The installation's circulation: 1.397 gal/min (the median over the
-#: 14 days before a retrain). The run model's three terms are fitted together
-#: (``calibration.fit_return``) on 123 runs with the compressor off,
-#: 2026-04-04 to 2026-10-24: the return rests 7.84 °F above the heater's
-#: air, and the pipe a run warmed cools back to rest on 0.464 h. The
-#: 19.36 gal is an effective volume, just under the longest measured
-#: run (19.8 gal), which sets it: the record's long runs never brought
-#: hot water back (the return still 17 to 38 °F under the tank after 16
-#: to 20 gal), so a run takes heat as long as it runs, and the typical
-#: 4 min run (5.9 gal) is under it.
+#: 14 days before a retrain). Its pipe is measured on one run on
+#: 2026-10-29 (``calibration.measure_pipe``), 35.7 min at constant
+#: pressure after a 4 h rest with nothing else acting on the tank: the
+#: return rose half way to its steady value at 6.86 gal of the run's
+#: own flow reading, and held 1.6 °F under the upper probe at 1.08
+#: gal/min, a loss of 14.6 BTU/h·°F. With it the return's rest and
+#: cooling are fitted (``calibration.fit_return``) on 122 runs with the
+#: compressor off, 2026-04-04 to 2026-10-24: the return rests 4.47 °F
+#: above the heater's air, and the pipe a run warmed cools back to rest
+#: on 0.52 h. The gallons are the run's own reading's: the house's
+#: meter has read about 0.3 gal/min under it since 2026-09-14.
 SITE_CIRCULATION = CirculationParams(
-    displaced_gal=19.36,
+    displaced_gal=6.86,
     flow_gpm=1.397,
-    return_rest_offset_f=7.84,
-    return_cool_tau_h=0.464,
+    pipe_ua_btu_hr_f=14.6,
+    return_rest_offset_f=4.47,
+    return_cool_tau_h=0.52,
     # Its household meter read a run at 0.81 of the run's own flow
     # (median of 47 runs), but the flow a history's replay takes is the
     # household's draws alone (``sim_home_assistant`` reads them from
@@ -129,9 +132,9 @@ def _nwp500_65() -> HeaterParams:
             heat_btu_h_per_air_f=55.49795247502065,
             heat_btu_h_per_water_f=-15.948333659761246,
             heat_btu_h_per_air_water_f=0.0,
-            power_w=408.9257414721442,
-            power_w_per_air_f=1.0341014222315645,
-            power_w_per_water_f=2.7037561739288445,
+            power_w=408.8883465244252,
+            power_w_per_air_f=1.0192155261203373,
+            power_w_per_water_f=2.7279692948864747,
             power_w_per_air_water_f=0.0,
             heat_domain_air_f=(61.0, 89.0),
             heat_domain_water_f=(114.0, 144.0),

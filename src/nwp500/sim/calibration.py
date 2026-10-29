@@ -55,11 +55,15 @@ import pandas as pd
 from scipy.optimize import (
     OptimizeResult,
     minimize,
-    minimize_scalar,
 )
 
 from nwp500.sim import history_frame as hf
-from nwp500.sim.circulation import RUN_GAP, cooled_share, merge_runs
+from nwp500.sim.circulation import (
+    RUN_GAP,
+    cooled_share,
+    merge_runs,
+    steady_share,
+)
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
 from nwp500.sim.history_frame import Interval
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
@@ -703,17 +707,17 @@ def demonstrated(d: CleanDraw, line_f: float = 105.0) -> float:
     return crossing(d, line_f - 1e-9)[0]
 
 
-# ── circulation: what each run took, and the volume it displaces ────
+# ── circulation: what each run took, and its pipe ──────────────────
 
 #: A reading of the circulation's flow or its return line older than
 #: this at a running sample is no reading of it.
 RETURN_MAX_AGE = timedelta(minutes=5)
-#: Fewer runs than this and no displaced volume is fitted.
+#: Fewer runs than this and no return is fitted.
 MIN_RUNS_TO_FIT = 20
-#: Physically admissible displaced volumes, gallons, and the grid that
-#: brackets the fit before it is refined (about 0.1 gal a step).
-DISPLACED_BOUNDS = (0.5, 25.0)
-DISPLACED_GRID_POINTS = 250
+#: The gallons a run must go on after its return's warmest reading for
+#: ``measure_pipe`` to take that reading as the return's steady value,
+#: not one still rising.
+PIPE_STEADY_GAL = 4.0
 #: How far back the circulation's recent flow is measured, and how many
 #: runs in that window it needs.
 RECENT_FLOW_WINDOW = timedelta(days=14)
@@ -839,19 +843,24 @@ def run_heat_btu(
     rest_h: float | None = None,
     cool_tau_h: float = 0.0,
     before_min: float = 0.0,
+    pipe_ua_btu_hr_f: float = 0.0,
 ) -> float:
-    """The heat a run takes for its displaced volume over ``minutes``
-    of it, after ``before_min`` it had already run: the gallons it
-    displaces in them (``circulation.displaced_gal``), times the share
-    cooled since the run before (``circulation.cooled_share``), at the
-    upper zone less the return's rest (the air plus ``rest_offset_f``),
+    """The heat a run takes over ``minutes`` of it, after ``before_min``
+    it had already run, at the upper zone's lift over the return's rest
+    (the air plus ``rest_offset_f``): all of it for the pipe's cooled
+    water, the gallons of its volume it displaces in them
+    (``circulation.displaced_gal``) times the share cooled since the run
+    before (``circulation.cooled_share``), and what the pipe's loss takes
+    off it (1 less ``circulation.steady_share``) for the rest it moves;
     never negative."""
-    if displaced <= 0.0 or minutes <= 0.0 or flow_gpm <= 0.0:
+    if minutes <= 0.0 or flow_gpm <= 0.0:
         return 0.0
-    gal = (
+    piped = (
         circulation_displaced_gal(before_min + minutes, displaced, flow_gpm)
         - circulation_displaced_gal(before_min, displaced, flow_gpm)
     ) * cooled_share(rest_h, cool_tau_h)
+    lost = 1.0 - steady_share(pipe_ua_btu_hr_f, flow_gpm)
+    gal = piped + lost * (flow_gpm * minutes - piped)
     return max(
         0.0, gal * WATER_BTU_PER_GAL_F * (upper_f - air_f - rest_offset_f)
     )
@@ -861,27 +870,29 @@ def run_heat_btu(
 #: hours, for ``fit_return``.
 REST_OFFSET_BOUNDS = (-20.0, 30.0)
 COOL_TAU_BOUNDS = (0.02, 24.0)
-#: The least ratio of the smallest to the largest singular value of the
-#: fitted heat's sensitivities to ``fit_return``'s three terms, each
+#: The least ratio of the smaller to the larger singular value of the
+#: fitted heat's sensitivities to ``fit_return``'s two terms, each
 #: scaled by its bounds, for the runs to tell the terms apart. The
-#: record's runs give about 0.03; runs that cannot tell them apart (no
-#: rest known, none longer than the volume, one rest and one tank-to-air
-#: difference throughout) give 1e-14 or less.
+#: record's runs give about 0.06; runs that cannot tell
+#: them apart (no rest known, or one rest and one tank-to-air difference
+#: throughout with no run past the pipe) give 1e-14 or less.
 MIN_TERM_INDEPENDENCE = 1e-6
 
 
 def fit_return(
     runs: Sequence[MeasuredRun],
-) -> tuple[float, float, float] | None:
-    """``CirculationParams``' ``(displaced_gal, return_rest_offset_f,
-    return_cool_tau_h)`` together: the three minimising the mean absolute
-    error of ``run_heat_btu`` against each run's measured heat, at its
-    own flow and rest. None with fewer than ``MIN_RUNS_TO_FIT`` usable
-    runs, a fit pinned on a bound, or runs that cannot tell the three
-    apart (``MIN_TERM_INDEPENDENCE``): with no rest known the cooling is
-    not seen, with no run longer than the volume the volume is not, and
-    with one rest and one tank-to-air difference throughout the offset
-    and the cooling trade off."""
+    displaced_gal: float,
+    pipe_ua_btu_hr_f: float = 0.0,
+) -> tuple[float, float] | None:
+    """``CirculationParams``' ``(return_rest_offset_f,
+    return_cool_tau_h)`` together, for the pipe measured
+    (``measure_pipe``): the two minimising the mean absolute error of
+    ``run_heat_btu`` against each run's measured heat, at its own flow
+    and rest. None with fewer than ``MIN_RUNS_TO_FIT`` usable runs, a fit
+    pinned on a bound, or runs that cannot tell the two apart
+    (``MIN_TERM_INDEPENDENCE``): with no rest known the cooling is not
+    seen, and with one rest and one tank-to-air difference throughout
+    and no run past the pipe the offset and the cooling trade off."""
     usable = [
         (r.minutes, r.upper_f, r.air_f, r.flow_gpm, r.btu, r.rest_h)
         for r in runs
@@ -895,21 +906,22 @@ def fit_return(
     ]
     if len(usable) < MIN_RUNS_TO_FIT:
         return None
-    bounds = (DISPLACED_BOUNDS, REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS)
+    bounds = (REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS)
 
     def heat(x: Sequence[float]) -> np.ndarray:
-        volume, offset, tau = x
+        offset, tau = x
         return np.array(
             [
                 run_heat_btu(
                     m,
                     up,
                     air,
-                    volume,
+                    displaced_gal,
                     f,
                     rest_offset_f=offset,
                     rest_h=rest,
                     cool_tau_h=tau,
+                    pipe_ua_btu_hr_f=pipe_ua_btu_hr_f,
                 )
                 for m, up, air, f, _, rest in usable
             ]
@@ -932,7 +944,7 @@ def fit_return(
                 options={"xatol": 1e-4, "fatol": 0.1, "maxiter": 4000},
             ),
         )
-        for x0 in ((6.0, 0.0, 1.0), (8.0, 5.0, 1.0), (12.0, 8.0, 2.0))
+        for x0 in ((0.0, 1.0), (5.0, 1.0), (8.0, 2.0))
     ]
     found = tries[int(np.argmin([float(r.fun) for r in tries]))]
     x = [float(v) for v in found.x]
@@ -953,60 +965,77 @@ def fit_return(
     sv = np.linalg.svd(np.column_stack(columns), compute_uv=False)
     if not sv[0] > 0.0 or sv[-1] / sv[0] < MIN_TERM_INDEPENDENCE:
         return None
-    return x[0], x[1], x[2]
+    return x[0], x[1]
 
 
-def fit_displaced_gal(runs: Sequence[MeasuredRun]) -> float | None:
-    """``CirculationParams.displaced_gal``: the volume minimising the
-    mean absolute error of ``run_heat_btu`` against each run's measured
-    heat, at its own flow. The objective goes flat past the largest
-    displaced volume in the runs, so it is bracketed on a grid over
-    ``DISPLACED_BOUNDS`` first and refined inside the winning interval.
-    None with fewer than ``MIN_RUNS_TO_FIT`` usable runs, or a fit pinned
-    on a bound (the runs do not constrain it)."""
-    usable = [
-        (
-            r.minutes,
-            r.upper_f or 0.0,
-            r.air_f or 0.0,
-            r.flow_gpm or 0.0,
-            r.btu or 0.0,
-        )
-        for r in runs
-    ]
-    usable = [
-        u for u in usable if u[0] > 0 and u[3] > 0 and u[4] > 0 and u[1] > u[2]
-    ]
-    if len(usable) < MIN_RUNS_TO_FIT:
+@dataclass(frozen=True)
+class Pipe:
+    """A circulation's pipe measured on one run's return line
+    (``measure_pipe``): its volume, gal (``CirculationParams.
+    displaced_gal``), and its loss, BTU/h·°F (``pipe_ua_btu_hr_f``), at
+    the run's median flow, gal/min, from the return's rest, °F."""
+
+    volume_gal: float
+    ua_btu_hr_f: float
+    flow_gpm: float
+    rest_f: float
+
+
+def measure_pipe(
+    start: datetime,
+    end: datetime,
+    *,
+    flow: Sequence[tuple[datetime, float]],
+    return_f: Sequence[tuple[datetime, float]],
+    upper_f: Sequence[tuple[datetime, float]],
+) -> Pipe | None:
+    """The pipe from one run from ``start`` to ``end`` after a rest long
+    enough to cool it (several ``return_cool_tau_h``), with nothing else
+    acting on the tank: the return's last reading before the run its
+    rest; its steady value the warmest it read in the run, against the
+    upper zone in force then (``circulation.steady_share`` solved for
+    the loss at the run's median flow); the volume the gallons moved
+    (each flow reading held until the next, the first back to the start)
+    where the return first read half way from its rest to its steady
+    value. None with no rest or flow read, a return that never warmed,
+    or a run that ends within ``PIPE_STEADY_GAL`` of its warmest reading
+    (the return may still be rising)."""
+    flows = sorted((t, v) for t, v in flow if start <= t <= end and v > 0.0)
+    before = [v for t, v in sorted(return_f) if t <= start]
+    rets = sorted((t, v) for t, v in return_f if start < t <= end)
+    if not flows or not before or not rets:
         return None
+    rest = before[-1]
+    times = [start] + [t for t, _ in flows[1:]]
+    rates = [v for _, v in flows]
+    cum = [0.0]
+    for k in range(1, len(times)):
+        hours = (times[k] - times[k - 1]).total_seconds() / 3600.0
+        cum.append(cum[-1] + rates[k - 1] * 60.0 * hours)
 
-    def mae(volume: float) -> float:
-        return sum(
-            abs(run_heat_btu(m, up, air, volume, f) - measured)
-            for m, up, air, f, measured in usable
-        ) / len(usable)
+    def gal(at: datetime) -> float:
+        k = bisect.bisect_right(times, at) - 1
+        return cum[k] + rates[k] * (at - times[k]).total_seconds() / 60.0
 
-    lo, hi = DISPLACED_BOUNDS
-    grid = np.linspace(lo, hi, DISPLACED_GRID_POINTS)
-    scores = [mae(float(v)) for v in grid]
-    best = int(np.argmin(scores))
-    found = cast(
-        OptimizeResult,
-        minimize_scalar(
-            mae,
-            bounds=(
-                float(grid[max(best - 1, 0)]),
-                float(grid[min(best + 1, len(grid) - 1)]),
-            ),
-            method="bounded",
-        ),
-    )
-    volume = float(found.x)
-    if mae(float(grid[best])) < mae(volume):
-        volume = float(grid[best])
-    if not lo * 1.01 < volume < hi * 0.99:
+    peak_at, steady = max(rets, key=lambda r: (r[1], -r[0].timestamp()))
+    up = _held_at(sorted(upper_f), [peak_at])[0]
+    if up is None or not steady > rest + 1.0 or not up > rest:
         return None
-    return volume
+    if gal(end) - gal(peak_at) < PIPE_STEADY_GAL:
+        return None
+    gpm = float(np.median(rates))
+    share = min((steady - rest) / (up - rest), 1.0)
+    ua = -math.log(share) * gpm * 60.0 * WATER_BTU_PER_GAL_F
+    half = rest + (steady - rest) / 2.0
+    last_t, last_v = start, rest
+    for t, v in rets:
+        if v >= half:
+            # Between the readings either side of it, by gallons.
+            a, b = gal(last_t), gal(t)
+            volume = a + (b - a) * (half - last_v) / (v - last_v)
+            return Pipe(volume, ua, gpm, rest)
+        last_t, last_v = t, v
+    return None
 
 
 def recent_flow_gpm(

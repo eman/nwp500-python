@@ -408,22 +408,28 @@ Circulation
 ===========
 
 A recirculation loop's pump pulls tank water around the house and
-returns it, cooled, to the tank. A run is priced as a flowing draw: its
-gallons are the loop volume :math:`V_{\text{loop}}` it displaced,
-scaled by how far the pipe had cooled in the :math:`t_{\text{rest}}`
-since the last run, and its return comes back at the air plus a fitted
-offset:
+returns it to the bottom of the tank. A run first brings back the water
+that rested in the pipe: the pipe's volume :math:`V_{\text{pipe}}`,
+scaled by how far it had cooled in the :math:`t_{\text{rest}}` since
+the last run, at the return's rest, the air plus an offset. After that
+the tank's own water comes back, cooled on its way round by the pipe's
+loss :math:`UA_{\text{pipe}}` at the run's flow :math:`\dot m`:
 
 .. math::
 
-   V_{\text{run}} = \min\left(\dot V\,t_{\text{run}},\;
-   V_{\text{loop}}\right)\left(1 - e^{-t_{\text{rest}}/\tau_c}\right),
-   \qquad T_{\text{return}} = T_a + \Delta T_{\text{rest}}
+   V_{\text{cooled}} = \min\left(\dot V\,t_{\text{run}},\;
+   V_{\text{pipe}}\right)\left(1 - e^{-t_{\text{rest}}/\tau_c}\right),
+   \qquad T_{\text{rest}} = T_a + \Delta T_{\text{rest}},
 
-The pipe's cooled water returns at the bottom as a draw's cold water
-does, pushing as much out of the top; the rest of the run's water comes
-back as it left. Runs closer than 10 minutes count as one. The terms
-and their fits are in :doc:`standby-loss`.
+   T_{\text{steady}} = T_{\text{rest}} + \left(T_{\text{top}} -
+   T_{\text{rest}}\right) e^{-UA_{\text{pipe}}/(\dot m c)}
+
+Water colder than the tank's inlet zone comes in there and pushes the
+column up, as a draw's cold water does. Water warmer than it, the run's
+own once the pipe's cold has come back, rises past the zone to where
+the tank is as warm and pushes out only what is above that. Runs closer
+than 10 minutes count as one. The terms and how they were measured are
+in :doc:`standby-loss`.
 
 
 The tank now

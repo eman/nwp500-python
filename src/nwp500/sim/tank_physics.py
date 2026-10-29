@@ -42,7 +42,7 @@ from typing import Literal, Protocol
 
 import pandas as pd
 
-from nwp500.sim.circulation import Circulation, cooled_share
+from nwp500.sim.circulation import Circulation, cooled_share, steady_share
 from nwp500.sim.decay import AmbientSampler, Impulse
 from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.heat_pump_recovery import (
@@ -274,7 +274,8 @@ def circulation_flows(
     the water they move through the tank: the pipe's cooled water first
     (``displaced_gal`` times its ``cooled_share`` since the run before),
     at the return's rest (the air plus ``return_rest_offset_f``), then
-    the run's own, straight from the top."""
+    the run's own from the top, back at the rest plus its
+    ``steady_share`` of the top's lift over it."""
     if terms.flow_gpm <= 0.0:
         return []
     runs = circulation.over(start, end)
@@ -293,18 +294,23 @@ def circulation_flows(
             rest, terms.return_cool_tau_h
         )
         turn = min(b, a + timedelta(minutes=cooled / terms.flow_gpm))
+        rest_f = air_at(a) + terms.return_rest_offset_f
         if turn > a:
             out.append(
                 st.Flowing(
-                    start=a,
-                    end=turn,
-                    gpm=terms.flow_gpm,
-                    inflow_f=air_at(a) + terms.return_rest_offset_f,
+                    start=a, end=turn, gpm=terms.flow_gpm, inflow_f=rest_f
                 )
             )
         if b > turn:
             out.append(
-                st.Flowing(start=turn, end=b, gpm=terms.flow_gpm, inflow_f=None)
+                st.Flowing(
+                    start=turn,
+                    end=b,
+                    gpm=terms.flow_gpm,
+                    inflow_f=None,
+                    rest_f=rest_f,
+                    share=steady_share(terms.pipe_ua_btu_hr_f, terms.flow_gpm),
+                )
             )
     return out
 

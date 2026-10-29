@@ -1209,32 +1209,42 @@ The bath's volume is yours to set: measure a bath by filling one to
 your usual level at the hot side's meter.
 
 With circulation's own telemetry (its running samples, flow and return
-line temperature), fit its terms too:
+line temperature), measure its pipe and fit its return too. The pipe
+comes from one run you hold on after the loop has rested a few hours
+(a constant-pressure or constant-speed mode, so the pump does not stop
+itself), with nothing else heating or drawing; the return's rest and
+cooling come from the everyday runs:
 
 .. code-block:: python
 
+   pipe = calibration.measure_pipe(start, end, flow=pump_flow,
+                                   return_f=return_line, upper_f=upper)
    runs = calibration.measure_runs(running, flow=pump_flow,
                                    return_f=return_line, upper_f=upper,
                                    air_f=air, compressor=compressor_runs)
-   displaced, offset, tau = calibration.fit_return(runs)
+   offset, tau = calibration.fit_return(runs, pipe.volume_gal,
+                                        pipe.ua_btu_hr_f)
    circulation = replace(
        params.circulation,
-       displaced_gal=displaced,
+       displaced_gal=pipe.volume_gal,
+       pipe_ua_btu_hr_f=pipe.ua_btu_hr_f,
        return_rest_offset_f=offset,
        return_cool_tau_h=tau,
        flow_gpm=calibration.recent_flow_gpm(runs, until),
    )
 
-Each run's heat is measured as its flow times the drop from the upper
-zone to the return line, and its rest as the hours since the run
-before it ended. Runs with the compressor on are left out of the fit
-but still end a rest. The three terms are the ones that price those
-runs best: the volume, how far above the air the return rests, and how
-fast the pipe cools back to that after a run. ``fit_displaced_gal``
-fits the volume alone, the return at the air.
-``recent_flow_gpm`` is the median run flow over the last 14 days, since
-the flow is a setting that moves in steps. ``fit_return`` and
-``recent_flow_gpm`` are None when the runs cannot say.
+The pipe's volume is the gallons moved when the return is half way
+from its rest to its steady value, and its loss is what the steady
+value says at the run's flow. Each everyday run's heat is measured as
+its flow times the drop from the upper zone to the return line, and
+its rest as the hours since the run before it ended. Runs with the
+compressor on are left out of the fit but still end a rest. The two
+terms are the ones that price those runs best with the pipe given: how
+far above the air the return rests, and how fast the pipe cools back
+to that after a run. ``recent_flow_gpm`` is the median run flow over
+the last 14 days, since the flow is a setting that moves in steps.
+``measure_pipe``, ``fit_return`` and ``recent_flow_gpm`` are None when
+the run or the runs cannot say.
 
 
 Fit the elements
