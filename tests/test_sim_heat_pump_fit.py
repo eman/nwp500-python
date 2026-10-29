@@ -455,3 +455,71 @@ class TestTheFits:
         assert hpf.overshoot_error(found.runs, OVERSHOOT) == pytest.approx(
             0.0, abs=0.2
         )
+
+
+class TestTheSlopesSigns:
+    """A plane's slopes take the sign the cycle gives them
+    (``HEAT_SLOPE_SIGNS``, ``POWER_SLOPE_SIGNS``): one fitted the other
+    way is pinned at 0."""
+
+    @staticmethod
+    def _heat(per_air: float, per_water: float, noise: float = 0.0):
+        rng = np.random.default_rng(7)
+        air = rng.uniform(60.0, 90.0, 40)
+        water = rng.uniform(114.0, 144.0, 40)
+        heat = (
+            4500.0
+            + per_air * (air - 65.0)
+            + per_water * (water - 120.0)
+            + noise * rng.standard_normal(40)
+        )
+        return pd.DataFrame(
+            {
+                "air_f": air,
+                "water_f": water,
+                "heat_btu_h": heat,
+                "minutes": 30.0,
+            }
+        )
+
+    def test_a_plane_of_the_cycles_signs_is_its_own(self) -> None:
+        got = hpf.fit_heat_map(self._heat(55.0, -16.0))
+        assert got is not None
+        assert got.per_air == pytest.approx(55.0)
+        assert got.per_water == pytest.approx(-16.0)
+
+    def test_a_heat_rising_with_the_water_is_pinned(self) -> None:
+        got = hpf.fit_heat_map(self._heat(55.0, 8.0))
+        assert got is not None
+        assert got.per_water == 0.0
+        # The air's slope refitted with the water's at 0.
+        assert got.per_air == pytest.approx(55.0, rel=0.1)
+        assert got.level > 4500.0
+
+    def test_both_wrong_leaves_the_level(self) -> None:
+        rows = self._heat(-30.0, 20.0)
+        got = hpf.fit_heat_map(rows)
+        assert got is not None
+        assert (got.per_air, got.per_water) == (0.0, 0.0)
+        assert got.level == pytest.approx(
+            np.average(rows["heat_btu_h"], weights=rows["minutes"])
+        )
+
+    def test_the_powers_air_is_free(self) -> None:
+        rng = np.random.default_rng(3)
+        air = rng.uniform(50.0, 90.0, 60)
+        water = rng.uniform(70.0, 145.0, 60)
+        rows = pd.DataFrame(
+            {
+                "air_f": air,
+                "water_f": water,
+                "power_w": 400.0 - 1.5 * (air - 65.0) + 2.7 * (water - 120.0),
+            }
+        )
+        got = hpf.fit_power_map(rows)
+        assert got is not None
+        assert got.per_air == pytest.approx(-1.5)
+        rows["power_w"] = 400.0 - 2.0 * (water - 120.0)
+        pinned = hpf.fit_power_map(rows)
+        assert pinned is not None
+        assert pinned.per_water == 0.0

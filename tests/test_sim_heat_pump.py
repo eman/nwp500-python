@@ -3,6 +3,7 @@ the run-on past the target."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 import pytest
 
@@ -25,9 +26,18 @@ class TestTheMap:
             C, air, water
         ) * BTU_PER_WH == pytest.approx(hp.heat_btu_h(C, air, water))
 
-    def test_it_is_read_inside_its_domain(self) -> None:
-        assert hp.heat_btu_h(C, 30.0, 120.0) == hp.heat_btu_h(C, 61.0, 120.0)
-        assert hp.power_w(C, 65.0, 160.0) == hp.power_w(C, 65.0, 148.0)
+    def test_it_is_read_along_its_plane_past_its_domain(self) -> None:
+        # 41 °F air is 20 under the heat's fitted span, and 80 °F water
+        # 34 under it.
+        assert hp.heat_btu_h(C, 41.0, 120.0) == pytest.approx(
+            C.heat_btu_h - 24.0 * C.heat_btu_h_per_air_f
+        )
+        assert hp.heat_btu_h(C, 65.0, 80.0) == pytest.approx(
+            C.heat_btu_h - 40.0 * C.heat_btu_h_per_water_f
+        )
+        assert hp.power_w(C, 65.0, 149.0) == pytest.approx(
+            C.power_w + 29.0 * C.power_w_per_water_f
+        )
 
     def test_it_is_quoted_at_its_reference(self) -> None:
         assert hp.heat_btu_h(C, 65.0, 120.0) == C.heat_btu_h
@@ -45,24 +55,48 @@ class TestTheMap:
         assert hpf.violations(C) == ()
         assert hpf.violations(sim.site_example_params().compressor) == ()
 
-    def test_a_claim_at_a_domains_edge_is_found(self) -> None:
-        # The heat less the power bends where the heat's domain ends
-        # (114 °F water), which no even grid point need hit.
-        c = replace(
-            C,
-            heat_btu_h=2942.5,
-            heat_btu_h_per_air_f=0.0,
-            heat_btu_h_per_water_f=200.0,
-            power_w=600.0,
-            power_w_per_air_f=0.0,
-            power_w_per_water_f=10.0,
-        )
-        assert hp.evaporator_btu_h(c, 65.0, 114.0) < 0.0
+    def test_a_claim_past_the_domains_is_found(self) -> None:
+        # Within the heat's span (61-89 °F air) the plane takes heat
+        # from the air; carried to the envelope's 41 °F it gives some.
+        c = replace(C, heat_btu_h_per_air_f=150.0)
+        assert hp.evaporator_btu_h(c, 61.0, 149.0) > 0.0
+        assert hp.evaporator_btu_h(c, 41.0, 149.0) < 0.0
         assert "evaporator_heat_negative" in hpf.violations(c)
+        assert "evaporator_heat_negative" not in hpf.violations(
+            c, (61.0, 113.0)
+        )
 
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)
         assert hp.carnot_cop(80.0, 75.0) == float("inf")
+
+    def test_the_bound_is_the_refrigerants(self) -> None:
+        # The coil runs EVAPORATOR_APPROACH_F under the air, so the lift
+        # the cycle makes is that much more than the air's to the water.
+        assert hp.refrigerant_carnot_cop(65.0, 120.0) == pytest.approx(
+            579.67 / (55.0 + hp.EVAPORATOR_APPROACH_F)
+        )
+        assert hp.refrigerant_carnot_cop(65.0, 120.0) < hp.carnot_cop(
+            65.0, 120.0
+        )
+
+    def test_a_cop_over_the_refrigerants_bound_is_found(self) -> None:
+        # The heat flat at 15 % over the map's: at the envelope's coldest
+        # air and hottest water, under 0.6 of the ideal heat pump between
+        # the air and the water, but over it between the coil and the
+        # water.
+        c = replace(
+            C,
+            heat_btu_h=1.15 * C.heat_btu_h,
+            heat_btu_h_per_air_f=0.0,
+            heat_btu_h_per_water_f=0.0,
+        )
+        air, water = 41.0, 149.0
+        assert hp.cop(c, air, water) < 0.6 * hp.carnot_cop(air, water)
+        assert hp.cop(c, air, water) > 0.6 * hp.refrigerant_carnot_cop(
+            air, water
+        )
+        assert "cop_over_carnot" in hpf.violations(c)
 
 
 class TestTheHold:
@@ -103,11 +137,16 @@ class TestTheHold:
         with pytest.raises(ValueError, match="negative"):
             ControllerParams(hp_stop_overshoot_f=-0.1)
 
-    def test_each_map_is_held_to_its_own_domain(self) -> None:
-        # The heat was fitted on a mixed tank from 114 °F; the power on
-        # a lower tank from 73 °F.
-        assert hp.heat_btu_h(C, 65.0, 80.0) == hp.heat_btu_h(C, 65.0, 114.0)
-        assert hp.power_w(C, 65.0, 80.0) < hp.power_w(C, 65.0, 114.0)
+    def test_neither_map_bends_at_its_domains_edge(self) -> None:
+        # The heat was fitted on a mixed tank from 114 °F, the power on
+        # the condenser's water from 73 °F: each moves as much per °F
+        # either side of its edge.
+        heat = [hp.heat_btu_h(C, 65.0, w) for w in (110.0, 114.0, 118.0)]
+        power = [hp.power_w(C, 65.0, w) for w in (69.0, 73.0, 77.0)]
+        for read in (heat, power):
+            steps = [b - a for a, b in pairwise(read)]
+            assert steps[0] == pytest.approx(steps[1])
+            assert steps[0] != 0.0
 
 
 T0 = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)

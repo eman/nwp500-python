@@ -45,6 +45,7 @@ from nwp500.sim.params import (
     MAP_REF_AIR_F,
     MAP_REF_WATER_F,
     CompressorParams,
+    ControllerParams,
     HeaterParams,
 )
 from nwp500.sim.physics import heat_pump as hp
@@ -577,11 +578,12 @@ def power_blocks(
 MIN_HEAT_STRETCHES = 10
 MIN_POWER_BLOCKS = 30
 MIN_RUN_ONS = 5
-#: What a fitted map may claim anywhere over its domain, checked on a
-#: ``CHECK_POINTS`` × ``CHECK_POINTS`` grid: a COP no more than
-#: ``CARNOT_SHARE`` of the ideal heat pump's between the air and the
-#: water, heat taken from the air (not given to it), and at least
-#: ``MIN_POWER_W``.
+#: What a fitted map may claim anywhere the heat pump runs (the
+#: controller's ``hp_air_range_f`` and ``hp_water_range_f``), checked on
+#: a ``CHECK_POINTS`` × ``CHECK_POINTS`` grid: a COP no more than
+#: ``CARNOT_SHARE`` of the ideal heat pump's between the evaporator's
+#: coil and the water (``heat_pump.refrigerant_carnot_cop``), heat taken
+#: from the air (not given to it), and at least ``MIN_POWER_W``.
 CARNOT_SHARE = 0.6
 MIN_POWER_W = 50.0
 CHECK_POINTS = 8
@@ -661,6 +663,17 @@ class Plane:
     water_f: tuple[float, float] | None = None
 
 
+#: The sign each map's slope takes, per °F of the air and of the water,
+#: 0 for either: warmer air boils the refrigerant warmer and denser, so
+#: the compressor moves more of it and the heat rises; warmer water
+#: condenses it hotter, so the heat falls and the compressor's work
+#: rises. The power in the air is left free: a compressor's work rises
+#: or falls with the denser gas by how far it lifts it. A fit whose
+#: slope takes the other sign has it pinned at 0 (``_fit_plane``).
+HEAT_SLOPE_SIGNS = (1, -1)
+POWER_SLOPE_SIGNS = (0, 1)
+
+
 def _span(values: np.ndarray) -> tuple[float, float]:
     return (
         float(math.floor(float(np.min(values)))),
@@ -669,9 +682,16 @@ def _span(values: np.ndarray) -> tuple[float, float]:
 
 
 def _fit_plane(
-    air: np.ndarray, water: np.ndarray, y: np.ndarray, weight: np.ndarray
+    air: np.ndarray,
+    water: np.ndarray,
+    y: np.ndarray,
+    weight: np.ndarray,
+    signs: tuple[int, int],
 ) -> Plane | None:
-    """The weighted least-squares plane through ``y``; None when the
+    """The weighted least-squares plane through ``y``, each slope of the
+    sign ``signs`` gives it (``HEAT_SLOPE_SIGNS``, ``POWER_SLOPE_SIGNS``):
+    one that takes the other
+    is pinned at 0 and the rest refitted, the worst first; None when the
     air and the water do not place one."""
     x = np.column_stack(
         [np.ones(len(y)), air - MAP_REF_AIR_F, water - MAP_REF_WATER_F]
@@ -679,7 +699,19 @@ def _fit_plane(
     w = np.sqrt(weight)[:, None]
     if np.linalg.matrix_rank(x * w) < 3:
         return None
-    coef, *_ = np.linalg.lstsq(x * w, y * w[:, 0], rcond=None)
+    free = [0, 1, 2]
+    while True:
+        got, *_ = np.linalg.lstsq(x[:, free] * w, y * w[:, 0], rcond=None)
+        coef = np.zeros(3)
+        coef[free] = got
+        wrong = {
+            k: -signs[k - 1] * coef[k]
+            for k in (1, 2)
+            if signs[k - 1] and signs[k - 1] * coef[k] < 0.0
+        }
+        if not wrong:
+            break
+        free.remove(max(wrong, key=lambda k: wrong[k]))
     return Plane(
         float(coef[0]),
         float(coef[1]),
@@ -702,7 +734,7 @@ def fit_heat_map(rows: pd.DataFrame) -> Plane | None:
     air, water, heat, minutes = _columns(
         rows, "air_f", "water_f", "heat_btu_h", "minutes"
     )
-    return _fit_plane(air, water, heat, minutes)
+    return _fit_plane(air, water, heat, minutes, HEAT_SLOPE_SIGNS)
 
 
 def fit_power_map(rows: pd.DataFrame) -> Plane | None:
@@ -712,7 +744,7 @@ def fit_power_map(rows: pd.DataFrame) -> Plane | None:
     if len(rows) < MIN_POWER_BLOCKS:
         return None
     air, water, power = _columns(rows, "air_f", "water_f", "power_w")
-    return _fit_plane(air, water, power, np.ones(len(rows)))
+    return _fit_plane(air, water, power, np.ones(len(rows)), POWER_SLOPE_SIGNS)
 
 
 def heat_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
@@ -760,28 +792,28 @@ def overshoot_error(rows: pd.DataFrame, overshoot_f: float) -> float | None:
     )
 
 
-def violations(c: CompressorParams) -> tuple[str, ...]:
-    """What ``c``'s map claims somewhere over its two maps' domains
-    together that no heat pump does (``CARNOT_SHARE``,
-    ``MIN_POWER_W``): ``cop_over_carnot``, ``evaporator_heat_negative``,
-    ``power_too_low``; empty when none. The grid holds every domain's
-    edges, where a map held to its domain bends, so the heat less the
-    power, linear between them, is checked at its extremes."""
+def violations(
+    c: CompressorParams,
+    air_f: tuple[float, float] = ControllerParams().hp_air_range_f,
+    water_f: tuple[float, float] = ControllerParams().hp_water_range_f,
+) -> tuple[str, ...]:
+    """What ``c``'s map claims somewhere the heat pump runs, the air
+    ``air_f`` and the water ``water_f`` (the controller's envelope),
+    that no heat pump does (``CARNOT_SHARE``, ``MIN_POWER_W``):
+    ``cop_over_carnot``, ``evaporator_heat_negative``,
+    ``power_too_low``; empty when none. The grid holds the envelope's
+    corners, where the heat less the power, a plane in each, has its
+    extremes."""
     found: set[str] = set()
-
-    def axis(*edges: float) -> list[float]:
-        grid = np.linspace(min(edges), max(edges), CHECK_POINTS)
-        return sorted({*(float(v) for v in grid), *edges})
-
-    airs = axis(*c.heat_domain_air_f, *c.power_domain_air_f)
-    waters = axis(*c.heat_domain_water_f, *c.power_domain_water_f)
+    airs = np.linspace(*air_f, CHECK_POINTS)
+    waters = np.linspace(*water_f, CHECK_POINTS)
     for air in airs:
         for water in waters:
             a, w = float(air), float(water)
             if hp.power_w(c, a, w) < MIN_POWER_W:
                 found.add("power_too_low")
                 continue
-            if hp.cop(c, a, w) > CARNOT_SHARE * hp.carnot_cop(a, w):
+            if hp.cop(c, a, w) > CARNOT_SHARE * hp.refrigerant_carnot_cop(a, w):
                 found.add("cop_over_carnot")
             if hp.evaporator_btu_h(c, a, w) < 0.0:
                 found.add("evaporator_heat_negative")
@@ -792,7 +824,7 @@ def with_planes(
     c: CompressorParams, heat: Plane | None, power: Plane | None
 ) -> CompressorParams:
     """``c`` with the planes given, the cross terms 0 where one is, and
-    each read over the span it was fitted on where it says."""
+    the span each was fitted on where it says."""
     if heat is not None:
         c = replace(
             c,
@@ -843,12 +875,19 @@ class HeatPumpFit:
         return tuple(sorted({*self.heat_violations, *self.power_violations}))
 
 
-def fit_heat_pump(found: Evidence, base: CompressorParams) -> HeatPumpFit:
-    """Every part of the heat pump fitted on ``found``, over ``base``."""
+def fit_heat_pump(
+    found: Evidence,
+    base: CompressorParams,
+    air_f: tuple[float, float] = ControllerParams().hp_air_range_f,
+    water_f: tuple[float, float] = ControllerParams().hp_water_range_f,
+) -> HeatPumpFit:
+    """Every part of the heat pump fitted on ``found``, over ``base``,
+    its claims checked where it runs, the air ``air_f`` and the water
+    ``water_f`` (``violations``)."""
     heat = fit_heat_map(found.heat)
     power = fit_power_map(found.power)
     planes = with_planes(base, heat, power)
-    found_claims = violations(planes)
+    found_claims = violations(planes, air_f, water_f)
     return HeatPumpFit(
         heat=heat,
         power=power,

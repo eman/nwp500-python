@@ -210,6 +210,36 @@ Added
 Changed
 -------
 
+- **The heat pump's maps are read along their planes.** The heat's and
+  the power's maps were held at the edges of the span each was fitted
+  on: a 45 °F air heated as 61 °F does, the condenser's water below 114
+  °F got the heat at 114 °F, and the heat and the power, held at
+  different water, gave a COP that bent where neither was measured.
+  ``physics.heat_pump`` now reads each along its plane wherever the
+  heat pump runs; ``heat_map_out_of_domain`` still marks a recovery
+  whose air is outside the heat's span, its heat the plane carried past
+  the record. A fit's slopes take the sign the cycle gives them (the
+  heat rising with the air and falling with the water, the power rising
+  with the water; ``heat_pump_fit.HEAT_SLOPE_SIGNS`` and
+  ``POWER_SLOPE_SIGNS``): one fitted the other way is pinned at 0 and
+  the rest refitted. ``heat_pump_fit.violations`` checks a map over the
+  controller's envelope (41 to 113 °F air, 50 to 149 °F water; its new
+  ``air_f`` and ``water_f``, and ``fit_heat_pump``'s) rather than its
+  domains, its COP against the ideal heat pump's between the
+  evaporator's coil and the water (``heat_pump.refrigerant_carnot_cop``,
+  the coil ``EVAPORATOR_APPROACH_F``, 20.5 °F, under the air: as close
+  as it ran in 90 % of 145,286 steady running minutes on the record).
+  Against the coil as read, the site's map runs a steady 0.43 of that
+  ideal and never over 0.46; the check is still 0.6. The site's tank is
+  refitted with the maps so read (the bottom's loss 0.168 to 0.445
+  BTU/h·°F, the condenser's span 0.143-0.351 to 0.148-0.323, 2.52 to
+  2.50 °F RMS over the events), and its power map on that tank (408.9 W,
+  +1.03 per °F of air, +2.70 per °F of water). Held out after
+  2026-09-18, the 11 draw-free recoveries' duration error went from 6.9
+  to 5.8 min and their electricity's from 5.0 % to 4.7 %, its bias from
+  0.4 % to 0.0 %; the 16 with draws went from 47.2 to 48.0 min and the
+  lower probe after a draw from 2.16 to 2.18 °F RMS.
+
 - **The power is fitted where it is read.** The walk reads the power's
   map at the condenser's water, which is below the lower probe the map
   was fitted on (4.7 °F on the record's climbs on average): read there,

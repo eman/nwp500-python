@@ -94,49 +94,49 @@ def _nwp500_65() -> HeaterParams:
         # 2026-10-26 (``sim_calibrate.calibrate_changes``): 266 quiet
         # windows, 254 metered draws and 118 recoveries, each started
         # from the day's replay before it, the compressor's start
-        # stirring the layers (``physics.stratified.stir``) and no hold
-        # imposed.
+        # stirring the layers (``physics.stratified.stir``), no hold
+        # imposed and the heat pump's maps read along their planes.
         tank=TankParams(
             volume_gal=63.2,
             layers=12,
-            upper_probe_height=0.901813885380396,
-            lower_probe_height=0.46296408131161204,
-            upper_probe_spread_gal=5.971337972581407,
-            lower_probe_spread_gal=2.0635540925212172,
-            lower_probe_offset_f=1.008459895282938,
-            condenser_span=(0.14307729589423623, 0.3508032644394711),
-            inlet_mix_gal=14.330242694663644,
-            conductance_btu_hr_f=0.49547263784845164,
+            upper_probe_height=0.9025211164843931,
+            lower_probe_height=0.46911072655391756,
+            upper_probe_spread_gal=5.653661660910821,
+            lower_probe_spread_gal=2.1419340767729347,
+            lower_probe_offset_f=1.0786505111721996,
+            condenser_span=(0.14781984512812876, 0.32255146714444416),
+            inlet_mix_gal=14.248249131082055,
+            conductance_btu_hr_f=0.5001962294309196,
         ),
         loss=LossParams(
-            ua_side_btu_hr_f=3.139115014260317,
-            ua_bottom_btu_hr_f=0.1675409344227829,
-            ua_top_btu_hr_f=0.553916158090328,
+            ua_side_btu_hr_f=3.102932671833771,
+            ua_bottom_btu_hr_f=0.4446638449401684,
+            ua_top_btu_hr_f=0.556307002968742,
         ),
         # The heat's map and the run-on fitted on its record,
         # 2025-12-28 to 2026-10-26 (``heat_pump_fit.fit_heat_pump``),
         # the heat against the two-zone tank's loss: refitted against
-        # the loss above, from 2026-04-16, it moves 0.05 % at 65 °F air
-        # and 120 °F water and under 0.2 % across its span (4,497
-        # BTU/h, +55.5 per °F of air, -16.1 per °F of water). The
+        # the loss above, from 2026-04-16, it moves 0.5 % at 65 °F air
+        # and 120 °F water and under 0.9 % across its span (4,478
+        # BTU/h, +55.9 per °F of air, -16.4 per °F of water). The
         # power's map fitted on 3,562 metered climb blocks of 211 runs,
         # 2026-04-16 to 10-26, at the condenser's water on the record's
         # replay through the tank above
         # (``heat_pump_fit.in_condenser_water``), where the walk reads
-        # it: 4.7 °F under the lower probe on average.
+        # it: 4.8 °F under the lower probe on average.
         compressor=CompressorParams(
             heat_btu_h=4499.436604500702,
             heat_btu_h_per_air_f=55.49795247502065,
             heat_btu_h_per_water_f=-15.948333659761246,
             heat_btu_h_per_air_water_f=0.0,
-            power_w=408.59956058228266,
-            power_w_per_air_f=1.0381853868143607,
-            power_w_per_water_f=2.696755796440391,
+            power_w=408.9257414721442,
+            power_w_per_air_f=1.0341014222315645,
+            power_w_per_water_f=2.7037561739288445,
             power_w_per_air_water_f=0.0,
             heat_domain_air_f=(61.0, 89.0),
             heat_domain_water_f=(114.0, 144.0),
             power_domain_air_f=(53.0, 90.0),
-            power_domain_water_f=(68.0, 145.0),
+            power_domain_water_f=(67.0, 145.0),
             start_hold_after_min=(15.0, 60.0, 180.0, 720.0),
             start_hold_min=(0.0, 0.0, 0.0, 0.0, 0.0),
         ),
