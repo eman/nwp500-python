@@ -26,9 +26,9 @@ past what drives it:
 - ``flow``: water in at the bottom pushes the column up and out of the
   top as a plug, through an inlet zone of ``inlet_mix_gal`` that mixes
   it in as it comes, solved exactly and remapped onto the layers by
-  exact integrals; water warmer than the inlet zone rises past it
-  instead, to where the column is as warm, and pushes only the water
-  above that up and out;
+  exact integrals; a circulation's water warmer than the inlet zone
+  rises past it instead, to where the column is as warm, and pushes
+  only the water above that up and out;
 - ``draw``: a delivered draw through the mixing valve
   (``physics.draw.delivery_temp_f``, ``hot_fraction``), the tank water
   it takes solved from the water leaving the top in turn.
@@ -661,12 +661,21 @@ def _risen(col: _Column, gal: float, a: float, b: float) -> float:
     return total(b) - total(a)
 
 
-def flow(lay: Layout, state: TankState, gal: float, inflow_f: float) -> Flowed:
+def flow(
+    lay: Layout,
+    state: TankState,
+    gal: float,
+    inflow_f: float,
+    *,
+    rises: bool = True,
+) -> Flowed:
     """``gal`` gallons in at the bottom at ``inflow_f``, and as much out
     at the top: through the inlet zone, then as a plug (``_Column``);
-    or, warmer than the inlet zone (than the bottom layer with none),
-    risen past it to where it settles (``_risen``). Solved exactly,
-    remapped onto the layers by exact integrals, then mixed."""
+    or, with ``rises`` and warmer than the inlet zone (than the bottom
+    layer with none), risen past it to where it settles (``_risen``).
+    Solved exactly, remapped onto the layers by exact integrals, then
+    mixed. A delivered draw (``draw``) keeps to the plug, which its
+    outlet is solved along."""
     layers = _layers(lay, state)
     if gal <= 0.0:
         return Flowed(state, 0.0)
@@ -674,7 +683,7 @@ def flow(lay: Layout, state: TankState, gal: float, inflow_f: float) -> Flowed:
     h = lay.layer_gal
     n = lay.layers
     bottom = col.mix_start_f if col.mix_gal > 0.0 else layers[0]
-    column = _risen if inflow_f > bottom else _Column.after
+    column = _risen if rises and inflow_f > bottom else _Column.after
     after = tuple(
         column(col, gal, i * h, lay.volume_gal if i == n - 1 else (i + 1) * h)
         / h
@@ -741,7 +750,7 @@ def draw(
             break
         withdrawn += gal
         remaining -= gal / share
-    flowed = flow(lay, state, withdrawn, inflow_f)
+    flowed = flow(lay, state, withdrawn, inflow_f, rises=False)
     return Drawn(flowed.state, withdrawn, flowed.heat_btu, last)
 
 

@@ -848,17 +848,18 @@ def run_heat_btu(
     """The heat a run takes over ``minutes`` of it, after ``before_min``
     it had already run, at the upper zone's lift over the return's rest
     (the air plus ``rest_offset_f``): all of it for the pipe's cooled
-    water, the gallons of its volume it displaces in them
-    (``circulation.displaced_gal``) times the share cooled since the run
-    before (``circulation.cooled_share``), and what the pipe's loss takes
-    off it (1 less ``circulation.steady_share``) for the rest it moves;
-    never negative."""
+    water, the gallons it displaces in them of the volume times the
+    share cooled since the run before (``circulation.displaced_gal`` of
+    ``circulation.cooled_share``'s part, as the walk returns it), and
+    what the pipe's loss takes off it (1 less
+    ``circulation.steady_share``) for the rest it moves; never
+    negative."""
     if minutes <= 0.0 or flow_gpm <= 0.0:
         return 0.0
-    piped = (
-        circulation_displaced_gal(before_min + minutes, displaced, flow_gpm)
-        - circulation_displaced_gal(before_min, displaced, flow_gpm)
-    ) * cooled_share(rest_h, cool_tau_h)
+    cooled = displaced * cooled_share(rest_h, cool_tau_h)
+    piped = circulation_displaced_gal(
+        before_min + minutes, cooled, flow_gpm
+    ) - circulation_displaced_gal(before_min, cooled, flow_gpm)
     lost = 1.0 - steady_share(pipe_ua_btu_hr_f, flow_gpm)
     gal = piped + lost * (flow_gpm * minutes - piped)
     return max(
@@ -995,12 +996,17 @@ def measure_pipe(
     rest; its steady value the warmest it read in the run, against the
     upper zone in force then (``circulation.steady_share`` solved for
     the loss at the run's median flow); the volume the gallons moved
-    (each flow reading held until the next, the first back to the start)
+    (each flow reading held until the next, from the one in force at the
+    start, or else the first after it, back to the start)
     where the return first read half way from its rest to its steady
     value. None with no rest or flow read, a return that never warmed,
     or a run that ends within ``PIPE_STEADY_GAL`` of its warmest reading
     (the return may still be rising)."""
-    flows = sorted((t, v) for t, v in flow if start <= t <= end and v > 0.0)
+    rows = sorted(flow)
+    flows = [(t, v) for t, v in rows if start < t <= end and v > 0.0]
+    at_start = _held_at(rows, [start])[0]
+    if at_start is not None and at_start > 0.0:
+        flows.insert(0, (start, at_start))
     before = [v for t, v in sorted(return_f) if t <= start]
     rets = sorted((t, v) for t, v in return_f if start < t <= end)
     if not flows or not before or not rets:

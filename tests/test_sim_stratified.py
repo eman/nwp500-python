@@ -549,6 +549,16 @@ class TestFlow:
         for i in range(int(foot // L.layer_gal)):
             assert out.layers_f[i] == pytest.approx(state.layers_f[i], abs=1e-9)
 
+    def test_a_draw_keeps_to_the_plug_its_outlet_is_solved_on(self) -> None:
+        """Mains warmer than a cold bottom: the tank the draw leaves is
+        the plug's, as the water it delivered was read off."""
+        state = S.mix(S.TankState((60.0, 70.0, *([125.0] * 10))))
+        out = S.draw(L, state, 4.0, 90.0)
+        plug = S.flow(L, state, out.withdrawn_gal, 90.0, rises=False)
+        risen = S.flow(L, state, out.withdrawn_gal, 90.0)
+        assert out.state.layers_f == pytest.approx(plug.state.layers_f)
+        assert risen.state.layers_f != pytest.approx(plug.state.layers_f)
+
     def test_a_warm_return_leaves_a_cold_bottom_cold(self) -> None:
         """A run's own water after the pipe's: the cold the pipe's water
         brought stays at the bottom, and the warm water goes in above
@@ -599,7 +609,8 @@ class TestDraw:
         assert 0.0 <= out.withdrawn_gal <= gal + 1e-9
         if valve == S.NO_VALVE:
             assert out.withdrawn_gal == pytest.approx(gal)
-        assert out.state == S.flow(L, state, out.withdrawn_gal, inflow).state
+        plug = S.flow(L, state, out.withdrawn_gal, inflow, rises=False)
+        assert out.state == plug.state
 
     @given(
         temps,

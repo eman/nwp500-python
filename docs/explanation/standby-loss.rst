@@ -31,7 +31,7 @@ Summary
        140 degF tank in 65 degF air that is about **0.63 degF an hour**.
    * - A circulation run
      - The pipe's **6.86 gal** back at the return's rest, the air plus
-       4.47 degF, then the tank's own water **1.6 degF** under the top
+       3.74 degF, then the tank's own water **1.6 degF** under the top
        at 1.08 gal/min (a loss of **14.6 BTU/hr per degF**), measured on
        one run after a 4 h rest. At the loop fitted in September
        (6.38 gal), a typical run was about 5 degF of the whole tank,
@@ -217,15 +217,15 @@ off (the readings are ``tests/fixtures/sim/circulation_run_2026-10-29.json``):
 
 **The return's rest and cooling**, fitted with that pipe on 122 runs
 with the compressor off (2026-04-04 to 2026-10-24, ``fit_return``): the
-return rests **4.47 degF** above the air and the warmed pipe cools back
-to it on **0.52 h**. The runs before these terms were measured were
+return rests **3.74 degF** above the air and the warmed pipe cools back
+to it on **0.72 h**. The runs before these terms were measured were
 priced on an effective loop of 19.36 gal, its return back at the
 tank's own temperature after it. That form prices the record's run heat
-better (300 BTU a run in five-fold cross-validation, against 379), but
+better (300 BTU a run in five-fold cross-validation, against 399), but
 its volume is three times the measured pipe's, and with the measured
 pipe the held-out recoveries come out closer: fitted before 2026-09-18
-and scored after, 27.1 minutes from the measured duration against 30.9
-(5.44 against 5.69 with no draw), and 4.4 % of the energy against 4.5.
+and scored after, 27.2 minutes from the measured duration against 30.9
+(5.45 against 5.69 with no draw), and 4.4 % of the energy against 4.5.
 
 * Before a run that followed 16 h or more without one, the return
   probe read a median **6.9 degF** above the heater's air, and it

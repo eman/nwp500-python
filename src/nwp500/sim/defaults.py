@@ -72,16 +72,16 @@ SITE_CLIMATE = (61.3, 19.9)
 #: own flow reading, and held 1.6 °F under the upper probe at 1.08
 #: gal/min, a loss of 14.6 BTU/h·°F. With it the return's rest and
 #: cooling are fitted (``calibration.fit_return``) on 122 runs with the
-#: compressor off, 2026-04-04 to 2026-10-24: the return rests 4.47 °F
+#: compressor off, 2026-04-04 to 2026-10-24: the return rests 3.74 °F
 #: above the heater's air, and the pipe a run warmed cools back to rest
-#: on 0.52 h. The gallons are the run's own reading's: the house's
+#: on 0.72 h. The gallons are the run's own reading's: the house's
 #: meter has read about 0.3 gal/min under it since 2026-09-14.
 SITE_CIRCULATION = CirculationParams(
     displaced_gal=6.86,
     flow_gpm=1.397,
     pipe_ua_btu_hr_f=14.6,
-    return_rest_offset_f=4.47,
-    return_cool_tau_h=0.52,
+    return_rest_offset_f=3.74,
+    return_cool_tau_h=0.72,
     # Its household meter read a run at 0.81 of the run's own flow
     # (median of 47 runs), but the flow a history's replay takes is the
     # household's draws alone (``sim_home_assistant`` reads them from
@@ -102,19 +102,19 @@ def _nwp500_65() -> HeaterParams:
         tank=TankParams(
             volume_gal=63.2,
             layers=12,
-            upper_probe_height=0.9025211164843931,
-            lower_probe_height=0.46911072655391756,
-            upper_probe_spread_gal=5.653661660910821,
-            lower_probe_spread_gal=2.1419340767729347,
-            lower_probe_offset_f=1.0786505111721996,
-            condenser_span=(0.14781984512812876, 0.32255146714444416),
-            inlet_mix_gal=14.248249131082055,
-            conductance_btu_hr_f=0.5001962294309196,
+            upper_probe_height=0.9023796550762445,
+            lower_probe_height=0.4762953177315908,
+            upper_probe_spread_gal=5.223993410085456,
+            lower_probe_spread_gal=2.2109548939857624,
+            lower_probe_offset_f=1.1277012541585785,
+            condenser_span=(0.15449269225072243, 0.28915445602405737),
+            inlet_mix_gal=14.217652959831804,
+            conductance_btu_hr_f=0.5106531501532018,
         ),
         loss=LossParams(
-            ua_side_btu_hr_f=3.102932671833771,
-            ua_bottom_btu_hr_f=0.4446638449401684,
-            ua_top_btu_hr_f=0.556307002968742,
+            ua_side_btu_hr_f=3.062819008375388,
+            ua_bottom_btu_hr_f=0.5590393828960091,
+            ua_top_btu_hr_f=0.5568139861843887,
         ),
         # The heat's map and the run-on fitted on its record,
         # 2025-12-28 to 2026-10-26 (``heat_pump_fit.fit_heat_pump``),
@@ -126,20 +126,20 @@ def _nwp500_65() -> HeaterParams:
         # 2026-04-16 to 10-26, at the condenser's water on the record's
         # replay through the tank above
         # (``heat_pump_fit.in_condenser_water``), where the walk reads
-        # it: 4.8 °F under the lower probe on average.
+        # it: 4.7 °F under the lower probe on average.
         compressor=CompressorParams(
             heat_btu_h=4499.436604500702,
             heat_btu_h_per_air_f=55.49795247502065,
             heat_btu_h_per_water_f=-15.948333659761246,
             heat_btu_h_per_air_water_f=0.0,
-            power_w=408.8883465244252,
-            power_w_per_air_f=1.0192155261203373,
-            power_w_per_water_f=2.7279692948864747,
+            power_w=408.82790749208425,
+            power_w_per_air_f=1.023669362351011,
+            power_w_per_water_f=2.7232689098605563,
             power_w_per_air_water_f=0.0,
             heat_domain_air_f=(61.0, 89.0),
             heat_domain_water_f=(114.0, 144.0),
             power_domain_air_f=(53.0, 90.0),
-            power_domain_water_f=(67.0, 145.0),
+            power_domain_water_f=(65.0, 144.0),
             start_hold_after_min=(15.0, 60.0, 180.0, 720.0),
             start_hold_min=(0.0, 0.0, 0.0, 0.0, 0.0),
         ),

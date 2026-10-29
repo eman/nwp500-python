@@ -230,14 +230,16 @@ Changed
   (``tank_physics.circulation_flows``, ``stratified.Flowing``'s new
   ``rest_f`` and ``share``), the tank's fit and ``run_heat_btu``.
   ``calibration.measure_pipe`` measures the two on such a run, and
-  ``fit_return`` fits the return's rest and cooling given them (4.47 °F
-  and 0.52 h at the site, on 122 runs). The run's readings are a test
+  ``fit_return`` fits the return's rest and cooling given them (3.74 °F
+  and 0.72 h at the site, on 122 runs). The run's readings are a test
   fixture, ``circulation_run_2026-10-29.json``. Fitted before
-  2026-09-18 and scored after, a recovery's duration comes out 27.1
-  min off against 30.9 (5.44 against 5.69 with no draw) and its energy
+  2026-09-18 and scored after, a recovery's duration comes out 27.2
+  min off against 30.9 (5.45 against 5.69 with no draw) and its energy
   4.4 % against 4.5. Refitted on the whole record with it, the site's
-  tank terms do not move and its power map takes +1.02 W per °F of
-  air and +2.73 per °F of the condenser's water (12.7 W RMS, from
+  tank fits to 2.26 °F RMS (from 2.50): the bottom's loss 0.445 to
+  0.559 BTU/h·°F, the condenser's span 0.148-0.323 to 0.154-0.289, the
+  lower probe 0.469 to 0.476; its power map takes +1.02 W per °F of
+  air and +2.72 per °F of the condenser's water (12.7 W RMS, from
   13.0).
 
 - **Water warmer than the tank's inlet zone rises past it.** The
@@ -248,8 +250,8 @@ Changed
   goes in where the column is as warm and pushes out only the water
   above (``stratified.flow``); on that run the upper probe reads
   0.8 °F RMS off, and the tank gives up the heat the return line
-  measured to 3 %. Only circulation flows this way; draws do not. The
-  lower probe, at its fitted height (0.47), cannot read the 105.8 °F
+  measured but 3.2 %. Only circulation flows this way; draws do not. The
+  lower probe, at its fitted height (0.48), cannot read the 105.8 °F
   it fell to on that run: no stable column with a probe that high
   holds so little heat below it, which places the probe lower than
   the tank's fit does.
