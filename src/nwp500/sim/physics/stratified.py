@@ -804,7 +804,7 @@ class Compressor:
     heating from ``heats_at`` (after any hold a caller imposes), both to
     ``off_at`` (None: past the walk's end). As its heating begins the
     tank is stirred (``stir``), where a walk starts at or steps over
-    ``heats_at``. Its map reads the condenser's water
+    ``heats_at`` before ``off_at``. Its map reads the condenser's water
     (``condenser_water_f``)."""
 
     params: CompressorParams
@@ -813,6 +813,9 @@ class Compressor:
     off_at: datetime | None = None
     #: Its map's heat scaled by this (a recovery model's correction).
     scale: float = 1.0
+    #: Its heating begins at ``heats_at``, with the start's stir; False
+    #: for a run under way at the walk's start, already heating.
+    stirs: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -986,7 +989,8 @@ class _Walk:
         self, a: datetime, b: datetime, state: TankState
     ) -> tuple[TankState, Books]:
         """The tank from ``a`` (the draws there taken) to ``b``: the
-        compressor's start stir where its heating begins at ``a``, the
+        compressor's start stir where its heating begins at ``a`` (it
+        still running), the
         heat in, the flows, the jacket, conduction, then any inversion
         turned over."""
         lay = self.lay
@@ -997,7 +1001,12 @@ class _Walk:
         c = self.heating.compressor
         credit = 1.0 if self.heating.credited else 0.0
         if c is not None:
-            if a == c.heats_at and self.heating.credited:
+            if (
+                c.stirs
+                and a == c.heats_at
+                and (c.off_at is None or a < c.off_at)
+                and self.heating.credited
+            ):
                 state = stir(lay, state)
             water = condenser_water_f(lay, state)
             q = (

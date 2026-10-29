@@ -377,6 +377,67 @@ class TestStir:
             coast.state.layers_f, abs=0.2
         )
 
+    def test_a_run_under_way_is_not_stirred_again(self) -> None:
+        # Its heating began before the walk: the walk is that of a run
+        # begun earlier, whose start it never steps over.
+        start = S.estimate(L, 130.0, 110.0)
+        earlier = T0 - timedelta(hours=1)
+
+        def first(c: S.Compressor) -> tuple[float, ...]:
+            w = S.walk(
+                L,
+                start,
+                T0,
+                T0 + timedelta(hours=1),
+                air_f=_air,
+                heating=S.Heating(compressor=c),
+            )
+            return w.path[1][1].layers_f
+
+        going = first(
+            S.Compressor(
+                params=P.compressor, on_at=T0, heats_at=T0, stirs=False
+            )
+        )
+        begun = first(
+            S.Compressor(params=P.compressor, on_at=earlier, heats_at=earlier)
+        )
+        fresh = first(S.Compressor(params=P.compressor, on_at=T0, heats_at=T0))
+        assert going == pytest.approx(begun, abs=1e-9)
+        assert max(abs(x - y) for x, y in zip(going, fresh, strict=True)) > 1.0
+
+    def test_a_run_stopped_before_its_heating_stirs_nothing(self) -> None:
+        # A hold a caller imposes that outlasts the run: no heating
+        # begins, so nothing is pooled.
+        start = S.estimate(L, 130.0, 110.0)
+        on = T0 + timedelta(minutes=30)
+        heats = on + timedelta(minutes=10)
+
+        def walk(off: datetime, *, stirs: bool) -> S.Walked:
+            return S.walk(
+                L,
+                start,
+                T0,
+                T0 + timedelta(hours=2),
+                air_f=_air,
+                heating=S.Heating(
+                    compressor=S.Compressor(
+                        params=P.compressor,
+                        on_at=on,
+                        heats_at=heats,
+                        off_at=off,
+                        stirs=stirs,
+                    )
+                ),
+            )
+
+        for off in (heats, heats - timedelta(minutes=5)):
+            got = walk(off, stirs=True)
+            assert got.books.compressor_btu == 0.0
+            assert got.state.layers_f == pytest.approx(
+                walk(off, stirs=False).state.layers_f, abs=1e-9
+            )
+
 
 class TestFlow:
     @given(profiles, st.floats(0.0, 250.0), inflows)

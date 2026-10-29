@@ -398,7 +398,10 @@ Changed
   the lower probe holds until the condenser has heated the pool back
   past its reading: longer the longer the compressor was off and the
   colder the bottom has grown, as the record's holds are (0 to 22 min),
-  with nothing fitted to them. On the record's 84 clean starts the
+  with nothing fitted to them. A compressor already running at the
+  walk's start is not stirred again (in ``simulate``, ``active_cycle``
+  and ``forecast``) unless some of a ``running_hold`` is left, nor one
+  that stops before its heating begins. On the record's 84 clean starts the
   model holds a median 3, 23, 18, 18 and 21 min after under 15, 60,
   180 and 720 min off and beyond, against 0, 5, 10, 18 and 22; the
   upper probe holds still through the record's holds, as the model's

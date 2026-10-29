@@ -203,6 +203,23 @@ class TestTheRecovery:
         assert got.confidence == 1.0
         assert got.model is None
 
+    def test_a_run_under_way_has_begun_heating(self) -> None:
+        # Under way with no hold left, its layers are not stirred again;
+        # with a hold left, its heating begins after it as a start's.
+        physics = _physics()
+        state = physics.estimate(125.0, 100.0)
+        fresh = physics.recover(T0, state, 130.0)
+        going = physics.recover(T0, state, 130.0, under_way=True)
+        assert going.reached
+        assert going.trajectory[1] != fresh.trajectory[1]
+        assert going.physics == physics.recovery(
+            T0, state, 130.0, under_way=True
+        )
+        held = physics.recover(T0, state, 130.0, hold_minutes=5.0)
+        assert held == physics.recover(
+            T0, state, 130.0, hold_minutes=5.0, under_way=True
+        )
+
     def test_a_model_paces_the_heat_pump(self) -> None:
         """A model's longer duration is a smaller scale on the heat, and
         the recovery then takes the model's time."""

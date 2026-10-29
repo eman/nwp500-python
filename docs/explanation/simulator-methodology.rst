@@ -251,7 +251,10 @@ carry that cold. At the instant the condenser's heating begins the walk
 pools the water the condenser wraps with the water below it
 (``stratified.stir``: each layer by its share under the condenser's
 top, ``Layout.stir_weights``), the same heat spread over the pool, and
-the climb follows from there. The lower probe, above the pool, holds
+the climb follows from there. A compressor already running when a walk
+starts has had its stir, so it is not stirred again unless some of a
+caller's hold is left, and one stopped before its heating begins stirs
+nothing. The lower probe, above the pool, holds
 until the condenser has heated the pool past its reading, and the
 upper probe holds as the record's does. The hold is nothing of its
 own, so a stand's cold costs the heat it does and no more: a 22-minute
