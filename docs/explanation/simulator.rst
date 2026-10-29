@@ -374,6 +374,23 @@ leaves, with 90 % day-block bootstrap intervals.
   crossing 5.3-7.3 gal after the probe's; the fitted probe sits with
   6.9 gal of the 63.2 above it.
 
+Two errors in a heat-pump recovery partly cancel. The climb stops when
+the model's lower probe, which carries nothing for the compressor's
+heating, reaches the target plus the run-on's overshoot, but the
+overshoot is measured on the real probe, which after 40 minutes or more
+of heating reads about 0.9 degF higher than at rest
+(:doc:`recovery-speed`), so a long recovery runs long. And the power is
+read at the condenser's water, below the lower probe's reading it was
+fitted on: pooled over the 11 held-out draw-free recoveries, 392 W
+against the 417 W metered, which offsets the long runs in their
+electricity. Modelling both, with an offset that builds over the first
+minutes of heating, fitted on the stops, cut those 11 recoveries' mean
+from 6.6 min long to 2.5 min but raised their mean absolute error from
+11.9 to 12.7 min, and the electricity's from 5.7 % to 9.9 %. Over all 21
+draw-free recoveries from 2026-04-16 (in-sample before 2026-09-18), the
+13 of 90 minutes or more went from 7.8 min long to 3.6, and the 8
+shorter ones from 1.9 min short to 8.2. Neither change is applied.
+
 Not yet measured on the layered tank: recorded starts and daily energy
 from replaying recorded writes, depletions called over the whole
 record, a forecast's draw windows, and the time to ready and an element
