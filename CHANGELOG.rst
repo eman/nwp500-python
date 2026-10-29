@@ -235,11 +235,11 @@ Changed
   ``ValueError`` for a setpoint written out of range, as ``simulate``
   does. On 34 deliveries held out of the fit, none of
   which crossed the line, the replayed layers under-promised 3 % of
-  them, by 1.16 gal on average, against 6 % and 2.00 gal from the
+  them, by 1.17 gal on average, against 3 % and 0.91 gal from the
   probes alone. Of the three draws in the record that took the upper
-  probe across the line, the model's crossing came at 26.1 and
-  31.3 gal against the recorded 23.3 and 31.3 (the third started below
-  the line).
+  probe across the line, the layered tank as first fitted crossed the
+  probe at 26.1 and 31.3 gal against the recorded 23.3 and 31.3 (the
+  third started below the line).
   ``sim_score`` scores deliveries from the replayed layers.
 
 - **The tank's keeper from Home Assistant is ``HomeAssistantTank``**

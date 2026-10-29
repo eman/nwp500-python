@@ -175,7 +175,8 @@ the lower probe further the wider the gap between the probes when it
 starts.
 
 The simulator's layered tank tracks the water itself: a draw pushes the
-column up through an inlet zone (12.2 gal fitted on the whole record)
+column up through an inlet zone (12.2 gal, fitted on 2026-04-16 to
+10-26)
 and out of the top, and the probes read the layers where they sit
 (:doc:`simulator-methodology`). On the 46 metered draws after
 2026-09-18, each followed for an hour from the layers the record's
@@ -193,8 +194,7 @@ the spout fell below 105 degF, and the gallon at which the valve's
 outlet did. Two baths did not run cold. A third crossed at the outlet
 after 28.6 gal; the fourth ran cold at the spout after 39.4 gal and at
 the outlet after 39.9, with the compressor running through it; and a
-later drawdown of the tank crossed at the outlet after 8.6 gal. The
-layered tank's estimate has not yet been scored against them.
+later drawdown of the tank crossed at the outlet after 8.6 gal.
 
 The estimate reads the tank's layers: the water leaving the top in
 turn, each gallon through the mixing valve, to the first the valve
@@ -210,13 +210,13 @@ of the fit, none crossed, so each delivered at least its gallons: an
 estimate under them is an under-promise. From the replayed layers 3 %
 were under-promised, by 1.17 gal on average across all 34 (0-3.40);
 from the probes alone, also 3 %, by 0.91 gal (0-2.66). Only three
-draws in the whole record took the
-upper probe across the line, each with the compressor running. On two,
-the model's own crossing of the probe came at 26.1 and 31.3 gal against
-the recorded 23.3 and 31.3; the third started below the line. The tap
-crosses later than the probe: the water above the probe still leaves
-hot. From the layers the estimates at the tap were 34.3 and 44.0 gal,
-against 29.2 and 62.0 from the probes alone.
+draws in the whole record took the upper probe across the line, each
+with the compressor running. On two, the layered tank as first fitted
+crossed the probe at 26.1 and 31.3 gal against the recorded 23.3 and
+31.3; the third started below the line. The tap crosses later than the
+probe: the water above the probe still leaves hot. From the layers, as
+first fitted, the estimates at the tap were 34.3 and 44.0 gal, against
+29.2 and 62.0 from the probes alone.
 
 The probes alone over-read a tank whose upper element has just heated a
 thin top over a spent tank. On 2026-04-14 a draw from 139.6/78.4 degF
