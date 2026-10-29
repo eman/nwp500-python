@@ -78,6 +78,7 @@ from nwp500.sim.controller import (
     wake_times,
     window_at,
 )
+from nwp500.sim.decay import Impulse
 from nwp500.sim.params import ControllerParams, ElementParams
 from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.physics.stratified import IDLE_STEP
@@ -112,12 +113,12 @@ _INSTANT = timedelta(microseconds=1)
 _ENTRY_MINUTE = timedelta(minutes=1)
 #: How far ahead a recovery is walked to judge the TOU cap on it.
 _RECOVERY_AHEAD = timedelta(hours=16)
-#: How far a coast walks ahead at most, to the clock's ``IDLE_STEP``
-#: grid at or before it: the heater's own start is found on the walk
-#: after it, and the walk is taken again to there, so a coast walked to
-#: a distant event would cost the horizon at every start. A split on
-#: the grid is a step's end, so the tank walked in pieces is the tank
-#: walked whole.
+#: How far a coast walks ahead before it looks for the heater's own
+#: start, to the clock's ``IDLE_STEP`` grid at or before it: the start
+#: is found on the walk and the walk is taken again to there, so a coast
+#: walked whole to a distant event would cost the horizon at every
+#: start. A split on the grid is a step's end, so the tank walked in
+#: pieces is the tank walked whole (``_coast_stretch``).
 _COAST_AHEAD = timedelta(hours=3)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 #: A walk that has not reached the horizon after this many steps is a
@@ -1262,13 +1263,8 @@ class _Engine:
         """The tank with no recovery running, to ``end``, or to where
         the heater starts itself, an element's later start reads its
         zone, the running element reaches its off point, or the water
-        leaves or enters the heat pump's range, whichever is first, or
-        to ``_COAST_AHEAD`` on, the walk going on from there."""
-        ahead = _EPOCH + IDLE_STEP * math.floor(
-            (self.t + _COAST_AHEAD - _EPOCH) / IDLE_STEP
-        )
-        end = min(end, ahead)
-        stretch = self._advance(end, self._peek_draws(end), stop=self._stop())
+        leaves or enters the heat pump's range, whichever is first."""
+        stretch = self._coast_stretch(end)
         at: datetime | None = None
         own = self._trigger_ahead(stretch)
         if own is not None:
@@ -1331,6 +1327,65 @@ class _Engine:
         )
         self._append(stretch.points, heating=False)
         self.t = stretch.end
+
+    def _coast_stretch(self, end: datetime) -> Stretch:
+        """The tank walked from now toward ``end`` under what runs now,
+        to where the coast's stop holds, as ``_advance`` walks it: in
+        pieces of ``_COAST_AHEAD`` to a mark of the clock's grid, which
+        are the walk whole, and no further than the piece the heater's
+        own start is triggered in. Each of its rules finds its instant
+        from the tank up to it, so one triggered short of a piece's end
+        (with no draw at the end, which the rules read with the step
+        before it) is the one the walk to ``end`` finds, and its start,
+        past the lockout of a stop before now, falls short of the end
+        too. With only an element's later start found, the walk goes on
+        to ``end``: the coast plans the heater's own start too where the
+        whole walk finds one, past the element's."""
+        self.cooling = [
+            e for e in self.cooling if self._heats_until(e) > self.t
+        ]
+        running = self._running(self.t)
+        stop = self._stop()
+        t, state = self.t, self.tank_state
+        points: list[Point] = []
+        impulses: list[Impulse] = []
+        while True:
+            upto = min(
+                end,
+                _EPOCH
+                + IDLE_STEP
+                * math.floor((t + _COAST_AHEAD - _EPOCH) / IDLE_STEP),
+            )
+            part = self.physics.advance(
+                t,
+                state,
+                upto,
+                self.draws[self._draws_in(t, upto)],
+                running=running,
+                stop=stop,
+            )
+            points += part.points[1:] if points else part.points
+            impulses += part.impulses
+            stretch = Stretch(points, stopped=part.stopped, impulses=impulses)
+            if part.stopped or part.end >= end:
+                return stretch
+            own, _ = trigger_ahead(
+                self.state,
+                self.settings,
+                self.params,
+                [(p.at, p.upper_f, p.lower_f) for p in points],
+                impulses,
+                self.t,
+            )
+            if (
+                own is not None
+                and own.trigger_at < upto
+                and not self.draws[self._draws_in(upto, upto + _INSTANT)]
+            ):
+                # A draw at the piece's end is the next piece's, but the
+                # rules read the drops at a step's end with the step.
+                return stretch
+            t, state = part.end, part.state
 
     def _coast_draw(self) -> None:
         """The draws at this instant, taken here: the path has the tank

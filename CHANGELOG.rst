@@ -220,12 +220,13 @@ Changed
 - **A simulation's cost grows with its span.** A coast walked the tank
   to the next fixed event, often the horizon, to find the heater's own
   start, then again to the start; and every step scanned all the
-  draws. A coast now looks at most 3 hours ahead (to a 10-minute mark
-  of the clock, where a split walk is the walk whole), and the draws
-  are found by their instants. On one NWP500-65's parameters with
-  about 30 draws a day, ``simulate`` over 7 days takes 166 ms against
-  647 ms, and over 14 days 331 ms against 2.6 s; the answers are the
-  same.
+  draws. A coast now walks 3 hours at a time (to a 10-minute mark of
+  the clock, where a split walk is the walk whole) and stops once the
+  heater's own start is triggered, which is then the start the whole
+  walk finds; the draws are found by their instants. On one
+  NWP500-65's parameters with about 30 draws a day, ``simulate`` over
+  14 days takes 369 ms against 2.6 s in Heat Pump mode and 449 ms
+  against 4.8 s in High Demand; the answers are the same.
 - **A circulation run returns its pipe, then the tank's own water a
   little cooler.** A run was priced on an effective volume (19.36 gal
   at the site) back at the return's rest, then the tank's own water as
