@@ -205,15 +205,17 @@ air and 120 degF water (``physics.heat_pump``):
 where :math:`T_c` is the water the condenser heats: the layers it
 wraps, weighted by how much of each.
 
-The power is fitted on the lower probe's reading
-(``heat_pump_fit.power_blocks``) but read here at :math:`T_c`, which is
-below it: by the probe's fixed offset in a mixed tank, and by more
-while the tank is stratified. Pooled over the 11 held-out draw-free
-recoveries, that prices the power at 392 W against the 417 W metered.
+The power is fitted where it is read, at :math:`T_c`: each metered
+block at the condenser's water on the record's replay
+(``heat_pump_fit.in_condenser_water``), which is below the lower probe,
+by the probe's fixed offset in a mixed tank and by more while the tank
+is stratified (4.7 degF on average over the record's climbs). Fitted on
+the lower probe's reading and read at :math:`T_c`, it priced the
+record's climbs at 407.2 W against the 418.2 W metered.
 
 Each is read with the air and the water held to the span it was
 fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
-the power's 45 to 90 degF air and 73 to 148 degF water, on the record),
+the power's 53 to 90 degF air and 68 to 145 degF water, on the record),
 so a recovery outside it takes the nearest edge rather than
 extrapolating. The heat is fitted on a mixed tank, where the tank's
 mean and the condenser's water are within a few degrees; while the tank
@@ -500,8 +502,10 @@ run-on, and four measures are read from it:
   losses, at the terms just fitted. The heat's plane is a least-squares fit weighted by
   each stretch's minutes, with 10 stretches or more;
 - **the power**, on 10-minute blocks of a climb's metered power,
-  stratified or not, at the air and the lower probe: a least-squares
-  plane with 30 blocks or more;
+  stratified or not, at the air and the condenser's water on the
+  record's replay through the terms just fitted (the lower probe's,
+  with no record to replay): a least-squares plane with 30 blocks or
+  more;
 - **the run-on**: the median of the lower probe's overshoot past the
   target at the stop of draw-free runs, with 5 runs or more.
 

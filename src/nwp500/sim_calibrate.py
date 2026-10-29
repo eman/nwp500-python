@@ -247,7 +247,8 @@ def score(
     - ``heat_map``: the heat's RMS error on the mixed climbs, weighted by
       their minutes, BTU/h (``heat_pump_fit.heat_map_error``);
     - ``power_map``: the power's RMS error on the climbs' metered
-      blocks, W;
+      blocks, each at the water it was read at (``_heat_pump_evidence``),
+      W;
     - ``run_on``: the overshoot's mean absolute error at the stops, °F.
 
     Raises ``CalibrationInputError`` for a ``done`` not made with
@@ -507,7 +508,7 @@ def _keep_better(
     )
     found = cal.recoveries(frame, air=recovery_air)
     params, pump, held_pump = _keep_better_heat_pump(
-        hpf.evidence(frame, params, air=recovery_air),
+        _heat_pump_evidence(frame, params, recovery_air, record),
         params,
         unfitted,
         judged,
@@ -522,6 +523,22 @@ def _keep_better(
         tuple(judged),
         HeldOut(held_tank, record, held_pump),
     )
+
+
+def _heat_pump_evidence(
+    frame: pd.DataFrame,
+    params: HeaterParams,
+    air: str,
+    record: tf.TankRecord | None,
+) -> hpf.Evidence:
+    """What the heat pump is fitted on (``heat_pump_fit.evidence``),
+    with a ``record`` its power read at the condenser's water on the
+    record's replay (``heat_pump_fit.in_condenser_water``), where the
+    walk reads the power map."""
+    found = hpf.evidence(frame, params, air=air)
+    if record is None:
+        return found
+    return hpf.in_condenser_water(found, params, record)
 
 
 def _split_frame(
@@ -1000,7 +1017,14 @@ def _fit(
         fit, why = _fit_tank(base, found, map_)
         tank = _tank_calibration(fit, found, why)
         start = base if fit is None else fit.params
-        fitted = cal.calibrate(frame, start, recovery_air=recovery_air)
+        fitted = cal.calibrate(
+            frame,
+            start,
+            recovery_air=recovery_air,
+            evidence=_heat_pump_evidence(
+                frame, start, recovery_air, found.record
+            ),
+        )
         unfitted = set(fitted.params.unfitted) - {"tank"}
         if fit is None:
             unfitted.add("tank")

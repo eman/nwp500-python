@@ -748,15 +748,20 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        (:doc:`/explanation/recovery-speed`).
      - First fitted 2026-10-26
    * - ``compressor.power_w`` and its slopes
-     - 401.7 W at 65 degF air and 120 degF water; +0.21 per degF of
-       air, +2.85 per degF of the lower tank
-     - 6,132 ten-minute blocks of metered climbs over 342 runs,
-       2025-12-28 to 2026-10-26, the lower tank 73.8 to 147.5 degF and
-       the air 45.9 to 89.3 degF: 12.9 W RMS.
-     - First fitted 2026-10-26
+     - 408.6 W at 65 degF air and 120 degF water; +1.04 per degF of
+       air, +2.70 per degF of the condenser's water
+     - 3,562 ten-minute blocks of metered climbs over 211 runs,
+       2026-04-16 to 10-26, each at the condenser's water on the
+       record's replay (``heat_pump_fit.in_condenser_water``), where the
+       walk reads the map: 68.4 to 144.3 degF, 4.7 degF under the lower
+       probe on average, the air 53.6 to 89.3 degF: 12.9 W RMS. Read
+       there, the map fitted on the lower probe (401.7 W, +0.21, +2.85)
+       priced these blocks at 407.2 W against the 418.2 W metered, at
+       17.8 W RMS. The runs before 2026-04-16 have no record to replay.
+     - 2026-10-29
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``
-     - 61-89 and 114-144 degF; 45-90 and 73-148 degF
+     - 61-89 and 114-144 degF; 53-90 and 68-145 degF
      - The span each map was fitted over, to the whole degree. Each is
        read with the air and the water held to its own, so a recovery
        past an edge takes the edge's value.

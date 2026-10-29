@@ -777,6 +777,32 @@ class TestTheWalk:
             w.books.element_wh * BTU_PER_WH
         )
 
+    def test_its_power_is_read_at_the_condenser_water(self) -> None:
+        # Each step's water is the condenser's as the map reads it, after
+        # the start's stir, weighted by the hours the compressor ran.
+        start = S.estimate(L, 125.0, 100.0)
+        on = T0 + timedelta(minutes=30)
+        w = S.walk(
+            L,
+            start,
+            T0,
+            T0 + timedelta(hours=2),
+            air_f=_air,
+            heating=S.Heating(
+                compressor=S.Compressor(
+                    params=P.compressor, on_at=on, heats_at=on
+                )
+            ),
+        )
+        assert w.books.compressor_h == pytest.approx(1.5)
+        k = next(i for i, (t, _) in enumerate(w.path) if t == on)
+        first = w.steps[k]
+        hours = (w.path[k + 1][0] - on).total_seconds() / 3600.0
+        assert first.compressor_h == pytest.approx(hours)
+        stirred = S.condenser_water_f(L, S.stir(L, w.path[k][1]))
+        assert first.compressor_water_f_h == pytest.approx(stirred * hours)
+        assert w.steps[0].compressor_h == 0.0
+
     def test_the_heat_pump_heats_by_its_map(self) -> None:
         w = _day(S.estimate(L, 125.0, 100.0), draws=(), flowing=())
         cop = w.books.compressor_btu / (w.books.compressor_wh * BTU_PER_WH)

@@ -297,6 +297,60 @@ class TestTheReplay:
         assert a.layers_f == pytest.approx(b.layers_f, abs=0.05)
 
 
+class TestTheCondenserWater:
+    def test_it_is_the_tanks_own_through_a_recovery(
+        self, history, record
+    ) -> None:
+        """The water the condenser heats, which no probe reads, comes
+        back from the replay: the tank's own, minute by minute, through
+        the compressor's run."""
+        _, _, path = history
+        lay = S.layout(TRUE)
+        spans = [
+            (_at(20.0 + k / 6), _at(20.0 + (k + 1) / 6)) for k in range(17)
+        ]
+        got = tf.condenser_water(TRUE, record, spans)
+        for (a, b), water in zip(spans, got, strict=True):
+            own = [S.condenser_water_f(lay, s) for t, s in path if a <= t < b]
+            assert water == pytest.approx(sum(own) / len(own), abs=1.0)
+        # It heats through the run.
+        assert got[-1] > got[0] + 5.0
+
+    def test_it_reads_the_water_the_walk_reads_the_map_at(
+        self, history
+    ) -> None:
+        """A draw during the run cools the condenser's water before the
+        power's map is read: a minute from the draw reads the water
+        after it, not the tank's before."""
+        frame, draws, _ = history
+        at = _at(21.0)
+        spans = [(at, at + timedelta(minutes=1))]
+        dry = tf.condenser_water(TRUE, tf.tank_record(frame, draws), spans)
+        drawn = tf.tank_record(frame, sorted([*draws, (at, 15.0)]))
+        wet = tf.condenser_water(TRUE, drawn, spans)
+        assert wet[0] < dry[0] - 1.0
+
+    def test_its_steps_follow_on(self, record) -> None:
+        """The replay's steps meet end to end: each step's water is read
+        once."""
+        lay = S.layout(PRIORS)
+        first, end = record.minute(_at(19.0)), record.minute(_at(22.0))
+        steps: list[tuple[datetime, datetime, S.Books]] = []
+        tf._replayed(lay, PRIORS, record, first, end, steps=steps)  # pyright: ignore[reportPrivateUsage]
+        assert steps[0][0] == record.instant(first)
+        assert steps[-1][1] == record.instant(end)
+        assert [b for _, b, _ in steps[:-1]] == [a for a, _, _ in steps[1:]]
+        running = [k for _, _, k in steps if k.compressor_h > 0.0]
+        assert running
+        assert all(k.compressor_water_f_h > 0.0 for k in running)
+
+    def test_outside_the_record_it_is_unknown(self, record) -> None:
+        before = (T0 - timedelta(hours=3), T0 - timedelta(hours=2))
+        got = tf.condenser_water(TRUE, record, [before, (_at(21), _at(21.2))])
+        assert math.isnan(got[0]) and math.isfinite(got[1])
+        assert tf.condenser_water(TRUE, record, []) == []
+
+
 class TestTheErrors:
     def test_the_tank_that_wrote_it_tracks_it(self, history, record) -> None:
         _, _, path = history
