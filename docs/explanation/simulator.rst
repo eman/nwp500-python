@@ -377,8 +377,8 @@ leaves, with 90 % day-block bootstrap intervals.
 Two errors in a heat-pump recovery partly cancel. The climb stops when
 the model's lower probe, which carries nothing for the compressor's
 heating, reaches the target plus the run-on's overshoot, but the
-overshoot is measured on the real probe, which on a long recovery reads
-about 0.9 degF higher while the compressor heats than at rest
+overshoot is measured on the real probe, which after 40 minutes or more
+of heating reads about 0.9 degF higher than at rest
 (:doc:`recovery-speed`), so a long recovery runs long. And the power is
 read at the condenser's water, below the lower probe's reading it was
 fitted on: pooled over the 11 held-out draw-free recoveries, 392 W
