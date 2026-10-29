@@ -197,7 +197,9 @@ base and the fit on the recorded events after it:
    nwp-cli simulate calibrate history.jsonl --ambient 68 --holdout-from 2026-10-01
 
 The events are taken from the record without any model, so each set of
-parameters is scored on the same events. Each recovery that reached its
+parameters is scored on the same events, each started from the layers
+the record's replay leaves at its start (given the air; without it,
+from the probes). Each recovery that reached its
 target with no water in use is walked from its recorded start (one with
 a draw needs a meter's draws, from Python below): ``recovery_minutes_abs`` is
 how far its predicted run is from the recorded one, and
@@ -210,22 +212,31 @@ least a week, or the intervals are wide.
 
 From Python, ``nwp500.sim_score`` scores any history the fits read
 (``sim_calibrate.prepare`` or ``prepare_changes``), and takes a hot
-water meter's draws for the draw and deliverable-gallon metrics:
+water meter's draws for the draw and deliverable-gallon metrics. Give
+the fit the draws before the split, and the score the record
+(``tank_fit.tank_record``) to start each event from its replay:
 
 .. code-block:: python
 
    import json
 
    from nwp500 import sim_calibrate, sim_score
+   from nwp500.sim import tank_fit
 
    ready = sim_calibrate.prepare_changes(rows, observed, record=record)
    start = sim_score.holdout_start(ready.frame.index, tz="America/Los_Angeles")
    done = sim_calibrate.calibrate_changes(
-       rows.until(start), [t for t in observed if t < start], record=record
+       rows.until(start),
+       [t for t in observed if t < start],
+       record=record,
+       draws=[d for d in draws if d[0] < start],
    )
    found = sim_score.events(ready, draws=draws, flow=flow, since=start)
    score = sim_score.score(
-       found, done.calibration.params, tz="America/Los_Angeles"
+       found,
+       done.calibration.params,
+       tz="America/Los_Angeles",
+       record=tank_fit.tank_record(ready.frame, draws),
    )
    print(json.dumps(score.document(), indent=2))
 

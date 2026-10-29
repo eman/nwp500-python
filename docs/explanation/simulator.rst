@@ -337,64 +337,47 @@ Accuracy
 
 Measured on one NWP500-65. The recovery, quiet-window and draw figures
 are the held-out scoreboard's (``sim_score``): parameters calibrated
-(``sim_calibrate.calibrate_changes``) on the record from
-2026-04-16 to 2026-09-18, and scored on the events from then to
-2026-10-26, with 90 % day-block bootstrap intervals.
+(``sim_calibrate.calibrate_changes``) on the record and its metered
+draws from 2026-04-16 to 2026-09-18, and scored on the events from
+then to 2026-10-26, each started from the layers the record's replay
+leaves, with 90 % day-block bootstrap intervals.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error 11.8 min (7.3-16.6) on the 11 with no water moving, a mean
-  6.2 min long; 47.4 min (27.0-76.2) on the 16 with draws or
-  circulation inside them, a mean 24 min short. As two zones: 7.9 and
-  43.6 min; under the earlier refrigerant model, 13.6 and 44.4 min.
-  Over 119 recoveries each hot gallon drawn inside one added about
-  4.7 min to it and each minute of circulation about 1.3 min;
+  error 11.9 min (7.5-16.6) on the 11 with no water moving, a mean
+  6.6 min long; 46.4 min (25.6-75.3) on the 16 with draws or
+  circulation inside them, a mean 20.2 min short. Over 119 recoveries
+  each hot gallon drawn inside one added about 4.7 min to it and each
+  minute of circulation about 1.3 min;
 - a recovery's electricity, from the map, against the heater's metered
-  energy on the 11 metered recoveries: mean absolute error 5.8 %
-  (3.7-8.0), a mean 2.0 % low; 7.2 % as two zones, and 12.8 % under
-  the earlier model;
+  energy on the 11 metered recoveries: mean absolute error 5.7 %
+  (3.6-8.0), a mean 2.5 % low;
 - the tank left alone, on the 59 quiet windows: the upper probe within
-  0.255 degF RMS (0.227-0.286) and the lower within 0.548 (0.457-0.646),
-  against 0.299 and 0.630 as two zones;
-- replaying recorded writes, with a recovery model trained on the
-  heater's record, under the earlier refrigerant model:
-  recorded starts reproduced over six days held out, 31 of 40; daily
-  energy, with start-up charged once, 3.6 % low in sample and 4.4 %
-  low held out (2.0 % low and 2.2 % high with the start hold);
-- replaying the recorded draws from each draw's start (1,312 draw
-  events from 2026-02-25), with the upper probe crossing the line
-  standing in for the tap running cold: recorded depletions caught, 5 of
-  5; draws called empty where the probe never crossed, 17 of 1,306
-  (1.3 %). From 2026-07-01, 2 of 2 caught
-  (one independent event) and 2 false calls in 488. Replayed over whole
-  days (214, 2026-02-26 to 2026-09-27), the two-zone tank drifted from
-  the record: mean absolute error 3.22 degF a day on the upper zone and
-  6.61 degF on the lower;
-- a forecast's draw windows, issued every 3 h for 24 h ahead from
-  2026-09-08 to 2026-09-28, flagged by the delivered water and scored
-  against the upper probe crossing the line, which reads 5.3-7.3 gal
-  before the delivered water does (:doc:`draws`): 1 of the 8 windows in
-  which the probe crossed was flagged, and 1 of 160 others;
-- time to ready after a switch into an element mode, 12 events (8 of
-  them Energy Saver): mean absolute error 0.51 min; on the two held
-  out, 0.13 min, ready a little later than predicted.
-  Element energy on the 7 whole runs: mean absolute error 0.045 kWh,
-  7 % high;
+  0.254 degF RMS (0.226-0.284) and the lower within 0.564 (0.476-0.652);
 - the probes over the hour after each of the 46 metered draws: the
-  upper within 0.290 degF RMS (0.183-0.458) and the lower within 2.09
-  (1.42-2.86), against 0.281 and 2.16 for the two zones' fitted draw
-  response (:doc:`draws`);
+  upper within 0.299 degF RMS (0.192-0.463) and the lower within 2.08
+  (1.42-2.84) (:doc:`draws`);
 - the deliverable gallons at the start of each of the 34 deliveries
   held out, none of which crossed the line, so each delivered at least
-  its gallons: from the replayed layers, 3 % under-promised, by
-  1.16 gal on average across all 34; from the probes alone, 6 % and
-  2.00 gal;
+  its gallons: 3 % under-promised, by 1.17 gal on average across all
+  34 (0-3.40);
+- the same parameters on the same events, each started from the two
+  probes alone instead of the replay: the lower probe within 1.29 degF
+  RMS (1.10-1.51) on the quiet windows and 5.19 (3.38-7.12) after the
+  draws, a recovery's electricity 10.3 % off (5.5-15.7), a draw-free
+  recovery's duration 9.9 min off (5.6-15.2), and the deliveries 3 %
+  under-promised, by 0.91 gal (0-2.66);
 - the three draws in the whole record that took the upper probe across
-  the line, each with the compressor running: on two, the model's
-  crossing of the probe came at 26.1 and 31.3 gal against the recorded
-  23.3 and 31.3; the third started below the line;
+  the line, each with the compressor running: on two, the layered
+  tank as first fitted crossed the probe at 26.1 and 31.3 gal against
+  the recorded 23.3 and 31.3; the third started below the line;
 - the water above the upper probe: one measurement put the tap's
   crossing 5.3-7.3 gal after the probe's; the fitted probe sits with
   6.9 gal of the 63.2 above it.
+
+Not yet measured on the layered tank: recorded starts and daily energy
+from replaying recorded writes, depletions called over the whole
+record, a forecast's draw windows, and the time to ready and an element
+run's energy after a switch into an element mode.
 
 
 Limitations

@@ -73,11 +73,12 @@ Heat output and power
 tank mixed (the upper probe within 1 degF above to 5 degF below the
 lower) and no water in use, at least 20 minutes long: the probes' mean
 is then the tank's, and the heat is the tank's mass (63.2 gal) times
-the mean's rise, plus the loss the fitted parameters price (here the
-two-zone tank's: a UA of 4.48 BTU/hr per degF, and the bottom loss's
-share at the gap; priced at the layered tank's 4.45, the fitted map
-moves under 0.1 %). 38 stretches, 3,059 minutes, 2025-12-28 to
-2026-10-26:
+the mean's rise, plus the jacket's loss as the shipped map's fit
+priced it; refitted from 2026-04-16 with the layered tank's
+4.45 BTU/hr per degF instead, the map moves 0.05 % at 65 degF air and
+120 degF water (4,497 BTU/hr) and under 0.2 % across its span, its
+water slope -16.1 per degF. 38 stretches, 3,059 minutes, 2025-12-28
+to 2026-10-26:
 
 .. list-table::
    :header-rows: 1

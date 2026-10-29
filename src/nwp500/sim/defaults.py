@@ -114,7 +114,8 @@ def _nwp500_65() -> HeaterParams:
         # The performance map, hold and run-on fitted on its record,
         # 2025-12-28 to 2026-10-26 (``heat_pump_fit.fit_heat_pump``),
         # the heat against the two-zone tank's loss: refitted against
-        # the loss above, from 2026-04-16, it moves under 0.1 % (4,497
+        # the loss above, from 2026-04-16, it moves 0.05 % at 65 °F air
+        # and 120 °F water and under 0.2 % across its span (4,497
         # BTU/h, +55.5 per °F of air, -16.1 per °F of water).
         compressor=CompressorParams(
             heat_btu_h=4499.436604500702,

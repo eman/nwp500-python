@@ -5,6 +5,49 @@ Changelog
 Unreleased
 ==========
 
+Upgrading
+---------
+
+The simulator's tank is stacked layers and its heat pump a fitted
+performance map; the two-zone tank, the refrigerant cycle, the heat
+book and the element-mode planner are gone. To move a caller over:
+
+- **Parameters.** A ``heater-params/1`` document is refused: calibrate
+  again with ``nwp-cli simulate calibrate`` (or
+  ``sim_calibrate.calibrate``), which writes ``heater-params/2``. A
+  ``/2`` document with removed fields, such as the heat book's, still
+  reads: they are left out and named by ``params.unknown_fields``. One
+  written before the layered tank also reads its tank as the priors,
+  with ``tank`` unfitted, until it is calibrated again.
+- **Removed parameters.** ``PowerParams`` and ``HeaterParams.power``;
+  ``BookParams`` and ``HeaterParams.book``; the two zones' tank, loss
+  and draw terms (``TankParams.lower_zone_share`` and
+  ``stratification_gap_tau_h``, ``LossParams.ua_btu_hr_f``,
+  ``ua_exponent``, ``bottom_loss_btu_hr``, the ``DrawParams`` reach and
+  observability terms); the refrigerant cycle's ``CompressorParams``
+  fields; ``ElementParams.upper_f_per_min`` and ``lower_f_per_min``;
+  the readiness evidence and outlet lag (``ReadinessParams.evidence``,
+  ``delivered_lag_gal``, ``fall_f_per_gal``); the circulation's book
+  terms (``CirculationParams.loss_btu_per_gal``, ``book_circuit_gal``).
+  The Removed and Changed lists below name each.
+- **``simulate``** no longer takes ``ledger``, ``lead_draws``,
+  ``physics_usable`` or ``book``, and ``readiness`` and
+  ``time_to_ready`` no longer take ``book``. ``extensions.HeatLedger``
+  and its types are gone.
+- **The tank's state.** ``HeaterState.layers_f`` carries the layers a
+  walk starts from; without it every answer reads the profile the two
+  probes stand for and says ``tank_profile_estimated``.
+  ``sim_adapters.layers_from_history`` and ``layers_from_changes``, and
+  ``sim_home_assistant.HomeAssistantTank`` (was ``HomeAssistantBook``),
+  give it from a recorded history; ``book_from_history`` and
+  ``book_from_changes`` are gone.
+- **``element_mode(scenario, params, *, mode, ...)``** takes a
+  ``Scenario`` in place of ``state``, ``settings`` and ``at``, and no
+  ``hp_lower_minutes``; ``ElementModeResult`` has no ``plan``.
+  ``physics.element.mode_plan`` and ``mode_recovery`` are gone.
+- **A custom ``Physics``** implements ``estimate``, ``observe``,
+  ``advance`` and ``draw`` on a ``TankState``.
+
 Added
 -----
 
@@ -192,11 +235,11 @@ Changed
   ``ValueError`` for a setpoint written out of range, as ``simulate``
   does. On 34 deliveries held out of the fit, none of
   which crossed the line, the replayed layers under-promised 3 % of
-  them, by 1.16 gal on average, against 6 % and 2.00 gal from the
+  them, by 1.17 gal on average, against 3 % and 0.91 gal from the
   probes alone. Of the three draws in the record that took the upper
-  probe across the line, the model's crossing came at 26.1 and
-  31.3 gal against the recorded 23.3 and 31.3 (the third started below
-  the line).
+  probe across the line, the layered tank as first fitted crossed the
+  probe at 26.1 and 31.3 gal against the recorded 23.3 and 31.3 (the
+  third started below the line).
   ``sim_score`` scores deliveries from the replayed layers.
 
 - **The tank's keeper from Home Assistant is ``HomeAssistantTank``**
@@ -259,8 +302,8 @@ Changed
   RMS in 25 trials and scored within each of those intervals. The
   record does not split the bottom's loss from the sides' well: the
   bottom came out 0.89 to 2.35 across the fits. Refitted against the
-  layered loss, the heat map moves under 0.1 %, and the shipped one
-  stays.
+  layered loss, the heat map moves 0.05 % at 65 °F air and 120 °F
+  water and under 0.2 % across its span, and the shipped one stays.
 
 - **The simulator walks the layered tank** (breaking).
   ``tank_physics.TankPhysics`` is the stratified tank

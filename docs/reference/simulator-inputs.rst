@@ -712,15 +712,14 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        before it, against a sensor of the air beside the heater: both
        probes' error every 10 minutes, 2.64 degF RMS over the events.
        Fitted on the record to 2026-09-18, they scored on the 59 quiet
-       windows after it 0.255 and 0.548 degF RMS (upper, lower) against
-       0.299 and 0.630 for the two-zone tank, and on 46 draws 0.290 and
-       2.09 against 0.281 and 2.16 (:doc:`/explanation/simulator`).
+       windows after it 0.254 and 0.564 degF RMS (upper, lower), and on
+       46 draws 0.299 and 2.08 (:doc:`/explanation/simulator`).
      - First fitted 2026-10-27
    * - ``tank.upper_probe_height``, ``lower_probe_height``,
        ``upper_probe_spread_gal``, ``lower_probe_spread_gal``,
        ``lower_probe_offset_f``
      - 0.890, 0.478; 5.90, 3.11 gal; 0.797 degF
-     - The same fit. The upper probe's 0.890 puts 7.0 gal of the 63.2
+     - The same fit. The upper probe's 0.890 puts 6.9 gal of the 63.2
        above it, against the 5.3-7.3 gal the delivered water lags it by
        (:doc:`/explanation/draws`).
      - First fitted 2026-10-27
@@ -904,13 +903,15 @@ with. Heights are shares of the volume from the bottom.
        the tank while it is stratified.
    * - ``tank.inlet_mix_gal``
      - 9 gal
-     - The water an inflow mixes with as it enters: how far the
-       two-zone tank's fitted draw response reached.
+     - The water an inflow mixes with as it enters. A starting value;
+       the fit finds 12.2 gal.
    * - ``tank.conductance_btu_hr_f``
      - 0.89 BTU/hr per degF
      - The water column's, end to end (10.7 between each pair of twelve
-       layers): its slowest mode closes a gap between the probes on
-       60 h, the two-zone tank's fit, ``mass / (pi^2 tau)``.
+       layers): its slowest mode, ``mass / (pi^2 tau)``, closes a gap
+       between the probes on about 60 h, near the record's 59 h
+       (:doc:`/explanation/standby-loss`). A starting value; the fit
+       finds 0.42.
    * - ``tank.upper_probe_spread_gal``, ``tank.lower_probe_spread_gal``
      - 0 gal
      - How far along the column each probe feels the water: it reads the
@@ -923,8 +924,8 @@ with. Heights are shares of the volume from the bottom.
        lower higher, after a recovery).
    * - ``loss.ua_bottom_btu_hr_f``
      - 1.8 BTU/hr per degF
-     - The two-zone tank's fitted bottom loss, 90.8 BTU/hr, over a
-       50 degF gap to the air, from the bottom layer alone.
+     - About 90 BTU/hr over a 50 degF gap to the air, from the bottom
+       layer alone. A starting value; the fit finds 0.89.
    * - ``loss.ua_top_btu_hr_f``
      - 0 BTU/hr per degF
      - The top's loss, from the top layer: the head, the fittings and
