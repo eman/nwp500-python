@@ -231,8 +231,9 @@ refrigerant warmer and denser, so the heat rises with :math:`T_a`
 falls and the compressor's work rises with :math:`T_c` (:math:`q_w \le
 0`, :math:`p_w \ge 0`). The power in the air is left free: a
 compressor's work rises or falls with the denser gas by how far it
-lifts it. A slope fitted the other way is pinned at 0 and the rest
-refitted (``heat_pump_fit.HEAT_SLOPE_SIGNS``, ``POWER_SLOPE_SIGNS``).
+lifts it. The plane is the least-squares one so constrained: of the
+planes with each slope free or pinned at 0, the best that keeps every
+sign (``heat_pump_fit.HEAT_SLOPE_SIGNS``, ``POWER_SLOPE_SIGNS``).
 
 The COP is :math:`\dot Q_h / 3.412 P`, and the heat taken from the air
 is :math:`\dot Q_h - 3.412 P`: what the condenser gives is what the

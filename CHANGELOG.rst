@@ -221,10 +221,13 @@ Changed
   the record. A fit's slopes take the sign the cycle gives them (the
   heat rising with the air and falling with the water, the power rising
   with the water; ``heat_pump_fit.HEAT_SLOPE_SIGNS`` and
-  ``POWER_SLOPE_SIGNS``): one fitted the other way is pinned at 0 and
-  the rest refitted. ``heat_pump_fit.violations`` checks a map over the
-  controller's envelope (41 to 113 °F air, 50 to 149 °F water; its new
-  ``air_f`` and ``water_f``, and ``fit_heat_pump``'s) rather than its
+  ``POWER_SLOPE_SIGNS``): the plane is the least-squares one so
+  constrained, the best of those with each slope free or pinned at 0
+  that keep every sign. ``heat_pump_fit.violations`` checks a map over
+  the controller's envelope (41 to 113 °F air, 50 to 149 °F water; its
+  new ``air_f`` and ``water_f``, and ``fit_heat_pump``'s, which both
+  ``sim_calibrate`` and ``calibration.calibrate`` pass from the
+  parameters' controller) rather than its
   domains, its COP against the ideal heat pump's between the
   evaporator's coil and the water (``heat_pump.refrigerant_carnot_cop``,
   the coil ``EVAPORATOR_APPROACH_F``, 20.5 °F, under the air: as close

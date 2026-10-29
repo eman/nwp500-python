@@ -669,7 +669,8 @@ class Plane:
 #: condenses it hotter, so the heat falls and the compressor's work
 #: rises. The power in the air is left free: a compressor's work rises
 #: or falls with the denser gas by how far it lifts it. A fit whose
-#: slope takes the other sign has it pinned at 0 (``_fit_plane``).
+#: slope takes the other sign is refitted with it pinned at 0, or the
+#: other with it, whichever errs less (``_fit_plane``).
 HEAT_SLOPE_SIGNS = (1, -1)
 POWER_SLOPE_SIGNS = (0, 1)
 
@@ -690,28 +691,33 @@ def _fit_plane(
 ) -> Plane | None:
     """The weighted least-squares plane through ``y``, each slope of the
     sign ``signs`` gives it (``HEAT_SLOPE_SIGNS``, ``POWER_SLOPE_SIGNS``):
-    one that takes the other
-    is pinned at 0 and the rest refitted, the worst first; None when the
-    air and the water do not place one."""
+    of the planes with each signed slope free or pinned at 0, the one of
+    least error whose slopes all take their sign, the fit so
+    constrained; None when the air and the water do not place one."""
     x = np.column_stack(
         [np.ones(len(y)), air - MAP_REF_AIR_F, water - MAP_REF_WATER_F]
     )
     w = np.sqrt(weight)[:, None]
     if np.linalg.matrix_rank(x * w) < 3:
         return None
-    free = [0, 1, 2]
-    while True:
+    best: tuple[float, np.ndarray] | None = None
+    # The constrained optimum pins some set of the signed slopes, so it
+    # is the best of the planes the sets give that keep every sign.
+    for pinned in ((), (1,), (2,), (1, 2)):
+        if any(not signs[k - 1] for k in pinned):
+            continue
+        free = [k for k in (0, 1, 2) if k not in pinned]
         got, *_ = np.linalg.lstsq(x[:, free] * w, y * w[:, 0], rcond=None)
         coef = np.zeros(3)
         coef[free] = got
-        wrong = {
-            k: -signs[k - 1] * coef[k]
-            for k in (1, 2)
-            if signs[k - 1] and signs[k - 1] * coef[k] < 0.0
-        }
-        if not wrong:
-            break
-        free.remove(max(wrong, key=lambda k: wrong[k]))
+        if any(signs[k - 1] * coef[k] < 0.0 for k in (1, 2)):
+            continue
+        error = float(np.sum(((x @ coef - y) * w[:, 0]) ** 2))
+        if best is None or error < best[0]:
+            best = (error, coef)
+    # Both pinned keeps every sign, so one always stands.
+    assert best is not None
+    coef = best[1]
     return Plane(
         float(coef[0]),
         float(coef[1]),

@@ -571,7 +571,12 @@ def calibrate(
     found = recoveries(history, air=recovery_air)
     if evidence is None:
         evidence = hpf.evidence(history, base, air=recovery_air)
-    hp_fit = hpf.fit_heat_pump(evidence, base.compressor)
+    hp_fit = hpf.fit_heat_pump(
+        evidence,
+        base.compressor,
+        base.controller.hp_air_range_f,
+        base.controller.hp_water_range_f,
+    )
     params = hpf.with_heat_pump(base, hp_fit)
     unfitted = [t for t in base.unfitted if t not in ("compressor", "power")]
     if hp_fit.heat is None or hp_fit.violations:

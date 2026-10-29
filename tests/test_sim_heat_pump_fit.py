@@ -505,6 +505,29 @@ class TestTheSlopesSigns:
             np.average(rows["heat_btu_h"], weights=rows["minutes"])
         )
 
+    def test_correlated_air_and_water_keep_the_better_slope(self) -> None:
+        # Warmer air with warmer water: the unconstrained plane takes the
+        # air's slope negative and the water's positive. Pinning the
+        # worse of them and refitting pins the other too; the air's
+        # slope alone fits better.
+        air = np.array([64.0, 64.0, 66.0, 66.0] * 3)
+        water = np.array([116.0, 118.0, 122.0, 124.0] * 3)
+        rows = pd.DataFrame(
+            {
+                "air_f": air,
+                "water_f": water,
+                "heat_btu_h": 4500.0
+                - 20.0 * (air - 65.0)
+                + 10.0 * (water - 120.0),
+                "minutes": 30.0,
+            }
+        )
+        got = hpf.fit_heat_map(rows)
+        assert got is not None
+        assert got.per_water == 0.0
+        assert got.per_air == pytest.approx(10.0)
+        assert got.level == pytest.approx(4500.0)
+
     def test_the_powers_air_is_free(self) -> None:
         rng = np.random.default_rng(3)
         air = rng.uniform(50.0, 90.0, 60)
