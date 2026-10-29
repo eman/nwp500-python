@@ -172,119 +172,46 @@ about 2 degF per gallon.
 
 **The lower probe's response follows the gap.** The same draw moves
 the lower probe further the wider the gap between the probes when it
-starts. The two-zone tank moved the lower probe toward the inflow by
-the share ``1 - exp(-(gap + 1.25) / 30)`` of its distance from it per
-9 gal withdrawn, and the upper probe 0.05 degF per delivered gallon,
-walking the draw a quarter gallon at a time. It was fitted on 399 draws from
-2026-02-21 to 2026-07-31 with nothing heating or circulating and the
-heater heard throughout, from 15 minutes before to 30 minutes after,
-and no other draw within 30 minutes. The table scores the lower probe
-10 minutes after each draw ended, on all 535 such draws to 2026-10-23,
-against the response it replaced (the gap opening 1.235 degF per
-withdrawn gallon whatever the tank's state). Bias is the model less the
-probe:
+starts. On 535 draws to 2026-10-23 with nothing heating or
+circulating, a response fixed per withdrawn gallon moved the lower
+probe too far in a mixed tank and not far enough in a stratified one.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 20 10 17 17 18 18
-
-   * - Draw
-     - n
-     - Bias before
-     - Bias now
-     - Error before
-     - Error now
-   * - Under 1 gal
-     - 281
-     - +0.19 degF
-     - +0.30 degF
-     - 0.48 degF
-     - 0.35 degF
-   * - 1-3 gal
-     - 55
-     - +0.15 degF
-     - +0.26 degF
-     - 1.68 degF
-     - 0.91 degF
-   * - 3-8 gal
-     - 51
-     - -0.59 degF
-     - -0.28 degF
-     - 3.70 degF
-     - 2.12 degF
-   * - 8-20 gal
-     - 127
-     - -2.79 degF
-     - -1.12 degF
-     - 6.72 degF
-     - 3.52 degF
-   * - Over 20 gal
-     - 21
-     - +5.37 degF
-     - +1.27 degF
-     - 8.78 degF
-     - 6.48 degF
-
-The fixed response moved the lower probe too far in a mixed tank and
-not far enough in a stratified one: with the probes within 3 degF the
-bias went from -1.75 to -0.03 degF, and with them further apart from
-+1.62 to -0.10. On the 136 draws from 2026-08-01, held out of the fit,
-the lower probe's mean absolute error went from 2.79 to 1.91 degF and
-the upper probe's from 0.31 to 0.21, and the bias of the two probes'
-mean stayed within 0.2 degF. The largest draws keep the widest error.
-
-The layered tank replaces that response with the water itself: a draw
-pushes the column up through an inlet zone (12.2 gal at the fit) and
-out of the top, and the probes read the layers where they sit
+The simulator's layered tank tracks the water itself: a draw pushes the
+column up through an inlet zone (12.2 gal at the fit) and out of the
+top, and the probes read the layers where they sit
 (:doc:`simulator-methodology`). On the 46 metered draws after
-2026-09-18, each followed for an hour, fitted on the record before
-them, its lower probe's RMS error was 2.09 degF against 2.16 for the
-response above, and its upper 0.290 against 0.281.
-
-The upper probe is harder. Over 563 draws of 5 gal or more in 204 days,
-a two-zone model's upper zone, moved only by each draw's calibrated
-response, ran too warm by a mean of 0.22 degF over the first 5 gal,
-9.1 degF at 30-40 gal and 19.0 degF past 40 gal. Tracking the water a
-draw takes from the top of the tank, as the simulator's layered tank
-does (:doc:`simulator`), is what lets an estimate see the tank run out.
+2026-09-18, each followed for an hour from the layers the record's
+replay leaves at its start, fitted on the record before them, its
+upper probe's RMS error was 0.299 degF (0.192-0.463) and its lower
+2.08 (1.42-2.84). Tracking the water a draw takes from the top of the
+tank is what lets an estimate see the tank run out.
 
 
 How much hot water is left
 ==========================
 
-Four bath tests, 2026-09-28 to 2026-10-02, each scored an estimate
-made before the tap opened against the gallon at which the spout fell
-below 105 degF:
+Four bath tests, 2026-09-28 to 2026-10-02, recorded the gallon at which
+the spout fell below 105 degF, and the gallon at which the valve's
+outlet did. Two baths did not run cold. Bath B crossed at the outlet
+after 28.6 gal; another ran cold at the spout after 39.4 gal and at the
+outlet after 39.9, with the compressor running through it; and a later
+drawdown of the tank crossed at the outlet after 8.6 gal.
 
-* Two baths did not run cold, and the estimate said so.
-* One, bath B, ran cold 5.2 gal later than estimated: a cautious answer.
-* One ran cold after 39.4 gal against an estimate of 56.6, an
-  over-promise of 17.2 gal. The compressor ran through it.
-
-A second scoring used the gallon at which the valve outlet, not the
-spout, fell below 105 degF. Three draws crossed there: bath B, the bath
-that ran cold after 39.4 gal, and a later drawdown of the tank. Their
-estimates against the outlet's crossing were 30.3 gal against 28.6,
-56.9 against 39.9 and 1.6 against 8.6: a mean 3.9 gal over, and a
-worst over-promise of 17.0 gal. With the inlet read from long-draw
-plateaus (next section) instead, they were 26.3, 49.3 and 2.4: a mean
-0.3 gal over, and a worst over-promise of 9.4 gal. Three events say
-little about the level.
-
-The estimate now reads the tank's layers: the water leaving the top in
+The estimate reads the tank's layers: the water leaving the top in
 turn, each gallon through the mixing valve, to the first the valve
 delivers under the line (:doc:`simulator-methodology`). The layers are
 what the last day's record leaves (the probes, the compressor and the
 elements, the metered draws and the circulation's runs, replayed), with
-the probes now laid over them. Without a record they are the profile the
+the probes laid over them. Without a record they are the profile the
 two probes stand for, and the answer says so
 (``tank_profile_estimated``).
 
 The record has few draws that cross the line. Of 34 deliveries held out
 of the fit, none crossed, so each delivered at least its gallons: an
-estimate under them is an under-promise. From the probes alone 6 % were
-under-promised, by 2.00 gal on average across all 34; from the replayed
-layers 3 %, by 1.16 gal. Only three draws in the whole record took the
+estimate under them is an under-promise. From the replayed layers 3 %
+were under-promised, by 1.17 gal on average across all 34 (0-3.40);
+from the probes alone, also 3 %, by 0.91 gal (0-2.67). Only three
+draws in the whole record took the
 upper probe across the line, each with the compressor running. On two,
 the model's own crossing of the probe came at 26.1 and 31.3 gal against
 the recorded 23.3 and 31.3; the third started below the line. The tap

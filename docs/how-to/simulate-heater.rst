@@ -726,7 +726,7 @@ Try an element mode
 ``element_mode`` walks a stint in Energy Saver (3), High Demand (4) or
 Electric (2): the scenario with the mode written at its start, to the
 end of the recovery that write sets off, or to the switch-back. It
-gives how fast the upper zone comes up, the elements' and the heat
+gives how fast the upper probe comes up, the elements' and the heat
 pump's energy, slot by slot, and the tank when the stint ends.
 
 .. code-block:: python
