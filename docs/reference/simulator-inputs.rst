@@ -908,9 +908,10 @@ with. Heights are shares of the volume from the bottom.
    * - ``tank.conductance_btu_hr_f``
      - 0.89 BTU/hr per degF
      - The water column's, end to end (10.7 between each pair of twelve
-       layers): its slowest mode closes a gap between the probes on
-       60 h, the gap's time constant on the record
-       (:doc:`/explanation/standby-loss`), ``mass / (pi^2 tau)``.
+       layers): its slowest mode, ``mass / (pi^2 tau)``, closes a gap
+       between the probes on about 60 h, near the record's 59 h
+       (:doc:`/explanation/standby-loss`). A starting value; the fit
+       finds 0.42.
    * - ``tank.upper_probe_spread_gal``, ``tank.lower_probe_spread_gal``
      - 0 gal
      - How far along the column each probe feels the water: it reads the
@@ -924,8 +925,7 @@ with. Heights are shares of the volume from the bottom.
    * - ``loss.ua_bottom_btu_hr_f``
      - 1.8 BTU/hr per degF
      - About 90 BTU/hr over a 50 degF gap to the air, from the bottom
-       layer alone: the loss the record's quiet windows show at the
-       bottom while the tank is stratified.
+       layer alone. A starting value; the fit finds 0.89.
    * - ``loss.ua_top_btu_hr_f``
      - 0 BTU/hr per degF
      - The top's loss, from the top layer: the head, the fittings and

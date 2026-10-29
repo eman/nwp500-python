@@ -361,22 +361,23 @@ leaves, with 90 % day-block bootstrap intervals.
   its gallons: 3 % under-promised, by 1.17 gal on average across all
   34 (0-3.40);
 - the same parameters on the same events, each started from the two
-  probes alone instead of the replay: the lower probe within 1.30 degF
+  probes alone instead of the replay: the lower probe within 1.29 degF
   RMS (1.10-1.51) on the quiet windows and 5.19 (3.38-7.12) after the
-  draws, a recovery's electricity 10.3 % off (5.5-15.7), and the
-  deliveries 3 % under-promised, by 0.91 gal (0-2.67);
+  draws, a recovery's electricity 10.3 % off (5.5-15.7), a draw-free
+  recovery's duration 9.9 min off (5.6-15.2), and the deliveries 3 %
+  under-promised, by 0.91 gal (0-2.66);
 - the three draws in the whole record that took the upper probe across
-  the line, each with the compressor running: on two, the model's
-  crossing of the probe came at 26.1 and 31.3 gal against the recorded
-  23.3 and 31.3; the third started below the line;
+  the line, each with the compressor running: on two, the layered
+  tank as first fitted crossed the probe at 26.1 and 31.3 gal against
+  the recorded 23.3 and 31.3; the third started below the line;
 - the water above the upper probe: one measurement put the tap's
   crossing 5.3-7.3 gal after the probe's; the fitted probe sits with
   6.9 gal of the 63.2 above it.
 
-Not yet measured on the layered tank: recorded starts reproduced by
-replaying recorded writes, depletions called over the whole record, a
-forecast's draw windows, and the time to ready after a switch into an
-element mode.
+Not yet measured on the layered tank: recorded starts and daily energy
+from replaying recorded writes, depletions called over the whole
+record, a forecast's draw windows, and the time to ready and an element
+run's energy after a switch into an element mode.
 
 
 Limitations

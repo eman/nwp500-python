@@ -172,13 +172,11 @@ about 2 degF per gallon.
 
 **The lower probe's response follows the gap.** The same draw moves
 the lower probe further the wider the gap between the probes when it
-starts. On 535 draws to 2026-10-23 with nothing heating or
-circulating, a response fixed per withdrawn gallon moved the lower
-probe too far in a mixed tank and not far enough in a stratified one.
+starts.
 
 The simulator's layered tank tracks the water itself: a draw pushes the
-column up through an inlet zone (12.2 gal at the fit) and out of the
-top, and the probes read the layers where they sit
+column up through an inlet zone (12.2 gal fitted on the whole record)
+and out of the top, and the probes read the layers where they sit
 (:doc:`simulator-methodology`). On the 46 metered draws after
 2026-09-18, each followed for an hour from the layers the record's
 replay leaves at its start, fitted on the record before them, its
@@ -192,10 +190,11 @@ How much hot water is left
 
 Four bath tests, 2026-09-28 to 2026-10-02, recorded the gallon at which
 the spout fell below 105 degF, and the gallon at which the valve's
-outlet did. Two baths did not run cold. Bath B crossed at the outlet
-after 28.6 gal; another ran cold at the spout after 39.4 gal and at the
-outlet after 39.9, with the compressor running through it; and a later
-drawdown of the tank crossed at the outlet after 8.6 gal.
+outlet did. Two baths did not run cold. A third crossed at the outlet
+after 28.6 gal; the fourth ran cold at the spout after 39.4 gal and at
+the outlet after 39.9, with the compressor running through it; and a
+later drawdown of the tank crossed at the outlet after 8.6 gal. The
+layered tank's estimate has not yet been scored against them.
 
 The estimate reads the tank's layers: the water leaving the top in
 turn, each gallon through the mixing valve, to the first the valve
@@ -210,7 +209,7 @@ The record has few draws that cross the line. Of 34 deliveries held out
 of the fit, none crossed, so each delivered at least its gallons: an
 estimate under them is an under-promise. From the replayed layers 3 %
 were under-promised, by 1.17 gal on average across all 34 (0-3.40);
-from the probes alone, also 3 %, by 0.91 gal (0-2.67). Only three
+from the probes alone, also 3 %, by 0.91 gal (0-2.66). Only three
 draws in the whole record took the
 upper probe across the line, each with the compressor running. On two,
 the model's own crossing of the probe came at 26.1 and 31.3 gal against

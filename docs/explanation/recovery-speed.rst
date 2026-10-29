@@ -74,8 +74,7 @@ tank mixed (the upper probe within 1 degF above to 5 degF below the
 lower) and no water in use, at least 20 minutes long: the probes' mean
 is then the tank's, and the heat is the tank's mass (63.2 gal) times
 the mean's rise, plus the jacket's loss (the layered tank's
-4.45 BTU/hr per degF in all; the fitted map moves under 0.1 % across
-the loss figures fitted on this record). 38 stretches, 3,059 minutes,
+4.45 BTU/hr per degF in all). 38 stretches, 3,059 minutes,
 2025-12-28 to 2026-10-26:
 
 .. list-table::

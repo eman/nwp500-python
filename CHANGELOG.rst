@@ -15,18 +15,21 @@ book and the element-mode planner are gone. To move a caller over:
 - **Parameters.** A ``heater-params/1`` document is refused: calibrate
   again with ``nwp-cli simulate calibrate`` (or
   ``sim_calibrate.calibrate``), which writes ``heater-params/2``. A
-  ``/2`` document written before the layered tank, or with the heat
-  book, still reads: its removed fields are left out and named by
-  ``params.unknown_fields``, and its tank reads as the priors, with
-  ``tank`` unfitted, until it is calibrated again.
+  ``/2`` document with removed fields, such as the heat book's, still
+  reads: they are left out and named by ``params.unknown_fields``. One
+  written before the layered tank also reads its tank as the priors,
+  with ``tank`` unfitted, until it is calibrated again.
 - **Removed parameters.** ``PowerParams`` and ``HeaterParams.power``;
   ``BookParams`` and ``HeaterParams.book``; the two zones' tank, loss
   and draw terms (``TankParams.lower_zone_share`` and
   ``stratification_gap_tau_h``, ``LossParams.ua_btu_hr_f``,
   ``ua_exponent``, ``bottom_loss_btu_hr``, the ``DrawParams`` reach and
   observability terms); the refrigerant cycle's ``CompressorParams``
-  fields; ``ElementParams.upper_f_per_min`` and ``lower_f_per_min``.
-  The Removed list below names each.
+  fields; ``ElementParams.upper_f_per_min`` and ``lower_f_per_min``;
+  the readiness evidence and outlet lag (``ReadinessParams.evidence``,
+  ``delivered_lag_gal``, ``fall_f_per_gal``); the circulation's book
+  terms (``CirculationParams.loss_btu_per_gal``, ``book_circuit_gal``).
+  The Removed and Changed lists below name each.
 - **``simulate``** no longer takes ``ledger``, ``lead_draws``,
   ``physics_usable`` or ``book``, and ``readiness`` and
   ``time_to_ready`` no longer take ``book``. ``extensions.HeatLedger``

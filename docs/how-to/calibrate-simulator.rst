@@ -198,7 +198,8 @@ base and the fit on the recorded events after it:
 
 The events are taken from the record without any model, so each set of
 parameters is scored on the same events, each started from the layers
-the record's replay leaves at its start. Each recovery that reached its
+the record's replay leaves at its start (given the air; without it,
+from the probes). Each recovery that reached its
 target with no water in use is walked from its recorded start (one with
 a draw needs a meter's draws, from Python below): ``recovery_minutes_abs`` is
 how far its predicted run is from the recorded one, and

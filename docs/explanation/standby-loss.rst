@@ -69,9 +69,9 @@ What the probes show
 
 Read as one temperature, the probes' mean, the tank loses heat at a
 rate ``UA * (T_tank - T_air)`` with a ``UA`` that rises with the
-difference between the tank and the air: a hotter tank is more often
-stratified, and the bottom's loss then leaves water the lower probe
-reads. Fitted on 301 quiet windows (no draw, no heating, no circulation
+difference between the tank and the air, likely because a hotter tank
+is more often stratified, with the bottom's loss leaving water the
+lower probe reads. Fitted on 301 quiet windows (no draw, no heating, no circulation
 run) covering a tank-to-air difference of 11.2 to 90.7 degF, to
 2026-08-12:
 
