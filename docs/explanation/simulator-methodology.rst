@@ -206,9 +206,9 @@ wraps, weighted by how much of each.
 
 The power is fitted on the lower probe's reading
 (``heat_pump_fit.power_blocks``) but read here at :math:`T_c`, which is
-below it while the tank is stratified: over the held-out draw-free
-recoveries a recovery's mean power comes to 392 W against the 417 W
-metered.
+below it: by the probe's fixed offset in a mixed tank, and by more
+while the tank is stratified. Pooled over the 11 held-out draw-free
+recoveries, that prices the power at 392 W against the 417 W metered.
 
 Each is read with the air and the water held to the span it was
 fitted over (the heat's 61 to 89 degF air and 114 to 144 degF water,
@@ -255,8 +255,9 @@ reaches its target: on the record it stops a median 0.9 degF past it
 (``ControllerParams.hp_stop_overshoot_f``). The climb is integrated to
 the target plus that overshoot. The overshoot is the probe's reading,
 which runs high while the compressor heats, and the model's probe
-reads the water, so a long recovery's water ends warmer than the real
-one's and the recovery runs a few minutes long (:doc:`simulator`). The TOU window's cap on the lower probe
+carries nothing for the heating, so a long recovery's water ends
+warmer than the real one's and the recovery runs about 4 minutes
+longer for it (:doc:`simulator`). The TOU window's cap on the lower probe
 is still judged at the target.
 
 **The operating range.** The heat pump runs only with the air at the

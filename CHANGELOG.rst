@@ -213,16 +213,17 @@ Changed
 - **What a recovery gets wrong, documented.**
   :doc:`/explanation/simulator` gives two errors in a heat-pump
   recovery that partly cancel. The probes read about 0.5 and 0.9 degF
-  above the water while the compressor heats, so the stop, judged on
-  the model's water against the overshoot measured on the reading,
-  comes late. The power is read at the condenser's water, 392 W
-  against the 417 W metered. Modelling both cut the draw-free
-  recoveries' bias from 6.6 to 2.5 min but raised their mean absolute
-  error from 11.9 to 12.7 min and the electricity's from 5.7 % to
-  9.9 %, so neither is applied. :doc:`/explanation/recovery-speed`
-  gives the probes' step at a quiet stop, and that the heat pump does
-  not measurably cool its room: 0.49 degF over a run against the same
-  hours with nothing running, inside both intervals.
+  above the water while the compressor heats and the model's carry
+  nothing for it, so the stop, judged against an overshoot measured on
+  the reading, comes late. The power is read at the condenser's water:
+  392 W against the 417 W metered, pooled over the 11 held-out
+  draw-free recoveries. Modelling both cut those recoveries' bias from
+  6.6 to 2.5 min but raised their mean absolute error from 11.9 to
+  12.7 min and the electricity's from 5.7 % to 9.9 %, so neither is
+  applied. :doc:`/explanation/recovery-speed` gives the probes' step
+  at a quiet stop, and that the heat pump cools its room a little: the
+  air rose 0.49 degF less over a run than over the same hours with
+  nothing running (0.04-0.95).
 
 - **Another installation's mains are the rating test's 58 °F**
   (``defaults.RATING_INLET_F``, 10 CFR 430, Subpart B, Appendix E), in
