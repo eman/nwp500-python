@@ -20,8 +20,8 @@ empty set of runs is a known-quiet circuit.
 water through the tank at ``flow_gpm``, leaving the top and coming back
 at the bottom. The first of it comes back at the air where the heater
 stands plus ``CirculationParams.return_rest_offset_f``, where the return
-rests between runs: ``displaced_gal`` of it, scaled by the share that
-has cooled since the last run ended (``cooled_share``, on
+rests between runs: up to the share of ``displaced_gal`` that has
+cooled since the last run ended (``cooled_share``, on
 ``CirculationParams.return_cool_tau_h``); the rest comes back at the
 rest plus ``steady_share`` of the top's lift over it. Water warmer than
 the tank's bottom rises to its own level there

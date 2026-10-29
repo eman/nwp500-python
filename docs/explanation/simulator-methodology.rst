@@ -409,8 +409,8 @@ Circulation
 
 A recirculation loop's pump pulls tank water around the house and
 returns it to the bottom of the tank. A run first brings back the water
-that rested in the pipe: the pipe's volume :math:`V_{\text{pipe}}`,
-scaled by how far it had cooled in the :math:`t_{\text{rest}}` since
+that rested in the pipe: the share of the pipe's volume
+:math:`V_{\text{pipe}}` that had cooled in the :math:`t_{\text{rest}}` since
 the last run, at the return's rest, the air plus an offset. After that
 the tank's own water comes back, cooled on its way round by the pipe's
 loss :math:`UA_{\text{pipe}}` at the run's flow :math:`\dot m`:
@@ -418,7 +418,7 @@ loss :math:`UA_{\text{pipe}}` at the run's flow :math:`\dot m`:
 .. math::
 
    V_{\text{cooled}} = \min\left(\dot V\,t_{\text{run}},\;
-   V_{\text{pipe}}\right)\left(1 - e^{-t_{\text{rest}}/\tau_c}\right),
+   V_{\text{pipe}}\left(1 - e^{-t_{\text{rest}}/\tau_c}\right)\right),
    \qquad T_{\text{rest}} = T_a + \Delta T_{\text{rest}},
 
    T_{\text{steady}} = T_{\text{rest}} + \left(T_{\text{top}} -

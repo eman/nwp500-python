@@ -498,9 +498,10 @@ nothing is charged.
        once over the whole input. The return's rest and cooling are
        fitted on runs merged at this gap, so change them together.
 
-Each run first returns ``min(flow x minutes, displaced_gal)`` gallons
-times the share of the pipe cooled since the last run ended, at the air
-where the heater stands plus ``return_rest_offset_f``, then the tank's
+Each run first returns ``min(flow x minutes, displaced_gal x
+cooled_share)`` gallons, the share of the pipe cooled since the last
+run ended, at the air where the heater stands plus
+``return_rest_offset_f``, then the tank's
 own water at its steady share; water warmer than the tank's inlet zone
 rises past it to where the tank is as warm. Runs closer than
 ``run_gap_min`` are one run, as the return's terms were fitted.
