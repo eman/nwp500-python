@@ -635,17 +635,29 @@ Fixed
   room and drew nothing (``element_later_starts_not_modelled``). Its
   later starts are not on the record, so they follow the elements in the
   heat pump's place: the heater's own triggers start them by Electric's
-  entry rule, the upper element then the lower, and the upper element
-  starts again 4.1 °F short of the setpoint, as High Demand's does
-  (``controller.later_start``). Each walk that uses them says
-  ``electric_later_starts_unverified``. Two days in Electric at a
-  130 °F setpoint from 128 °F now hold the upper probe at 125.9-132 °F
+  entry rule, the upper element then the lower, from the tank a draw at
+  that instant leaves, and the upper element starts again 4.1 °F short
+  of the setpoint, as High Demand's does (``controller.later_start``).
+  Each walk that uses them says ``electric_later_starts_unverified``,
+  and so does one going on from such a run. Two days in Electric at a
+  130 °F setpoint from 128 °F now keep the upper probe at 124.9-132.1 °F
   for 4.5 kWh with no draws and 13.6 kWh with a household's, where
-  before they heated nothing and ended at 104.6 and 72.9 °F. Across 800 random walks on one
-  NWP500-65's parameters, 427 change, each with Electric in force at
-  some point: 95 only in their reasons, 324 heat more (a median
-  +9.1 kWh), and 8 less, by up to 6.5 kWh, where the tank was warmer
-  when a later mode took over.
+  before they heated nothing and ended at 104.6 and 72.9 °F. Across 800
+  random walks on one NWP500-65's parameters, 427 with Electric in
+  force at some point change: 93 only in their reasons, 319 heat more
+  (a median +8.6 kWh), and 15 less, by up to 6.5 kWh, where the tank
+  was warmer when a later mode took over or the elements in the heat
+  pump's place answered a low setpoint less often (below).
+- **The elements answer the lower trigger no nearer than 4.1 °F under
+  the setpoint.** They stop at the setpoint, not past it as the
+  compressor does, so with ``hp_lower_on_f`` at or near the setpoint
+  the trigger started them again at once: in the heat pump's place,
+  about 110 starts in two days at a 104 °F setpoint and a 104.9 °F
+  threshold, most of them seconds long. They now answer it at the
+  upper element's restart when that is lower (12 starts). Of the 800
+  walks, 37 that never enter Electric change: 26 heat less and 10 more,
+  the energy moving −7.5 to +0.5 kWh (a median −0.15) and the end tank
+  up to 6.3 °F.
 - **The upper element's later start is found on a recovery's path.**
   High Demand's start of the upper element when the upper probe falls
   short, and Energy Saver's, were found along a coast but only read at

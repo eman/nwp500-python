@@ -223,7 +223,11 @@ Built by ``sim_adapters.settings(status)``.
        heater never starts on the lower zone, its usual trigger
        (:doc:`/explanation/what-starts-a-recovery`), though a TOU
        window's opening still can; ``simulate`` and ``standby`` say
-       ``hp_lower_on_unknown``. The adapter always fills it.
+       ``hp_lower_on_unknown``. The adapter always fills it. Where the
+       elements answer it (Electric, or the heat pump outside its
+       range) it reads at most
+       ``element.upper_reengages_below_setpoint_f`` under the setpoint,
+       since they stop at the setpoint.
    * - ``hp_lower_off_f``
      - degF
      - None
@@ -1135,7 +1139,9 @@ The ones about the heater's own rules, each resting on the device runs
      - Electric's elements started later in a stint: the upper element
        4.1 degF short of the setpoint, as High Demand's, or the
        heater's own trigger starting them by Electric's entry rule, as
-       in the heat pump's place. Electric's own rule is not on the
+       in the heat pump's place, from the tank a draw then leaves.
+       The lower element after such an upper one, and a walk going on
+       from either, say it too. Electric's own rule is not on the
        record.
    * - ``upper_zone_dips_during_the_lower_phase``
      - The upper zone dips while the lower element runs, and the model

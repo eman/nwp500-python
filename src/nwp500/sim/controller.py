@@ -244,6 +244,9 @@ class Element:
     live_at: datetime | None = None
     #: Started in the heat pump's place, outside its operating range.
     in_place: bool = False
+    #: Started by Electric's later rules, or the lower element after an
+    #: upper one that was (``ELECTRIC_LATER_STARTS_UNVERIFIED``).
+    later: bool = False
 
     @property
     def running(self) -> bool:
@@ -1007,14 +1010,16 @@ def _start_element(
     start: Start,
     zone: Zone,
     since: datetime | None = None,
+    *,
+    later: bool = False,
 ) -> None:
-    """An element starts. The upper zone does not move for the dead
-    time after an on-edge (1.21 min, 2026-10-02); the lower
-    zone's rate spans its own. One already running at the walk's start
-    has the rest of its dead time left when its on-edge (``since``) is
-    known, and is taken to be past it, with a whole dead time's heat in
-    transit, when it is not. A zone already at its off point stops it at
-    once (``_check_element``)."""
+    """An element starts; ``later`` by Electric's later rules. The
+    upper zone does not move for the dead time after an on-edge
+    (1.21 min, 2026-10-02); the lower zone's rate spans its own. One
+    already running at the walk's start has the rest of its dead time
+    left when its on-edge (``since``) is known, and is taken to be past
+    it, with a whole dead time's heat in transit, when it is not. A zone
+    already at its off point stops it at once (``_check_element``)."""
     # Electric's rule in the heat pump's place (``heats_as``).
     in_place = not s.state.hp_available and s.mode != ELECTRIC
     ep = s.settings.element
@@ -1034,6 +1039,7 @@ def _start_element(
             zone,
             live_at,
             in_place,
+            later,
         ),
     )
     s.act(
@@ -1041,7 +1047,7 @@ def _start_element(
             start, zone, live_at, (start.at - on_edge).total_seconds() / 60.0
         )
     )
-    for note in element_notes(zone, in_place):
+    for note in element_notes(zone, in_place, later):
         s.note(note)
     _check_element(s)
 
@@ -1054,14 +1060,19 @@ def held_notes(mode: HeaterMode, *, entry: bool) -> tuple[str, ...]:
     return (MODE_WRITE_HELD_PROJECTED,)
 
 
-def element_notes(zone: Zone, in_place: bool) -> tuple[str, ...]:
+def element_notes(
+    zone: Zone, in_place: bool, later: bool = False
+) -> tuple[str, ...]:
     """What an element's heat rests on: in the heat pump's place, the
-    fallback's; then the model's, and the lower element's own."""
+    fallback's; started by Electric's later rules, theirs; then the
+    model's, and the lower element's own."""
     notes: tuple[str, ...] = (
         (HEAT_PUMP_UNAVAILABLE, ENVELOPE_FALLBACK_UNVERIFIED)
         if in_place
         else ()
     )
+    if later:
+        notes += (ELECTRIC_LATER_STARTS_UNVERIFIED,)
     notes += ("element_model_small_n",)
     if zone == "lower":
         notes += (
@@ -1095,7 +1106,7 @@ def _stop_element(
     off point or a lowered setpoint's, unless a mode write at the same
     instant changes the mode at once (``mode_follows``; not one held to
     a window's end): the new mode's rule decides then."""
-    zone = s.state.element.zone
+    zone, later = s.state.element.zone, s.state.element.later
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
         coast = DEVICE_MODE[s.heats_as]  # type: ignore[assignment]
@@ -1119,6 +1130,7 @@ def _stop_element(
                 source="element",
             ),
             "lower",
+            later=later,
         )
 
 
@@ -1171,16 +1183,15 @@ def _read_upper(s: _Step) -> None:
         or s.upper > later[0]
     ):
         return
-    if s.mode == ELECTRIC:
-        s.note(ELECTRIC_LATER_STARTS_UNVERIFIED)
     _start_element(
         s,
         Start(s.at, "heater", trigger=later[1], source="element"),
         "upper",
+        later=s.mode == ELECTRIC,
     )
 
 
-def _element_entry(s: _Step, start: Start) -> None:
+def _element_entry(s: _Step, start: Start, *, later: bool = False) -> None:
     """A mode taking effect: its upper element starts at once when the
     upper zone is at least the mode's entry deficit short (device runs
     of 2026-09-20/21: Energy Saver 1.8 °F, High Demand 0.72, Electric
@@ -1196,9 +1207,9 @@ def _element_entry(s: _Step, start: Start) -> None:
     if low < deficit < high:
         s.note("deficit_inside_the_start_threshold_bracket")
     if deficit > 0.0 and deficit >= need - 1e-9:
-        _start_element(s, start, "upper")
+        _start_element(s, start, "upper", later=later)
     elif s.heats_as == ELECTRIC and s.lower < s.sp - ELEMENT_DONE_F:
-        _start_element(s, start, "lower")
+        _start_element(s, start, "lower", later=later)
 
 
 # ── Writes ──
@@ -1580,12 +1591,11 @@ def _upper_on_crossed(s: _Step, ev: UpperOnCrossed) -> None:
     later = later_start(s.state, s.settings.element)
     if later is None:
         return
-    if s.mode == ELECTRIC:
-        s.note(ELECTRIC_LATER_STARTS_UNVERIFIED)
     _start_element(
         s,
         Start(s.at, "heater", trigger=later[1], source="element"),
         "upper",
+        later=s.mode == ELECTRIC,
     )
 
 
@@ -1643,8 +1653,7 @@ def _electric_start(s: _Step, start: Start) -> None:
     not measured."""
     if s.disabled or s.state.element.running:
         return
-    s.note(ELECTRIC_LATER_STARTS_UNVERIFIED)
-    _element_entry(s, replace(start, source="element"))
+    _element_entry(s, replace(start, source="element"), later=True)
 
 
 def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
@@ -1809,10 +1818,20 @@ def trigger_ahead(
         return None, ()
     # No lower threshold disables the lower trigger alone: the upper
     # zone's at a TOU window's opening does not read it.
-    on = settings.hp_lower_on_f
+    on = -math.inf if settings.hp_lower_on_f is None else settings.hp_lower_on_f
+    if elements:
+        # The elements stop at the setpoint, not past it as the
+        # compressor does: a threshold at or near it would start them
+        # again at once. They answer it no nearer than the upper
+        # element's own restart (``later_start``).
+        on = min(
+            on,
+            state.setpoint_f
+            - settings.element.upper_reengages_below_setpoint_f,
+        )
     at, trigger, held = heater_start(
         trajectory,
-        -math.inf if on is None else on,
+        on,
         impulses,
         windows=settings.tou_windows,
         setpoint_f=state.setpoint_f,

@@ -7,14 +7,19 @@ element starts again as High Demand's does, 4.1 °F short of the
 setpoint. Each answer says so (``electric_later_starts_unverified``).
 """
 
+import json
 from datetime import timedelta
+from typing import Any
 
+import pandas as pd
 import pytest
-from sim_cases import days_of_draws
+from sim_cases import PARAMS, T0, days_of_draws
 
 from nwp500 import sim
 from nwp500.sim import Loads
 from nwp500.sim.controller import ELECTRIC_LATER_STARTS_UNVERIFIED
+from nwp500.sim.engine import Heater, Resume, simulate
+from nwp500.sim.tank_physics import TankPhysics
 
 SETPOINT = 130.0
 #: Where the upper element starts again (``upper_reengages_below_setpoint_f``).
@@ -79,3 +84,114 @@ def test_the_heat_pumps_place_keeps_to_its_triggers() -> None:
         h for h in got.heating if h.start.trigger == "electric_upper_short"
     ]
     assert ELECTRIC_LATER_STARTS_UNVERIFIED not in got.reasons
+
+
+def _walk(**over: Any) -> dict[str, Any]:
+    """Two hours in Electric, the lower zone just over the heater's
+    threshold and the upper at the setpoint, a draw 10 minutes in that
+    takes both down."""
+    until = T0 + timedelta(hours=2)
+    air = pd.DataFrame(
+        {"ambient_f": 68.0},
+        index=pd.date_range(
+            T0 - timedelta(hours=1), until + timedelta(hours=20), freq="10min"
+        ),
+    )
+    walk: dict[str, Any] = {
+        "start": T0,
+        "until": until,
+        "setpoint_f": 130.0,
+        "upper_f": 129.7,
+        "lower_f": 111.6,
+        "running": False,
+        "heater": Heater(hp_lower_on_f=111.0, mode="electric"),
+        "physics": TankPhysics(
+            PARAMS, air, 55.0, draws_on=True, low_confidence_floor=0.6
+        ),
+        "draws": [(T0 + timedelta(minutes=10), 6.0)],
+        "stopped_at": T0 - timedelta(hours=3),
+    }
+    return walk | over
+
+
+def test_a_draw_firing_the_trigger_is_met_from_the_tank_it_leaves() -> None:
+    """A draw that takes the lower zone past the heater's threshold
+    leaves the upper zone 2 °F short: the elements answer that tank,
+    the upper element first."""
+    got = simulate(**_walk())
+    first, then = got.heating[:2]
+    assert first.start.at == T0 + timedelta(minutes=10)
+    assert (first.zone, first.start.trigger) == ("upper", "lower")
+    assert (then.zone, then.start.trigger) == (
+        "lower",
+        "electric_lower_after_upper",
+    )
+
+
+@pytest.mark.parametrize("zone", ["upper", "lower"])
+def test_a_resume_keeps_what_the_restart_rests_on(zone: str) -> None:
+    """A walk going on while an element Electric's later rules started
+    is heating, the upper or the lower after it, says those rules are
+    unverified."""
+    kw = _walk()
+    run = next(h for h in simulate(**kw).heating if h.zone == zone)
+    cut = run.start.at + (run.end - run.start.at) / 2
+    to_cut: dict[str, Any] = {**kw, "until": cut}
+    head = simulate(**to_cut)
+    assert head.resume is not None
+    resume = Resume.from_document(
+        json.loads(json.dumps(head.resume.to_document()))
+    )
+    last = head.points[-1]
+    assert last.layers_f is not None
+    part: dict[str, Any] = {
+        **kw,
+        "start": cut,
+        "upper_f": last.upper_f,
+        "lower_f": last.lower_f,
+        "state": kw["physics"].layers(list(last.layers_f)),
+        "draws": [],
+        "resume": resume,
+    }
+    tail = simulate(**part)
+    assert tail.heating[0].zone == zone
+    assert ELECTRIC_LATER_STARTS_UNVERIFIED in tail.reasons
+
+
+def test_a_mark_at_the_draw_moves_nothing() -> None:
+    """A mark where a draw fires the trigger: the elements answer the
+    tank the draw leaves, as in the walk without it."""
+    kw = _walk()
+    with_mark: dict[str, Any] = {**kw, "marks": [T0 + timedelta(minutes=10)]}
+    marked = simulate(**with_mark)
+    plain = simulate(**kw)
+    assert marked.heating[0].zone == "upper"
+    assert [(h.zone, h.start.at, h.end) for h in marked.heating] == [
+        (h.zone, h.start.at, h.end) for h in plain.heating
+    ]
+
+
+@pytest.mark.parametrize(
+    ("setpoint", "lower_on"), [(104.0, 104.9), (110.0, 111.0)]
+)
+def test_a_setpoint_at_the_lower_threshold_does_not_cycle(
+    setpoint: float, lower_on: float
+) -> None:
+    """The elements stop at the setpoint: with the heater's lower
+    threshold at or over it they answer it no nearer than the upper
+    element's restart, so two days of standby start them a few times,
+    not every few minutes."""
+    s = days_of_draws(2).model_copy(
+        update={
+            "state": sim.HeaterState(
+                upper_f=setpoint - 2, lower_f=setpoint - 12
+            ),
+            "settings": sim.Settings(
+                setpoint_f=setpoint, mode=2, hp_lower_on_f=lower_on
+            ),
+            "loads": Loads(),
+        }
+    )
+    got = sim.simulate(s, sim.site_example_params())
+    assert len(got.heating) <= 12
+    assert min(h.end - h.start.at for h in got.heating) > timedelta(minutes=1)
