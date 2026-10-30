@@ -195,3 +195,43 @@ def test_a_setpoint_at_the_lower_threshold_does_not_cycle(
     got = sim.simulate(s, sim.site_example_params())
     assert len(got.heating) <= 12
     assert min(h.end - h.start.at for h in got.heating) > timedelta(minutes=1)
+
+
+def test_a_draw_from_a_full_tank_starts_the_elements_at_once() -> None:
+    """Both zones at the setpoint, a draw takes the lower one far past the
+    heater's threshold: nothing was short before it, so the elements
+    start on the tank it leaves, at its instant, not at the coast's
+    next reading."""
+    draw = T0 + timedelta(minutes=10)
+    got = simulate(**_walk(upper_f=130.2, lower_f=130.1, draws=[(draw, 15.0)]))
+    first = got.heating[0]
+    assert (first.start.at, first.zone) == (draw, "lower")
+
+
+def test_standby_reads_the_lower_trigger_where_the_walk_does() -> None:
+    """A setpoint under the heater's lower threshold in Electric: the
+    standby forecast reads the trigger at the elements' restart, as the
+    walk does, not at once."""
+    s = days_of_draws(1).model_copy(
+        update={
+            "state": sim.HeaterState(upper_f=109.8, lower_f=109.5),
+            "settings": sim.Settings(
+                setpoint_f=110.0, mode=2, hp_lower_on_f=111.0
+            ),
+            "loads": Loads(),
+        }
+    )
+    trace = sim.standby(
+        s.state,
+        s.environment,
+        s.loads,
+        sim.site_example_params(),
+        start=s.start,
+        until=s.start + timedelta(hours=24),
+        settings=s.settings,
+    )
+    assert trace.starts_at is not None
+    assert trace.starts_at > s.start
+    assert trace.lower_margin_f == pytest.approx(
+        trace.points[-1].lower_f - (110.0 - 4.1)
+    )

@@ -24,7 +24,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from nwp500.sim.circulation import RUN_GAP, Circulation
-from nwp500.sim.controller import ELEMENT_DONE_F, HEAT_PUMP_UNAVAILABLE
+from nwp500.sim.controller import (
+    ELEMENT_DONE_F,
+    HEAT_PUMP_UNAVAILABLE,
+    lower_trigger_f,
+)
 from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
@@ -896,12 +900,19 @@ def standby(
     held = False
     margin: float | None = None
     if settings is not None:
-        on = settings.hp_lower_on_f
-        if on is None:
-            reasons.append(HP_LOWER_ON_UNKNOWN)
-        last = coast.points[-1]
-        margin = None if on is None else last.lower_f - on
         mode, disabled = _engine_mode(settings.mode)
+        if settings.hp_lower_on_f is None:
+            reasons.append(HP_LOWER_ON_UNKNOWN)
+        # Where the simulation reads it: Electric's elements answer it no
+        # nearer the setpoint than their restart.
+        on = lower_trigger_f(
+            settings.hp_lower_on_f,
+            settings.setpoint_f,
+            params.element,
+            elements=mode == ENGINE_MODE[ELECTRIC],
+        )
+        last = coast.points[-1]
+        margin = None if math.isinf(on) else last.lower_f - on
         windows = (
             while_enabled(
                 tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until),
@@ -919,7 +930,7 @@ def standby(
             starts_at, trigger, held = heater_start(
                 [(p.at, p.upper_f, p.lower_f) for p in coast.points],
                 # None: no lower trigger, the TOU-opening one still.
-                -math.inf if on is None else on,
+                on,
                 coast.impulses,
                 windows=windows,
                 setpoint_f=settings.setpoint_f,

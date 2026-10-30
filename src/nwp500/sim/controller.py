@@ -1816,22 +1816,14 @@ def trigger_ahead(
     if elements and state.element.running:
         # The call for heat is being answered.
         return None, ()
-    # No lower threshold disables the lower trigger alone: the upper
-    # zone's at a TOU window's opening does not read it.
-    on = -math.inf if settings.hp_lower_on_f is None else settings.hp_lower_on_f
-    if elements:
-        # The elements stop at the setpoint, not past it as the
-        # compressor does: a threshold at or near it would start them
-        # again at once. They answer it no nearer than the upper
-        # element's own restart (``later_start``).
-        on = min(
-            on,
-            state.setpoint_f
-            - settings.element.upper_reengages_below_setpoint_f,
-        )
     at, trigger, held = heater_start(
         trajectory,
-        on,
+        lower_trigger_f(
+            settings.hp_lower_on_f,
+            state.setpoint_f,
+            settings.element,
+            elements=elements,
+        ),
         impulses,
         windows=settings.tou_windows,
         setpoint_f=state.setpoint_f,
@@ -1859,7 +1851,7 @@ def trigger_ahead(
             (
                 t
                 for t, upper, lower in [(at, *_tank_on(trajectory, at))]
-                + [p for p in trajectory if p[0] > at]
+                + [p for p in trajectory if p[0] >= at]
                 if electric_entry(
                     state.setpoint_f, upper, lower, settings.element
                 )
@@ -1873,6 +1865,27 @@ def trigger_ahead(
     if at is None:
         return None, notes
     return Ahead(at, not_before(state, params, at), trigger), notes
+
+
+def lower_trigger_f(
+    hp_lower_on_f: float | None,
+    setpoint_f: float,
+    element: ElementParams,
+    *,
+    elements: bool,
+) -> float:
+    """Where the heater's lower trigger reads (``heater_start``):
+    ``hp_lower_on_f``, or nowhere without it (the upper zone's at a TOU
+    window's opening does not read it). When the elements answer it
+    (``elements``: Electric, or the heat pump outside its range), no
+    nearer the setpoint than the upper element's restart
+    (``later_start``): they stop at the setpoint, not past it as the
+    compressor does, so a threshold at or near it would start them
+    again at once."""
+    on = -math.inf if hp_lower_on_f is None else hp_lower_on_f
+    if elements:
+        on = min(on, setpoint_f - element.upper_reengages_below_setpoint_f)
+    return on
 
 
 def _tank_on(

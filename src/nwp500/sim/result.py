@@ -223,7 +223,9 @@ class Trace:
     #: TOU window), which moved or dropped the start.
     start_held: bool = False
     #: The lower zone at the end less ``hp_lower_on``, °F: how far above
-    #: its start threshold the coast leaves it; None without settings.
+    #: its start threshold the coast leaves it (in Electric the
+    #: elements', ``controller.lower_trigger_f``); None without settings
+    #: or without the threshold.
     lower_margin_f: float | None = None
     reasons: tuple[str, ...] = ()
     #: As ``SimulationResult.draw_out_of_domain_at``.

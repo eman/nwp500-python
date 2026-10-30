@@ -654,7 +654,9 @@ Fixed
   the trigger started them again at once: in the heat pump's place,
   about 110 starts in two days at a 104 °F setpoint and a 104.9 °F
   threshold, most of them seconds long. They now answer it at the
-  upper element's restart when that is lower (12 starts). Of the 800
+  upper element's restart when that is lower (12 starts), and
+  ``standby`` reads it there in Electric too, its ``lower_margin_f``
+  with it (``controller.lower_trigger_f``). Of the 800
   walks, 37 that never enter Electric change: 26 heat less and 10 more,
   the energy moving −7.5 to +0.5 kWh (a median −0.15) and the end tank
   up to 6.3 °F.
