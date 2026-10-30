@@ -72,7 +72,27 @@ def test_other_sizes_resize_the_tank(
     assert total == pytest.approx(ua, abs=1e-3)
     assert loss.ua_top_btu_hr_f == base.loss.ua_top_btu_hr_f
     assert other.tank.inlet_mix_gal == pytest.approx(inlet, abs=0.01)
+    # A length of the column holds the cross-section's water; the
+    # column's conductance is the cross-section over its height.
+    (inner, height), (inner65, height65) = column, (21.00, 42.13)
+    area = (inner / inner65) ** 2
+    for spread in ("upper_probe_spread_gal", "lower_probe_spread_gal"):
+        assert getattr(other.tank, spread) == pytest.approx(
+            getattr(base.tank, spread) * area, rel=2e-3
+        )
+    assert other.tank.conductance_btu_hr_f == pytest.approx(
+        base.tank.conductance_btu_hr_f * area * height65 / height, rel=2e-3
+    )
     assert replace(other, tank=base.tank, loss=base.loss) == base
+    kept = replace(
+        other.tank,
+        volume_gal=base.tank.volume_gal,
+        upper_probe_spread_gal=base.tank.upper_probe_spread_gal,
+        lower_probe_spread_gal=base.tank.lower_probe_spread_gal,
+        inlet_mix_gal=base.tank.inlet_mix_gal,
+        conductance_btu_hr_f=base.tank.conductance_btu_hr_f,
+    )
+    assert kept == base.tank
 
 
 def test_the_column_closes_on_the_65() -> None:
