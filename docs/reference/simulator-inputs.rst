@@ -631,7 +631,8 @@ the tap gets at the line or warmer: the water leaving the top in turn,
 each tank gallon delivering ``1 / hot_fraction`` through the mixing
 valve, to the first that the valve delivers under the line
 (``stratified.deliverable_gal``). The mains it meets is the scenario's
-inlet, else the parameters' on its first day. The tank is its layers
+inlet, else the parameters' on the day it is read: a draw window's
+onset, a walk's point. The tank is its layers
 (``HeaterState.layers_f``, ``Deliverable.basis`` ``layers``), else the
 profile its two probes stand for (``basis`` ``probes``, and
 ``tank_profile_estimated`` in the reasons). The outlet is above the

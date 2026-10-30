@@ -195,7 +195,7 @@ class Environment(_Value):
     #: Relative humidity, percent.
     humidity: Annotated[float, Field(ge=0.0, le=100.0)] = 50.0
     #: The inlet (mains) water temperature, °F. None: the parameters'
-    #: mains on the span's first day (``DrawParams.mains_on``).
+    #: mains on each day, as each draw meets it (``DrawParams.mains_on``).
     inlet_f: float | None = None
     #: ``ambient_f`` comes from the heater's own reading while its
     #: compressor was idle, its cabinet's, less the cabinet's measured
