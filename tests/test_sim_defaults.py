@@ -46,9 +46,9 @@ def test_the_65_round_trips_as_a_document() -> None:
     [
         # Narrower than the 65 and as tall: less wall, less water in a
         # length of the column.
-        (1, 45.2, (17.70, 42.41), 3.592, 10.10),
+        (1, 45.2, (17.70, 42.41), 3.545, 10.10),
         # As wide and taller: more wall, the same cross-section.
-        (3, 76.1, (21.00, 50.73), 4.804, 14.22),
+        (3, 76.1, (21.00, 50.73), 4.741, 14.22),
     ],
 )
 def test_other_sizes_resize_the_tank(

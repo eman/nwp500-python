@@ -55,6 +55,7 @@ from nwp500.sim.params import (
 )
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
+from nwp500.sim.physics.water import btu_per_gal_f, heat_f
 from nwp500.sim.schedules import weekly_runs
 from nwp500.sim.tank_physics import circulation_flows, point_at
 
@@ -168,9 +169,14 @@ class TestTheRuns:
             Circulation(((at(0), at(1)),)), terms, lambda _: 68.0, at(0), at(2)
         )
         assert own.inflow_f is None and own.rest_f == 70.0
-        assert own.share == pytest.approx(math.exp(-40.0 / (1.5 * 60 * 8.34)))
-        assert steady_share(0.0, 1.5) == 1.0
-        assert steady_share(40.0, 0.0) == 0.0
+        assert own.pipe_ua_btu_hr_f == 40.0
+        # The water's heat per gallon at its temperature: 8.20 at 140 °F.
+        assert steady_share(40.0, 1.5, 140.0) == pytest.approx(
+            math.exp(-40.0 / (1.5 * 60 * btu_per_gal_f(140.0)))
+        )
+        assert btu_per_gal_f(140.0) == pytest.approx(8.20, abs=0.005)
+        assert steady_share(0.0, 1.5, 140.0) == 1.0
+        assert steady_share(40.0, 0.0, 140.0) == 0.0
 
     def test_a_run_under_way_is_returned_whole(self) -> None:
         (cooled, _) = _flows([(at(0), at(1))], at(0.5), at(2))
@@ -510,7 +516,9 @@ class TestThePipe:
         # Half way up its front at 6.9 gal; steady 1.6 degF under the
         # upper probe at 1.08 gal/min.
         assert got.volume_gal == pytest.approx(6.86, abs=0.01)
-        assert got.ua_btu_hr_f == pytest.approx(14.6, abs=0.1)
+        # 14.6 at a constant 8.34 BTU per gallon; the water there, at
+        # about 130 degF, holds 8.21.
+        assert got.ua_btu_hr_f == pytest.approx(14.4, abs=0.05)
         assert got.flow_gpm == pytest.approx(1.078, abs=0.001)
         assert got.rest_f == pytest.approx(68.84, abs=0.01)
 
@@ -567,7 +575,9 @@ class TestThePipe:
         heat = calibration.run_heat_btu(
             2.0, 130.0, 60.0, 6.0, 1.5, rest_h=rest, cool_tau_h=0.5
         )
-        assert heat == pytest.approx(3.0 * 8.34 * 70.0)
+        assert heat == pytest.approx(
+            3.0 * 8.34 * (heat_f(130.0) - heat_f(60.0))
+        )
         terms = replace(TERMS, displaced_gal=6.0, return_cool_tau_h=0.5)
         first = (
             at(0) - timedelta(hours=rest + 0.1),
@@ -583,7 +593,9 @@ class TestThePipe:
         assert (cooled.end - cooled.start) / MIN * 1.5 == pytest.approx(3.0)
 
     def test_past_its_volume_a_run_takes_the_pipes_loss(self) -> None:
-        lift = 130.0 - 60.0 - 5.0
+        # The heat between the upper zone and the rest, in the water's
+        # heats (``physics.water``).
+        lift = heat_f(130.0) - heat_f(60.0 + 5.0)
 
         def heat(minutes: float, ua: float = 0.0) -> float:
             return calibration.run_heat_btu(
@@ -601,7 +613,7 @@ class TestThePipe:
         assert heat(2.0, 30.0) == pytest.approx(heat(2.0))
         # Past it, nothing without a loss; with one, its share.
         assert heat(10.0) == pytest.approx(heat(4.0))
-        lost = 1.0 - steady_share(30.0, 1.5)
+        lost = 1.0 - steady_share(30.0, 1.5, 130.0)
         assert heat(10.0, 30.0) == pytest.approx(
             (6.0 + lost * 9.0) * 8.34 * lift
         )
@@ -652,7 +664,8 @@ class TestTheMeasuredRunThroughTheTank:
         lifting it through the column, so the top stays as hot as the
         upper probe read (0.8 degF RMS, against 2.0 with every inflow a
         plug), and the tank gives up the heat the return line measured
-        (4,589 BTU) but 3.2 %. The lower probe, at its fitted height, does
+        (4,545 BTU, its flow times the drop in the water's heat) but
+        3.2 %. The lower probe, at its fitted height, does
         not see the cold the run left below it: it fell to 105.8 degF,
         which no stable column with the probe that high can read on the
         heat that had left."""
@@ -695,4 +708,4 @@ class TestTheMeasuredRunThroughTheTank:
             if r["start"] < at <= r["end"]
         ]
         assert math.sqrt(sum(e * e for e in errors) / len(errors)) < 1.0
-        assert w.books.flowing_btu == pytest.approx(4589.0, rel=0.04)
+        assert w.books.flowing_btu == pytest.approx(4545.0, rel=0.04)

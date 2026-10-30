@@ -502,7 +502,9 @@ nothing is charged.
      - The pipe's loss once the tank's own water is coming back, BTU/h
        per degF, measured with the volume (default 0: back as hot as
        it left). That water returns at the rest plus
-       ``exp(-UA / (flow x 8.34 x 60))`` of the top's lift over it.
+       ``exp(-UA / (flow x c x 60))`` of the top's lift over it, ``c``
+       the water's heat per gallon per degF at the top's temperature
+       (8.20 at 140 degF).
    * - ``return_rest_offset_f``
      - How far above the air at the heater the return rests between
        runs (default 0: at the air). The pipe can run through warmer
@@ -533,7 +535,7 @@ rises past it to where the tank is as warm. Runs closer than
 ``run_gap_min`` are one run, as the return's terms were fitted.
 None of these has a default: they
 describe one installation's plumbing. ``site_example_params`` carries
-one installation's (a 6.86 gal pipe losing 14.6 BTU/h per degF, a
+one installation's (a 6.86 gal pipe losing 14.4 BTU/h per degF, a
 return resting 3.74 degF above the air and cooling on 0.72 h,
 1.397 gal/min).
 
@@ -744,7 +746,7 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - Range over retrains
    * - ``loss.ua_side_btu_hr_f``, ``ua_bottom_btu_hr_f``,
        ``ua_top_btu_hr_f``; ``tank.conductance_btu_hr_f``
-     - 3.06, 0.559, 0.557 BTU/hr per degF; 0.511 BTU/hr per degF
+     - 3.02, 0.552, 0.550 BTU/hr per degF; 0.504 BTU/hr per degF
      - The layered tank's terms, fitted together
        (``sim_calibrate.calibrate_changes``, ``sim.tank_fit``) on 266
        quiet windows, 254 metered draws and 118 recoveries, 2026-04-16
@@ -762,7 +764,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        plane, the heat at the cold water a recovery starts from is
        more than the edge's, and the bottom gives back 0.445; with a
        circulation run's pipe returned at its measured volume and its
-       own water risen to its level, 0.559.
+       own water risen to its level, 0.559. Fitted at 8.34 BTU per
+       gallon per degF, each is restated at the quiet tank's 125 degF,
+       8.23 (``defaults._restated``): 3.06, 0.559, 0.557 and 0.511 as
+       fitted.
      - 2026-10-27 to 10-29
    * - ``tank.upper_probe_height``, ``lower_probe_height``,
        ``upper_probe_spread_gal``, ``lower_probe_spread_gal``,
@@ -782,8 +787,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 2026-10-27 to 10-29
    * - ``compressor.heat_btu_h`` and its slopes per degF of air and
        of water
-     - 4,499 BTU/hr at 65 degF air and 120 degF water; +55.5 per degF
-       of air, -15.9 per degF of water
+     - 4,445 BTU/hr at 65 degF air and 120 degF water; +54.8 per degF
+       of air, -16.7 per degF of water: fitted as 4,499, +55.5 and
+       -15.9 at 8.34 BTU per gallon per degF, restated at the water's
+       own (``defaults._restated``)
      - 38 stretches of 20 minutes or more of draw-free climbs with the
        tank mixed (3,059 minutes, 2026-04-21 to 10-22), the air 61.2 to
        88.7 degF and the tank 114.8 to 143.3 degF: 236 BTU/hr RMS. The
@@ -825,7 +832,7 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        2026-04-21 to 10-22.
      - First fitted 2026-10-26
    * - ``SITE_CIRCULATION``
-     - 6.86 gal, 14.6 BTU/h per degF, +3.74 degF, 0.72 h, 1.397 gal/min
+     - 6.86 gal, 14.4 BTU/h per degF, +3.74 degF, 0.72 h, 1.397 gal/min
      - The pipe measured on one run on 2026-10-29 (``measure_pipe``):
        35.7 min at constant pressure after a 4 h rest, nothing else
        acting on the tank. The return rose half way to its steady
@@ -959,7 +966,7 @@ with. Heights are shares of the volume from the bottom.
      - Where the record's draws first move each probe.
    * - ``tank.upper_element_height``, ``tank.lower_element_height``
      - 0.72, 0.15
-     - The upper element with 17.5 gal of the 63.2 above it, the volume
+     - The upper element with 17.7 gal of the 63.2 above it, the volume
        its rise on 29 clean runs (2.01 degF/min) heats; the lower near
        the bottom. Not fitted: an element heats its layer and the ones
        above, so the height acts in whole layers. Of twelve, 0.72 heats

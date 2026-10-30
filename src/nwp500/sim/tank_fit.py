@@ -282,7 +282,7 @@ def _flows(
         if max(turn, lo) < hi:
             m = max(record.minute(max(turn, lo)), 0)
             up = float(record.upper_f[m])
-            share = steady_share(c.pipe_ua_btu_hr_f, c.flow_gpm)
+            share = steady_share(c.pipe_ua_btu_hr_f, c.flow_gpm, up)
             out.append(
                 st.Flowing(
                     start=max(turn, lo),

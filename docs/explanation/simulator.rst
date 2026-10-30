@@ -256,7 +256,7 @@ on the 50 gives a column 17.7 in across and 42.4 tall, as tall as the
 with the shell, the bottom's with the cross-section, and the column's
 conductance with the cross-section over its height. The probes'
 spreads and the inlet zone are gallons along the column, so they
-scale with the cross-section. The tanks lose 3.59, 4.18 and 4.80
+scale with the cross-section. The tanks lose 3.55, 4.12 and 4.74
 BTU/h·°F. The top's loss (the head, its fittings and pipes), the
 heights as shares of the volume, the compressor, the elements and the
 controller are the 65's. None of the 50's or the 80's terms is

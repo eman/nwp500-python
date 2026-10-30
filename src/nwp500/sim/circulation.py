@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from nwp500.sim.units import WATER_BTU_PER_GAL_F
+from nwp500.sim.physics.water import btu_per_gal_f
 
 #: A run: when it starts and when it ends.
 Run = tuple[datetime, datetime]
@@ -62,16 +62,17 @@ def cooled_share(rest_hours: float | None, cool_tau_h: float) -> float:
     return 1.0 - math.exp(-max(rest_hours, 0.0) / cool_tau_h)
 
 
-def steady_share(ua_btu_hr_f: float, flow_gpm: float) -> float:
+def steady_share(ua_btu_hr_f: float, flow_gpm: float, water_f: float) -> float:
     """The share of the tank's lift over the return's rest that the
-    tank's own water keeps on its way round the pipe, at ``flow_gpm``:
-    ``exp(−UA / (ṁ·c))``, the pipe a heat exchanger with surroundings
-    at the rest. 1 with no loss; 0 with no flow."""
+    tank's own water, at ``water_f``, keeps on its way round the pipe at
+    ``flow_gpm``: ``exp(−UA / (ṁ·c))``, the pipe a heat exchanger with
+    surroundings at the rest, ``c`` the water's heat per gallon at its
+    temperature (``physics.water``). 1 with no loss; 0 with no flow."""
     if ua_btu_hr_f <= 0.0:
         return 1.0
     if flow_gpm <= 0.0:
         return 0.0
-    return math.exp(-ua_btu_hr_f / (flow_gpm * 60.0 * WATER_BTU_PER_GAL_F))
+    return math.exp(-ua_btu_hr_f / (flow_gpm * 60.0 * btu_per_gal_f(water_f)))
 
 
 def merge_runs(runs: Iterable[Run], gap: timedelta = RUN_GAP) -> list[Run]:

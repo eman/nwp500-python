@@ -28,6 +28,7 @@ from dataclasses import replace
 
 from nwp500.sim.params import (
     INSTALLATION_TERMS,
+    MAP_REF_WATER_F,
     CirculationParams,
     CompressorParams,
     ControllerParams,
@@ -38,6 +39,8 @@ from nwp500.sim.params import (
     TankParams,
 )
 from nwp500.sim.physics.draw import DEFAULT_INLET_TEMP_F
+from nwp500.sim.physics.water import btu_per_gal_f
+from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 #: The device's ``volume_code``: NWP500-50, -65 and -80.
 VOLUME_50 = 1
@@ -83,7 +86,7 @@ SITE_CLIMATE = (61.3, 19.9)
 #: pressure after a 4 h rest with nothing else acting on the tank: the
 #: return rose half way to its steady value at 6.86 gal of the run's
 #: own flow reading, and held 1.6 °F under the upper probe at 1.08
-#: gal/min, a loss of 14.6 BTU/h·°F. With it the return's rest and
+#: gal/min, a loss of 14.4 BTU/h·°F. With it the return's rest and
 #: cooling are fitted (``calibration.fit_return``) on 122 runs with the
 #: compressor off, 2026-04-04 to 2026-10-24: the return rests 3.74 °F
 #: above the heater's air, and the pipe a run warmed cools back to rest
@@ -92,7 +95,7 @@ SITE_CLIMATE = (61.3, 19.9)
 SITE_CIRCULATION = CirculationParams(
     displaced_gal=6.86,
     flow_gpm=1.397,
-    pipe_ua_btu_hr_f=14.6,
+    pipe_ua_btu_hr_f=14.4,
     return_rest_offset_f=3.74,
     return_cool_tau_h=0.72,
     # Its household meter read a run at 0.81 of the run's own flow
@@ -103,8 +106,61 @@ SITE_CIRCULATION = CirculationParams(
 )
 
 
+#: The tank in the quiet windows the jacket's loss and the column's
+#: conductance were fitted on, °F: their typical mean (``_restated``).
+_QUIET_TANK_F = 125.0
+
+
+def _restated(params: HeaterParams) -> HeaterParams:
+    """``params``' terms fitted in BTU against a constant
+    ``WATER_BTU_PER_GAL_F``, restated against water's heat at its
+    temperature (``physics.water``): the same climbs and coasts, so the
+    same answers where they were fitted. Each scales by the water's
+    heat per gallon there over the constant: the heat pump's map at its
+    120 °F reference water (0.988), its slope with the water taking the
+    heat's own fall with it (-15.9 to -16.7 BTU/h per °F); the jacket's
+    loss and the column's conductance at ``_QUIET_TANK_F`` (0.987).
+    Refitted on the record under the water's heat, 2026-04-16 to 10-26,
+    the map lands within 0.1 % of the fit restated so at 120 °F, and on
+    the record from 2026-09-18 the restated fit scores within 0.05 min
+    a recovery and 0.03 % of its energy of the fit under the constant."""
+    c, loss, tank = params.compressor, params.loss, params.tank
+    at_map = btu_per_gal_f(MAP_REF_WATER_F) / WATER_BTU_PER_GAL_F
+    falls = (
+        btu_per_gal_f(MAP_REF_WATER_F + 0.5)
+        - btu_per_gal_f(MAP_REF_WATER_F - 0.5)
+    ) / WATER_BTU_PER_GAL_F
+    quiet = btu_per_gal_f(_QUIET_TANK_F) / WATER_BTU_PER_GAL_F
+    return replace(
+        params,
+        compressor=replace(
+            c,
+            heat_btu_h=c.heat_btu_h * at_map,
+            heat_btu_h_per_air_f=c.heat_btu_h_per_air_f * at_map,
+            heat_btu_h_per_water_f=c.heat_btu_h_per_water_f * at_map
+            + c.heat_btu_h * falls,
+            heat_btu_h_per_air_water_f=c.heat_btu_h_per_air_water_f * at_map,
+        ),
+        loss=replace(
+            loss,
+            ua_side_btu_hr_f=loss.ua_side_btu_hr_f * quiet,
+            ua_bottom_btu_hr_f=loss.ua_bottom_btu_hr_f * quiet,
+            ua_top_btu_hr_f=loss.ua_top_btu_hr_f * quiet,
+        ),
+        tank=replace(
+            tank, conductance_btu_hr_f=tank.conductance_btu_hr_f * quiet
+        ),
+    )
+
+
 def _nwp500_65() -> HeaterParams:
-    """The NWP500-65's parameters."""
+    """The NWP500-65's parameters, as fitted (``_restated``)."""
+    return _restated(_fitted_65())
+
+
+def _fitted_65() -> HeaterParams:
+    """The NWP500-65's parameters as fitted, against a constant
+    ``WATER_BTU_PER_GAL_F``."""
     return HeaterParams(
         # The layered tank fitted on its record, 2026-04-16 to
         # 2026-10-26 (``sim_calibrate.calibrate_changes``): 266 quiet

@@ -1,6 +1,8 @@
 """Physical constants the simulator core uses."""
 
-# Thermal mass of water: 1 gal ≈ 8.34 lb, c_p = 1 BTU/lb·°F.
+# A gallon of water's heat per °F at the mains, 58 °F: 8.34 lb at
+# 1 BTU/lb·°F. It falls as the water warms (``physics.water``); the
+# tank's heat is kept in degrees of it (``physics.water.heat_f``).
 WATER_BTU_PER_GAL_F = 8.34
 
 # BTU is the core's internal unit (the tank, the water and the UA law

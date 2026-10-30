@@ -150,17 +150,24 @@ The tank
 
 **State.** The tank is a column of layers of equal volume, 12 by
 default (``TankParams.layers``), the bottom first, each mixed within
-itself: HPWHsim's stratified tank (``physics.stratified``). The whole
-tank's mass is
+itself: HPWHsim's stratified tank (``physics.stratified``). Each of the
+:math:`n` layers holds :math:`V/n` of the storage volume :math:`V`
+(63.2 gal for the 65 gal model), and a gallon's heat per degree falls
+as it warms (``physics.water``):
 
 .. math::
 
-   m = 8.34\,V
+   c(T) = 8.34 \text{ BTU/gal degF at 58 degF},\quad 8.20 \text{ at 140 degF}
 
-where :math:`V` is the storage volume (63.2 gal for the 65 gal model),
-so :math:`m` is about 527 BTU/degF, and each of the :math:`n` layers
-holds :math:`m/n`. Every operator below conserves the layers' energy to
-rounding.
+from water's density (1.6 % lighter at 140 degF) and its heat
+capacity, fitted as a quartic to 0.002 BTU/gal degF over 32 to
+212 degF. The whole tank holds 527 BTU/degF cold and 518 at 140 degF.
+The layers' heat is kept as each one's :math:`h(T)`, the temperature
+water of a constant 8.34 would have with the same heat, in which mixing,
+flows and heat put in are linear: every operator below conserves the
+layers' energy to rounding. Where a temperature drives the heat, the
+air, a neighbour, the condenser's water, the operator reads it, and
+books the heat it moves in :math:`h`.
 
 **The probes.** The probes read the layers; they are not the state.
 Each reads the layers around its height (a share of the volume from
@@ -384,7 +391,7 @@ The elements
 ============
 
 An element puts its power, 5,148 W, into its layer: the upper's at 0.72
-of the volume from the bottom (17.5 gal of the 63.2 above it), the
+of the volume from the bottom (17.7 gal of the 63.2 above it), the
 lower's at 0.15. The upper's heat reaches the water 1.21 minutes after
 it starts, and goes on as long after it stops. The heat rises from its
 layer as the layers turn over, so the upper element heats the water

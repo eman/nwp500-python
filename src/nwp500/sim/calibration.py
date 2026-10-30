@@ -71,6 +71,7 @@ from nwp500.sim.params import (
     UNFITTED_TERMS,
     HeaterParams,
 )
+from nwp500.sim.physics.water import btu_per_gal_f, heat_f
 from nwp500.sim.record import Record
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
@@ -804,7 +805,7 @@ def measure_runs(
         rets = _held_at(return_f, samples, RETURN_MAX_AGE)
         flows = _held_at(flow, samples, RETURN_MAX_AGE)
         q = [
-            f * 60.0 * WATER_BTU_PER_GAL_F * (u - r)
+            f * 60.0 * WATER_BTU_PER_GAL_F * (heat_f(u) - heat_f(r))
             for u, r, f in zip(ups, rets, flows, strict=True)
             if u is not None and r is not None and f is not None
         ]
@@ -860,10 +861,13 @@ def run_heat_btu(
     piped = circulation_displaced_gal(
         before_min + minutes, cooled, flow_gpm
     ) - circulation_displaced_gal(before_min, cooled, flow_gpm)
-    lost = 1.0 - steady_share(pipe_ua_btu_hr_f, flow_gpm)
+    lost = 1.0 - steady_share(pipe_ua_btu_hr_f, flow_gpm, upper_f)
     gal = piped + lost * (flow_gpm * minutes - piped)
     return max(
-        0.0, gal * WATER_BTU_PER_GAL_F * (upper_f - air_f - rest_offset_f)
+        0.0,
+        gal
+        * WATER_BTU_PER_GAL_F
+        * (heat_f(upper_f) - heat_f(air_f + rest_offset_f)),
     )
 
 
@@ -1031,7 +1035,7 @@ def measure_pipe(
         return None
     gpm = float(np.median(rates))
     share = min((steady - rest) / (up - rest), 1.0)
-    ua = -math.log(share) * gpm * 60.0 * WATER_BTU_PER_GAL_F
+    ua = -math.log(share) * gpm * 60.0 * btu_per_gal_f(up)
     half = rest + (steady - rest) / 2.0
     last_t, last_v = start, rest
     for t, v in rets:

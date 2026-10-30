@@ -103,7 +103,10 @@ to 2026-10-26:
 A tank only mixes once a recovery has run a while, so below 130 degF
 there is one stretch. Fitted over all 38, weighted by their minutes:
 **4,499 + 55.5 x (air - 65) - 15.9 x (water - 120) BTU/hr**, with the
-air between 61.2 and 88.7 degF.
+air between 61.2 and 88.7 degF. The heat is the climb at 8.34 BTU per
+gallon per degF; at the water's own, 8.24 at 120 degF, the same climbs
+are 4,445 + 54.8 x (air - 65) - 16.7 x (water - 120), the map the
+simulator runs (``defaults._restated``).
 
 The figure closes on the meter. Over the 28 draw-free recoveries mixed
 at both ends, the heat the tank kept plus its loss, against the
