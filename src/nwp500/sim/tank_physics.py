@@ -159,8 +159,11 @@ class Stretch:
     point); the lower probe's drop at each instant draws were taken,
     and at the end of each step the circulation cooled it over; the
     delivered gallons drawn and the heat they took, the heat the
-    flows took, and the mean air over it; and the reasons it carries
-    (a heat pump heating outside its map's air or water)."""
+    flows took, and the mean air over it; the reasons it carries (a
+    heat pump heating outside its map's air); and the hours the
+    condenser's heat went in, with the probes' mean times them, which
+    a recovery's stretches sum to judge its water
+    (``TankPhysics.heating_reasons``)."""
 
     points: list[Point]
     stopped: bool = False
@@ -170,6 +173,8 @@ class Stretch:
     flowing_heat_btu: float = 0.0
     ambient_mean_f: float | None = None
     reasons: tuple[str, ...] = ()
+    heating_h: float = 0.0
+    heating_mean_f_h: float = 0.0
 
     @property
     def end(self) -> datetime:
@@ -536,12 +541,10 @@ class TankPhysics:
         points = out
         mean = ambient_window_mean(self.series, start, walked.end)
         reasons: tuple[str, ...] = ()
-        if running.compressor is not None and (
-            (
-                mean is not None
-                and heat_air_outside(self.params.compressor, mean)
-            )
-            or _water_outside(self.params.compressor, walked.books)
+        if (
+            running.compressor is not None
+            and mean is not None
+            and heat_air_outside(self.params.compressor, mean)
         ):
             reasons = (HEAT_MAP_OUT_OF_DOMAIN,)
         books = walked.books
@@ -554,7 +557,21 @@ class TankPhysics:
             flowing_heat_btu=books.flowing_btu,
             ambient_mean_f=mean,
             reasons=reasons,
+            heating_h=books.compressor_heat_h,
+            heating_mean_f_h=books.compressor_mean_f_h,
         )
+
+    def heating_reasons(
+        self, heating_h: float, mean_f_h: float
+    ) -> tuple[str, ...]:
+        """What a recovery's heating says of the heat map's water: its
+        hours and the probes' mean times them, summed over its
+        stretches (``Stretch.heating_h``, ``heating_mean_f_h``)."""
+        if heating_h > 0.0 and heat_water_outside(
+            self.params.compressor, mean_f_h / heating_h
+        ):
+            return (HEAT_MAP_OUT_OF_DOMAIN,)
+        return ()
 
     def draw(self, at: datetime, state: TankState, gal: float) -> st.TankState:
         layers = _layers(state)

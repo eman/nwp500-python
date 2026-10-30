@@ -644,6 +644,10 @@ Fixed
   forecasts (``forecast``, ``active_cycle``), as its mean air is judged
   against the air's (``stratified.Books``' new ``compressor_heat_h``,
   the hours the condenser's heat went in, and ``compressor_mean_f_h``).
+  ``simulate`` judges it over the whole run where the compressor stops,
+  not each stretch an event cuts it into, and a walk going on from one
+  carries the run's heating so far (``Resume``); a walk that ends inside
+  a run judges what it heated.
   From the heater's 104.9 °F lower trigger, at 67.5 °F air, a recovery
   says so at setpoints of 117 °F and under and not at 118 °F and over.
   The condenser's water the map is read at runs under the mean in a

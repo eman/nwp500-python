@@ -250,7 +250,8 @@ compressor runs; there the maps are read at the envelope's edge
 (``stratified.Layout.map_air_f``, ``map_water_f``), so no read falls
 where no fit was checked. A recovery whose air is outside the heat's
 span says so (``heat_map_out_of_domain``), and so does one whose
-probes' mean over its heating is outside the heat's water span: the
+probes' mean over its heating, over the whole run, is outside the
+heat's water span: the
 heat was fitted on mixed climbs against that mean, each climb's
 average, 114 to 144 °F on the site's record, so a cold tank's recovery,
 or one to a low setpoint (from the heater's 104.9 °F trigger, 117 °F

@@ -10,8 +10,10 @@ import pandas as pd
 import pytest
 
 from nwp500 import sim
+from nwp500.sim import Commands
 from nwp500.sim import controller as ctl
 from nwp500.sim.decay import AmbientSampler
+from nwp500.sim.inputs import Write as CommandWrite
 from nwp500.sim.params import ControllerParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import HEAT_MAP_OUT_OF_DOMAIN
@@ -840,6 +842,43 @@ class TestTheHeatMapsWater:
         )
         assert any(h.source == "compressor" for h in got.heating)
         assert (HEAT_MAP_OUT_OF_DOMAIN in got.reasons) is flagged
+
+    def test_a_write_that_changes_nothing_changes_nothing(self) -> None:
+        """A write of the setpoint in force, its half degree Celsius
+        (120.2 °F), cuts the recovery's walk without changing its
+        heating: the water is judged over the whole run, so its cold
+        first stretch does not say so alone."""
+
+        def walk(writes: tuple[CommandWrite, ...]) -> sim.SimulationResult:
+            return sim.simulate(
+                sim.Scenario(
+                    start=T0,
+                    horizon=timedelta(hours=8),
+                    tz="UTC",
+                    state=sim.HeaterState(upper_f=118.2, lower_f=104.8),
+                    settings=sim.Settings(
+                        setpoint_f=120.2, hp_lower_on_f=104.9, mode=1
+                    ),
+                    environment=sim.Environment(ambient_f=67.5, inlet_f=58.0),
+                    commands=Commands(writes=writes),
+                ),
+                sim.site_example_params(),
+            )
+
+        alone = walk(())
+        for minutes in (5, 10, 20):
+            cut = walk(
+                (
+                    CommandWrite(
+                        at=T0 + timedelta(minutes=minutes), setpoint_f=120.2
+                    ),
+                )
+            )
+            assert [(h.start.at, h.end) for h in cut.heating] == [
+                (h.start.at, h.end) for h in alone.heating
+            ]
+            assert HEAT_MAP_OUT_OF_DOMAIN not in cut.reasons
+        assert HEAT_MAP_OUT_OF_DOMAIN not in alone.reasons
 
     def test_a_forecast_from_a_cold_tank_says_so(self) -> None:
         params = sim.site_example_params()
