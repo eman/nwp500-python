@@ -71,7 +71,7 @@ Added
   on: chained at marks of the clock's 10-minute grid, the calls give
   the path and heating of one walk with marks at the cuts, through
   ``codec`` and JSON too, with TOU and the climate's mains across
-  midnight (held on the first call's day, as one walk holds it). A
+  midnight. A
   cut off the grid splits a walk's step (0.002 °F after two days of
   15-minute calls). A setpoint or mode other than the one the last
   call left is a write at the start (``serves="settings"``), its
@@ -89,8 +89,9 @@ Added
   coldest), and ``cold_supply.climate_of`` reads that climate off a
   year of outdoor readings. ``DrawParams.climate_f`` carries it:
   ``DrawParams.mains_on(day)`` gives that day's mains, else
-  ``inlet_temp_f``. A scenario without an inlet takes the mains on its
-  first day, and ``defaults_used`` names it; the history's replay, the
+  ``inlet_temp_f``. A scenario without an inlet meets each draw with
+  the mains on its day, and ``defaults_used`` names the start's; the
+  history's replay, the
   tank's fits and ``readiness(..., on=day)`` take each day's. At one
   installation (mean air 61.3 °F, swing 19.9 °F, its weather
   station's 2025-11 to 2026-10) the correlation read 1.5 °F under its
@@ -645,6 +646,10 @@ Fixed
   its end, so a recovery running there was judged without a window
   opening after it; they now reach as far past the end as a recovery
   judges its cap (``engine.RECOVERY_AHEAD``, 16 h).
+- ``tou_cap_projected`` is said where the cap stops a recovery, in the
+  walk it stops in. It was said where a recovery's cap was projected,
+  so a walk ending before the cap, or one whose projection a draw
+  undid, said it of a recovery the cap never stopped.
 - A start TOU defers past the walk's end stays pending, for a walk
   going on from there; ``controller.TriggerDeferred`` has no
   ``horizon``. No single walk changes.

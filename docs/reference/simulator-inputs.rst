@@ -177,6 +177,19 @@ Built by ``sim_adapters.heater_state(status)``.
        a zero count as "already ready" outside a TOU window. Leave it
        None for a tank state you made up: the count is the heater's
        own tank's.
+   * - ``resume``
+     - JSON text
+     - None
+     - Where a simulation that ended at this scenario's start left the
+       heater: ``SimulationResult.end_state`` carries it, with
+       ``end_history`` and ``end_settings`` for the scenario's
+       ``history`` and ``settings``. Opaque; keep it as given. With it
+       the walk goes on from that one (the compressor, the element,
+       the lockout and a held mode), and its own flags and ``History``
+       are the resume's. A setpoint or mode other than
+       ``end_settings``' is a write at the start. Into or out of
+       Vacation or Power Off, the walk starts afresh and ``reasons``
+       says ``resume_dropped_heating_disabled_changed``.
 
 
 Settings: ``Settings``
@@ -372,12 +385,12 @@ The environment: ``Environment``
        the heater averaged 53 % (monthly 45-70 %).
    * - ``inlet_f``
      - degF
-     - the parameters' mains on the start's day
+     - the parameters' mains on each draw's day
      - The mains water temperature. **Not reported**: the device's
        inlet field reads 0. It prices every draw. The default is the
-       mains of the parameters' climate on the scenario's first day
-       (``draw.climate_f``, ``DrawParams.mains_on``), held over the
-       span; without a climate, ``draw.inlet_temp_f`` all year: 58 degF
+       mains of the parameters' climate on each draw's own day
+       (``draw.climate_f``, ``DrawParams.mains_on``), the start's
+       named in ``defaults_used``; without a climate, ``draw.inlet_temp_f`` all year: 58 degF
        in ``default_params``, the rating test's
        (:ref:`the mains by season <mains-by-season>`). ``defaults_used``
        names the value.
@@ -1098,6 +1111,11 @@ The ones about the heater's own rules, each resting on the device runs
      - A reservation entry's Heat Pump write inside a window was held:
        that rests on the documented rule for entries, measured only on
        an element mode's entry.
+   * - ``resume_dropped_heating_disabled_changed``
+     - ``HeaterState.resume`` was not gone on from: the scenario is in
+       Vacation or Power Off and the walk that left it was not, or the
+       other way round, a write the simulation holds no rule for. The
+       walk starts from the tank and the history.
    * - ``element_mode_dropped_projected``
      - A TOU window's opening dropped an element mode to Heat Pump.
    * - ``write_start_uncertain``

@@ -358,9 +358,6 @@ class Resume:
     Opaque to a caller, who keeps it as ``to_document`` writes it."""
 
     at: datetime
-    #: Where the first of the walks this goes on from began: the day the
-    #: scenario's mains is read on, held as one walk holds it.
-    began: datetime
     controller: ctl.State
     setpoint_f: float
     mode: HeaterMode
@@ -375,6 +372,20 @@ class Resume:
     #: Heating was disabled (``controller.disabled``): Vacation, or
     #: powered off with no entry having turned the heater on.
     disabled: bool = False
+
+    def carries(self, *, heating_disabled: bool, powered_off: bool) -> bool:
+        """Whether a walk in these settings goes on from it: not into or
+        out of Vacation or Power Off since (``disabled``), a write the
+        simulation holds no rule for."""
+        now = ctl.disabled(
+            self.controller,
+            ctl.Settings(
+                hp_lower_on_f=None,
+                heating_disabled=heating_disabled,
+                powered_off=powered_off,
+            ),
+        )
+        return now == self.disabled
 
     def to_document(self) -> dict[str, Any]:
         """The resume as a JSON-compatible document: instants as ISO
@@ -500,6 +511,9 @@ class _Cycle:
     scale: float = 1.0
     input_wh: float | None = 0.0
     confidence: float = 1.0
+    #: Why its pace may be less than it seems, from the start's model
+    #: (``TankPhysics.scale``).
+    why: tuple[str, ...] = ()
     #: Its heating begins at ``heats_at``, with the start's stir; False
     #: for a run under way at the walk's start with no hold left.
     stirs: bool = True
@@ -552,19 +566,11 @@ class _Engine:
                 f"a walk from {start.isoformat()} cannot go on from one "
                 f"that ended at {resume.at.isoformat()}"
             )
-        #: Where the first of the walks this goes on from began.
-        self.began = start if resume is None else resume.began
-        #: Into or out of Vacation or Power Off since, a write the
-        #: simulation holds no rule for: the walk starts afresh.
-        self.resume_dropped = resume is not None and resume.disabled != (
-            ctl.disabled(
-                resume.controller,
-                ctl.Settings(
-                    hp_lower_on_f=None,
-                    heating_disabled=heater.heating_disabled,
-                    powered_off=heater.powered_off,
-                ),
-            )
+        #: A resume these settings do not go on from: the walk starts
+        #: afresh (``Resume.carries``).
+        self.resume_dropped = resume is not None and not resume.carries(
+            heating_disabled=heater.heating_disabled,
+            powered_off=heater.powered_off,
         )
         if self.resume_dropped:
             resume = None
@@ -771,11 +777,18 @@ class _Engine:
         self.cooling = list(resume.cooling)
         self._cold = resume.cold
         # What the heating carried on rests on, as where it began says.
+        if self.cycle is not None:
+            self.reasons.update(self.cycle.why)
         el = self.state.element
         if el.running and el.zone is not None:
             self.reasons.update(ctl.element_notes(el.zone, el.in_place))
         if held is not None:
-            self.reasons.add(ctl.MODE_WRITE_HELD_PROJECTED)
+            assert resume.held_write is not None
+            self.reasons.update(
+                ctl.held_notes(
+                    held.mode, entry=resume.held_write.owner != "raw"
+                )
+            )
 
     def _resume(self) -> Resume:
         """The heater now, for a walk from here to go on from."""
@@ -784,7 +797,6 @@ class _Engine:
         el = self.element
         return Resume(
             at=self.t,
-            began=self.began,
             controller=self.state,
             setpoint_f=self.sp,
             mode=self.mode,
@@ -1156,8 +1168,6 @@ class _Engine:
                 cycle.stop_at, cycle.capped = window[0], True
             elif outcome == "to_level":
                 cycle.stop_level, cycle.capped = cap.level, True
-        if cycle.capped:
-            self.reasons.add(TOU_CAP_PROJECTED)
 
     def _begin(self, start: Start, *, hold: float) -> None:
         """The compressor starts (``controller.StartCompressor``),
@@ -1168,6 +1178,7 @@ class _Engine:
             self.params.hp_water_range_f[1],
         )
         scale, confidence = 1.0, 1.0
+        why: tuple[str, ...] = ()
         under_way = start.cause == "running" and not self.running_starts
         scaled = getattr(self.physics, "scale", None)
         if scaled is not None:
@@ -1179,7 +1190,8 @@ class _Engine:
                 under_way=under_way,
             )
             scale, confidence = got.scale, got.confidence
-            self.reasons.update(got.reasons)
+            why = tuple(got.reasons)
+            self.reasons.update(why)
         self.cycle = _Cycle(
             start=start,
             setpoint_f=self.sp,
@@ -1188,6 +1200,7 @@ class _Engine:
             capped=False,
             scale=scale,
             confidence=confidence,
+            why=why,
             stirs=not under_way or hold > 0.0,
         )
         self._position()
@@ -1213,6 +1226,10 @@ class _Engine:
         interval.end = at
         interval.stop = stop
         interval.capped = stop == "cap"
+        if interval.capped:
+            # Said where the cap stops it, in the walk it stops in: not
+            # one the walk ends before, nor a projection a draw undoes.
+            self.reasons.add(TOU_CAP_PROJECTED)
         interval.input_wh = cycle.input_wh
         interval.confidence = cycle.confidence
         interval.final_target_f = cycle.setpoint_f

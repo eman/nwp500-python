@@ -36,7 +36,7 @@ at the heater's evaporator. ``sim.decay.AmbientSampler`` reads it.
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from itertools import pairwise
 from typing import Literal, Protocol
 
@@ -338,6 +338,9 @@ class TankPhysics:
       (``params.circulation``, else ``circulation_terms``); None, none;
     - ``draw_inlet_temp_f``: the water replacing a draw; None, the
       parameters' (``DrawParams.inlet_temp_f``);
+    - ``draw_inlet_on``: the water replacing a draw on each day, in
+      place of ``draw_inlet_temp_f`` (``DrawParams.mains_on``); None,
+      that one all the span;
     - ``recovery_model``: the model of a recovery's duration; None, the
       physics alone;
     - ``low_confidence_floor``: a recovery whose confidence is below it
@@ -356,6 +359,7 @@ class TankPhysics:
         circulation: Circulation | None = None,
         circulation_terms: CirculationParams | None = None,
         draw_inlet_temp_f: float | None = None,
+        draw_inlet_on: Callable[[date], float] | None = None,
         recovery_model: RecoveryModel | None = None,
         low_confidence_floor: float = 0.0,
         air_readings: pd.DataFrame | None = None,
@@ -368,6 +372,7 @@ class TankPhysics:
             if draw_inlet_temp_f is None
             else draw_inlet_temp_f
         )
+        self.draw_inlet_on = draw_inlet_on
         self.valve = (
             params.draw.delivery_intercept_f,
             params.draw.delivery_slope,
@@ -472,7 +477,7 @@ class TankPhysics:
             heating=self._heating(running),
             flowing=self._flows(start, end, walk_from),
             draws=[
-                st.Delivered(at=t, gal=g, inflow_f=self.draw_inlet_temp_f)
+                st.Delivered(at=t, gal=g, inflow_f=self.inlet_at(t))
                 for t, g in taken
             ],
             valve=self.valve,
@@ -545,8 +550,15 @@ class TankPhysics:
         if not self.draws_on:
             return layers
         return st.draw(
-            self.layout, layers, gal, self.draw_inlet_temp_f, self.valve
+            self.layout, layers, gal, self.inlet_at(at), self.valve
         ).state
+
+    def inlet_at(self, at: datetime) -> float:
+        """The water replacing a draw at ``at``: that day's, or the one
+        all the span."""
+        if self.draw_inlet_on is None:
+            return self.draw_inlet_temp_f
+        return self.draw_inlet_on(at.date())
 
     def _climb(
         self,

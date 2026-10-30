@@ -39,6 +39,7 @@ from nwp500.sim.engine import (
     HEATER_SETPOINT_MAX_F,
     HEATER_SETPOINT_MIN_F,
     RECOVERY_AHEAD,
+    RESUME_DROPPED,
     Entry,
     Heater,
     HeatingInterval,
@@ -248,12 +249,9 @@ def _mains(
     return params.draw.mains_on(at.date())
 
 
-def _inlet_f(
-    s: Scenario, params: HeaterParams, began: datetime | None = None
-) -> float:
-    """The scenario's mains (``_mains`` from its start, or from where
-    the walks it goes on from ``began``)."""
-    return _mains(s.environment, params, began or s.start)
+def _inlet_f(s: Scenario, params: HeaterParams) -> float:
+    """The scenario's mains (``_mains`` from its start)."""
+    return _mains(s.environment, params, s.start)
 
 
 def _physics(
@@ -266,13 +264,12 @@ def _physics(
     model: RecoveryModel | None,
     defaults: list[str],
     circulation: Circulation | None = None,
-    began: datetime | None = None,
 ) -> TankPhysics:
-    """The physics over ``start`` to ``until``, its mains read on the
-    day the walk ``began`` (``start`` when it goes on from none)."""
+    """The physics over ``start`` to ``until``: each draw meets the
+    environment's inlet, else the parameters' mains on its own day."""
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
-    inlet_f = _mains(environment, params, began or start)
+    inlet_f = _mains(environment, params, start)
     if environment.inlet_f is None:
         defaults.append(
             f"inlet_f={inlet_f:.1f}"
@@ -292,6 +289,9 @@ def _physics(
         circulation=circulation,
         circulation_terms=SITE_CIRCULATION,
         draw_inlet_temp_f=inlet_f,
+        draw_inlet_on=None
+        if environment.inlet_f is not None
+        else params.draw.mains_on,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
         # Where the air leaves the heat pump's range, on the readings
@@ -466,6 +466,15 @@ def simulate(
         if s.state.resume is None
         else Resume.from_document(json.loads(s.state.resume))
     )
+    reasons: list[str] = []
+    mode, disabled = _engine_mode(s.settings.mode)
+    if resume is not None and not resume.carries(
+        heating_disabled=disabled, powered_off=s.settings.mode == POWER_OFF
+    ):
+        # Starts afresh from the tank and the history, as the engine
+        # would.
+        resume = None
+        reasons.append(RESUME_DROPPED)
     setpoint_f = s.settings.setpoint_f
     if resume is not None and setpoint_f != resume.controller.setpoint_f:
         # Moved since the walk ended: written at the start, as an app
@@ -473,7 +482,6 @@ def simulate(
         _check_setpoint(f"settings at {s.start.isoformat()}", setpoint_f)
         setpoint_f = quantise(setpoint_f)
     tz = ZoneInfo(s.tz)
-    reasons: list[str] = []
     defaults: list[str] = []
     if s.loads.draws and not inlet_measured:
         # Each draw's cold water is priced at an inlet nobody measured
@@ -491,7 +499,6 @@ def simulate(
         model=recovery,
         defaults=defaults,
         circulation=circulation,
-        began=None if resume is None else resume.began,
     )
     tou_on = (
         s.commands.tou_enabled
@@ -523,7 +530,6 @@ def simulate(
         s.schedules.tou_periods
     ):
         reasons.append("tou_schedule_unknown")
-    mode, disabled = _engine_mode(s.settings.mode)
     if s.settings.hp_lower_on_f is None:
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
         # The lower trigger was never searched; the TOU-opening one was.
@@ -602,9 +608,7 @@ def simulate(
                 [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
                 delivery,
                 params,
-                inlet_f=_inlet_f(
-                    s, params, None if resume is None else resume.began
-                ),
+                inlet_f=_inlet_f(s, params),
                 forecast=[
                     (w.expected_count, w.draws_until) for w in s.loads.windows
                 ],
@@ -638,6 +642,12 @@ def _end(s: Scenario, sim: Simulation) -> dict[str, Any]:
         if commanded == _engine_mode(s.settings.mode)[0] and not powered_on
         else _DEVICE_MODE[commanded]
     )
+    if powered_on:
+        # Out of Power Off as the settings say: Power Off given again is
+        # the heater turned off, not the entry's turning on.
+        r = dataclasses.replace(
+            r, controller=dataclasses.replace(r.controller, powered_on=False)
+        )
     return {
         "end_state": HeaterState(
             upper_f=last.upper_f,

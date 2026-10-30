@@ -137,7 +137,9 @@ carried on, as if the two were one walk with a mark at the cut. A mark
 is exact on the clock's 10-minute grid, where an idle walk steps; a
 cut between grid points splits a step and moves the tank by
 thousandths of a degree. A setpoint or mode other than the one the
-last walk left is a write at the start. A change into or out of
+last walk left is a write at the start. Each draw meets its own
+day's mains, so a walk going on past midnight meets the next day's as
+one walk does. A change into or out of
 Vacation or Power Off is a write the simulation holds no rule for: that
 walk starts afresh from the tank and the history, and says so.
 

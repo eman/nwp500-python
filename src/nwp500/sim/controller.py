@@ -1038,6 +1038,14 @@ def _start_element(
     _check_element(s)
 
 
+def held_notes(mode: HeaterMode, *, entry: bool) -> tuple[str, ...]:
+    """What a mode write held in a TOU window rests on: a held
+    ``heat_pump`` entry on the documented rule alone (``_mode_write``)."""
+    if entry and mode == HEAT_PUMP:
+        return ("heat_pump_entry_held_spec_only", MODE_WRITE_HELD_PROJECTED)
+    return (MODE_WRITE_HELD_PROJECTED,)
+
+
 def element_notes(zone: Zone, in_place: bool) -> tuple[str, ...]:
     """What an element's heat rests on: in the heat pump's place, the
     fallback's; then the model's, and the lower element's own."""
@@ -1294,12 +1302,11 @@ def _mode_write(
     entry = owner != "raw"
     if _holds(s, mode, owner):
         s.act(ModeHeld(ref))
-        if entry and mode == HEAT_PUMP:
-            s.note("heat_pump_entry_held_spec_only")
         window = window_at(s.at, s.settings.tou_windows)
         assert window is not None
         s.modes(held=Held(mode, serves, window[1], ref))
-        s.note(MODE_WRITE_HELD_PROJECTED)
+        for note in held_notes(mode, entry=entry):
+            s.note(note)
         if (
             not s.state.compressor.running
             and s.mode != ELECTRIC

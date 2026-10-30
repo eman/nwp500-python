@@ -23,6 +23,7 @@ from sim_cases import days_of_draws, walk_case
 from nwp500 import sim
 from nwp500.sim import (
     Commands,
+    History,
     Loads,
     ReservationEntry,
     Schedules,
@@ -30,7 +31,9 @@ from nwp500.sim import (
     codec,
     engine,
 )
+from nwp500.sim.controller import TOU_CAP_PROJECTED
 from nwp500.sim.engine import RESUME_DROPPED, RESUME_VERSION, Resume, Write
+from nwp500.sim.heat_pump_recovery import ModelDuration, RecoveryContext
 from nwp500.sim.inputs import Write as CommandWrite
 from nwp500.sim.params import HeaterParams
 
@@ -219,7 +222,10 @@ def _settings_in(base: sim.Scenario, mode: int) -> sim.Scenario:
 
 
 def _api_chained(
-    base: sim.Scenario, params: HeaterParams, cuts: list[datetime]
+    base: sim.Scenario,
+    params: HeaterParams,
+    cuts: list[datetime],
+    **kw: Any,
 ) -> list[sim.SimulationResult]:
     """``base`` as one scenario per span between ``cuts``, each from the
     last's ``end_state``, ``end_history`` and ``end_settings``, through
@@ -246,7 +252,7 @@ def _api_chained(
         part, _ = codec.scenario_from_document(
             json.loads(json.dumps(codec.scenario_to_document(part)))
         )
-        got = sim.simulate(part, params)
+        got = sim.simulate(part, params, **kw)
         out.append(got)
         s = s.model_copy(
             update={
@@ -414,6 +420,79 @@ def test_an_entry_that_turns_the_heater_on_leaves_power_off() -> None:
     assert _same_heating(heating, whole.heating)
 
 
+def test_power_off_given_again_turns_the_heater_off() -> None:
+    """Powered off, an entry turns the heater on; the next call given
+    Power Off again is the heater turned off, not still on by the
+    entry."""
+    params = sim.site_example_params()
+    t0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
+    entry = ReservationEntry(
+        week=0xFE, hour=20, minute=0, mode=1, setpoint_half_c=124
+    )
+    base = days_of_draws(1).model_copy(
+        update={
+            "start": t0,
+            "horizon": timedelta(hours=2),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
+            "settings": sim.Settings(
+                setpoint_f=140.9, mode=6, hp_lower_on_f=105.0
+            ),
+            "schedules": Schedules(reservations=(entry,)),
+            "loads": Loads(),
+        }
+    )
+    first = sim.simulate(base, params)
+    assert first.end_settings is not None and first.end_settings.mode == 1
+    off = first.end_settings.model_copy(update={"mode": 6})
+    then = sim.simulate(
+        base.model_copy(
+            update={
+                "start": first.until,
+                "state": first.end_state,
+                "history": first.end_history,
+                "settings": off,
+                "schedules": Schedules(),
+            }
+        ),
+        params,
+    )
+    assert RESUME_DROPPED in then.reasons
+    assert then.end_settings is not None and then.end_settings.mode == 6
+
+
+class _Model:
+    """A recovery model that says why on every recovery."""
+
+    def duration(self, ctx: RecoveryContext) -> ModelDuration:
+        return ModelDuration(
+            minutes=ctx.physics.minutes * 1.2,
+            start_hold_minutes=ctx.start_hold_minutes,
+            confidence=0.9,
+            reasons=("model_says_so",),
+        )
+
+
+def test_a_recovery_carried_on_keeps_what_its_pace_rests_on() -> None:
+    """A recovery a model paces, running at a call's end: the next call,
+    whose heating it carries on, keeps the model's reasons."""
+    params = sim.site_example_params()
+    base = days_of_draws(1).model_copy(
+        update={
+            "horizon": timedelta(hours=2),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
+            "settings": sim.Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+            "loads": Loads(),
+        }
+    )
+    calls = _api_chained(
+        base, params, [base.start + timedelta(minutes=30)], recovery=_Model()
+    )
+    assert calls[0].end_state is not None
+    assert calls[0].end_state.compressor_running
+    assert "model_says_so" in calls[0].reasons
+    assert "model_says_so" in calls[1].reasons
+
+
 def test_an_element_carried_on_keeps_what_it_rests_on() -> None:
     """High Demand's upper element running at a call's end: the next
     call, whose heating it carries on, keeps the element model's
@@ -544,3 +623,102 @@ def test_the_result_document_carries_the_end_state() -> None:
     assert hash(result.end_state) == hash(
         sim.HeaterState.model_validate(doc["end_state"])
     )
+
+
+def _peak_afternoon(start: datetime, hours: float) -> sim.Scenario:
+    """A recovery under way from 11:00, a peak 14:00 to 18:00."""
+    return days_of_draws(1).model_copy(
+        update={
+            "start": start,
+            "horizon": timedelta(hours=hours),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
+            "settings": sim.Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+            "schedules": _peak(14, 18),
+            "loads": Loads(),
+        }
+    )
+
+
+def test_the_cap_is_said_in_the_call_it_stops_a_recovery_in() -> None:
+    """A recovery the peak will cap: a walk that ends before it does not
+    say the cap stopped it; of calls chained hourly, the one the cap
+    stops it in says so."""
+    params = sim.site_example_params()
+    start = datetime(2026, 10, 4, 11, 0, tzinfo=UTC)
+    short = sim.simulate(_peak_afternoon(start, 1.0), params)
+    assert not any(h.capped for h in short.heating)
+    assert TOU_CAP_PROJECTED not in short.reasons
+    base = _peak_afternoon(start, 5.0)
+    whole = sim.simulate(base, params)
+    assert any(h.stop == "cap" for h in whole.heating)
+    assert TOU_CAP_PROJECTED in whole.reasons
+    calls = _api_chained(base, params, _hourly(base))
+    said = [TOU_CAP_PROJECTED in c.reasons for c in calls]
+    capped = [any(h.stop == "cap" for h in c.heating) for c in calls]
+    assert said == capped and any(capped)
+
+
+def test_a_held_heat_pump_entry_landing_later_says_its_rule() -> None:
+    """A Heat Pump entry held in a window, landing in a later call:
+    that call says the hold rests on the documented rule alone."""
+    params = sim.site_example_params()
+    t0 = datetime(2026, 10, 1, 12, tzinfo=UTC)
+    entry = ReservationEntry(
+        week=0xFE, hour=12, minute=5, mode=1, setpoint_half_c=110
+    )
+    base = days_of_draws(1).model_copy(
+        update={
+            "start": t0,
+            "horizon": timedelta(hours=4),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=105.0),
+            "settings": sim.Settings(
+                setpoint_f=120.0, hp_lower_on_f=105.0, mode=3
+            ),
+            "schedules": _peak(11, 14).model_copy(
+                update={"reservations": (entry,)}
+            ),
+            "loads": Loads(),
+        }
+    )
+    whole = sim.simulate(base, params)
+    assert "heat_pump_entry_held_spec_only" in whole.reasons
+    calls = _api_chained(base, params, [t0 + timedelta(hours=1)])
+    assert "heat_pump_entry_held_spec_only" in calls[1].reasons
+
+
+def test_a_dropped_resume_is_a_fresh_start() -> None:
+    """Into Vacation, the call is the one made without the resume: the
+    same defaults named, the same answer."""
+    params = sim.site_example_params()
+    base = days_of_draws(1).model_copy(
+        update={
+            "horizon": timedelta(hours=1),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
+            "settings": sim.Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+            "loads": Loads(),
+        }
+    )
+    first = sim.simulate(base, params)
+    assert first.end_state is not None and first.end_settings is not None
+    then = base.model_copy(
+        update={
+            "start": first.until,
+            "state": first.end_state,
+            "history": History(),
+            "settings": first.end_settings.model_copy(
+                update={"mode": 5, "setpoint_f": 133.3}
+            ),
+        }
+    )
+    got = sim.simulate(then, params)
+    fresh = sim.simulate(
+        then.model_copy(
+            update={
+                "state": first.end_state.model_copy(update={"resume": None})
+            }
+        ),
+        params,
+    )
+    assert got.reasons == (RESUME_DROPPED, *fresh.reasons)
+    assert got.defaults_used == fresh.defaults_used
+    assert got.simulation == fresh.simulation
