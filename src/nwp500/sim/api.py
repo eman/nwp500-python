@@ -736,7 +736,7 @@ def _range_reasons(
     recovery runs, or with the recovery's stop (``stop_f``, its target
     and run-on) over its top, which the elements finish;
     ``heat_map_out_of_domain`` with the air outside the span its heat
-    was fitted on."""
+    was fitted on (the recovery's walk says so of the water)."""
     out: list[str] = []
     if (
         _out_of_range(params, airs, lower_f)

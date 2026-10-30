@@ -941,6 +941,13 @@ class Books:
     #: condenser's water the map was read at times those hours, °F·h.
     compressor_h: float = 0.0
     compressor_water_f_h: float = 0.0
+    #: The hours the condenser's heat went into the tank (from the
+    #: start's hold, credited), and the probes' mean times those hours,
+    #: °F·h: the water the heat's map was fitted against, on mixed
+    #: climbs (``CompressorParams.heat_domain_water_f``). The map is read
+    #: at the condenser's water, under that mean in a layered tank.
+    compressor_heat_h: float = 0.0
+    compressor_mean_f_h: float = 0.0
     element_btu: float = 0.0
     element_wh: float = 0.0
     flowing_btu: float = 0.0
@@ -1140,11 +1147,16 @@ class _Walk:
             heat = [
                 x + y for x, y in zip(heat, condenser_heat(lay, q), strict=True)
             ]
+            heat_h = credit * _overlap_h(a, b, c.heats_at, c.off_at)
             books += Books(
                 compressor_btu=q,
                 compressor_wh=wh,
                 compressor_h=on_h,
                 compressor_water_f_h=water * on_h,
+                compressor_heat_h=heat_h,
+                compressor_mean_f_h=(
+                    sum(observe(lay, state)) / 2.0 * heat_h if heat_h else 0.0
+                ),
             )
         for e in self.heating.elements:
             off = None if e.off_at is None else e.off_at + e.lag

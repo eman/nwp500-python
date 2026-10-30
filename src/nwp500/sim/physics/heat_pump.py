@@ -102,8 +102,11 @@ def start_hold_min(c: CompressorParams, minutes_off: float | None) -> float:
 
 
 #: The reason a recovery carries whose air is outside the heat map's
-#: fitted span (``CompressorParams.heat_domain_air_f``): its heat is the
-#: plane carried past the record, not a reading's.
+#: fitted span (``CompressorParams.heat_domain_air_f``), or whose
+#: probes' mean over its heating, the water the map was fitted against
+#: on mixed climbs, is outside its water span (``heat_domain_water_f``,
+#: ``stratified.Books.compressor_mean_f_h``): its heat is the plane
+#: carried past the record, not a reading's.
 HEAT_MAP_OUT_OF_DOMAIN = "heat_map_out_of_domain"
 
 
@@ -111,6 +114,13 @@ def heat_air_outside(c: CompressorParams, air_f: float) -> bool:
     """Whether ``air_f`` is outside the heat map's fitted air span."""
     low, high = c.heat_domain_air_f
     return not low <= air_f <= high
+
+
+def heat_water_outside(c: CompressorParams, water_f: float) -> bool:
+    """Whether ``water_f``, a recovery's probes' mean over its heating,
+    is outside the heat map's fitted water span."""
+    low, high = c.heat_domain_water_f
+    return not low <= water_f <= high
 
 
 def carnot_cop(air_f: float, water_f: float) -> float:

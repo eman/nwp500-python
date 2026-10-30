@@ -528,6 +528,10 @@ class _Cycle:
     stirs: bool = True
     #: Its entry in ``heating``.
     interval: HeatingInterval | None = None
+    #: The hours its heat went in so far, and the probes' mean times
+    #: them (``Stretch.heating_h``): its water judged where it stops.
+    heating_h: float = 0.0
+    heating_mean_f_h: float = 0.0
 
 
 @dataclass
@@ -1241,6 +1245,11 @@ class _Engine:
         interval.input_wh = cycle.input_wh
         interval.confidence = cycle.confidence
         interval.final_target_f = cycle.setpoint_f
+        # The heat map's water, judged over the whole run, as one walk
+        # or a chain of them heats it: not each stretch an event cuts.
+        judge = getattr(self.physics, "heating_reasons", None)
+        if judge is not None:
+            self.reasons.update(judge(cycle.heating_h, cycle.heating_mean_f_h))
         # A write that ends a recovery because the lower zone is already
         # at the new setpoint ends it at that target too.
         at_target = stop in ("target", "cap") or (
@@ -1289,11 +1298,13 @@ class _Engine:
                 upto = self._advance(element_at, stop=self._stop())
                 self._append(upto.points, heating=True)
                 self.reasons.update(upto.reasons)
+                self._heated(cycle, upto)
                 self.t = upto.end
                 self._dispatch(ctl.UpperOnCrossed(at=self.t, tank=self._tank()))
                 continue
             self._append(stretch.points, heating=True)
             self.reasons.update(stretch.reasons)
+            self._heated(cycle, stretch)
             self.t = stretch.end
             self._element_boundary()
             if self.cycle is cycle and (
@@ -1301,6 +1312,11 @@ class _Engine:
                 or (cycle.stop_at is not None and self.t >= cycle.stop_at)
             ):
                 self._recovery_done()
+
+    @staticmethod
+    def _heated(cycle: _Cycle, stretch: Stretch) -> None:
+        cycle.heating_h += stretch.heating_h
+        cycle.heating_mean_f_h += stretch.heating_mean_f_h
 
     def _recovery_done(self) -> None:
         """The running recovery is at its stop. Short of its target at

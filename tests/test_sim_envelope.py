@@ -10,9 +10,12 @@ import pandas as pd
 import pytest
 
 from nwp500 import sim
+from nwp500.sim import Commands
 from nwp500.sim import controller as ctl
 from nwp500.sim.decay import AmbientSampler
+from nwp500.sim.inputs import Write as CommandWrite
 from nwp500.sim.params import ControllerParams
+from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import HEAT_MAP_OUT_OF_DOMAIN
 
 T0 = datetime(2026, 1, 10, 6, 0, tzinfo=UTC)
@@ -779,3 +782,156 @@ class TestInThePlaceOfTheHeatPump:
         assert sim.next_recovery(s, params).tou_capped
         ready = sim.time_to_ready(s, params, bath_gal=60.0)
         assert ctl.HEAT_PUMP_UNAVAILABLE not in ready.reasons
+
+
+class TestTheHeatMapsWater:
+    """The heat's map was fitted on mixed climbs against the probes'
+    mean, 114 to 144 °F on the site's record: a recovery with the mean
+    outside that span reads the plane past its evidence and says so,
+    the air in its span or not."""
+
+    SETTINGS = sim.Settings(setpoint_f=130.0, hp_lower_on_f=111.0, mode=1)
+
+    def _walk(self, upper: float, lower: float) -> sim.SimulationResult:
+        return sim.simulate(
+            sim.Scenario(
+                start=T0,
+                horizon=timedelta(hours=12),
+                tz="UTC",
+                state=sim.HeaterState(upper_f=upper, lower_f=lower),
+                settings=self.SETTINGS,
+                environment=sim.Environment(ambient_f=67.5, inlet_f=58.0),
+            ),
+            sim.site_example_params(),
+        )
+
+    def test_a_cold_tank_says_so(self) -> None:
+        cold = self._walk(58.0, 58.0)
+        assert any(h.source == "compressor" for h in cold.heating)
+        assert HEAT_MAP_OUT_OF_DOMAIN in cold.reasons
+
+    def test_a_tank_at_its_trigger_does_not(self) -> None:
+        """The lower probe at the trigger, the upper near the setpoint:
+        the mean is in the span, though the condenser's water the map is
+        read at is under it."""
+        warm = self._walk(125.0, 110.9)
+        assert any(h.source == "compressor" for h in warm.heating)
+        assert HEAT_MAP_OUT_OF_DOMAIN not in warm.reasons
+
+    @pytest.mark.parametrize(
+        ("setpoint", "flagged"), [(117.0, True), (118.0, False)]
+    )
+    def test_a_low_setpoint_says_so(
+        self, setpoint: float, flagged: bool
+    ) -> None:
+        """From the heater's own 104.9 °F trigger, a recovery to 117 °F
+        heats with the probes' mean under the span on average; one to
+        118 °F does not."""
+        got = sim.simulate(
+            sim.Scenario(
+                start=T0,
+                horizon=timedelta(hours=8),
+                tz="UTC",
+                state=sim.HeaterState(upper_f=setpoint - 2.0, lower_f=104.8),
+                settings=sim.Settings(
+                    setpoint_f=setpoint, hp_lower_on_f=104.9, mode=1
+                ),
+                environment=sim.Environment(ambient_f=67.5, inlet_f=58.0),
+            ),
+            sim.site_example_params(),
+        )
+        assert any(h.source == "compressor" for h in got.heating)
+        assert (HEAT_MAP_OUT_OF_DOMAIN in got.reasons) is flagged
+
+    def test_a_write_that_changes_nothing_changes_nothing(self) -> None:
+        """A write of the setpoint in force, its half degree Celsius
+        (120.2 °F), cuts the recovery's walk without changing its
+        heating: the water is judged over the whole run, so its cold
+        first stretch does not say so alone."""
+
+        def walk(writes: tuple[CommandWrite, ...]) -> sim.SimulationResult:
+            return sim.simulate(
+                sim.Scenario(
+                    start=T0,
+                    horizon=timedelta(hours=8),
+                    tz="UTC",
+                    state=sim.HeaterState(upper_f=118.2, lower_f=104.8),
+                    settings=sim.Settings(
+                        setpoint_f=120.2, hp_lower_on_f=104.9, mode=1
+                    ),
+                    environment=sim.Environment(ambient_f=67.5, inlet_f=58.0),
+                    commands=Commands(writes=writes),
+                ),
+                sim.site_example_params(),
+            )
+
+        alone = walk(())
+        for minutes in (5, 10, 20):
+            cut = walk(
+                (
+                    CommandWrite(
+                        at=T0 + timedelta(minutes=minutes), setpoint_f=120.2
+                    ),
+                )
+            )
+            assert [(h.start.at, h.end) for h in cut.heating] == [
+                (h.start.at, h.end) for h in alone.heating
+            ]
+            assert HEAT_MAP_OUT_OF_DOMAIN not in cut.reasons
+        assert HEAT_MAP_OUT_OF_DOMAIN not in alone.reasons
+
+    def test_a_forecast_from_a_cold_tank_says_so(self) -> None:
+        params = sim.site_example_params()
+        for state, flagged in (
+            (sim.HeaterState(upper_f=60.0, lower_f=58.0), True),
+            (sim.HeaterState(upper_f=128.0, lower_f=110.0), False),
+        ):
+            got = sim.forecast(
+                state,
+                self.SETTINGS,
+                sim.Environment(ambient_f=67.5),
+                params,
+                at=T0,
+                target_time=at(10),
+            )
+            assert (HEAT_MAP_OUT_OF_DOMAIN in got.reasons) is flagged
+
+    def test_the_walk_books_the_heating_and_its_mean(self) -> None:
+        """Its books count the hours the condenser's heat went in, from
+        the start's hold and credited, and the probes' mean over them:
+        a cold tank's under the span, a warm one's in it, and a hold or
+        a withheld window none."""
+        params = sim.site_example_params()
+        lay = st.layout(params)
+
+        def books(
+            upper: float,
+            lower: float,
+            *,
+            hold_h: float = 0.0,
+            credited: bool = True,
+        ) -> st.Books:
+            return st.walk(
+                lay,
+                st.estimate(lay, upper, lower),
+                T0,
+                at(1),
+                air_f=lambda _: 67.5,
+                heating=st.Heating(
+                    compressor=st.Compressor(
+                        params=params.compressor, on_at=T0, heats_at=at(hold_h)
+                    ),
+                    credited=credited,
+                ),
+            ).books
+
+        low, high = params.compressor.heat_domain_water_f
+        cold, warm = books(60.0, 58.0), books(128.0, 120.0)
+        assert cold.compressor_heat_h == pytest.approx(1.0)
+        assert cold.compressor_mean_f_h / cold.compressor_heat_h < low
+        assert low <= warm.compressor_mean_f_h / warm.compressor_heat_h <= high
+        held = books(60.0, 58.0, hold_h=0.5)
+        assert held.compressor_h == pytest.approx(1.0)
+        assert held.compressor_heat_h == pytest.approx(0.5)
+        assert books(60.0, 58.0, hold_h=1.0).compressor_heat_h == 0.0
+        assert books(60.0, 58.0, credited=False).compressor_heat_h == 0.0

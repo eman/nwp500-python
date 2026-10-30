@@ -54,11 +54,12 @@ from nwp500.sim.heat_pump_recovery import (
     rate_scale,
 )
 from nwp500.sim.heating_trajectory import HeatingPoint, from_walk
-from nwp500.sim.params import CirculationParams, HeaterParams
+from nwp500.sim.params import CirculationParams, CompressorParams, HeaterParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
     heat_air_outside,
+    heat_water_outside,
 )
 
 #: A delivered draw at the inlet: its onset, and the gallons the meter
@@ -158,8 +159,11 @@ class Stretch:
     point); the lower probe's drop at each instant draws were taken,
     and at the end of each step the circulation cooled it over; the
     delivered gallons drawn and the heat they took, the heat the
-    flows took, and the mean air over it; and the reasons it carries
-    (a heat pump heating outside its map's air)."""
+    flows took, and the mean air over it; the reasons it carries (a
+    heat pump heating outside its map's air); and the hours the
+    condenser's heat went in, with the probes' mean times them, which
+    a recovery's stretches sum to judge its water
+    (``TankPhysics.heating_reasons``)."""
 
     points: list[Point]
     stopped: bool = False
@@ -169,6 +173,8 @@ class Stretch:
     flowing_heat_btu: float = 0.0
     ambient_mean_f: float | None = None
     reasons: tuple[str, ...] = ()
+    heating_h: float = 0.0
+    heating_mean_f_h: float = 0.0
 
     @property
     def end(self) -> datetime:
@@ -240,6 +246,14 @@ class Physics(Protocol):
     def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
         """The tank just after a delivered draw of ``gal`` at ``at``."""
         ...
+
+
+def _water_outside(c: CompressorParams, books: st.Books) -> bool:
+    """Whether a walk's heating, if any, ran with the probes' mean over
+    it outside the heat map's water span."""
+    return books.compressor_heat_h > 0.0 and heat_water_outside(
+        c, books.compressor_mean_f_h / books.compressor_heat_h
+    )
 
 
 def ambient_window_mean(
@@ -543,7 +557,21 @@ class TankPhysics:
             flowing_heat_btu=books.flowing_btu,
             ambient_mean_f=mean,
             reasons=reasons,
+            heating_h=books.compressor_heat_h,
+            heating_mean_f_h=books.compressor_mean_f_h,
         )
+
+    def heating_reasons(
+        self, heating_h: float, mean_f_h: float
+    ) -> tuple[str, ...]:
+        """What a recovery's heating says of the heat map's water: its
+        hours and the probes' mean times them, summed over its
+        stretches (``Stretch.heating_h``, ``heating_mean_f_h``)."""
+        if heating_h > 0.0 and heat_water_outside(
+            self.params.compressor, mean_f_h / heating_h
+        ):
+            return (HEAT_MAP_OUT_OF_DOMAIN,)
+        return ()
 
     def draw(self, at: datetime, state: TankState, gal: float) -> st.TankState:
         layers = _layers(state)
@@ -759,7 +787,9 @@ class TankPhysics:
                 under_way=under_way,
             )
         reasons = scaled.reasons
-        if heat_air_outside(self.params.compressor, air):
+        if heat_air_outside(self.params.compressor, air) or _water_outside(
+            self.params.compressor, walked.books
+        ):
             reasons = (*reasons, HEAT_MAP_OUT_OF_DOMAIN)
         return Recovered(
             minutes=(walked.end - start).total_seconds() / 60.0,

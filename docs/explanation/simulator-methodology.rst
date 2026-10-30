@@ -237,7 +237,7 @@ record's climbs at 406.9 W against the 418.2 W metered.
 Each is read along its plane over the envelope the heat pump runs in
 (the controller's 41 to 113 degF air and 50 to 149 degF water, the
 region a fit is checked over, below), past the span it was fitted over (the heat's 61 to 89 degF air and 114 to 144 degF
-water, the power's 53 to 90 degF air and 67 to 145 degF water, on the
+water, the power's 53 to 90 degF air and 65 to 144 degF water, on the
 record) as within it. The heat is fitted on a mixed tank, where the
 tank's mean and the condenser's water are within a few degrees; while
 the tank is stratified the condenser's water is below the heat's span,
@@ -249,7 +249,17 @@ cold bottom can leave the condenser's below the envelope while the
 compressor runs; there the maps are read at the envelope's edge
 (``stratified.Layout.map_air_f``, ``map_water_f``), so no read falls
 where no fit was checked. A recovery whose air is outside the heat's
-span says so (``heat_map_out_of_domain``).
+span says so (``heat_map_out_of_domain``), and so does one whose
+probes' mean over its heating, over the whole run, is outside the
+heat's water span: the
+heat was fitted on mixed climbs against that mean, each climb's
+average, 114 to 144 °F on the site's record, so a cold tank's recovery,
+or one to a low setpoint (from the heater's 104.9 °F trigger, 117 °F
+and under at 67.5 °F air), reads the plane past its evidence. The map
+is read at the condenser's water, which in a layered tank runs under
+that mean (from that trigger to a 130 °F setpoint it starts at 102.1
+°F and averages 114.3 °F over the run, the probes' mean 121.9 °F): it
+is not what is judged.
 
 A fit's slopes take the sign the cycle gives them: warmer air boils the
 refrigerant warmer and denser, so the heat rises with :math:`T_a`

@@ -632,6 +632,29 @@ Changed
 Fixed
 -----
 
+- **A recovery from a cold tank says its heat is carried past the
+  record.** The heat's map was fitted on mixed climbs against the
+  probes' mean, 114 to 144 °F on the site's record, and is read along
+  its plane below that, but ``heat_map_out_of_domain`` judged only the
+  air. A 58 °F tank at 67.5 °F air heats at a COP of 6.35 over its
+  first hour and 4.45 to a 126 °F lower probe, its probes' mean 93 °F
+  over its heating, and said nothing. A recovery whose probes' mean
+  over its heating is outside the heat's water span now says
+  ``heat_map_out_of_domain`` too, in ``simulate`` and in the recovery
+  forecasts (``forecast``, ``active_cycle``), as its mean air is judged
+  against the air's (``stratified.Books``' new ``compressor_heat_h``,
+  the hours the condenser's heat went in, and ``compressor_mean_f_h``).
+  ``simulate`` judges it over the whole run where the compressor stops,
+  not each stretch an event cuts it into, and a walk going on from one
+  carries the run's heating so far (``Resume``); a walk that ends inside
+  a run judges what it heated.
+  From the heater's 104.9 °F lower trigger, at 67.5 °F air, a recovery
+  says so at setpoints of 117 °F and under and not at 118 °F and over.
+  The condenser's water the map is read at runs under the mean in a
+  layered tank (from that trigger to a 130 °F setpoint it starts at
+  102.1 °F and averages 114.3 °F, the probes' mean 121.9 °F), and is
+  not what is judged. The map is not changed: what the heat pump does
+  with water that cold is not on the record.
 - **A draw runs over its time.** A draw was taken all at its instant,
   and ``draw_forecast.forecast_loads`` dropped each expected draw's
   time drawing, so a forecast shower emptied the top of the tank at its
