@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+from collections.abc import Coroutine
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -383,14 +384,14 @@ def _manager(emitter: Any, schedule: Any) -> MqttSubscriptionManager:
         future.set_result(value)
         return future
 
-    connection.subscribe.side_effect = lambda topic, qos, callback: (
-        resolved({"topic": topic, "qos": qos}),
-        1,
-    )
-    connection.unsubscribe.side_effect = lambda topic: (
-        resolved({"topic": topic}),
-        2,
-    )
+    def subscribe(topic: str, qos: Any, callback: Any) -> Any:
+        return resolved({"topic": topic, "qos": qos}), 1
+
+    def unsubscribe(topic: str) -> Any:
+        return resolved({"topic": topic}), 2
+
+    connection.subscribe.side_effect = subscribe
+    connection.unsubscribe.side_effect = unsubscribe
     return MqttSubscriptionManager(
         connection=connection,
         client_id="navien-client-1",
@@ -405,13 +406,11 @@ class TestSubscribeAppConnection:
         emitter = EventEmitter()
         events: list[Any] = []
         emitter.on(MqttClientEvents.APP_CONNECTION_RECEIVED, events.append)
-        return (
-            _manager(
-                emitter,
-                lambda coro: asyncio.get_running_loop().create_task(coro),
-            ),
-            events,
-        )
+
+        def schedule(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
+            return asyncio.get_running_loop().create_task(coro)
+
+        return _manager(emitter, schedule), events
 
     @pytest.mark.asyncio
     async def test_subscribes_to_the_event_topic(self) -> None:

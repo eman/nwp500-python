@@ -5,6 +5,7 @@ hold and stop."""
 import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -155,19 +156,19 @@ def frame() -> pd.DataFrame:
 
 class TestTheFrame:
     def test_each_run_on_a_minute_grid(self, frame: pd.DataFrame) -> None:
-        assert frame["cycle"].nunique() == len(CYCLES)
+        assert bool(frame["cycle"].nunique() == len(CYCLES))
         steps = frame.groupby("cycle")["minute"].diff().dropna()
-        assert (steps == 1.0).all()
+        assert bool((steps == 1.0).all())
 
     def test_the_phases_in_order(self, frame: pd.DataFrame) -> None:
         order = {p: i for i, p in enumerate(hpf.PHASES)}
         for _, g in frame.groupby("cycle"):
-            ranks = g["phase"].map(order).to_numpy()
+            ranks = g["phase"].map(order).to_numpy()  # pyright: ignore[reportArgumentType]
             assert (np.diff(ranks) >= 0).all()
             assert set(g["phase"]) == set(hpf.PHASES)
 
     def test_the_tank_is_mixed(self, frame: pd.DataFrame) -> None:
-        assert frame["mixed"].all()
+        assert bool(frame["mixed"].all())
 
     def test_the_minutes_off(self, frame: pd.DataFrame) -> None:
         off = frame.drop_duplicates("cycle")["minutes_off"].to_numpy(float)
@@ -184,7 +185,9 @@ class TestTheFrame:
         start = heat_pump_cycles(history)[1].start
         # One sample, past the minute's start.
         inside = history.index[
-            history.index > start + timedelta(minutes=40, seconds=20)
+            np.asarray(
+                history.index > start + timedelta(minutes=40, seconds=20)
+            )
         ][0]
         history.loc[inside, "dhw_in_use"] = True
         f = hpf.recovery_frame(history)
@@ -214,7 +217,7 @@ class TestTheRuns:
         history.loc[between, "unrecorded"] = True
         assert heat_pump_cycles(history)[1].stopped_at is None
         f = hpf.recovery_frame(history)
-        assert f.drop_duplicates("cycle")["minutes_off"].isna().all()
+        assert bool(f.drop_duplicates("cycle")["minutes_off"].isna().all())
 
     def test_a_flag_before_the_lead_leaves_a_start_clean(self) -> None:
         history = planted(CYCLES[3:5])
@@ -238,7 +241,7 @@ class TestTheHold:
         late = holds["hold_minutes"].to_numpy() - want
         assert late.min() >= -0.5
         assert late.max() <= 3.0
-        assert holds["draw_free"].all()
+        assert bool(holds["draw_free"].all())
 
     def test_a_step_and_back_is_not_the_climb(self) -> None:
         history = planted(CYCLES[:2])
@@ -350,7 +353,7 @@ class TestThePower:
         assert np.abs(got["power_w"] - water.map(power)).max() < 5.0
         assert set(got["phase"]) <= set(hpf.PHASES)
         # Read at the lower probe, until a replay places the condenser.
-        assert (got["water_f"] == got["lower_f"]).all()
+        assert bool((got["water_f"] == got["lower_f"]).all())
 
 
 @pytest.fixture(scope="module")
@@ -363,7 +366,7 @@ class TestTheFits:
     def test_the_evidence_in_time_order(self, found: hpf.Evidence) -> None:
         for rows in (found.heat, found.power, found.runs):
             assert rows["start"].is_monotonic_increasing
-        assert (found.power["phase"] == "climb").all()
+        assert bool((found.power["phase"] == "climb").all())
 
     def test_it_recovers_the_planted_heat_pump(
         self, found: hpf.Evidence
@@ -381,7 +384,7 @@ class TestTheFits:
         assert fit.overshoot_f == pytest.approx(OVERSHOOT, abs=0.2)
         assert fit.violations == ()
         # Each plane is read over what it was fitted on.
-        water = found.heat["water_f"]
+        water = cast(pd.Series, found.heat["water_f"])
         assert fit.heat.water_f == (
             math.floor(water.min()),
             math.ceil(water.max()),
@@ -408,7 +411,9 @@ class TestTheFits:
         # one the replay has no point in is left out.
         asked: list[tuple[datetime, datetime]] = []
 
-        def water(_p: object, _r: object, spans: list) -> list[float]:
+        def water(
+            _p: object, _r: object, spans: list[tuple[datetime, datetime]]
+        ) -> list[float]:
             asked.extend(spans)
             return [math.nan, *(100.0 + k for k in range(1, len(spans)))]
 

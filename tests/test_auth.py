@@ -1,7 +1,7 @@
 """Tests for authentication functionality."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -722,7 +722,7 @@ async def test_ensure_session() -> None:
     assert client._owned_session is True
 
     # Clean up
-    await client._session.close()
+    await cast(aiohttp.ClientSession, client._session).close()
 
 
 @pytest.mark.asyncio

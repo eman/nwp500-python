@@ -35,6 +35,7 @@ from nwp500.mqtt.control import MqttDeviceController
 from nwp500.mqtt.state_tracker import DeviceStateTracker
 from nwp500.mqtt.types import QoS
 from nwp500.mqtt.utils import MqttConnectionConfig
+from nwp500.mqtt_events import ErrorClearedEvent, ErrorDetectedEvent
 from nwp500.temperature import RawCelsius
 from nwp500.unit_system import reset_unit_system
 
@@ -764,8 +765,12 @@ class TestErrorCodeChangeEvents:
         emitter = EventEmitter()
         tracker = DeviceStateTracker(emitter)
 
-        events = []
-        emitter.on("error_detected", lambda e: events.append(int(e.error_code)))
+        events: list[int] = []
+
+        def record(e: ErrorDetectedEvent) -> None:
+            events.append(int(e.error_code))
+
+        emitter.on("error_detected", record)
 
         # Baseline snapshot (no events emitted for the first status)
         await tracker.process("mac", _status(device_status_dict, errorCode=0))
@@ -781,8 +786,12 @@ class TestErrorCodeChangeEvents:
         emitter = EventEmitter()
         tracker = DeviceStateTracker(emitter)
 
-        events = []
-        emitter.on("error_detected", lambda e: events.append(int(e.error_code)))
+        events: list[int] = []
+
+        def record(e: ErrorDetectedEvent) -> None:
+            events.append(int(e.error_code))
+
+        emitter.on("error_detected", record)
 
         await tracker.process("mac", _status(device_status_dict, errorCode=0))
         await tracker.process("mac", _status(device_status_dict, errorCode=799))
@@ -797,8 +806,12 @@ class TestErrorCodeChangeEvents:
         emitter = EventEmitter()
         tracker = DeviceStateTracker(emitter)
 
-        cleared = []
-        emitter.on("error_cleared", lambda e: cleared.append(int(e.error_code)))
+        cleared: list[int] = []
+
+        def record(e: ErrorClearedEvent) -> None:
+            cleared.append(int(e.error_code))
+
+        emitter.on("error_cleared", record)
 
         await tracker.process("mac", _status(device_status_dict, errorCode=0))
         await tracker.process("mac", _status(device_status_dict, errorCode=799))

@@ -35,14 +35,15 @@ DRAWS = ((7.2, 12.0), (17.0, 4.0), (31.0, 20.0), (44.4, 2.5))
 COMPRESSOR = ((20.0, 23.0),)
 ELEMENT = ((32.0, 32.4),)
 
+type TankPath = list[tuple[datetime, S.TankState]]
+type History = tuple[pd.DataFrame, list[tuple[datetime, float]], TankPath]
+
 
 def _at(hours: float) -> datetime:
     return T0 + timedelta(hours=hours)
 
 
-def _history(
-    params=TRUE, hours: float = 54.0
-) -> tuple[pd.DataFrame, list[tuple[datetime, float]], list[tuple]]:
+def _history(params=TRUE, hours: float = 54.0) -> History:
     """A history ``params``' tank writes: the probes every minute, the
     flags, the draws, and the tank's own path."""
     lay = S.layout(params)
@@ -115,7 +116,7 @@ def _history(
 
 
 @pytest.fixture(scope="module")
-def history() -> tuple[pd.DataFrame, list[tuple[datetime, float]], list]:
+def history() -> History:
     return _history()
 
 
@@ -137,7 +138,7 @@ def _observed(
     return tuple(out)
 
 
-def _coasts(path) -> list[tf.Coast]:
+def _coasts(path: TankPath) -> list[tf.Coast]:
     """The quiet stretches and the hours after the draws."""
     lay = S.layout(TRUE)
     out = []
@@ -255,7 +256,9 @@ class TestTheReplay:
         assert u == pytest.approx(record.upper_f[i], abs=0.3)
         assert lo == pytest.approx(record.lower_f[i], abs=0.3)
 
-    def test_it_finds_the_hidden_layers(self, history, record) -> None:
+    def test_it_finds_the_hidden_layers(
+        self, history: History, record: tf.TankRecord
+    ) -> None:
         """The layers below the lower probe, which the probes do not
         say, come back from the history: closer to the tank's own than
         the estimate from the probes."""
@@ -422,7 +425,7 @@ class TestTheFit:
             tf.fit(TRUE, record, [])
 
 
-def _climb(path) -> tf.Coast:
+def _climb(path: TankPath) -> tf.Coast:
     """The compressor's run, as a recovery event."""
     lay = S.layout(TRUE)
     ((a, b),) = COMPRESSOR

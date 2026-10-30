@@ -136,7 +136,7 @@ def recovery_history(
     for start_h, minutes, lower in runs:
         a = T0 + timedelta(hours=start_h)
         b = a + timedelta(minutes=minutes)
-        span = (index >= a) & (index < b)
+        span = np.asarray((index >= a) & (index < b))
         frame.loc[span, "compressor_on"] = True
         frame.loc[span, "heater_air_f"] = 65.0
         frame.loc[span, "lower_f"] = np.linspace(lower, target_f, span.sum())
@@ -144,11 +144,15 @@ def recovery_history(
     return frame
 
 
+def _only_row(frame: pd.DataFrame) -> Any:
+    """``frame``'s one row, its columns as attributes."""
+    (row,) = frame.itertuples()
+    return row
+
+
 class TestRecoveries:
     def test_a_clean_run(self) -> None:
-        (row,) = cal.recoveries(
-            recovery_history([(2, 100, 100.0)])
-        ).itertuples()
+        row = _only_row(cal.recoveries(recovery_history([(2, 100, 100.0)])))
         assert row.start_time == T0 + timedelta(hours=2)
         assert row.duration_minutes == 100.0
         assert row.t_start_lower == 100.0
@@ -165,7 +169,7 @@ class TestRecoveries:
         # snapshot; it then recovers to the target by the end.
         dip = T0 + timedelta(hours=2, minutes=30)
         h.loc[dip - timedelta(minutes=5) : dip, "lower_f"] = 95.0
-        (row,) = cal.recoveries(h).itertuples()
+        row = _only_row(cal.recoveries(h))
         assert row.start_time == dip
         assert row.duration_minutes == 130.0
         assert row.delta_t_lower == 45.0
@@ -181,7 +185,7 @@ class TestRecoveries:
             + timedelta(minutes=30),
             "lower_f",
         ] = 95.0
-        (row,) = cal.recoveries(h).itertuples()
+        row = _only_row(cal.recoveries(h))
         # The coldest snapshot has no air after it: the reading before.
         assert row.start_time == start + timedelta(minutes=30)
         assert row.t_amb_mean == 61.0
@@ -236,7 +240,7 @@ class TestRecoveries:
 class TestCalibrate:
     def test_an_unrecorded_stop_threshold_is_the_usual_one(self) -> None:
         h = recovery_history([(2, 100, 100.0)]).drop(columns=["target_f"])
-        (row,) = cal.recoveries(h).itertuples()
+        row = _only_row(cal.recoveries(h))
         assert row.delta_t_lower == pytest.approx(
             cal.UNRECORDED_TARGET_F - row.t_start_lower
         )
@@ -363,7 +367,7 @@ class TestTheHistoryAdapter:
         assert list(h["dhw_in_use"]) == [False, False, True, False, False]
         assert list(h["excluded"]) == [False, False, True, False, False]
         # Without it, every span is taken as observed.
-        assert not sa.history(readings)["dhw_in_use"].any()
+        assert not bool(sa.history(readings)["dhw_in_use"].any())
 
     def test_a_gap_splits_the_quiet_windows(
         self, device_status_dict: dict[str, Any]
@@ -393,7 +397,7 @@ class TestTheHistoryAdapter:
             max_gap=timedelta(minutes=5),
         )
         assert list(h["drawing"]) == [True, False]
-        assert not h["circulating"].any()
+        assert not bool(h["circulating"].any())
 
     def test_a_meters_spans(self, device_status_dict: dict[str, Any]) -> None:
         s = self._status(device_status_dict)
@@ -403,7 +407,7 @@ class TestTheHistoryAdapter:
             circulating=[],
         )
         assert list(h["drawing"]) == [False, True, True, False]
-        assert not h["circulating"].any()
+        assert not bool(h["circulating"].any())
 
 
 class TestTheEnergyIntegral:
@@ -457,7 +461,9 @@ class TestTheLeadByInterval:
 
     def test_the_sample_before_the_lead_counts(self) -> None:
         h = self.frame()
-        before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
+        before = h.index[
+            np.asarray(h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD)
+        ][-1]
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
         h.loc[before, "drawing"] = True
         assert not cal.recoveries(h, air="heater_air_f")["draw_free"].item()
@@ -465,13 +471,17 @@ class TestTheLeadByInterval:
     def test_activity_after_the_recovery_does_not_count(self) -> None:
         h = self.frame()
         end = h.index[
-            ~h["compressor_on"] & (h.index > T0 + timedelta(hours=2))
+            np.asarray(
+                ~h["compressor_on"] & (h.index > T0 + timedelta(hours=2))
+            )
         ][0]
         h.loc[end, "circulating"] = True
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
 
     def test_not_for_the_heaters_own_flag(self) -> None:
         h = self.frame().drop(columns=["drawing", "circulating"])
-        before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
+        before = h.index[
+            np.asarray(h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD)
+        ][-1]
         h.loc[before, "dhw_in_use"] = True
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()

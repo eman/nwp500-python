@@ -21,7 +21,9 @@ AIR = 65.0
 MINUTE = timedelta(minutes=1)
 
 
-def _sample(points: Any, start: datetime, end: datetime) -> list[tuple]:
+def _sample(
+    points: Any, start: datetime, end: datetime
+) -> list[tuple[datetime, float, float]]:
     """``points`` (a walk's path) a sample a minute over ``[start,
     end)``: ``(at, upper, lower)``."""
     out = []
@@ -35,7 +37,7 @@ def _sample(points: Any, start: datetime, end: datetime) -> list[tuple]:
 
 def _coast(
     params: sim.HeaterParams, at: datetime, upper: float, lower: float, h: float
-) -> list[tuple]:
+) -> list[tuple[datetime, float, float]]:
     trace = sim.standby(
         sim.HeaterState(upper_f=upper, lower_f=lower),
         sim.Environment(ambient_f=AIR),

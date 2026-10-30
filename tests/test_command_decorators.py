@@ -21,9 +21,10 @@ class BaseMockController:
         features = await self._device_info_cache.get(
             device.device_info.mac_address
         )
-        if features is None and hasattr(self, "_auto_request_device_info"):
+        auto_request = getattr(self, "_auto_request_device_info", None)
+        if features is None and auto_request is not None:
             try:
-                await self._auto_request_device_info(device)
+                await auto_request(device)
                 features = await self._device_info_cache.get(
                     device.device_info.mac_address
                 )

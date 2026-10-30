@@ -324,7 +324,7 @@ class TestTriStateFlags:
         """0 surfaces as None rather than a fabricated OFF."""
         data = dict(default_status_data)
         data[self.ALIASES[field]] = 0
-        assert getattr(DeviceStatus(**data), field) is None
+        assert getattr(DeviceStatus.model_validate(data), field) is None
 
     @pytest.mark.parametrize("field", TRISTATE_FIELDS)
     def test_one_is_off(
@@ -333,7 +333,7 @@ class TestTriStateFlags:
         """1 is a real OFF and stays False."""
         data = dict(default_status_data)
         data[self.ALIASES[field]] = 1
-        assert getattr(DeviceStatus(**data), field) is False
+        assert getattr(DeviceStatus.model_validate(data), field) is False
 
     @pytest.mark.parametrize("field", TRISTATE_FIELDS)
     def test_two_is_on(
@@ -342,7 +342,7 @@ class TestTriStateFlags:
         """2 is a real ON and stays True."""
         data = dict(default_status_data)
         data[self.ALIASES[field]] = 2
-        assert getattr(DeviceStatus(**data), field) is True
+        assert getattr(DeviceStatus.model_validate(data), field) is True
 
     def test_unknown_is_falsy_but_distinguishable(
         self, default_status_data: dict[str, Any]
@@ -354,7 +354,7 @@ class TestTriStateFlags:
         """
         data = dict(default_status_data)
         data["compUse"] = 0
-        status = DeviceStatus(**data)
+        status = DeviceStatus.model_validate(data)
         assert not status.comp_use
         assert status.comp_use is not False
 
@@ -364,7 +364,7 @@ class TestTriStateFlags:
         """Plain DeviceBool status fields still collapse 0 to False."""
         data = dict(default_status_data)
         data["dhwUse"] = 0
-        assert DeviceStatus(**data).dhw_use is False
+        assert DeviceStatus.model_validate(data).dhw_use is False
 
 
 class TestEnergyFields:
@@ -379,7 +379,7 @@ class TestEnergyFields:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         """The protocol field names are unchanged on the wire."""
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert status.full_recovery_energy == pytest.approx(6320.0)
         assert status.energy_to_setpoint == pytest.approx(4664.0)
 
@@ -391,7 +391,7 @@ class TestEnergyFields:
         Per the project's backward compatibility policy, renamed fields
         are removed outright rather than kept as shims.
         """
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert not hasattr(status, "total_energy_capacity")
         assert not hasattr(status, "available_energy_capacity")
 
@@ -399,14 +399,14 @@ class TestEnergyFields:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         """A partly charged tank needs less than a full recovery costs."""
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert status.energy_to_setpoint < status.full_recovery_energy
 
     def test_protocol_dump_uses_wire_names(
         self, device_status_dict: dict[str, Any]
     ) -> None:
         """Renaming the Python fields must not change what is sent."""
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         dumped = status.to_protocol_dict()
         assert "totalEnergyCapacity" in dumped
         assert "availableEnergyCapacity" in dumped
@@ -420,14 +420,14 @@ class TestUsableEnergy:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         """Usable energy is full recovery minus the remaining deficit."""
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert status.usable_energy == pytest.approx(
             status.full_recovery_energy - status.energy_to_setpoint
         )
 
     def test_known_value(self, device_status_dict: dict[str, Any]) -> None:
         """1580 and 1166 raw counts at 4 Wh give 6320 - 4664 Wh."""
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert status.usable_energy == pytest.approx(1656.0)
 
     def test_zero_when_tank_at_reference(
@@ -436,7 +436,7 @@ class TestUsableEnergy:
         """A tank at the reference temperature has nothing drawable."""
         d = dict(device_status_dict)
         d["availableEnergyCapacity"] = d["totalEnergyCapacity"]
-        assert DeviceStatus(**d).usable_energy == 0.0
+        assert DeviceStatus.model_validate(d).usable_energy == 0.0
 
     def test_clamped_below_reference(
         self, device_status_dict: dict[str, Any]
@@ -444,7 +444,7 @@ class TestUsableEnergy:
         """Below the reference the result clamps rather than going negative."""
         d = dict(device_status_dict)
         d["availableEnergyCapacity"] = d["totalEnergyCapacity"] + 500
-        assert DeviceStatus(**d).usable_energy == 0.0
+        assert DeviceStatus.model_validate(d).usable_energy == 0.0
 
     def test_independent_of_setpoint(
         self, device_status_dict: dict[str, Any]
@@ -455,12 +455,12 @@ class TestUsableEnergy:
         while the two raw fields are not: raising the setpoint inflates
         both of them by the same amount.
         """
-        base = DeviceStatus(**device_status_dict)
+        base = DeviceStatus.model_validate(device_status_dict)
         d = dict(device_status_dict)
         bump = 200  # raw counts of extra setpoint headroom
         d["totalEnergyCapacity"] += bump
         d["availableEnergyCapacity"] += bump
-        assert DeviceStatus(**d).usable_energy == pytest.approx(
+        assert DeviceStatus.model_validate(d).usable_energy == pytest.approx(
             base.usable_energy
         )
 
@@ -468,7 +468,7 @@ class TestUsableEnergy:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         """Computed fields must never be sent back to the device."""
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert "usable_energy" not in status.to_protocol_dict()
 
 

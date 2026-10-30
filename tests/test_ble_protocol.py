@@ -351,13 +351,10 @@ def _run_read(
 ) -> int:
     from nwp500.ble import __main__ as cli
 
-    monkeypatch.setattr(
-        cli,
-        "NavienBleClient",
-        lambda address: NavienBleClient(
-            transport=transport, reply_timeout=0.05
-        ),
-    )
+    def make_client(address: str) -> NavienBleClient:
+        return NavienBleClient(transport=transport, reply_timeout=0.05)
+
+    monkeypatch.setattr(cli, "NavienBleClient", make_client)
     return cli.main(["read", "--address", "AA:BB", *argv])
 
 

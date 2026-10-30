@@ -208,11 +208,11 @@ def cli_with_fake_heater(
     from nwp500.cli import ble_backend
 
     transport = _heater()
-    monkeypatch.setattr(
-        ble_backend,
-        "NavienBleClient",
-        lambda address: NavienBleClient(transport=transport, reply_timeout=0.5),
-    )
+
+    def make_client(address: str) -> NavienBleClient:
+        return NavienBleClient(transport=transport, reply_timeout=0.5)
+
+    monkeypatch.setattr(ble_backend, "NavienBleClient", make_client)
     from click.testing import CliRunner
 
     from nwp500.cli.__main__ import cli

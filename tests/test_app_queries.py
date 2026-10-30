@@ -330,11 +330,11 @@ def _manager() -> MqttSubscriptionManager:
         future.set_result({"topic": topic, "qos": qos})
         return future, 1
 
+    def fake_unsubscribe(topic: str) -> Any:
+        return _resolved({"topic": topic}), 2
+
     connection.subscribe.side_effect = fake_subscribe
-    connection.unsubscribe.side_effect = lambda topic: (
-        _resolved({"topic": topic}),
-        2,
-    )
+    connection.unsubscribe.side_effect = fake_unsubscribe
     return MqttSubscriptionManager(
         connection=connection,
         client_id="test-client",
@@ -645,15 +645,19 @@ class TestYearlyEnergyReport:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from nwp500.cli import output_formatters
+        from nwp500.cli.presentation import DailyEnergyReport, EnergyTotals
 
         calls: list[str] = []
         formatter = MagicMock()
-        formatter.print_yearly_energy_table.side_effect = lambda r: (
+
+        def print_year(r: DailyEnergyReport) -> None:
             calls.append(f"year:{r.year}")
-        )
-        formatter.print_lifetime_energy.side_effect = lambda t: calls.append(
-            "lifetime"
-        )
+
+        def print_lifetime(t: EnergyTotals) -> None:
+            calls.append("lifetime")
+
+        formatter.print_yearly_energy_table.side_effect = print_year
+        formatter.print_lifetime_energy.side_effect = print_lifetime
         monkeypatch.setattr(
             output_formatters, "get_formatter", lambda: formatter
         )
@@ -669,13 +673,19 @@ class TestYearlyEnergyReport:
         """Regression: with every requested year missing from the reply, the
         lifetime total was never printed."""
         from nwp500.cli import output_formatters
+        from nwp500.cli.presentation import EnergyTotals
 
         calls: list[str] = []
         formatter = MagicMock()
-        formatter.print_info.side_effect = lambda message: calls.append("info")
-        formatter.print_lifetime_energy.side_effect = lambda t: calls.append(
-            f"lifetime:{t.total_usage_wh}"
-        )
+
+        def print_info(message: str) -> None:
+            calls.append("info")
+
+        def print_lifetime(t: EnergyTotals) -> None:
+            calls.append(f"lifetime:{t.total_usage_wh}")
+
+        formatter.print_info.side_effect = print_info
+        formatter.print_lifetime_energy.side_effect = print_lifetime
         monkeypatch.setattr(
             output_formatters, "get_formatter", lambda: formatter
         )
@@ -745,7 +755,7 @@ def _connected_client(
         config=MqttConnectionConfig(client_id="test-client", **config),
     )
     manager = MqttConnection(client.config, client._auth_client)
-    manager._connection = sdk
+    manager._connection = cast(Any, sdk)
     manager._connected = True
     client._connection_manager = manager
     client._connected = True

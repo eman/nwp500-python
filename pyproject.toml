@@ -301,3 +301,8 @@ reportUntypedBaseClass = "warning"
 
 # Ignore missing imports for external libraries without stubs
 reportMissingImports = false
+
+# Tests reach into the modules they test.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportPrivateUsage = "none"

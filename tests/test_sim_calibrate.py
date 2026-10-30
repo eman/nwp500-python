@@ -1,7 +1,7 @@
 """``nwp500.sim_calibrate``: a recorded history in, the fitted
 parameters and a report of each fit out."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -753,11 +753,15 @@ class TestKeepBetter:
             seen.append(train)
             return SimpleNamespace(params=_fitted(UA)), ""
 
-        monkeypatch.setattr(sc, "_tank_events", lambda *_: found)
+        def tank_events(*_: Any) -> sc._TankEvents:
+            return found
+
+        def event_rmse(p: sim.HeaterParams, *_: Any, **__: Any) -> float:
+            return p.loss.ua_side_btu_hr_f
+
+        monkeypatch.setattr(sc, "_tank_events", tank_events)
         monkeypatch.setattr(sc, "_fit_tank", fit)
-        monkeypatch.setattr(
-            tf, "event_rmse", lambda p, *_, **__: p.loss.ua_side_btu_hr_f
-        )
+        monkeypatch.setattr(tf, "event_rmse", event_rmse)
         judged: list[sc.Judged] = []
         params, tank, held, _ = sc._keep_better_tank(
             _ready(recovery_days(1)), _fitted(12.0), (), set(), judged, map
@@ -1004,8 +1008,11 @@ PUMP_B = (
     1.8,
 )
 
+#: A heat pump's law on a day: its heat and power planes and run-on.
+type PumpLaw = Callable[[int], tuple[hpf.Plane, hpf.Plane, float]]
 
-def planted_evidence(law_at: Any, n: int = 50) -> hpf.Evidence:
+
+def planted_evidence(law_at: PumpLaw, n: int = 50) -> hpf.Evidence:
     """``n`` of each of the heat pump's measures a day apart, each what
     ``law_at(day)`` (a ``PUMP_*``) gives: a climb, a metered block and
     a run-on."""
@@ -1060,11 +1067,15 @@ def _with_pump(pump: Any, unfitted: tuple[str, ...] = ()) -> sim.HeaterParams:
 
 
 def _keep_pump(
-    law_at: Any, base: sim.HeaterParams
+    law_at: PumpLaw, base: sim.HeaterParams
 ) -> tuple[sim.HeaterParams, dict[str, sc.Judged], sc.HeldOut]:
     found = planted_evidence(law_at)
+
+    def evidence(*_: Any, **__: Any) -> hpf.Evidence:
+        return found
+
     with pytest.MonkeyPatch.context() as m:
-        m.setattr(sc, "_heat_pump_evidence", lambda *_, **__: found)
+        m.setattr(sc, "_heat_pump_evidence", evidence)
         done, _, judged, held = sc._keep_better(
             _ready(recovery_days(1)), base, (), map
         )
@@ -1088,8 +1099,8 @@ class TestThePowersWater:
             ready.frame, base, ready.recovery_air, None
         )
         assert len(found.power) and len(found.power) <= len(plain.power)
-        assert (plain.power["water_f"] == plain.power["lower_f"]).all()
-        assert (found.power["water_f"] != found.power["lower_f"]).any()
+        assert bool((plain.power["water_f"] == plain.power["lower_f"]).all())
+        assert bool((found.power["water_f"] != found.power["lower_f"]).any())
         assert found.heat.equals(plain.heat)
 
 
@@ -1140,8 +1151,12 @@ class TestKeepBetterTheHeatPump:
         greedy = (hpf.Plane(13500.0, 55.0, -16.0), *PUMP_A[1:])
         base = _with_pump(PUMP_B)
         found = planted_evidence(lambda _: greedy)
+
+        def evidence(*_: Any, **__: Any) -> hpf.Evidence:
+            return found
+
         with pytest.MonkeyPatch.context() as m:
-            m.setattr(sc, "_heat_pump_evidence", lambda *_, **__: found)
+            m.setattr(sc, "_heat_pump_evidence", evidence)
             done, tank, judged, held = sc._keep_better(
                 _ready(recovery_days(1)), base, (), map
             )

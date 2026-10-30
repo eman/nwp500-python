@@ -74,14 +74,15 @@ def _manager(
 ) -> MqttSubscriptionManager:
     """Manager over a fake connection whose subscribe acks immediately."""
     connection = MagicMock()
-    connection.subscribe.side_effect = lambda topic, qos, callback: (
-        _resolved({"topic": topic, "qos": qos}),
-        1,
-    )
-    connection.unsubscribe.side_effect = lambda topic: (
-        _resolved({"topic": topic}),
-        2,
-    )
+
+    def subscribe(topic: str, qos: Any, callback: Any) -> Any:
+        return _resolved({"topic": topic, "qos": qos}), 1
+
+    def unsubscribe(topic: str) -> Any:
+        return _resolved({"topic": topic}), 2
+
+    connection.subscribe.side_effect = subscribe
+    connection.unsubscribe.side_effect = unsubscribe
     return MqttSubscriptionManager(
         connection=connection,
         client_id="test-client",

@@ -18,6 +18,11 @@ STEP_S = 10.0
 P = default_params()
 
 
+def _at(s: hist.Step) -> datetime:
+    assert s.at is not None
+    return s.at
+
+
 def _steps(
     hours: float,
     *,
@@ -71,14 +76,14 @@ class TestTheRecord:
 
     def test_a_step_off_the_minute_starts_the_next(self) -> None:
         steps = _steps(1.0)
-        late = [replace(s, at=s.at + timedelta(seconds=25)) for s in steps]
+        late = [replace(s, at=_at(s) + timedelta(seconds=25)) for s in steps]
         rec = hist.record(late, P)
         assert rec.start == T0 + timedelta(minutes=1)
         assert len(rec) == 59
 
     def test_a_gap_is_unknown_and_the_air_holds(self) -> None:
         steps = _steps(1.0)
-        kept = [s for s in steps if not 600 <= (s.at - T0).seconds < 1200]
+        kept = [s for s in steps if not 600 <= (_at(s) - T0).seconds < 1200]
         rec = hist.record(kept, P)
         assert len(rec) == 60
         assert math.isnan(rec.upper_f[12]) and math.isnan(rec.lower_f[12])

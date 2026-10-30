@@ -97,12 +97,12 @@ class TestTheLag:
     def test_a_stint_with_a_draw_is_left_out(self) -> None:
         record, draws = tank(draw_at=4)
         stints = cal.element_stints(record, draws=draws)
-        assert stints["draw"].sum() == 1
+        assert bool(stints["draw"].sum() == 1)
         assert stints["draw_known"].iloc[4]
 
     def test_without_a_meter_no_draw_is_known(self) -> None:
         record, _ = tank()
-        assert not cal.element_stints(record)["draw_known"].any()
+        assert not bool(cal.element_stints(record)["draw_known"].any())
 
 
 class TestTheOffPoint:
@@ -110,8 +110,8 @@ class TestTheOffPoint:
         record, _ = tank()
         off = cal.element_off_points(record)
         upper = off[(off["which"] == "upper") & off["clean"]]
-        saver = upper[upper["mode"] == ENERGY_SAVER]["deficit"]
-        others = upper[upper["mode"] != ENERGY_SAVER]["deficit"]
+        saver = upper.loc[upper["mode"] == ENERGY_SAVER, "deficit"]
+        others = upper.loc[upper["mode"] != ENERGY_SAVER, "deficit"]
         # The probe's read at an edge is up to a report old in every
         # mode; Energy Saver stops 1.6 °F before the others.
         assert saver.median() - others.median() == pytest.approx(1.6, abs=0.2)
@@ -119,7 +119,7 @@ class TestTheOffPoint:
     def test_the_power_of_a_metered_stint(self) -> None:
         record, _ = tank()
         power = cal.element_power(record, cal.element_off_points(record))
-        assert power["net_w"].median() == pytest.approx(5150.0, rel=0.01)
+        assert bool(power["net_w"].median() == pytest.approx(5150.0, rel=0.01))
 
 
 class TestTheGridPower:
