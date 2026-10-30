@@ -227,11 +227,14 @@ class Physics(Protocol):
         *,
         running: Running = Running(),
         stop: Stop | None = None,
+        walk_from: datetime | None = None,
     ) -> Stretch:
         """The tank from ``start`` to ``end`` under ``running``, taking
         exactly ``draws`` (delivered gallons at their onsets, all in
         ``[start, end)``), with the circulation the physics was given.
-        ``stop`` ends it at the first instant it holds."""
+        ``stop`` ends it at the first instant it holds. ``walk_from``:
+        where the walk this one continues began (None: ``start``), as
+        far as what is known about the circulation goes."""
         ...
 
     def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
@@ -269,16 +272,20 @@ def circulation_flows(
     air_at: Callable[[datetime], float],
     start: datetime,
     end: datetime,
+    *,
+    known_from: datetime | None = None,
 ) -> list[st.Flowing]:
     """The circulation's runs overlapping ``[start, end)``, whole, as
     the water they move through the tank: the pipe's cooled water first
     (``displaced_gal`` times its ``cooled_share`` since the run before),
     at the return's rest (the air plus ``return_rest_offset_f``), then
     the run's own from the top, back at the rest plus its
-    ``steady_share`` of the top's lift over it."""
+    ``steady_share`` of the top's lift over it. Known as from
+    ``known_from``, the walk's start, when ``[start, end)`` continues
+    one (``Circulation.over``)."""
     if terms.flow_gpm <= 0.0:
         return []
-    runs = circulation.over(start, end)
+    runs = circulation.over(start, end, known_from=known_from)
     if not runs:
         return []
     out: list[st.Flowing] = []
@@ -428,12 +435,19 @@ class TankPhysics:
             credited=running.credited,
         )
 
-    def _flows(self, start: datetime, end: datetime) -> list[st.Flowing]:
+    def _flows(
+        self, start: datetime, end: datetime, known_from: datetime | None
+    ) -> list[st.Flowing]:
         terms = self.circulation_terms
         if self.circulation is None or terms is None:
             return []
         return circulation_flows(
-            self.circulation, terms, self.ambient.at, start, end
+            self.circulation,
+            terms,
+            self.ambient.at,
+            start,
+            end,
+            known_from=known_from,
         )
 
     def advance(
@@ -445,6 +459,7 @@ class TankPhysics:
         *,
         running: Running = Running(),
         stop: Stop | None = None,
+        walk_from: datetime | None = None,
     ) -> Stretch:
         lay = self.layout
         taken = list(draws) if self.draws_on else []
@@ -455,7 +470,7 @@ class TankPhysics:
             end,
             air_f=self.ambient.at,
             heating=self._heating(running),
-            flowing=self._flows(start, end),
+            flowing=self._flows(start, end, walk_from),
             draws=[
                 st.Delivered(at=t, gal=g, inflow_f=self.draw_inlet_temp_f)
                 for t, g in taken
@@ -567,7 +582,7 @@ class TankPhysics:
                     stirs=not under_way or hold_minutes > 0.0,
                 )
             ),
-            flowing=self._flows(start, end),
+            flowing=self._flows(start, end, None),
             valve=self.valve,
             stop=lambda s: st.observe(lay, s)[1] >= target_f,
         )

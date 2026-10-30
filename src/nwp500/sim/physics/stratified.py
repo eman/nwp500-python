@@ -56,6 +56,7 @@ conservation is exact; the error is about 1.5 % over the tank's span.
 """
 
 import math
+from bisect import bisect_right
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, fields
 from datetime import UTC, datetime, timedelta
@@ -949,10 +950,7 @@ class Books:
 
     def __add__(self, other: Books) -> Books:
         return Books(
-            *(
-                getattr(self, f.name) + getattr(other, f.name)
-                for f in fields(self)
-            )
+            *(getattr(self, n) + getattr(other, n) for n in _BOOK_FIELDS)
         )
 
     @property
@@ -965,6 +963,11 @@ class Books:
             - self.flowing_btu
             - self.drawn_btu
         )
+
+
+#: ``Books``' fields in order, read once: a walk adds books at every
+#: step.
+_BOOK_FIELDS = tuple(f.name for f in fields(Books))
 
 
 @dataclass(frozen=True)
@@ -1013,6 +1016,51 @@ class _Walk:
     flowing: tuple[Flowing, ...]
     draws: tuple[Delivered, ...]
     valve: tuple[float, float]
+    #: The draws at each instant some are, in order of size.
+    at: dict[datetime, tuple[Delivered, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    #: ``flowing``'s indices by start, their starts, and the latest end
+    #: of each and those before it: the flows over a span are found by
+    #: bisection, not by a pass over every flow at every step.
+    _by_start: tuple[int, ...] = field(init=False, repr=False, compare=False)
+    _starts: tuple[datetime, ...] = field(init=False, repr=False, compare=False)
+    _ends_by: tuple[datetime, ...] = field(
+        init=False, repr=False, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        at: dict[datetime, list[Delivered]] = {}
+        for d in self.draws:
+            at.setdefault(d.at, []).append(d)
+        object.__setattr__(
+            self,
+            "at",
+            {t: tuple(sorted(ds, key=lambda d: d.gal)) for t, ds in at.items()},
+        )
+        order = sorted(
+            range(len(self.flowing)), key=lambda i: self.flowing[i].start
+        )
+        ends: list[datetime] = []
+        for i in order:
+            end = self.flowing[i].end
+            ends.append(end if not ends else max(ends[-1], end))
+        object.__setattr__(self, "_by_start", tuple(order))
+        object.__setattr__(
+            self, "_starts", tuple(self.flowing[i].start for i in order)
+        )
+        object.__setattr__(self, "_ends_by", tuple(ends))
+
+    def flows_over(self, a: datetime, b: datetime) -> list[Flowing]:
+        """The flows that may run in ``[a, b]``, in ``flowing``'s order:
+        every one starting by ``b`` and ending after ``a``."""
+        lo = bisect_right(self._ends_by, a)
+        hi = bisect_right(self._starts, b)
+        return [
+            self.flowing[i]
+            for i in sorted(self._by_start[lo:hi])
+            if self.flowing[i].end > a
+        ]
 
     def instants(self, start: datetime, end: datetime) -> list[datetime]:
         """Where a step must end: wherever what acts on the tank
@@ -1043,14 +1091,12 @@ class _Walk:
             off = None if e.off_at is None else e.off_at + e.lag
             if on(e.on_at, off):
                 return True
-        return any(on(f.start, f.end) for f in self.flowing)
+        return any(on(f.start, f.end) for f in self.flows_over(t, t))
 
     def drawn(self, t: datetime, state: TankState) -> tuple[TankState, Books]:
         """The draws at ``t`` taken, in order of size."""
         books = Books()
-        for d in sorted(
-            (d for d in self.draws if d.at == t), key=lambda d: d.gal
-        ):
+        for d in self.at.get(t, ()):
             out = draw(self.lay, state, d.gal, d.inflow_f, self.valve)
             state = out.state
             books += Books(
@@ -1116,7 +1162,7 @@ class _Walk:
             books += Books(element_btu=q, element_wh=wh)
         if any(heat):
             state = add_heat(lay, state, heat)
-        for f in self.flowing:
+        for f in self.flows_over(a, b):
             gal = f.gpm * 60.0 * _overlap_h(a, b, f.start, f.end)
             if gal > 0.0:
                 inflow = (
@@ -1187,8 +1233,11 @@ def walk(
         return Walked(state, t, True, books, tuple(path))
     while t < end:
         step = active_step if w.active(t) else idle_step
-        nxt = min([_grid_after(t, step), end, *(x for x in instants if x > t)])
-        if any(d.at == t for d in w.draws):
+        k = bisect_right(instants, t)
+        nxt = min(
+            [_grid_after(t, step), end, *instants[k : k + 1]],
+        )
+        if t in w.at:
             taken, b = w.drawn(t, state)
             drops.append((t, state, taken))
             if stop is not None and stop(taken):

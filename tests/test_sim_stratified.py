@@ -1075,3 +1075,41 @@ class TestTheWalksWater:
         assert (at, before) in w.path
         assert S.energy_btu(L, after) < S.energy_btu(L, before)
         assert S.observe(L, after)[1] < S.observe(L, before)[1]
+
+
+_flow_runs = st.lists(
+    st.tuples(st.integers(-120, 600), st.integers(1, 300)), max_size=12
+)
+
+
+class TestFlowsOver:
+    @given(_flow_runs, st.integers(-180, 720), st.integers(0, 60))
+    def test_it_finds_what_a_pass_over_every_flow_finds(
+        self, runs: list[tuple[int, int]], a_min: int, span_min: int
+    ) -> None:
+        """The flows that may run in a span, found by bisection: every
+        one a pass over all of them gives water in it, in their order."""
+        flowing = tuple(
+            S.Flowing(
+                start=T0 + timedelta(minutes=s),
+                end=T0 + timedelta(minutes=s + n),
+                gpm=1.0,
+                inflow_f=60.0,
+            )
+            for s, n in runs
+        )
+        w = S._Walk(  # pyright: ignore[reportPrivateUsage]
+            L, lambda _: 60.0, S.Heating(), flowing, (), S.NO_VALVE
+        )
+        a = T0 + timedelta(minutes=a_min)
+        b = a + timedelta(minutes=span_min)
+        found = w.flows_over(a, b)
+        assert [f for f in flowing if f in found] == found
+        wet = [
+            f
+            for f in flowing
+            if S._overlap_h(a, b, f.start, f.end) > 0.0  # pyright: ignore[reportPrivateUsage]
+        ]
+        assert all(f in found for f in wet)
+        running = [f for f in flowing if f.start <= a < f.end]
+        assert [f for f in w.flows_over(a, a) if f.start <= a] == running

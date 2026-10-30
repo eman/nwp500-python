@@ -54,6 +54,7 @@ reconciliation against the record tests.
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -77,8 +78,10 @@ from nwp500.sim.controller import (
     wake_times,
     window_at,
 )
+from nwp500.sim.decay import Impulse
 from nwp500.sim.params import ControllerParams, ElementParams
 from nwp500.sim.physics.element import HeaterMode
+from nwp500.sim.physics.stratified import IDLE_STEP
 from nwp500.sim.tank_physics import (
     CompressorRun,
     Delivered,
@@ -110,6 +113,15 @@ _INSTANT = timedelta(microseconds=1)
 _ENTRY_MINUTE = timedelta(minutes=1)
 #: How far ahead a recovery is walked to judge the TOU cap on it.
 _RECOVERY_AHEAD = timedelta(hours=16)
+#: How far a coast walks ahead before it first looks for the heater's
+#: own start, to the clock's ``IDLE_STEP`` grid at or before it, each
+#: later piece twice the last: the start is found on the walk and the
+#: walk is taken again to there, so a coast walked whole to a distant
+#: event would cost the horizon at every start. A split on the grid is
+#: a step's end, so the tank walked in pieces is the tank walked whole
+#: (``_coast_stretch``).
+_COAST_AHEAD = timedelta(hours=2)
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 #: A walk that has not reached the horizon after this many steps is a
 #: bug, not a long simulation (a week of 10-minute events is ~1,000).
 _MAX_STEPS = 20_000
@@ -330,6 +342,16 @@ def _layers_of(state: object) -> tuple[float, ...] | None:
 #: The heater's setpoint resolution, °C: the NWP500 holds a setpoint in
 #: half degrees Celsius, so 146 °F is held as 146.3 (2026-09-20).
 SETPOINT_RESOLUTION_C = 0.5
+
+
+def _onset(draw: Draw) -> datetime:
+    return draw[0]
+
+
+def _overlapping(windows: Sequence[Window]) -> bool:
+    """Whether any two of ``windows`` overlap."""
+    ordered = sorted(windows)
+    return any(b[0] < a[1] for a, b in pairwise(ordered))
 
 
 def quantise(f: float, resolution_c: float = SETPOINT_RESOLUTION_C) -> float:
@@ -812,14 +834,27 @@ class _Engine:
             )
         self._adopt(points[-1])
 
+    def _draws_in(self, start: datetime, end: datetime) -> slice:
+        """Where the draws with onsets in ``[start, end)`` sit."""
+        return slice(
+            bisect_left(self.draws, start, key=_onset),
+            bisect_left(self.draws, end, key=_onset),
+        )
+
     def _take_draws(self, start: datetime, end: datetime) -> list[Draw]:
         """Remove and return the draws with onsets in ``[start, end)``."""
-        taken = [d for d in self.draws if start <= d[0] < end]
-        self.draws = [d for d in self.draws if not start <= d[0] < end]
+        at = self._draws_in(start, end)
+        taken = self.draws[at]
+        del self.draws[at]
         return taken
 
     def _peek_draws(self, end: datetime) -> list[Draw]:
-        return [d for d in self.draws if self.t <= d[0] < end]
+        return self.draws[self._draws_in(self.t, end)]
+
+    def _next_draw_after(self, at: datetime) -> datetime | None:
+        """The first draw's onset after ``at``, if any is left."""
+        k = bisect_right(self.draws, at, key=_onset)
+        return self.draws[k][0] if k < len(self.draws) else None
 
     def _lag(self, zone: Literal["upper", "lower"]) -> timedelta:
         """How long an element's heat takes to reach the water."""
@@ -977,7 +1012,8 @@ class _Engine:
                 self._recovery_done()
                 continue
             nxt = end if cycle.stop_at is None else min(end, cycle.stop_at)
-            later = [d[0] for d in self.draws if self.t < d[0] < nxt]
+            draw = self._next_draw_after(self.t)
+            later = [] if draw is None or draw >= nxt else [draw]
             later += [x for w in self.withheld for x in w if self.t < x < nxt]
             nxt = min([nxt, *later])
             stretch = self._advance(nxt, stop=self._stop())
@@ -1235,7 +1271,7 @@ class _Engine:
         the heater starts itself, an element's later start reads its
         zone, the running element reaches its off point, or the water
         leaves or enters the heat pump's range, whichever is first."""
-        stretch = self._advance(end, self._peek_draws(end), stop=self._stop())
+        stretch = self._coast_stretch(end)
         at: datetime | None = None
         own = self._trigger_ahead(stretch)
         if own is not None:
@@ -1298,6 +1334,90 @@ class _Engine:
         )
         self._append(stretch.points, heating=False)
         self.t = stretch.end
+
+    def _coast_stretch(self, end: datetime) -> Stretch:
+        """The tank walked from now toward ``end`` under what runs now,
+        to where the coast's stop holds, as ``_advance`` walks it: in
+        pieces to a mark of the clock's grid, which are the walk whole,
+        the first ``_COAST_AHEAD`` and each later twice the last, and no
+        further than the piece the heater's own start is triggered in.
+
+        Each of its rules finds its instant from the tank up to it, so a
+        start triggered short of a piece's end, and starting short of it,
+        is the one the walk to ``end`` finds; but not with a draw on the
+        piece's end, which the rules read with the step before it. With
+        TOU windows that overlap, the upper zone's start at one's opening
+        needs the whole walk. With only an element's later start found,
+        the walk goes on to ``end``: the coast plans the heater's own
+        start too where the whole walk finds one, past the element's."""
+        self.cooling = [
+            e for e in self.cooling if self._heats_until(e) > self.t
+        ]
+        running = self._running(self.t)
+        stop = self._stop()
+        t, state = self.t, self.tank_state
+        points: list[Point] = []
+        trajectory: list[tuple[datetime, float, float]] = []
+        impulses: list[Impulse] = []
+        ahead = _COAST_AHEAD
+        while True:
+            upto = min(
+                end,
+                _EPOCH
+                + IDLE_STEP * math.floor((t + ahead - _EPOCH) / IDLE_STEP),
+            )
+            # Each piece twice the last, so the rules' searches over the
+            # walk so far cost the walk once over.
+            ahead *= 2
+            part = self.physics.advance(
+                t,
+                state,
+                upto,
+                self.draws[self._draws_in(t, upto)],
+                running=running,
+                stop=stop,
+                walk_from=self.t,
+            )
+            new = part.points[1:] if points else part.points
+            points += new
+            trajectory += [(p.at, p.upper_f, p.lower_f) for p in new]
+            # At the instant pieces meet, the draws there (the new
+            # piece's) come before the flow's drop over the step ending
+            # there (the last piece's), as one walk orders them.
+            at_t = [i for i in impulses if i.at == t]
+            impulses = [i for i in impulses if i.at < t] + [
+                *(i for i in part.impulses if i.at == t),
+                *at_t,
+                *(i for i in part.impulses if i.at > t),
+            ]
+            stretch = Stretch(points, stopped=part.stopped, impulses=impulses)
+            if part.stopped or part.end >= end:
+                return stretch
+            own, _ = trigger_ahead(
+                self.state,
+                self.settings,
+                self.params,
+                trajectory,
+                impulses,
+                self.t,
+            )
+            if (
+                own is not None
+                and own.trigger_at < upto
+                and own.starts_at < upto
+                and not self.draws[self._draws_in(upto, upto + _INSTANT)]
+                and not (
+                    own.trigger == "upper_at_tou_open"
+                    and _overlapping(self.settings.tou_windows)
+                )
+            ):
+                # A draw at the piece's end is the next piece's, but the
+                # rules read the drops at a step's end with the step.
+                # Overlapping windows: the upper zone's start is the
+                # first window's that it crosses in, which may cross
+                # past the piece after a later window opened in it.
+                return stretch
+            t, state = part.end, part.state
 
     def _coast_draw(self) -> None:
         """The draws at this instant, taken here: the path has the tank
