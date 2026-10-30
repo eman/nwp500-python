@@ -373,6 +373,15 @@ class Resume:
     #: powered off with no entry having turned the heater on.
     disabled: bool = False
 
+    def check_from(self, start: datetime) -> None:
+        """Refuse a walk from ``start`` that is not where this ended:
+        whether it is gone on from or dropped (``carries``)."""
+        if self.at != start:
+            raise ValueError(
+                f"a walk from {start.isoformat()} cannot go on from one "
+                f"that ended at {self.at.isoformat()}"
+            )
+
     def carries(self, *, heating_disabled: bool, powered_off: bool) -> bool:
         """Whether a walk in these settings goes on from it: not into or
         out of Vacation or Power Off since (``disabled``), a write the
@@ -561,11 +570,8 @@ class _Engine:
         state: TankState | None = None,
         resume: Resume | None = None,
     ) -> None:
-        if resume is not None and resume.at != start:
-            raise ValueError(
-                f"a walk from {start.isoformat()} cannot go on from one "
-                f"that ended at {resume.at.isoformat()}"
-            )
+        if resume is not None:
+            resume.check_from(start)
         #: A resume these settings do not go on from: the walk starts
         #: afresh (``Resume.carries``).
         self.resume_dropped = resume is not None and not resume.carries(

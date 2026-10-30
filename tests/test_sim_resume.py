@@ -206,6 +206,30 @@ def test_a_resume_from_another_instant_is_refused() -> None:
         engine.simulate(**later)
 
 
+def test_a_resume_from_another_instant_is_refused_even_dropped() -> None:
+    """A scenario that starts elsewhere than its resume ended is refused,
+    into Vacation too, where the resume would be dropped."""
+    params = sim.site_example_params()
+    base = days_of_draws(1).model_copy(
+        update={"horizon": timedelta(hours=1), "loads": Loads()}
+    )
+    first = sim.simulate(base, params)
+    assert first.end_settings is not None
+    for mode in (1, 5):
+        later = base.model_copy(
+            update={
+                "start": first.until + timedelta(hours=3),
+                "state": first.end_state,
+                "history": first.end_history,
+                "settings": first.end_settings.model_copy(
+                    update={"mode": mode}
+                ),
+            }
+        )
+        with pytest.raises(ValueError, match="cannot go on"):
+            sim.simulate(later, params)
+
+
 def test_a_resume_of_another_version_is_refused() -> None:
     first = engine.simulate(**walk_case(1))
     assert first.resume is not None

@@ -33,7 +33,7 @@ line.
 import itertools
 import math
 from bisect import bisect_left
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Literal
@@ -307,13 +307,15 @@ def draw_windows(
     params: HeaterParams,
     *,
     inlet_f: float | None = None,
+    inlet_on: Callable[[datetime], float] | None = None,
     forecast: Sequence[tuple[float | None, datetime | None]] = (),
 ) -> list[DrawWindowResult]:
     """One per ``(start, end, expected_gal)`` window; ``forecast`` gives
     each, by index, the draws a forecast expects in it and the end of its
     long draws in the worst case. The tank at the onset (before anything
     drawn there), its ``deliverable_gal`` and the delivery judged over
-    the window all read the path's layers."""
+    the window all read the path's layers. ``inlet_on`` gives the mains
+    at a window's onset, in place of ``inlet_f``."""
     p = params.readiness
     out: list[DrawWindowResult] = []
     for k, (start, end, expected) in enumerate(windows):
@@ -329,7 +331,11 @@ def draw_windows(
             sim.points, opened, min(end, sim.points[-1].at), delivery, p
         )
         gal = deliverable(
-            params, upper, lower, there.layers_f, inlet_f=inlet_f
+            params,
+            upper,
+            lower,
+            there.layers_f,
+            inlet_f=inlet_f if inlet_on is None else inlet_on(opened),
         ).gal
         recovery = next(
             (h for h in sim.heating if h.start.at < end and h.end > start),

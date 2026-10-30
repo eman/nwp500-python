@@ -241,17 +241,20 @@ TANK_PROFILE_ESTIMATED = "tank_profile_estimated"
 def _mains(
     environment: Environment, params: HeaterParams, at: datetime
 ) -> float:
-    """The mains from ``at``: the environment's own
+    """The mains at ``at``: the environment's own
     (``Environment.inlet_f``), else the parameters' on that day
-    (``DrawParams.mains_on``), held over the span."""
+    (``DrawParams.mains_on``)."""
     if environment.inlet_f is not None:
         return environment.inlet_f
     return params.draw.mains_on(at.date())
 
 
-def _inlet_f(s: Scenario, params: HeaterParams) -> float:
-    """The scenario's mains (``_mains`` from its start)."""
-    return _mains(s.environment, params, s.start)
+def _inlet_f(
+    s: Scenario, params: HeaterParams, at: datetime | None = None
+) -> float:
+    """The scenario's mains at ``at``, its start by default
+    (``_mains``): a draw meets its own day's."""
+    return _mains(s.environment, params, s.start if at is None else at)
 
 
 def _physics(
@@ -468,6 +471,8 @@ def simulate(
     )
     reasons: list[str] = []
     mode, disabled = _engine_mode(s.settings.mode)
+    if resume is not None:
+        resume.check_from(s.start)
     if resume is not None and not resume.carries(
         heating_disabled=disabled, powered_off=s.settings.mode == POWER_OFF
     ):
@@ -608,7 +613,7 @@ def simulate(
                 [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
                 delivery,
                 params,
-                inlet_f=_inlet_f(s, params),
+                inlet_on=lambda at: _inlet_f(s, params, at),
                 forecast=[
                     (w.expected_count, w.draws_until) for w in s.loads.windows
                 ],
@@ -1658,7 +1663,7 @@ def _mode_run(
             pt.upper_f,
             pt.lower_f,
             pt.layers_f,
-            inlet_f=_inlet_f(s, params),
+            inlet_f=_inlet_f(s, params, pt.at),
         )
         if got.gal < bath_gal:
             continue

@@ -90,8 +90,9 @@ Added
   year of outdoor readings. ``DrawParams.climate_f`` carries it:
   ``DrawParams.mains_on(day)`` gives that day's mains, else
   ``inlet_temp_f``. A scenario without an inlet meets each draw with
-  the mains on its day, and ``defaults_used`` names the start's; the
-  history's replay, the
+  the mains on its day, as a draw window's deliverable gallons and
+  ``time_to_ready``'s walk read them, and ``defaults_used`` names the
+  start's; the history's replay, the
   tank's fits and ``readiness(..., on=day)`` take each day's. At one
   installation (mean air 61.3 °F, swing 19.9 °F, its weather
   station's 2025-11 to 2026-10) the correlation read 1.5 °F under its
