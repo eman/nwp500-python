@@ -855,7 +855,8 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 12 High Demand restarts mid-stint (90 % CI 3.8-4.5 degF); the
        four of 2026-04-26/27 came at 3.78-4.14 degF short, each about
        3 minutes to the setpoint. The simulator starts High Demand's
-       upper element there later in a stint.
+       upper element there later in a stint, and Electric's, which is
+       not measured.
    * - ``controller.write_start_lag_s``, ``restart_lockout_s``,
        ``window_write_starts_f``
      - 30 s, 330 s, 4.0 degF
@@ -1130,6 +1131,12 @@ The ones about the heater's own rules, each resting on the device runs
        ``element_start_on_setpoint_raise_n1``
      - The element model rests on few runs: the lower element's on
        nine, Energy Saver's start on a setpoint raise on one.
+   * - ``electric_later_starts_unverified``
+     - Electric's elements started later in a stint: the upper element
+       4.1 degF short of the setpoint, as High Demand's, or the
+       heater's own trigger starting them by Electric's entry rule, as
+       in the heat pump's place. Electric's own rule is not on the
+       record.
    * - ``upper_zone_dips_during_the_lower_phase``
      - The upper zone dips while the lower element runs, and the model
        holds it.

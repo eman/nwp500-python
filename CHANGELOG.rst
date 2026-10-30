@@ -630,6 +630,22 @@ Changed
 Fixed
 -----
 
+- **Electric heats again after its first run.** A walk in Electric
+  heated only on entering the mode, so a tank left in it coasted to the
+  room and drew nothing (``element_later_starts_not_modelled``). Its
+  later starts are not on the record, so they follow the elements in the
+  heat pump's place: the heater's own triggers start them by Electric's
+  entry rule, the upper element then the lower, and the upper element
+  starts again 4.1 °F short of the setpoint, as High Demand's does
+  (``controller.later_start``). Each walk that uses them says
+  ``electric_later_starts_unverified``. Two days in Electric at a
+  130 °F setpoint from 128 °F now hold the upper probe at 125.9-132 °F
+  for 4.5 kWh with no draws and 13.6 kWh with a household's, where
+  before they heated nothing and ended at 104.6 and 72.9 °F. Across 800 random walks on one
+  NWP500-65's parameters, 427 change, each with Electric in force at
+  some point: 95 only in their reasons, 324 heat more (a median
+  +9.1 kWh), and 8 less, by up to 6.5 kWh, where the tank was warmer
+  when a later mode took over.
 - **The upper element's later start is found on a recovery's path.**
   High Demand's start of the upper element when the upper probe falls
   short, and Energy Saver's, were found along a coast but only read at

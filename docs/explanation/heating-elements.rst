@@ -15,7 +15,9 @@ thermostat, and how far that holds depends on the mode and the moment:
   unit's history and confirmed by a commanded run.
 * **Later in a stint, in** ``HIGH_DEMAND`` **they do not**: it re-engages
   about 2.1 degC below its ON setting. That is from history only, and
-  the simulator follows it. ``ELECTRIC`` is uncharacterised.
+  the simulator follows it. ``ELECTRIC`` is uncharacterised: the
+  simulator re-engages it as High Demand, and starts it on the heater's
+  own triggers, and says so.
 
 The fields also look wrong as a thermostat taken literally: in Electric
 and High Demand the on and off settings are **the same value**, and every
@@ -550,7 +552,9 @@ point and the probe's lag come from the unit's recorded history to
   0.2 degC either way, so another run is unlikely to split them.
 * **Electric's** behaviour later in a stint. Energy Saver's and High
   Demand's are described above from history; Electric has only one
-  mid-stint start on record, which characterises nothing.
+  mid-stint start on record, which characterises nothing. The simulator
+  borrows High Demand's re-engagement and the heater's own triggers
+  for it (``electric_later_starts_unverified``).
 * anything about runs longer than six minutes.
 * whether either differential is firmware-dependent. The unit reported
   ``heUpperOnDiffTempSetting`` as 0 throughout; if another unit reports

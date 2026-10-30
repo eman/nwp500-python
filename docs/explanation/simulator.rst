@@ -105,8 +105,10 @@ where the condenser heats are fitted together on the record
 upper before lower, Energy Saver re-engaging at an absolute
 104.9 degF, and High Demand re-engaging 4.1 degF short of the setpoint.
 Electric's later starts are not measured (it never ran half an hour on
-record), so a walk in Electric heats only on entry and says so
-(``element_later_starts_not_modelled``).
+record). A walk in Electric heats again as the elements do in the heat
+pump's place: the heater's own triggers start them by Electric's entry
+rule, and the upper element starts again 4.1 degF short of the setpoint,
+as High Demand's does. It says so (``electric_later_starts_unverified``).
 
 **Draws.** A draw is gallons on the delivered (mixed) line. The tank
 gives up the hot share of them through the mixing valve, from the top,

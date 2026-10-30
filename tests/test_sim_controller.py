@@ -13,6 +13,7 @@ import pytest
 
 from nwp500.sim import controller
 from nwp500.sim.controller import (
+    ELECTRIC_LATER_STARTS_UNVERIFIED,
     POWERED_ON_BY_ENTRY,
     Action,
     Begins,
@@ -1303,17 +1304,38 @@ class TestTheElements:
         _, acts = step(fresh(), ElementWasOn(at=T0, tank=tank(130, 120)))
         assert acts == ()
 
-    def test_later_starts_are_not_modelled_for_electric(self) -> None:
-        """Mid-stint re-engagement is measured for Energy Saver and High
-        Demand; Electric never ran half an hour on record, so its later
-        starts are not projected, and the projection says so."""
-        _, acts = step(
-            fresh(mode="electric"), Begins(at=T0, tank=tank(130, 120))
+    def test_electrics_upper_element_starts_again_short_of_the_setpoint(
+        self,
+    ) -> None:
+        """Later in a stint, Electric's upper element starts as High
+        Demand's does, 4.1 °F short of the setpoint, and says the rule is
+        not Electric's own measured one."""
+        state = fresh(mode="electric")
+        _, acts = step(state, UpperRead(at=T0, tank=tank(135.85, 130)))
+        (start,) = of(acts, StartElement)
+        assert (start.zone, start.start.trigger) == (
+            "upper",
+            "electric_upper_short",
         )
-        assert "element_later_starts_not_modelled" in notes(acts)
-        for mode in ("energy_saver", "high_demand"):
-            _, acts = step(fresh(mode=mode), Begins(at=T0, tank=tank(130, 120)))
-            assert "element_later_starts_not_modelled" not in notes(acts)
+        assert ELECTRIC_LATER_STARTS_UNVERIFIED in notes(acts)
+        _, acts = step(state, UpperRead(at=T0, tank=tank(135.95, 130)))
+        assert not of(acts, StartElement)
+
+    def test_electrics_elements_answer_the_heaters_own_trigger(self) -> None:
+        """The lower zone at the heater's threshold in Electric starts the
+        elements, by its entry rule, never the compressor."""
+        state = fresh(mode="electric")
+        _, acts = step(
+            state, HeaterTrigger(at=T0, tank=tank(139.9, 100), trigger="lower")
+        )
+        assert not of(acts, StartCompressor)
+        (start,) = of(acts, StartElement)
+        assert (start.zone, start.start.trigger) == ("lower", "lower")
+        assert ELECTRIC_LATER_STARTS_UNVERIFIED in notes(acts)
+        _, acts = step(
+            state, HeaterTrigger(at=T0, tank=tank(130, 100), trigger="lower")
+        )
+        assert of(acts, StartElement)[0].zone == "upper"
 
 
 def test_the_controller_wakes_at_its_own_instants() -> None:
