@@ -8,6 +8,7 @@ its rules.
 import math
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -277,6 +278,70 @@ class TestTheParametersMains:
             modelled.defaults_used
         )
         assert not any(d.startswith("inlet_f") for d in given.defaults_used)
+
+    def test_a_draw_on_a_later_day_meets_that_days_mains(self) -> None:
+        """Across midnight, a draw meets the mains of its own day, not
+        the walk's first: the walk is the one given that day's."""
+        params = site_example_params()
+        start = datetime(2026, 2, 1, 18, tzinfo=UTC)
+        draw = start + timedelta(hours=18)
+        assert params.draw.mains_on(draw) != params.draw.mains_on(start)
+        base: dict[str, Any] = {
+            "start": start,
+            "horizon": timedelta(hours=30),
+            "tz": "UTC",
+            "state": {"upper_f": 135.0, "lower_f": 110.0},
+            "settings": {"setpoint_f": 140.0},
+            "loads": {"draws": [{"at": draw, "gallons": 20.0}]},
+        }
+        modelled = simulate(
+            Scenario(**base, environment=Environment(ambient_f=65.0)), params
+        )
+        given = simulate(
+            Scenario(
+                **base,
+                environment=Environment(
+                    ambient_f=65.0, inlet_f=params.draw.mains_on(draw)
+                ),
+            ),
+            params,
+        )
+        assert modelled.simulation == given.simulation
+
+    def test_a_window_on_a_later_day_is_priced_at_that_days_mains(
+        self,
+    ) -> None:
+        """A draw window a month on from the start: its deliverable
+        gallons meet that day's mains, as its draws would, not the
+        start's."""
+        params = site_example_params()
+        start = datetime(2026, 4, 20, 18, tzinfo=UTC)
+        opens = start + timedelta(days=30, hours=16)
+        base: dict[str, Any] = {
+            "start": start,
+            "horizon": timedelta(days=31),
+            "tz": "UTC",
+            "state": {"upper_f": 135.0, "lower_f": 110.0},
+            "settings": {"setpoint_f": 140.0, "hp_lower_on_f": 111.0},
+            "loads": {
+                "windows": [
+                    {
+                        "start": opens,
+                        "end": opens + timedelta(hours=1),
+                        "expected_gal": 40.0,
+                    }
+                ]
+            },
+        }
+
+        def window(inlet_f: float | None) -> float | None:
+            environment = Environment(ambient_f=65.0, inlet_f=inlet_f)
+            got = simulate(Scenario(**base, environment=environment), params)
+            return got.windows[0].deliverable_gal
+
+        modelled = window(None)
+        assert modelled == window(params.draw.mains_on(opens))
+        assert modelled != window(params.draw.mains_on(start))
 
     def test_each_modes_time_reads_the_days_mains(self) -> None:
         """A mode's bath is judged at the mains its walk meets: the same

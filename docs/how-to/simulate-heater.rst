@@ -1086,8 +1086,8 @@ draw late reaches the replay late: it replays what the history holds at
 ``circulation_speed`` gives the circulation's runs, and ``air`` the air
 beside the heater.
 
-**The inlet.** Without one, a scenario's draws meet the parameters'
-mains on its first day, and the replay's each its own day's: the
+**The inlet.** Without one, a scenario's draws, and the replay's, meet
+the parameters' mains each on its own day: the
 climate's (``DrawParams.climate_f``), else ``DrawParams.inlet_temp_f``. Give the climate once, as the year's mean
 outdoor air and its warmest monthly mean less its coldest, in °F: from
 your weather station's last year (``cold_supply.climate_of``) or a

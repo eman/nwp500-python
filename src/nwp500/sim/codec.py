@@ -127,6 +127,16 @@ def result_to_document(result: SimulationResult) -> dict[str, Any]:
         "windows": [_plain(dataclasses.asdict(w)) for w in result.windows],
         "reasons": list(result.reasons),
         "defaults_used": list(result.defaults_used),
+        # Where the walk left the heater: a scenario from ``until`` takes
+        # them as its state, history and settings.
+        **{
+            name: None if value is None else value.model_dump(mode="json")
+            for name, value in (
+                ("end_state", result.end_state),
+                ("end_history", result.end_history),
+                ("end_settings", result.end_settings),
+            )
+        },
     }
 
 

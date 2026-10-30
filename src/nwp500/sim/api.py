@@ -12,6 +12,7 @@ default used in its ``defaults_used``.
 import contextlib
 import dataclasses
 import itertools
+import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
@@ -37,11 +38,14 @@ from nwp500.sim.delivery import (
 from nwp500.sim.engine import (
     HEATER_SETPOINT_MAX_F,
     HEATER_SETPOINT_MIN_F,
+    RECOVERY_AHEAD,
+    RESUME_DROPPED,
     Entry,
     Heater,
     HeatingInterval,
     PathPoint,
     RawWrite,
+    Resume,
     Simulation,
     SimulationError,
     quantise,
@@ -237,17 +241,20 @@ TANK_PROFILE_ESTIMATED = "tank_profile_estimated"
 def _mains(
     environment: Environment, params: HeaterParams, at: datetime
 ) -> float:
-    """The mains from ``at``: the environment's own
+    """The mains at ``at``: the environment's own
     (``Environment.inlet_f``), else the parameters' on that day
-    (``DrawParams.mains_on``), held over the span."""
+    (``DrawParams.mains_on``)."""
     if environment.inlet_f is not None:
         return environment.inlet_f
     return params.draw.mains_on(at.date())
 
 
-def _inlet_f(s: Scenario, params: HeaterParams) -> float:
-    """The scenario's mains (``_mains`` from its start)."""
-    return _mains(s.environment, params, s.start)
+def _inlet_f(
+    s: Scenario, params: HeaterParams, at: datetime | None = None
+) -> float:
+    """The scenario's mains at ``at``, its start by default
+    (``_mains``): a draw meets its own day's."""
+    return _mains(s.environment, params, s.start if at is None else at)
 
 
 def _physics(
@@ -261,6 +268,8 @@ def _physics(
     defaults: list[str],
     circulation: Circulation | None = None,
 ) -> TankPhysics:
+    """The physics over ``start`` to ``until``: each draw meets the
+    environment's inlet, else the parameters' mains on its own day."""
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
     inlet_f = _mains(environment, params, start)
@@ -283,6 +292,9 @@ def _physics(
         circulation=circulation,
         circulation_terms=SITE_CIRCULATION,
         draw_inlet_temp_f=inlet_f,
+        draw_inlet_on=None
+        if environment.inlet_f is not None
+        else params.draw.mains_on,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
         # Where the air leaves the heat pump's range, on the readings
@@ -351,10 +363,21 @@ def _entries(
     return out
 
 
+def _check_setpoint(what: str, f: float) -> None:
+    """Refuse a setpoint outside the range the simulation can run
+    (``HEATER_SETPOINT_MIN_F`` to ``_MAX_F``)."""
+    if not HEATER_SETPOINT_MIN_F - 1e-6 <= f <= HEATER_SETPOINT_MAX_F + 1e-6:
+        raise ValueError(
+            f"{what}: setpoint {f:.1f} °F is outside the range the "
+            f"simulation runs, {HEATER_SETPOINT_MIN_F}-"
+            f"{HEATER_SETPOINT_MAX_F} °F"
+        )
+
+
 def _check_setpoints(scenario: Scenario) -> None:
     """Refuse a write or a written reservation whose setpoint is outside
-    the range the simulation can run (``HEATER_SETPOINT_MIN_F`` to
-    ``_MAX_F``); the device's own limits are its feature's."""
+    the range the simulation can run (``_check_setpoint``); the device's
+    own limits are its feature's."""
     asked = [
         (f"write at {w.at.isoformat()}", w.setpoint_f)
         for w in scenario.commands.writes
@@ -365,16 +388,7 @@ def _check_setpoints(scenario: Scenario) -> None:
         for i, e in enumerate(scenario.commands.reservations or ())
     ]
     for what, f in asked:
-        if (
-            not HEATER_SETPOINT_MIN_F - 1e-6
-            <= f
-            <= HEATER_SETPOINT_MAX_F + 1e-6
-        ):
-            raise ValueError(
-                f"{what}: setpoint {f:.1f} °F is outside the range the "
-                f"simulation runs, {HEATER_SETPOINT_MIN_F}-"
-                f"{HEATER_SETPOINT_MAX_F} °F"
-            )
+        _check_setpoint(what, f)
 
 
 def _raw_writes(scenario: Scenario, reasons: list[str]) -> list[RawWrite]:
@@ -450,8 +464,29 @@ def simulate(
     """
     s = scenario
     _check_setpoints(s)
-    tz = ZoneInfo(s.tz)
+    resume = (
+        None
+        if s.state.resume is None
+        else Resume.from_document(json.loads(s.state.resume))
+    )
     reasons: list[str] = []
+    mode, disabled = _engine_mode(s.settings.mode)
+    if resume is not None:
+        resume.check_from(s.start)
+    if resume is not None and not resume.carries(
+        heating_disabled=disabled, powered_off=s.settings.mode == POWER_OFF
+    ):
+        # Starts afresh from the tank and the history, as the engine
+        # would.
+        resume = None
+        reasons.append(RESUME_DROPPED)
+    setpoint_f = s.settings.setpoint_f
+    if resume is not None and setpoint_f != resume.controller.setpoint_f:
+        # Moved since the walk ended: written at the start, as an app
+        # writes one.
+        _check_setpoint(f"settings at {s.start.isoformat()}", setpoint_f)
+        setpoint_f = quantise(setpoint_f)
+    tz = ZoneInfo(s.tz)
     defaults: list[str] = []
     if s.loads.draws and not inlet_measured:
         # Each draw's cold water is priced at an inlet nobody measured
@@ -476,10 +511,17 @@ def simulate(
         else s.schedules.tou_enabled
     )
     switches = s.schedules.tou_switches
+    # To as far past the end as a recovery judges its cap, so one
+    # running at the end is judged as in a walk going on past it.
     windows: tuple[tuple[datetime, datetime], ...] = (
         tuple(
             while_enabled(
-                tou_windows(s.schedules.tou_periods, tz, s.start, s.until),
+                tou_windows(
+                    s.schedules.tou_periods,
+                    tz,
+                    s.start,
+                    s.until + RECOVERY_AHEAD,
+                ),
                 tou_on,
                 switches,
             )
@@ -493,12 +535,12 @@ def simulate(
         s.schedules.tou_periods
     ):
         reasons.append("tou_schedule_unknown")
-    mode, disabled = _engine_mode(s.settings.mode)
     if s.settings.hp_lower_on_f is None:
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
         # The lower trigger was never searched; the TOU-opening one was.
         reasons.append(HP_LOWER_ON_UNKNOWN)
-    _history_defaults(s.state, s.history, defaults)
+    if resume is None:
+        _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
     draws = [(d.at, d.gallons) for d in s.loads.draws]
@@ -512,7 +554,7 @@ def simulate(
         lower_f=s.state.lower_f,
         running=s.state.compressor_running,
         until=s.until,
-        setpoint_f=s.settings.setpoint_f,
+        setpoint_f=setpoint_f,
         heater=Heater(
             hp_lower_on_f=s.settings.hp_lower_on_f,
             tou_windows=windows,
@@ -540,6 +582,7 @@ def simulate(
         ),
         running_hold=running_hold,
         running_starts=running_starts,
+        resume=resume,
     )
     delivery = delivery_along(sim.points, params)
     out_of_domain_at: datetime | None = None
@@ -570,14 +613,63 @@ def simulate(
                 [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
                 delivery,
                 params,
-                inlet_f=_inlet_f(s, params),
+                inlet_on=lambda at: _inlet_f(s, params, at),
                 forecast=[
                     (w.expected_count, w.draws_until) for w in s.loads.windows
                 ],
             )
         ),
         draw_out_of_domain_at=out_of_domain_at,
+        **_end(s, sim),
     )
+
+
+#: The device's mode for each of the engine's.
+_DEVICE_MODE: Mapping[HeaterMode, int] = MappingProxyType(
+    {named: mode for mode, named in ENGINE_MODE.items()}
+)
+
+
+def _end(s: Scenario, sim: Simulation) -> dict[str, Any]:
+    """The heater where ``sim`` ended, as the state, the history and the
+    settings of a scenario from there (``SimulationResult.end_state``)."""
+    r = sim.resume
+    assert r is not None
+    last = sim.points[-1]
+    el = r.element
+    commanded = r.controller.mode.commanded
+    # The mode in force at the start unless a write moved it: Vacation
+    # and Power Off are the engine's Heat Pump, with heating disabled,
+    # and an entry that turns the heater on leaves Power Off.
+    powered_on = s.settings.mode == POWER_OFF and r.controller.powered_on
+    mode = (
+        s.settings.mode
+        if commanded == _engine_mode(s.settings.mode)[0] and not powered_on
+        else _DEVICE_MODE[commanded]
+    )
+    if powered_on:
+        # Out of Power Off as the settings say: Power Off given again is
+        # the heater turned off, not the entry's turning on.
+        r = dataclasses.replace(
+            r, controller=dataclasses.replace(r.controller, powered_on=False)
+        )
+    return {
+        "end_state": HeaterState(
+            upper_f=last.upper_f,
+            lower_f=last.lower_f,
+            layers_f=last.layers_f,
+            compressor_running=r.cycle is not None,
+            element_running=el is not None,
+            element_running_since=None if el is None else el.on_at,
+            resume=json.dumps(r.to_document(), sort_keys=True),
+        ),
+        "end_history": History(
+            compressor_stopped_at=r.controller.compressor.last_stop
+        ),
+        "end_settings": s.settings.model_copy(
+            update={"setpoint_f": r.controller.setpoint_f, "mode": mode}
+        ),
+    }
 
 
 def readiness(
@@ -1571,7 +1663,7 @@ def _mode_run(
             pt.upper_f,
             pt.lower_f,
             pt.layers_f,
-            inlet_f=_inlet_f(s, params),
+            inlet_f=_inlet_f(s, params, pt.at),
         )
         if got.gal < bath_gal:
             continue

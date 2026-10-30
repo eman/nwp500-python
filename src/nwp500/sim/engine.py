@@ -53,13 +53,16 @@ reconciliation against the record tests.
 
 from __future__ import annotations
 
+import dataclasses
 import math
+import types
+import typing
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
-from typing import Literal
+from typing import Any, Literal
 
 from nwp500.sim import controller as ctl
 from nwp500.sim.controller import (
@@ -112,7 +115,7 @@ _INSTANT = timedelta(microseconds=1)
 #: An entry's minute: the span it fires in.
 _ENTRY_MINUTE = timedelta(minutes=1)
 #: How far ahead a recovery is walked to judge the TOU cap on it.
-_RECOVERY_AHEAD = timedelta(hours=16)
+RECOVERY_AHEAD = timedelta(hours=16)
 #: How far a coast walks ahead before it first looks for the heater's
 #: own start, to the clock's ``IDLE_STEP`` grid at or before it, each
 #: later piece twice the last: the start is found on the walk and the
@@ -125,6 +128,10 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 #: A walk that has not reached the horizon after this many steps is a
 #: bug, not a long simulation (a week of 10-minute events is ~1,000).
 _MAX_STEPS = 20_000
+
+#: The ``id`` of the write a walk going on from another makes of the
+#: settings it is given where they differ from where that one ended.
+_SETTINGS_WRITE = "settings"
 
 #: What a write is: a reservation entry, or a direct write replayed.
 Purpose = Literal["entry", "raw"]
@@ -319,6 +326,9 @@ class Simulation:
     #: the mode. One dropped at the walk's start leaves no interval in
     #: ``modes``, so it is listed here.
     drops: list[tuple[datetime, HeaterMode]] = field(default_factory=list)
+    #: The heater where the walk ended, for a walk from there to go on
+    #: from (``simulate(resume=...)``).
+    resume: Resume | None = field(default=None, compare=False)
 
     @property
     def starts(self) -> list[Start]:
@@ -327,6 +337,125 @@ class Simulation:
 
 class SimulationError(Exception):
     """A walk the engine could not finish."""
+
+
+#: ``Resume.to_document``'s format.
+RESUME_VERSION = 1
+#: A resume not carried on: heating disabled or enabled since it ended
+#: (``Resume.disabled``), by a write the simulation holds no rule for.
+RESUME_DROPPED = "resume_dropped_heating_disabled_changed"
+
+
+@dataclass(frozen=True)
+class Resume:
+    """The heater where a walk ended, ``at``: the firmware's state and
+    what the engine keeps beside it (the recovery running, the element,
+    heat still on its way from one that stopped, a mode write held in
+    a window). A walk from ``at`` given it (``simulate(resume=...)``)
+    goes on as the walk would have past ``at`` unbroken. The tank is
+    the caller's: the walk goes on from the one it is handed.
+
+    Opaque to a caller, who keeps it as ``to_document`` writes it."""
+
+    at: datetime
+    controller: ctl.State
+    setpoint_f: float
+    mode: HeaterMode
+    cycle: _Cycle | None = None
+    element: _Element | None = None
+    cooling: tuple[ElementRun, ...] = ()
+    #: The tank was below the heat pump's water range with no element
+    #: since to heat it past (``_Engine._cold``).
+    cold: bool = False
+    #: The mode write ``controller``'s held write is (its ``ref``).
+    held_write: ModeWrite | None = None
+    #: Heating was disabled (``controller.disabled``): Vacation, or
+    #: powered off with no entry having turned the heater on.
+    disabled: bool = False
+
+    def check_from(self, start: datetime) -> None:
+        """Refuse a walk from ``start`` that is not where this ended:
+        whether it is gone on from or dropped (``carries``)."""
+        if self.at != start:
+            raise ValueError(
+                f"a walk from {start.isoformat()} cannot go on from one "
+                f"that ended at {self.at.isoformat()}"
+            )
+
+    def carries(self, *, heating_disabled: bool, powered_off: bool) -> bool:
+        """Whether a walk in these settings goes on from it: not into or
+        out of Vacation or Power Off since (``disabled``), a write the
+        simulation holds no rule for."""
+        now = ctl.disabled(
+            self.controller,
+            ctl.Settings(
+                hp_lower_on_f=None,
+                heating_disabled=heating_disabled,
+                powered_off=powered_off,
+            ),
+        )
+        return now == self.disabled
+
+    def to_document(self) -> dict[str, Any]:
+        """The resume as a JSON-compatible document: instants as ISO
+        8601 strings, floats as they are."""
+        return {"version": RESUME_VERSION, **_encode(self)}
+
+    @classmethod
+    def from_document(cls, doc: dict[str, Any]) -> Resume:
+        """The resume ``doc`` holds (``to_document``); a ``version``
+        other than ``RESUME_VERSION`` is a ``ValueError``."""
+        if doc.get("version") != RESUME_VERSION:
+            raise ValueError(
+                f"resume version {doc.get('version')!r}, not "
+                f"{RESUME_VERSION}: run the walk again from its start"
+            )
+        body = {k: v for k, v in doc.items() if k != "version"}
+        return _decode(body, cls)
+
+
+def _encode(value: Any) -> Any:
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            f.name: _encode(getattr(value, f.name))
+            for f in dataclasses.fields(value)
+            if f.init
+        }
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, tuple | list):
+        return [_encode(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
+    return value
+
+
+def _decode(value: Any, hint: Any) -> Any:
+    """``value`` (``_encode``'s) as the type ``hint`` names."""
+    if value is None:
+        return None
+    origin = typing.get_origin(hint)
+    if origin in (typing.Union, types.UnionType):
+        options = [a for a in typing.get_args(hint) if a is not type(None)]
+        if len(options) == 1:
+            return _decode(value, options[0])
+        if isinstance(value, dict):
+            (cls,) = [a for a in options if dataclasses.is_dataclass(a)]
+            return _decode(value, cls)
+        return value
+    if origin is tuple:
+        (item, *_) = typing.get_args(hint)
+        return tuple(_decode(v, item) for v in value)
+    if hint is datetime:
+        return datetime.fromisoformat(value)
+    if isinstance(hint, type) and dataclasses.is_dataclass(hint):
+        hints = typing.get_type_hints(hint)
+        return hint(
+            **{
+                f.name: _decode(value[f.name], hints[f.name])
+                for f in dataclasses.fields(hint)
+                if f.init and f.name in value
+            }
+        )
+    return value
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -391,6 +520,9 @@ class _Cycle:
     scale: float = 1.0
     input_wh: float | None = 0.0
     confidence: float = 1.0
+    #: Why its pace may be less than it seems, from the start's model
+    #: (``TankPhysics.scale``).
+    why: tuple[str, ...] = ()
     #: Its heating begins at ``heats_at``, with the start's stir; False
     #: for a run under way at the walk's start with no hold left.
     stirs: bool = True
@@ -436,7 +568,23 @@ class _Engine:
         running_starts: bool = False,
         controller: ControllerParams | None = None,
         state: TankState | None = None,
+        resume: Resume | None = None,
     ) -> None:
+        if resume is not None:
+            resume.check_from(start)
+        #: A resume these settings do not go on from: the walk starts
+        #: afresh (``Resume.carries``).
+        self.resume_dropped = resume is not None and not resume.carries(
+            heating_disabled=heater.heating_disabled,
+            powered_off=heater.powered_off,
+        )
+        if self.resume_dropped:
+            resume = None
+        #: The walk goes on from one that ended at its start.
+        self.resumed = resume
+        if resume is not None:
+            running = resume.cycle is not None
+            element_running = False
         self.t = start
         #: The rest of a running compressor's hold at the start, minutes.
         self.running_hold = running_hold if running else 0.0
@@ -479,12 +627,14 @@ class _Engine:
         )
         #: Where the air at the heater is outside the heat pump's
         #: operating range (``ControllerParams.hp_air_range_f``), from
-        #: the physics' air; none from a physics that cannot say.
+        #: the physics' air; none from a physics that cannot say. Read
+        #: to just past the end, so a span the end cuts does not end
+        #: there: the heat pump is not back in range at the end.
         outside = getattr(physics, "air_outside", None)
         self.air_out: list[Window] = (
             []
             if outside is None
-            else outside(start, until, *self.params.hp_air_range_f)
+            else outside(start, until + _INSTANT, *self.params.hp_air_range_f)
         )
         self.physics = physics
         available = self._available(start)
@@ -500,9 +650,12 @@ class _Engine:
             params=self.params,
             hp_available=available,
         )
-        self.reasons: set[str] = set()
+        self.reasons: set[str] = (
+            {RESUME_DROPPED} if self.resume_dropped else set()
+        )
         if (
-            not available
+            resume is None
+            and not available
             and heater.mode in ctl.COMPRESSOR_MODES
             and not (heater.heating_disabled or heater.powered_off)
         ):
@@ -512,11 +665,17 @@ class _Engine:
         self.sp = setpoint_f
         self.mode: HeaterMode = heater.mode
         self.mode_writes: list[ModeWrite] = []
-        self.modes: list[ModeInterval] = [ModeInterval(start, until, self.mode)]
+        self.cycle: _Cycle | None = None
         self.element: _Element | None = None
         #: Elements that have stopped, whose heat is still on its way to
         #: the water (``ElementParams.upper_dead_time_min``).
         self.cooling: list[ElementRun] = []
+        #: The intervals running at the start, carried on from a walk
+        #: that ended there.
+        carried: list[HeatingInterval] = []
+        if resume is not None:
+            self._restore(resume, carried)
+        self.modes: list[ModeInterval] = [ModeInterval(start, until, self.mode)]
         #: Draws not yet taken, onset order. Each is removed as a coast
         #: or a recovery takes it.
         self.draws = sorted(d for d in draws if start <= d[0] < until)
@@ -526,15 +685,14 @@ class _Engine:
                 start,
                 self.upper,
                 self.lower,
-                setpoint_f,
+                self.sp,
                 running,
                 0.0,
-                mode=heater.mode,
+                mode=self.mode,
                 layers_f=_layers_of(self.tank_state),
             )
         ]
-        self.heating: list[HeatingInterval] = []
-        self.cycle: _Cycle | None = None
+        self.heating: list[HeatingInterval] = carried
         #: Instants the path must carry an element at, exactly (the
         #: forecast's draw windows): not the feature's events, only stops.
         self.marks = {m for m in marks if start < m < until}
@@ -545,6 +703,21 @@ class _Engine:
             (w for w in raw_writes if start <= w.at < until),
             key=lambda w: w.at,
         )
+        if resume is not None:
+            # Settings that differ from where the walk ended were written
+            # at its start.
+            moved = setpoint_f != resume.controller.setpoint_f
+            mode_moved = heater.mode != resume.controller.mode.commanded
+            if moved or mode_moved:
+                self.raw.insert(
+                    0,
+                    RawWrite(
+                        start,
+                        setpoint_f=setpoint_f if moved else None,
+                        mode=heater.mode if mode_moved else None,
+                        id=_SETTINGS_WRITE,
+                    ),
+                )
         #: Each compressor recovery's arrival at its target (``reached``),
         #: and each mode the heater dropped (``drops``).
         self.reached: list[tuple[datetime, float]] = []
@@ -572,6 +745,87 @@ class _Engine:
                 )
             self.queue.append((fires, len(self.writes)))
             self.writes.append(w)
+
+    def _restore(self, resume: Resume, carried: list[HeatingInterval]) -> None:
+        """The heater as a walk that ended at the start left it: its
+        intervals running then carried on, each charged from here."""
+        held = resume.controller.mode.held
+        self.state = replace(
+            resume.controller,
+            mode=replace(
+                resume.controller.mode,
+                held=None if held is None else replace(held, ref=0),
+                recorded=0 if held is None else 1,
+            ),
+        )
+        if held is not None:
+            assert resume.held_write is not None
+            self.mode_writes.append(replace(resume.held_write))
+        self.sp = resume.setpoint_f
+        self.mode = resume.mode
+        if resume.cycle is not None:
+            assert resume.cycle.interval is not None
+            interval = replace(
+                resume.cycle.interval,
+                end=self.t,
+                input_wh=None if resume.cycle.input_wh is None else 0.0,
+            )
+            self.cycle = replace(
+                resume.cycle, input_wh=interval.input_wh, interval=interval
+            )
+            carried.append(interval)
+        if resume.element is not None:
+            interval = replace(
+                resume.element.interval, end=self.t, input_wh=0.0
+            )
+            self.element = replace(resume.element, interval=interval)
+            carried.append(interval)
+        self.cooling = list(resume.cooling)
+        self._cold = resume.cold
+        # What the heating carried on rests on, as where it began says.
+        if self.cycle is not None:
+            self.reasons.update(self.cycle.why)
+        el = self.state.element
+        if el.running and el.zone is not None:
+            self.reasons.update(ctl.element_notes(el.zone, el.in_place))
+        if held is not None:
+            assert resume.held_write is not None
+            self.reasons.update(
+                ctl.held_notes(
+                    held.mode, entry=resume.held_write.owner != "raw"
+                )
+            )
+
+    def _resume(self) -> Resume:
+        """The heater now, for a walk from here to go on from."""
+        held = self.state.mode.held
+        cycle = self.cycle
+        el = self.element
+        return Resume(
+            at=self.t,
+            controller=self.state,
+            setpoint_f=self.sp,
+            mode=self.mode,
+            cycle=None
+            if cycle is None
+            else replace(
+                cycle,
+                interval=None
+                if cycle.interval is None
+                else replace(cycle.interval),
+            ),
+            element=None
+            if el is None
+            else replace(el, interval=replace(el.interval)),
+            cooling=tuple(
+                e for e in self.cooling if self._heats_until(e) > self.t
+            ),
+            cold=self._cold,
+            held_write=None
+            if held is None
+            else replace(self.mode_writes[held.ref]),
+            disabled=ctl.disabled(self.state, self.settings),
+        )
 
     # ── the tank ──
 
@@ -891,7 +1145,7 @@ class _Engine:
         if self.lower >= level:
             cycle.stop_at = self.t
             return
-        ahead = self.t + _RECOVERY_AHEAD
+        ahead = self.t + RECOVERY_AHEAD
         if not any(w0 < ahead and self.t < w1 for w0, w1 in self.windows):
             return
         full = self._ahead(ahead, lambda _, lower: lower >= level)
@@ -920,8 +1174,6 @@ class _Engine:
                 cycle.stop_at, cycle.capped = window[0], True
             elif outcome == "to_level":
                 cycle.stop_level, cycle.capped = cap.level, True
-        if cycle.capped:
-            self.reasons.add(TOU_CAP_PROJECTED)
 
     def _begin(self, start: Start, *, hold: float) -> None:
         """The compressor starts (``controller.StartCompressor``),
@@ -932,6 +1184,7 @@ class _Engine:
             self.params.hp_water_range_f[1],
         )
         scale, confidence = 1.0, 1.0
+        why: tuple[str, ...] = ()
         under_way = start.cause == "running" and not self.running_starts
         scaled = getattr(self.physics, "scale", None)
         if scaled is not None:
@@ -943,7 +1196,8 @@ class _Engine:
                 under_way=under_way,
             )
             scale, confidence = got.scale, got.confidence
-            self.reasons.update(got.reasons)
+            why = tuple(got.reasons)
+            self.reasons.update(why)
         self.cycle = _Cycle(
             start=start,
             setpoint_f=self.sp,
@@ -952,6 +1206,7 @@ class _Engine:
             capped=False,
             scale=scale,
             confidence=confidence,
+            why=why,
             stirs=not under_way or hold > 0.0,
         )
         self._position()
@@ -977,6 +1232,10 @@ class _Engine:
         interval.end = at
         interval.stop = stop
         interval.capped = stop == "cap"
+        if interval.capped:
+            # Said where the cap stops it, in the walk it stops in: not
+            # one the walk ends before, nor a projection a draw undoes.
+            self.reasons.add(TOU_CAP_PROJECTED)
         interval.input_wh = cycle.input_wh
         interval.confidence = cycle.confidence
         interval.final_target_f = cycle.setpoint_f
@@ -993,7 +1252,9 @@ class _Engine:
         """Run the cycle to ``end`` or to its own finish: the tank
         walked under the compressor to the cycle's stop, cut at each
         draw (taken at its instant, and the stop judged again from the
-        tank it leaves) and at each withheld window's edges."""
+        tank it leaves), at each withheld window's edges, and where the
+        upper zone reaches the element's later start
+        (``controller.upper_on_crossing``)."""
         while self.cycle is not None and self.t < end:
             cycle = self.cycle
             now = self._take_draws(self.t, self.t + _INSTANT)
@@ -1017,6 +1278,18 @@ class _Engine:
             later += [x for w in self.withheld for x in w if self.t < x < nxt]
             nxt = min([nxt, *later])
             stretch = self._advance(nxt, stop=self._stop())
+            element_at = upper_on_crossing(
+                self.state, self.settings, stretch.points
+            )
+            if element_at is not None and element_at < stretch.end:
+                # The upper zone reaches the element's later start on
+                # the way: it starts there, as on a coast.
+                upto = self._advance(element_at, stop=self._stop())
+                self._append(upto.points, heating=True)
+                self.reasons.update(upto.reasons)
+                self.t = upto.end
+                self._dispatch(ctl.UpperOnCrossed(at=self.t, tank=self._tank()))
+                continue
             self._append(stretch.points, heating=True)
             self.reasons.update(stretch.reasons)
             self.t = stretch.end
@@ -1095,8 +1368,13 @@ class _Engine:
             )
 
     def _mode_events(self, at: datetime) -> None:
-        """A TOU window closing at ``at``, then one opening there."""
-        if any(w[1] == at for w in self.windows):
+        """A TOU window closing at ``at``, then one opening there. A
+        mode write held to ``at`` is to a window's close: one the walk
+        resumed at, which its windows begin past."""
+        held = self.state.mode.held
+        if any(w[1] == at for w in self.windows) or (
+            held is not None and held.until == at
+        ):
             self._dispatch(ctl.WindowCloses(at=at, tank=self._tank()))
         if any(w[0] == at for w in self.windows):
             self._dispatch(ctl.WindowOpens(at=at, tank=self._tank()))
@@ -1145,7 +1423,11 @@ class _Engine:
 
     def _element_boundary(self) -> None:
         """At every boundary the running element's zone is read: at its
-        off point it stops, otherwise it runs on (``_element_end``)."""
+        off point it stops, otherwise it runs on (``_element_end``). Not
+        at the walk's end, which takes nothing at its instant: a walk
+        going on from there reads it first (``run``)."""
+        if self.t >= self.until:
+            return
         if self.element is not None:
             # An element ending as the heat pump returns hands over to it.
             self._check_availability()
@@ -1176,6 +1458,50 @@ class _Engine:
     # ── the walk ──
 
     def run(self) -> Simulation:
+        if self.resumed is not None:
+            # Going on from a walk that ended here, whose own end took
+            # nothing at this instant: it is any later one, met at the
+            # end of a segment (``_element_boundary``, ``_at_event``).
+            self._element_boundary()
+            self._at_event(self.t)
+        else:
+            self._begin_walk()
+        steps = 0
+        while self.t < self.until:
+            steps += 1
+            # Each edge of the air's range is a step or two of its own.
+            if steps > _MAX_STEPS + 4 * len(self.air_out):
+                raise SimulationError("the walk did not advance")
+            self._check_availability()
+            self._element_trigger()
+            nxt = min([*self._upcoming(), self.until])
+            if self.cycle is not None:
+                self._heat_until(nxt)
+            else:
+                self._coast_until(nxt)
+                self._element_boundary()
+            if self.t < nxt:
+                # A recovery ended, or the heater started itself, before
+                # the event: what comes next may have changed (a write
+                # its end released can start the heater again).
+                continue
+            self._at_event(nxt)
+        resume = self._resume()
+        self._dispatch(ctl.Horizon(at=self.until, tank=self._tank()))
+        return Simulation(
+            self.path,
+            self.heating,
+            sorted(self.writes, key=lambda w: (w.at, w.written_at)),
+            sorted(self.reasons),
+            self.mode_writes,
+            [m for m in self.modes if m.end > m.start],
+            self.reached,
+            self.drops,
+            resume,
+        )
+
+    def _begin_walk(self) -> None:
+        """The walk's start, from the heater as the caller gives it."""
         self._dispatch(
             ctl.Begins(
                 at=self.t,
@@ -1201,37 +1527,6 @@ class _Engine:
                     since=self.element_running_since,
                 )
             )
-        steps = 0
-        while self.t < self.until:
-            steps += 1
-            # Each edge of the air's range is a step or two of its own.
-            if steps > _MAX_STEPS + 4 * len(self.air_out):
-                raise SimulationError("the walk did not advance")
-            self._check_availability()
-            self._element_trigger()
-            nxt = min([*self._upcoming(), self.until])
-            if self.cycle is not None:
-                self._heat_until(nxt)
-            else:
-                self._coast_until(nxt)
-                self._element_boundary()
-            if self.t < nxt:
-                # A recovery ended, or the heater started itself, before
-                # the event: what comes next may have changed (a write
-                # its end released can start the heater again).
-                continue
-            self._at_event(nxt)
-        self._dispatch(ctl.Horizon(at=self.until, tank=self._tank()))
-        return Simulation(
-            self.path,
-            self.heating,
-            sorted(self.writes, key=lambda w: (w.at, w.written_at)),
-            sorted(self.reasons),
-            self.mode_writes,
-            [m for m in self.modes if m.end > m.start],
-            self.reached,
-            self.drops,
-        )
 
     def _upcoming(self) -> set[datetime]:
         """Every instant the walk must stop at next: the controller's
@@ -1285,7 +1580,6 @@ class _Engine:
                         at=self.t,
                         starts_at=own.starts_at,
                         trigger=own.trigger,
-                        horizon=self.until,
                     )
                 )
             else:
@@ -1486,6 +1780,7 @@ def simulate(
     running_starts: bool = False,
     controller: ControllerParams | None = None,
     state: TankState | None = None,
+    resume: Resume | None = None,
 ) -> Simulation:
     """Walk the heater from ``start`` to ``until``, its reservation
     list holding ``entries``, from the tank ``state``, or with none,
@@ -1515,6 +1810,14 @@ def simulate(
     ``start``, as a recorded start replayed). ``controller`` holds the
     numbers of the firmware's rules (``sim/controller.py``); None, the
     measured defaults.
+
+    ``resume`` (``Simulation.resume`` of a walk that ended at ``start``)
+    goes on from where that walk left the heater, as if it had not
+    ended: ``running``, ``element_running`` and its since, ``stopped_at``
+    and ``running_hold`` are its, not the caller's. A ``setpoint_f`` or
+    a ``heater.mode`` other than the one it left is written at the start
+    (a raw write, ``id`` ``"settings"``). The tank is ``state``'s, or the
+    probes', as for any walk.
     """
     return _Engine(
         start=start,
@@ -1538,6 +1841,7 @@ def simulate(
         running_starts=running_starts,
         controller=controller,
         state=state,
+        resume=resume,
     ).run()
 
 

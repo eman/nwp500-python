@@ -141,6 +141,8 @@ POWERED_ON_BY_ENTRY = "powered_on_by_entry"
 #: The heat pump was outside its operating range
 #: (``ControllerParams.hp_air_range_f``, ``hp_water_range_f``) in the walk.
 HEAT_PUMP_UNAVAILABLE = "heat_pump_unavailable"
+#: A mode write held in a TOU window, landing at its close.
+MODE_WRITE_HELD_PROJECTED = "mode_write_held_projected"
 #: The elements heated in its place, by the manual's rule alone
 #: (``_fallback``): no such takeover is on the record.
 ENVELOPE_FALLBACK_UNVERIFIED = "envelope_fallback_unverified"
@@ -437,11 +439,11 @@ class HeaterTrigger(Event):
 class TriggerDeferred(Event):
     """A trigger on the coast ahead falls in the restart lockout, and
     its start, at ``starts_at``, beyond where this coast stops: it waits
-    as a pending start, unless it is at or past ``horizon``."""
+    as a pending start, past the walk's end too, as the heater keeps it
+    for a walk that goes on from there."""
 
     starts_at: datetime
     trigger: Trigger | None
-    horizon: datetime
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1005,11 +1007,8 @@ def _start_element(
     known, and is taken to be past it, with a whole dead time's heat in
     transit, when it is not. A zone already at its off point stops it at
     once (``_check_element``)."""
+    # Electric's rule in the heat pump's place (``heats_as``).
     in_place = not s.state.hp_available and s.mode != ELECTRIC
-    if in_place:
-        # Electric's rule in the heat pump's place (``heats_as``).
-        s.note(HEAT_PUMP_UNAVAILABLE)
-        s.note(ENVELOPE_FALLBACK_UNVERIFIED)
     ep = s.settings.element
     dead = ep.upper_dead_time_min if zone == "upper" else 0.0
     on_edge = start.at
@@ -1034,11 +1033,34 @@ def _start_element(
             start, zone, live_at, (start.at - on_edge).total_seconds() / 60.0
         )
     )
-    s.note("element_model_small_n")
-    if zone == "lower":
-        s.note("lower_element_nine_runs")
-        s.note("upper_zone_dips_during_the_lower_phase")
+    for note in element_notes(zone, in_place):
+        s.note(note)
     _check_element(s)
+
+
+def held_notes(mode: HeaterMode, *, entry: bool) -> tuple[str, ...]:
+    """What a mode write held in a TOU window rests on: a held
+    ``heat_pump`` entry on the documented rule alone (``_mode_write``)."""
+    if entry and mode == HEAT_PUMP:
+        return ("heat_pump_entry_held_spec_only", MODE_WRITE_HELD_PROJECTED)
+    return (MODE_WRITE_HELD_PROJECTED,)
+
+
+def element_notes(zone: Zone, in_place: bool) -> tuple[str, ...]:
+    """What an element's heat rests on: in the heat pump's place, the
+    fallback's; then the model's, and the lower element's own."""
+    notes: tuple[str, ...] = (
+        (HEAT_PUMP_UNAVAILABLE, ENVELOPE_FALLBACK_UNVERIFIED)
+        if in_place
+        else ()
+    )
+    notes += ("element_model_small_n",)
+    if zone == "lower":
+        notes += (
+            "lower_element_nine_runs",
+            "upper_zone_dips_during_the_lower_phase",
+        )
+    return notes
 
 
 def _check_element(s: _Step) -> None:
@@ -1280,12 +1302,11 @@ def _mode_write(
     entry = owner != "raw"
     if _holds(s, mode, owner):
         s.act(ModeHeld(ref))
-        if entry and mode == HEAT_PUMP:
-            s.note("heat_pump_entry_held_spec_only")
         window = window_at(s.at, s.settings.tou_windows)
         assert window is not None
         s.modes(held=Held(mode, serves, window[1], ref))
-        s.note("mode_write_held_projected")
+        for note in held_notes(mode, entry=entry):
+            s.note(note)
         if (
             not s.state.compressor.running
             and s.mode != ELECTRIC
@@ -1515,9 +1536,7 @@ def _trigger_deferred(s: _Step, ev: TriggerDeferred) -> None:
     the lockout ends (the 2026-09-23 restarts, 5 min 28 s and 5 min 31 s
     after the stop): carried as a pending start, the earliest kept."""
     pending = s.state.compressor.pending
-    if ev.starts_at < ev.horizon and (
-        pending is None or ev.starts_at < pending.at
-    ):
+    if pending is None or ev.starts_at < pending.at:
         s.pend(Start(ev.starts_at, "heater", trigger=ev.trigger))
 
 
