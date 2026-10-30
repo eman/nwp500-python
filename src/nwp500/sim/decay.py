@@ -7,6 +7,7 @@ instants (``Impulse``); ``AmbientSampler`` reads the air where the
 heater stands at any instant. Every input arrives as a value.
 """
 
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
@@ -73,6 +74,7 @@ def threshold_crossing(
         return trajectory[0][0]
 
     drops = sorted(impulses or (), key=lambda i: i.at)
+    ats = [d.at for d in drops]
 
     def interpolate(
         t0: datetime, lower0: float, t1: datetime, lower1: float
@@ -89,9 +91,8 @@ def threshold_crossing(
         # and one on its end instant is the flowing accounting boundary.
         # A drop already walked from the previous segment's end is
         # seen again here with nothing left to cross, harmlessly.
-        for drop in drops:
-            if not t0 <= drop.at <= t1:
-                continue
+        # The drops in ``[t0, t1]``, in order: one slice of them.
+        for drop in drops[bisect_left(ats, t0) : bisect_right(ats, t1)]:
             if drop.lower_before < threshold:
                 return interpolate(cur_t, cur_lower, drop.at, drop.lower_before)
             after = drop.lower_after

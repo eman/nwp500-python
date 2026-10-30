@@ -219,16 +219,17 @@ Changed
 
 - **A simulation's cost grows with its span.** A coast walked the tank
   to the next fixed event, often the horizon, to find the heater's own
-  start, then again to the start; and every step scanned all the
-  draws. A coast now walks 2 hours, then each time twice as far (to a
-  10-minute mark of the clock, where a split walk is the walk whole),
-  and stops once the
-  heater's own start is triggered, which is then the start the whole
-  walk finds; the draws are found by their instants. On one
-  NWP500-65's parameters with about 30 draws a day, ``simulate`` over
-  14 days takes 392 ms against 2.6 s in Heat Pump mode and 438 ms
-  against 4.8 s in High Demand, and 56 days with no draws 630 ms
-  against 3.5 s; the answers are the same.
+  start, then again to the start; and every step of a walk scanned all
+  its draws, flows and change instants, and the trigger search every
+  drop for every segment. A coast now walks 2 hours, then each time
+  twice as far (to a 10-minute mark of the clock, where a split walk is
+  the walk whole), and stops once the heater's own start is triggered,
+  which is then the start the whole walk finds; the draws, flows,
+  instants and drops are found by bisection. On one NWP500-65's
+  parameters with about 30 draws a day, ``simulate`` over 14 days takes
+  392 ms against 2.6 s in Heat Pump mode and 441 ms against 4.8 s in
+  High Demand. A coast of 224 days with draws and a circulation run
+  four times a day takes 1.9 s against 46 s. The answers are the same.
   ``Physics.advance`` takes ``walk_from``, where the walk a piece
   continues began, and ``Circulation.over`` and
   ``tank_physics.circulation_flows`` take ``known_from``: a circulation
