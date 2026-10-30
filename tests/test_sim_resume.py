@@ -13,7 +13,7 @@ tank there and change nothing else.
 import dataclasses
 import json
 import math
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from typing import Any
 
@@ -21,8 +21,18 @@ import pytest
 from sim_cases import days_of_draws, walk_case
 
 from nwp500 import sim
-from nwp500.sim import Loads, codec, engine
-from nwp500.sim.engine import RESUME_VERSION, Resume, Write
+from nwp500.sim import (
+    Commands,
+    Loads,
+    ReservationEntry,
+    Schedules,
+    TouPeriod,
+    codec,
+    engine,
+)
+from nwp500.sim.engine import RESUME_DROPPED, RESUME_VERSION, Resume, Write
+from nwp500.sim.inputs import Write as CommandWrite
+from nwp500.sim.params import HeaterParams
 
 #: Cases of ``walk_case`` across the modes, among them ones a cut once
 #: moved: a start triggered on a call's end (2), an element in the heat
@@ -208,101 +218,329 @@ def _settings_in(base: sim.Scenario, mode: int) -> sim.Scenario:
     )
 
 
-@pytest.mark.parametrize("mode", [1, 2, 3, 4])
-def test_scenarios_chained_by_their_end_state_are_one(mode: int) -> None:
-    """Two days of draws, one scenario an hour, each from the last's
-    ``end_state``, ``end_history`` and ``end_settings`` through its
-    document: the same heating and the same tank at the end as one
-    scenario over the two days."""
-    base = _settings_in(days_of_draws(2), mode)
-    params = sim.site_example_params()
-    whole = sim.simulate(base, params)
-    step = timedelta(hours=1)
-    s, t = base, base.start
-    calls: list[engine.Simulation] = []
-    last: sim.SimulationResult | None = None
-    while t < base.until:
+def _api_chained(
+    base: sim.Scenario, params: HeaterParams, cuts: list[datetime]
+) -> list[sim.SimulationResult]:
+    """``base`` as one scenario per span between ``cuts``, each from the
+    last's ``end_state``, ``end_history`` and ``end_settings``, through
+    the scenario's document."""
+    out: list[sim.SimulationResult] = []
+    s = base
+    for a, b in pairwise([base.start, *cuts, base.until]):
         part = s.model_copy(
             update={
-                "start": t,
-                "horizon": step,
+                "start": a,
+                "horizon": b - a,
                 "loads": Loads(
-                    draws=tuple(
-                        d for d in base.loads.draws if t <= d.at < t + step
-                    )
+                    draws=tuple(d for d in base.loads.draws if a <= d.at < b)
+                ),
+                "commands": base.commands.model_copy(
+                    update={
+                        "writes": tuple(
+                            w for w in base.commands.writes if a <= w.at < b
+                        )
+                    }
                 ),
             }
         )
         part, _ = codec.scenario_from_document(
             json.loads(json.dumps(codec.scenario_to_document(part)))
         )
-        last = sim.simulate(part, params)
-        calls.append(last.simulation)
+        got = sim.simulate(part, params)
+        out.append(got)
         s = s.model_copy(
             update={
-                "state": last.end_state,
-                "history": last.end_history,
-                "settings": last.end_settings,
+                "state": got.end_state,
+                "history": got.end_history,
+                "settings": got.end_settings,
             }
         )
-        t += step
-    assert last is not None
-    _, heating = _joined(calls)
+    return out
+
+
+def _hourly(base: sim.Scenario) -> list[datetime]:
+    return [
+        base.start + timedelta(hours=h)
+        for h in range(1, int(base.horizon / timedelta(hours=1)))
+    ]
+
+
+def _peak(opens: int, closes: int) -> Schedules:
+    """TOU on, a peak from ``opens``:00 to ``closes``:00 UTC: across
+    midnight when it closes earlier in the day than it opens."""
+
+    def period(h0: int, m0: int, h1: int, m1: int, price: int) -> TouPeriod:
+        return TouPeriod(
+            season=0xFFF,
+            week=0xFE,
+            start_hour=h0,
+            start_minute=m0,
+            end_hour=h1,
+            end_minute=m1,
+            price_max=price,
+        )
+
+    if closes < opens:
+        periods = (
+            period(0, 0, closes - 1, 59, 5),
+            period(closes, 0, opens - 1, 59, 1),
+            period(opens, 0, 23, 59, 5),
+        )
+    else:
+        periods = (
+            period(0, 0, opens - 1, 59, 1),
+            period(opens, 0, closes - 1, 59, 5),
+            period(closes, 0, 23, 59, 1),
+        )
+    return Schedules(tou_enabled=True, tou_periods=periods)
+
+
+@pytest.mark.parametrize("tou", [False, True], ids=["no-tou", "tou"])
+@pytest.mark.parametrize("mode", [1, 2, 3, 4])
+def test_scenarios_chained_by_their_end_state_are_one(
+    mode: int, tou: bool
+) -> None:
+    """Two days of draws, one scenario an hour: the same heating and the
+    same tank at the end as one scenario over the two days. With TOU, a
+    recovery running at a call's end is capped by a window opening past
+    it as one walk caps it."""
+    base = _settings_in(days_of_draws(2), mode)
+    if tou:
+        base = base.model_copy(update={"schedules": _peak(14, 2)})
+    params = sim.site_example_params()
+    whole = sim.simulate(base, params)
+    calls = _api_chained(base, params, _hourly(base))
+    _, heating = _joined([c.simulation for c in calls])
     assert _same_heating(heating, whole.heating)
-    end, ends = whole.points[-1], last.points[-1]
+    end, ends = whole.points[-1], calls[-1].points[-1]
     assert (ends.upper_f, ends.lower_f) == (end.upper_f, end.lower_f)
 
 
-def test_settings_given_otherwise_are_written_at_the_start() -> None:
+def test_a_held_mode_lands_at_its_windows_close_when_resumed_there() -> None:
+    """High Demand written inside a TOU window is held to its close, and
+    a call that begins there lands it, though its windows begin past
+    the close."""
+    t0 = datetime(2026, 10, 1, 12, tzinfo=UTC)
+    base = days_of_draws(1).model_copy(
+        update={
+            "start": t0,
+            "horizon": timedelta(hours=6),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=105.0),
+            "settings": sim.Settings(
+                setpoint_f=120.0, hp_lower_on_f=105.0, mode=3
+            ),
+            "schedules": _peak(11, 14),
+            "commands": Commands(
+                writes=(CommandWrite(at=t0 + timedelta(minutes=5), mode=4),)
+            ),
+            "loads": Loads(),
+        }
+    )
+    params = sim.site_example_params()
+    whole = sim.simulate(base, params)
+    close = t0 + timedelta(hours=2)
+    calls = _api_chained(base, params, [close])
+    assert (close, "high_demand") in [(m.start, m.mode) for m in whole.modes]
+    assert [(m.start, m.mode) for m in calls[1].modes] == [
+        (close, "high_demand")
+    ]
+    assert calls[1].end_settings is not None
+    assert calls[1].end_settings.mode == 4
+    assert whole.end_settings is not None and whole.end_settings.mode == 4
+    _, heating = _joined([c.simulation for c in calls])
+    assert _same_heating(heating, whole.heating)
+
+
+@pytest.mark.parametrize("mode", [5, 6])
+def test_into_vacation_or_power_off_the_walk_starts_afresh(mode: int) -> None:
+    """A recovery running at a call's end, the next call in Vacation or
+    Power Off: a write the simulation holds no rule for, so it starts
+    from the tank and the history, not the resume, and says so."""
+    params = sim.site_example_params()
+    base = days_of_draws(1).model_copy(
+        update={
+            "horizon": timedelta(hours=1),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
+            "settings": sim.Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+            "loads": Loads(),
+        }
+    )
+    first = sim.simulate(base, params)
+    assert first.end_state is not None and first.end_settings is not None
+    assert first.end_state.compressor_running
+    off = first.end_settings.model_copy(update={"mode": mode})
+    then = base.model_copy(
+        update={
+            "start": first.until,
+            "state": first.end_state,
+            "history": first.end_history,
+            "settings": off,
+        }
+    )
+    got = sim.simulate(then, params)
+    assert RESUME_DROPPED in got.reasons
+    fresh = then.model_copy(
+        update={"state": first.end_state.model_copy(update={"resume": None})}
+    )
+    assert got.simulation.heating == sim.simulate(fresh, params).heating
+
+
+def test_an_entry_that_turns_the_heater_on_leaves_power_off() -> None:
+    """Powered off, an entry turns the heater on in Heat Pump: the call
+    ends in Heat Pump, and the next goes on from there."""
+    params = sim.site_example_params()
+    t0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
+    entry = ReservationEntry(
+        week=0xFE, hour=20, minute=0, mode=1, setpoint_half_c=124
+    )
+    base = days_of_draws(1).model_copy(
+        update={
+            "start": t0,
+            "horizon": timedelta(hours=4),
+            "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
+            "settings": sim.Settings(
+                setpoint_f=140.9, mode=6, hp_lower_on_f=105.0
+            ),
+            "schedules": Schedules(reservations=(entry,)),
+            "loads": Loads(),
+        }
+    )
+    whole = sim.simulate(base, params)
+    assert "powered_on_by_entry" in whole.reasons
+    assert whole.end_settings is not None and whole.end_settings.mode == 1
+    calls = _api_chained(base, params, _hourly(base))
+    assert all(RESUME_DROPPED not in c.reasons for c in calls)
+    _, heating = _joined([c.simulation for c in calls])
+    assert _same_heating(heating, whole.heating)
+
+
+def test_an_element_carried_on_keeps_what_it_rests_on() -> None:
+    """High Demand's upper element running at a call's end: the next
+    call, whose heating it carries on, keeps the element model's
+    reasons."""
+    params = sim.site_example_params()
+    base = days_of_draws(1).model_copy(
+        update={
+            "horizon": timedelta(hours=2),
+            "state": sim.HeaterState(upper_f=100.0, lower_f=90.0),
+            "settings": sim.Settings(
+                setpoint_f=140.0, mode=4, hp_lower_on_f=105.0
+            ),
+            "loads": Loads(),
+        }
+    )
+    calls = _api_chained(base, params, [base.start + timedelta(minutes=10)])
+    assert calls[0].end_state is not None
+    assert calls[0].end_state.element_running
+    assert "element_model_small_n" in calls[1].reasons
+
+
+def _then(
+    first: sim.SimulationResult,
+    base: sim.Scenario,
+    settings: sim.Settings | None = None,
+) -> sim.Scenario:
+    """Two hours from where ``first`` ended, in ``settings`` (else the
+    ones it left)."""
+    return base.model_copy(
+        update={
+            "start": first.until,
+            "horizon": timedelta(hours=2),
+            "state": first.end_state,
+            "history": first.end_history,
+            "settings": settings or first.end_settings,
+            "loads": Loads(),
+        }
+    )
+
+
+@pytest.mark.parametrize(("asked", "written"), [(140.0, 140.0), (145.0, 145.4)])
+def test_settings_given_otherwise_are_written_at_the_start(
+    asked: float, written: float
+) -> None:
     """A setpoint other than the one the last call left is a write at
-    the next one's start, as an app would make it between the two."""
+    the next one's start, held as the device holds an app's (half
+    degrees Celsius); the ones it left write nothing."""
     base = days_of_draws(1)
     params = sim.site_example_params()
     first = sim.simulate(
         base.model_copy(update={"horizon": timedelta(hours=2)}), params
     )
     assert first.end_settings is not None
-    raised = first.end_settings.model_copy(update={"setpoint_f": 140.0})
-    then = sim.simulate(
-        base.model_copy(
-            update={
-                "start": first.until,
-                "horizon": timedelta(hours=2),
-                "state": first.end_state,
-                "history": first.end_history,
-                "settings": raised,
-                "loads": Loads(),
-            }
-        ),
-        params,
-    )
+    raised = first.end_settings.model_copy(update={"setpoint_f": asked})
+    then = sim.simulate(_then(first, base, raised), params)
     (write,) = [w for w in then.writes if w.serves == "settings"]
-    assert (write.at, write.setpoint_f) == (first.until, 140.0)
-    assert then.end_settings == raised
-    same = sim.simulate(
-        base.model_copy(
-            update={
-                "start": first.until,
-                "horizon": timedelta(hours=2),
-                "state": first.end_state,
-                "history": first.end_history,
-                "settings": first.end_settings,
-                "loads": Loads(),
-            }
-        ),
+    assert (write.at, write.setpoint_f) == (first.until, written)
+    assert then.end_settings is not None
+    assert then.end_settings.setpoint_f == written
+    same = sim.simulate(_then(first, base), params)
+    assert not [w for w in same.writes if w.serves == "settings"]
+
+
+def test_a_mode_given_otherwise_is_written_at_the_start() -> None:
+    base = days_of_draws(1)
+    params = sim.site_example_params()
+    first = sim.simulate(
+        base.model_copy(update={"horizon": timedelta(hours=2)}), params
+    )
+    assert first.end_settings is not None
+    then = sim.simulate(
+        _then(first, base, first.end_settings.model_copy(update={"mode": 4})),
         params,
     )
-    assert not [w for w in same.writes if w.serves == "settings"]
+    (write,) = [
+        w for w in then.simulation.mode_writes if w.serves == "settings"
+    ]
+    assert (write.at, write.mode, write.took_at) == (
+        first.until,
+        "high_demand",
+        first.until,
+    )
+
+
+def test_a_setpoint_given_out_of_range_is_refused() -> None:
+    base = days_of_draws(1)
+    params = sim.site_example_params()
+    first = sim.simulate(
+        base.model_copy(update={"horizon": timedelta(hours=2)}), params
+    )
+    assert first.end_settings is not None
+    hot = first.end_settings.model_copy(update={"setpoint_f": 200.0})
+    with pytest.raises(ValueError, match="outside the range"):
+        sim.simulate(_then(first, base, hot), params)
+
+
+def test_calls_across_midnight_keep_the_first_days_mains() -> None:
+    """With no inlet given, the mains is the climate's on the walk's
+    first day: a call after midnight that goes on from it keeps that
+    day's, as the walk whole does."""
+    base = days_of_draws(2)
+    base = base.model_copy(
+        update={"environment": sim.Environment(ambient_f=65.0)}
+    )
+    params = sim.site_example_params()
+    assert params.draw.climate_f is not None
+    whole = sim.simulate(base, params)
+    calls = _api_chained(base, params, _hourly(base))
+    _, heating = _joined([c.simulation for c in calls])
+    assert _same_heating(heating, whole.heating)
+    end, ends = whole.points[-1], calls[-1].points[-1]
+    assert (ends.upper_f, ends.lower_f) == (end.upper_f, end.lower_f)
 
 
 def test_the_result_document_carries_the_end_state() -> None:
     result = sim.simulate(days_of_draws(1), sim.site_example_params())
     doc = codec.result_to_document(result)
-    assert result.end_state is not None
+    assert result.end_state is not None and result.end_history is not None
+    assert result.end_state.resume is not None
     assert doc["end_state"]["resume"] == result.end_state.resume
-    assert doc["end_history"] == (
-        None
-        if result.end_history is None
-        else result.end_history.model_dump(mode="json")
+    stopped = result.end_history.compressor_stopped_at
+    assert stopped is not None
+    assert doc["end_history"]["compressor_stopped_at"] == (
+        stopped.isoformat().replace("+00:00", "Z")
     )
     assert sim.HeaterState.model_validate(doc["end_state"]) == result.end_state
+    # A state that carries a resume is a value like any other.
+    assert hash(result.end_state) == hash(
+        sim.HeaterState.model_validate(doc["end_state"])
+    )

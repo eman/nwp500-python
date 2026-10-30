@@ -115,7 +115,7 @@ _INSTANT = timedelta(microseconds=1)
 #: An entry's minute: the span it fires in.
 _ENTRY_MINUTE = timedelta(minutes=1)
 #: How far ahead a recovery is walked to judge the TOU cap on it.
-_RECOVERY_AHEAD = timedelta(hours=16)
+RECOVERY_AHEAD = timedelta(hours=16)
 #: How far a coast walks ahead before it first looks for the heater's
 #: own start, to the clock's ``IDLE_STEP`` grid at or before it, each
 #: later piece twice the last: the start is found on the walk and the
@@ -341,6 +341,9 @@ class SimulationError(Exception):
 
 #: ``Resume.to_document``'s format.
 RESUME_VERSION = 1
+#: A resume not carried on: heating disabled or enabled since it ended
+#: (``Resume.disabled``), by a write the simulation holds no rule for.
+RESUME_DROPPED = "resume_dropped_heating_disabled_changed"
 
 
 @dataclass(frozen=True)
@@ -355,6 +358,9 @@ class Resume:
     Opaque to a caller, who keeps it as ``to_document`` writes it."""
 
     at: datetime
+    #: Where the first of the walks this goes on from began: the day the
+    #: scenario's mains is read on, held as one walk holds it.
+    began: datetime
     controller: ctl.State
     setpoint_f: float
     mode: HeaterMode
@@ -366,6 +372,9 @@ class Resume:
     cold: bool = False
     #: The mode write ``controller``'s held write is (its ``ref``).
     held_write: ModeWrite | None = None
+    #: Heating was disabled (``controller.disabled``): Vacation, or
+    #: powered off with no entry having turned the heater on.
+    disabled: bool = False
 
     def to_document(self) -> dict[str, Any]:
         """The resume as a JSON-compatible document: instants as ISO
@@ -543,6 +552,22 @@ class _Engine:
                 f"a walk from {start.isoformat()} cannot go on from one "
                 f"that ended at {resume.at.isoformat()}"
             )
+        #: Where the first of the walks this goes on from began.
+        self.began = start if resume is None else resume.began
+        #: Into or out of Vacation or Power Off since, a write the
+        #: simulation holds no rule for: the walk starts afresh.
+        self.resume_dropped = resume is not None and resume.disabled != (
+            ctl.disabled(
+                resume.controller,
+                ctl.Settings(
+                    hp_lower_on_f=None,
+                    heating_disabled=heater.heating_disabled,
+                    powered_off=heater.powered_off,
+                ),
+            )
+        )
+        if self.resume_dropped:
+            resume = None
         #: The walk goes on from one that ended at its start.
         self.resumed = resume
         if resume is not None:
@@ -613,7 +638,9 @@ class _Engine:
             params=self.params,
             hp_available=available,
         )
-        self.reasons: set[str] = set()
+        self.reasons: set[str] = (
+            {RESUME_DROPPED} if self.resume_dropped else set()
+        )
         if (
             resume is None
             and not available
@@ -743,6 +770,12 @@ class _Engine:
             carried.append(interval)
         self.cooling = list(resume.cooling)
         self._cold = resume.cold
+        # What the heating carried on rests on, as where it began says.
+        el = self.state.element
+        if el.running and el.zone is not None:
+            self.reasons.update(ctl.element_notes(el.zone, el.in_place))
+        if held is not None:
+            self.reasons.add(ctl.MODE_WRITE_HELD_PROJECTED)
 
     def _resume(self) -> Resume:
         """The heater now, for a walk from here to go on from."""
@@ -751,6 +784,7 @@ class _Engine:
         el = self.element
         return Resume(
             at=self.t,
+            began=self.began,
             controller=self.state,
             setpoint_f=self.sp,
             mode=self.mode,
@@ -772,6 +806,7 @@ class _Engine:
             held_write=None
             if held is None
             else replace(self.mode_writes[held.ref]),
+            disabled=ctl.disabled(self.state, self.settings),
         )
 
     # ── the tank ──
@@ -1092,7 +1127,7 @@ class _Engine:
         if self.lower >= level:
             cycle.stop_at = self.t
             return
-        ahead = self.t + _RECOVERY_AHEAD
+        ahead = self.t + RECOVERY_AHEAD
         if not any(w0 < ahead and self.t < w1 for w0, w1 in self.windows):
             return
         full = self._ahead(ahead, lambda _, lower: lower >= level)
@@ -1310,8 +1345,13 @@ class _Engine:
             )
 
     def _mode_events(self, at: datetime) -> None:
-        """A TOU window closing at ``at``, then one opening there."""
-        if any(w[1] == at for w in self.windows):
+        """A TOU window closing at ``at``, then one opening there. A
+        mode write held to ``at`` is to a window's close: one the walk
+        resumed at, which its windows begin past."""
+        held = self.state.mode.held
+        if any(w[1] == at for w in self.windows) or (
+            held is not None and held.until == at
+        ):
             self._dispatch(ctl.WindowCloses(at=at, tank=self._tank()))
         if any(w[0] == at for w in self.windows):
             self._dispatch(ctl.WindowOpens(at=at, tank=self._tank()))

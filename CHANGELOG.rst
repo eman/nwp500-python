@@ -65,18 +65,23 @@ Added
   unavailability were taken afresh, and the heating intervals running
   at the cut were cut. ``SimulationResult.end_state``, ``end_history``
   and ``end_settings`` are the heater at the end: the probes and
-  layers, what runs, and ``HeaterState.resume``, a versioned JSON
-  document of the controller's state. Passed as the next
+  layers, what runs, and ``HeaterState.resume``, the JSON text of a
+  versioned document of the controller's state. Passed as the next
   ``Scenario``'s ``state``, ``history`` and ``settings``, the walk goes
   on: chained at marks of the clock's 10-minute grid, the calls give
   the path and heating of one walk with marks at the cuts, through
-  ``codec`` and JSON too. A cut off the grid splits a walk's step
-  (0.002 °F after two days of 15-minute calls). A setpoint or mode
-  other than the one the last call left is a write at the start
-  (``serves="settings"``). ``engine.simulate`` takes ``resume`` and
-  ``Simulation.resume`` gives it (``engine.Resume``, ``to_document``,
-  ``from_document``); one from another instant, or of another
-  version, is refused.
+  ``codec`` and JSON too, with TOU and the climate's mains across
+  midnight (held on the first call's day, as one walk holds it). A
+  cut off the grid splits a walk's step (0.002 °F after two days of
+  15-minute calls). A setpoint or mode other than the one the last
+  call left is a write at the start (``serves="settings"``), its
+  setpoint held and range-checked as an app's write is. Into or out of
+  Vacation or Power Off, which the simulation holds no rule for as a
+  write, the call starts afresh from the tank and the history and says
+  ``resume_dropped_heating_disabled_changed``. ``engine.simulate``
+  takes ``resume`` and ``Simulation.resume`` gives it
+  (``engine.Resume``, ``to_document``, ``from_document``); one from
+  another instant, or of another version, is refused.
 
 - **The mains by the day, from the climate.** ``cold_supply.mains_f``
   is Burch and Christensen's correlation of a utility's water with the
@@ -636,6 +641,10 @@ Fixed
   stopped as ``heat_pump``, often with a compressor interval of no
   length after it; it now stops as ``horizon``. 44 of the 800 walks
   change; the tank does not.
+- **TOU windows past the end.** A scenario's windows were laid out to
+  its end, so a recovery running there was judged without a window
+  opening after it; they now reach as far past the end as a recovery
+  judges its cap (``engine.RECOVERY_AHEAD``, 16 h).
 - A start TOU defers past the walk's end stays pending, for a walk
   going on from there; ``controller.TriggerDeferred`` has no
   ``horizon``. No single walk changes.

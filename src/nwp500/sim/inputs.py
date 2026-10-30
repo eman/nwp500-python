@@ -31,7 +31,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    JsonValue,
     field_validator,
     model_validator,
 )
@@ -93,10 +92,10 @@ class HeaterState(_Value):
     #: Where a simulation that ended at this scenario's start left the
     #: heater (``SimulationResult.end_state``): what it keeps beyond the
     #: probes and the layers, so the walk goes on as if unbroken.
-    #: Opaque; kept as given. With it the compressor, the element and
-    #: ``History`` are its, not these flags'. None: the walk starts
-    #: afresh.
-    resume: dict[str, JsonValue] | None = None
+    #: Opaque JSON text; kept as given. With it the compressor, the
+    #: element and ``History`` are its, not these flags'. None: the walk
+    #: starts afresh.
+    resume: str | None = None
 
 
 class Settings(_Value):
