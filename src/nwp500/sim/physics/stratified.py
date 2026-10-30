@@ -46,9 +46,12 @@ The layers are fixed, so a flow is remapped onto them: water moving a
 fraction of a layer carries each layer's water as a line through its
 mean, limited so it never passes a neighbour's (``_slope``). A front
 inside a layer is then that line, not the front: two draws are one of
-both to about a degree at the probes on a smooth profile, more on a
-step. A flow that leaves an inversion turns it over at its end
-(``mix``), so where such a flow is cut matters.
+both to about a degree at the probes on a smooth profile, and to 2 % of
+the step on a sharp one (2.4 °F from 160 °F to 35 °F mains). A draw
+walked a minute at a time is near the limit of many pieces: 9 gal from
+a 141 °F tank leaves the lower probe at 95.6 °F at once, 99.2 °F in
+nine pieces and 99.4 °F in 36. A flow that leaves an inversion turns
+it over at its end (``mix``), so where such a flow is cut matters.
 
 Water's density and heat capacity are taken constant (8.34 BTU per
 gallon per °F), so a layer's energy is linear in its temperature and

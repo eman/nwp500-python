@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from nwp500.sim import default_params
@@ -619,14 +619,18 @@ class TestDraw:
         st.floats(0.5, 40.0),
         st.floats(0.0, 1.0),
     )
+    # No step: a tank at the mains, equal but for roundoff.
+    @example(lower=40.0, gap=0.0, a=0.5, b=13.0, cold=1.0)
     def test_split_is_whole_but_for_the_grid(
         self, lower: float, gap: float, a: float, b: float, cold: float
     ) -> None:
         """Two draws are one of both but for the remap of what the first
         left: a front inside a layer moves on as the layer's line, not
-        as the front. Within 2 °F at the probes, 1 % of the heat drawn,
-        on the profiles ``estimate`` builds, with the mains under the
-        tank."""
+        as the front. Within 2.5 % of the step from the mains to the
+        hottest water at the probes (a draw is affine in temperature,
+        so its error scales with the step: up to 1.96 % on a scan of
+        these), 1 % of the heat drawn, on the profiles ``estimate``
+        builds, with the mains under the tank."""
         state = S.estimate(L, lower + gap, lower)
         inflow = 35.0 + cold * (lower - 35.0)
         whole = S.draw(L, state, a + b, inflow)
@@ -638,10 +642,11 @@ class TestDraw:
         assert first.heat_btu + split.heat_btu == pytest.approx(
             whole.heat_btu, rel=0.01, abs=1e-6
         )
+        step = max(state.layers_f) - inflow
         for x, y in zip(
             S.observe(L, whole.state), S.observe(L, split.state), strict=True
         ):
-            assert x == pytest.approx(y, abs=2.0)
+            assert x == pytest.approx(y, abs=max(0.025 * step, 1e-6))
 
     @pytest.mark.parametrize("valve", [S.NO_VALVE, SITE_VALVE])
     @pytest.mark.parametrize(
