@@ -1131,6 +1131,22 @@ class TestTheElements:
         )
         assert not of(acts, StartCompressor)
         assert not st.hp_available and st.element.zone == "lower"
+        # A raise calls for heat anew: the heat pump's return is judged
+        # again, and takes the recovery back.
+        st, _ = step(
+            st,
+            SetpointWrite(
+                at=at(6), tank=tank(119.0, 90.0), setpoint_f=140.0, serves="w"
+            ),
+        )
+        assert not st.element.finishes
+        st, _ = step(
+            st,
+            HeatPumpAvailability(
+                at=at(6), tank=tank(119.0, 90.0), available=True
+            ),
+        )
+        assert st.hp_available
 
     @pytest.mark.parametrize(
         ("mode", "on", "off"),

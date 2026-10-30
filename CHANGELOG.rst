@@ -653,7 +653,8 @@ Fixed
   - The heat pump back in its range with too little left for it, the
     elements finish the recovery as judged where it came back
     (``controller.Element.finishes``), through the upper element's
-    handover to the lower, not again at each event.
+    handover to the lower, not again at each event; a setpoint or mode
+    write calls for heat anew and has it judged again.
 
   On 1,500 random walks, hourly marks now move no start or stop by a
   second or more (a crossing is interpolated a fraction of a second

@@ -1282,10 +1282,12 @@ def _setpoint(
     otherwise the write may start one (``_write_starts``). Each write
     decides afresh: a later one that does not start the heater cancels
     a start an earlier write had set going. The heater's own, waiting
-    out the lockout, stands."""
+    out the lockout, stands. It decides afresh whether the heat pump
+    takes back a recovery the elements were finishing (``_unlatch``)."""
     previous = s.sp
     s.state = replace(s.state, setpoint_f=value)
     s.act(SetpointSet(s.at, value))
+    _unlatch(s)
     e = s.state.element
     if e.running:
         temp = s.upper if e.zone == "upper" else s.lower
@@ -1430,9 +1432,19 @@ def _apply_mode(
     _element_entry(s, Start(s.at, "write", serves=serves, source="element"))
 
 
+def _unlatch(s: _Step) -> None:
+    """A write calls for heat anew: the elements no longer finish what
+    the heat pump left them (``Element.finishes``), and the heat pump's
+    return is judged again at the next check, against the new call."""
+    e = s.state.element
+    if e.finishes:
+        s.state = replace(s.state, element=replace(e, finishes=False))
+
+
 def _set_mode(s: _Step, mode: HeaterMode, ended_by: ModeEnd) -> None:
     s.modes(in_force=mode)
     s.act(ModeSet(s.at, mode, ended_by))
+    _unlatch(s)
     if mode == ELECTRIC:
         # No heat pump in Electric: a start a write set going is off.
         s.pend(None)
