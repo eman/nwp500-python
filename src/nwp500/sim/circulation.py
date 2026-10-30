@@ -13,7 +13,7 @@ is charged.
 The runs are the caller's: a weekly schedule laid out as instants
 (``sim_adapters.circulation``), a record of when it ran, or a run asked
 for on demand. ``Circulation.known_until`` says how far they are known:
-a span starting after it is not known, which charges nothing, while an
+a run starting after it is not known, which charges nothing, while an
 empty set of runs is a known-quiet circuit.
 
 **Through the tank** (``tank_physics.circulation_flows``): each run is
@@ -87,32 +87,28 @@ def merge_runs(runs: Iterable[Run], gap: timedelta = RUN_GAP) -> list[Run]:
 
 @dataclass(frozen=True)
 class Circulation:
-    """The runs, and how far they are known: a span starting after
-    ``known_until`` is not known (None: known throughout). The runs are
-    held merged within ``gap`` (``merge_runs``), once, over the whole
-    input, so the tank sees the same runs wherever a walk is cut."""
+    """The runs, and how far they are known: a run starting after
+    ``known_until`` is not known and is left out, one under way there
+    is known whole (None: all known). The runs are held merged within
+    ``gap`` (``merge_runs``), once, over the whole input and after the
+    unknown ones are left out, so the tank sees the same runs wherever
+    a walk is cut."""
 
     runs: tuple[Run, ...] = ()
     known_until: datetime | None = None
     gap: timedelta = RUN_GAP
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "runs", tuple(merge_runs(self.runs, self.gap)))
+        known = (
+            self.runs
+            if self.known_until is None
+            else [r for r in self.runs if r[0] <= self.known_until]
+        )
+        object.__setattr__(self, "runs", tuple(merge_runs(known, self.gap)))
 
-    def over(
-        self,
-        start: datetime,
-        end: datetime,
-        *,
-        known_from: datetime | None = None,
-    ) -> list[Run] | None:
-        """The runs overlapping ``[start, end)``, unclipped, in the order
-        given; None when they are not known there: when the span, or the
-        walk it continues (from ``known_from``), starts after
-        ``known_until``."""
-        begins = start if known_from is None else known_from
-        if self.known_until is not None and begins > self.known_until:
-            return None
+    def over(self, start: datetime, end: datetime) -> list[Run]:
+        """The known runs overlapping ``[start, end)``, unclipped, in the
+        order given."""
         if end <= start:
             return []
         return [r for r in self.runs if r[1] > start and r[0] < end]

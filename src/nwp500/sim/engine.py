@@ -1688,7 +1688,6 @@ class _Engine:
                 self.draws[self._draws_in(t, upto)],
                 running=running,
                 stop=stop,
-                walk_from=self.t,
             )
             new = part.points[1:] if points else part.points
             points += new
