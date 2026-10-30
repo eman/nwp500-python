@@ -1403,7 +1403,9 @@ def _to_start(
     """The probes of the tank the heater's own start at ``start`` heats
     from, coasting from now under ``s.loads``. A draw at ``start``
     itself, the one that trips the trigger, is taken before the
-    recovery: its tank is the one the draw leaves."""
+    recovery: its tank is the one the draw leaves. So is the rest of one
+    under way there, all at ``start``: the recovery forecast takes no
+    draws (``forecast``)."""
     now = s.start
     upper, lower = s.state.upper_f, s.state.lower_f
     if start > now:
@@ -1422,7 +1424,10 @@ def _to_start(
                 to_start.points[-1].lower_f,
             )
     at_start = sorted(
-        g for d in s.loads.draws for at, g in d.pieces() if at == start
+        sum(g for at, g in d.pieces() if at >= start)
+        for d in s.loads.draws
+        if d.at == start
+        or d.at < start < d.at + timedelta(seconds=d.duration_s)
     )
     if at_start:
         physics = _physics(

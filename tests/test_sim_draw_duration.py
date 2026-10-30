@@ -2,9 +2,11 @@
 heating meets it between its minutes, as a meter's per-minute draws."""
 
 import json
+import math
 from datetime import timedelta
 
 import pytest
+from pydantic import ValidationError
 from sim_cases import T0
 
 from nwp500 import sim
@@ -141,3 +143,23 @@ def test_a_scenario_cut_through_it_chains_to_the_whole() -> None:
     assert (ends.upper_f, ends.lower_f) == pytest.approx(
         (end.upper_f, end.lower_f)
     )
+
+
+def test_next_recovery_takes_the_rest_of_the_draw_at_its_start() -> None:
+    """The recovery forecast takes no draws, so the shower's rest past
+    the trigger is taken where the recovery starts: as its first
+    12 minutes over time and the other 36 gal at that instant."""
+    split = (
+        Draw(at=SHOWER.at, gallons=24.0, duration_s=720.0),
+        Draw(at=SHOWER.at + timedelta(minutes=12), gallons=36.0),
+    )
+    over = sim.next_recovery(_scenario((SHOWER,), 1), PARAMS)
+    assert over.outcome == "ok"
+    assert over.start_minute == 22.0
+    assert over.points == sim.next_recovery(_scenario(split, 1), PARAMS).points
+
+
+@pytest.mark.parametrize("seconds", [math.inf, math.nan, 86400.5, -1.0])
+def test_a_draw_runs_a_day_at_most(seconds: float) -> None:
+    with pytest.raises(ValidationError):
+        Draw(at=T0, gallons=1.0, duration_s=seconds)

@@ -411,9 +411,10 @@ Draws: ``Loads``
      - Unit
      - Notes
    * - ``draws``
-     - ``Draw(at, gallons, duration_s=0)``
+     - ``Draw(at, gallons, per_draw_gal=None, duration_s=0)``
      - Hot water drawn, as gallons on the delivered (mixed) line from
-       ``at``, more than 0, at an even flow for ``duration_s`` seconds:
+       ``at``, more than 0, at an even flow for ``duration_s`` seconds (up
+       to a day):
        the walk takes it at ``at`` and at each whole minute before its
        end, each piece the gallons of its span, so the heating meets it
        between them as it meets a meter's per-minute draws. 0 takes it

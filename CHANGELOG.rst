@@ -45,6 +45,8 @@ book and the element-mode planner are gone. To move a caller over:
   ``Scenario`` in place of ``state``, ``settings`` and ``at``, and no
   ``hp_lower_minutes``; ``ElementModeResult`` has no ``plan``.
   ``physics.element.mode_plan`` and ``mode_recovery`` are gone.
+- **``draw_forecast.draws_first``** gives each placed draw as
+  ``(at, gallons, per-draw gallons, seconds)``, its time drawing added.
 - **A custom ``Physics``** implements ``estimate``, ``observe``,
   ``advance`` and ``draw`` on a ``TankState``.
 - **The circulation's terms.** ``CirculationParams.displaced_gal`` is
@@ -641,7 +643,9 @@ Fixed
   30 minutes from a full tank at a 130 °F setpoint now starts the
   compressor 12 minutes later than at once, and High Demand's upper
   element 17 minutes later. A draw with no duration is taken at its
-  instant, as before.
+  instant, as before. ``next_recovery`` and ``time_to_ready``, whose
+  recovery forecast takes no draws, take the rest of a draw under way
+  at the recovery's start there.
 - **Electric heats again after its first run.** A walk in Electric
   heated only on entering the mode, so a tank left in it coasted to the
   room and drew nothing (``element_later_starts_not_modelled``). Its

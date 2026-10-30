@@ -242,8 +242,10 @@ class Draw(_Value):
     #: is fractional, the slot's own per-draw volume: what the draw's
     #: domain is judged against. None: ``gallons`` itself.
     per_draw_gal: Annotated[float, Field(gt=0.0)] | None = None
-    #: How long it runs, s. 0: all at ``at``.
-    duration_s: Annotated[float, Field(ge=0.0)] = 0.0
+    #: How long it runs, s, up to a day. 0: all at ``at``.
+    duration_s: Annotated[
+        float, Field(ge=0.0, le=86400.0, allow_inf_nan=False)
+    ] = 0.0
 
     def pieces(self) -> tuple[tuple[datetime, float], ...]:
         """The draw as the walk takes it, ``(instant, gallons)``: at

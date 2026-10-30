@@ -115,7 +115,8 @@ the lockout ends:
 **Finding a crossing.** The tank is walked between events (below), and
 the walk finds the instant a threshold is crossed to the second. A draw
 that takes the lower probe past the threshold places the crossing at
-the draw's own instant.
+the draw's own instant, or the instant of the piece of a draw over time
+(``Draw.pieces``) that does.
 
 **A running recovery is the tank walked with the compressor on.** From
 its start the tank is walked with the condenser heating it, through
