@@ -627,6 +627,11 @@ Changed
 Fixed
 -----
 
+- The methodology's "The air" said a recovery runs in its span's mean
+  air; every step reads the air at its start, coast and recovery alike.
+  The mean judges only the heat map's domain and is a learned
+  duration's context.
+
 - **A mark changes nothing.** A mark, a resume cut or any event the walk
   stops at read the tank there by the controller's rules, and some of
   those rules read it otherwise along the path, so a mark moved 83 of

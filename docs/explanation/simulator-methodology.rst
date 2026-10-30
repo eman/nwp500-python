@@ -205,8 +205,11 @@ flows, the tank loses, the layers conduct, and inversions turn over.
 A stop (a target reached, a threshold crossed) is found to the second.
 
 **The air.** The ambient is given as readings (or one value) and
-interpolated onto a 10-minute grid. A coast reads it at each step; a
-recovery uses its mean over the recovery's span (below).
+interpolated onto a 10-minute grid. Coast and recovery alike read it
+at each step's start: a recovery's heat, power and losses follow the
+air through its span. The air's mean is used only to judge where the
+heat pump heats against its map (``heat_map_out_of_domain``, below)
+and as context for a learned duration (``t_amb_mean``).
 
 
 A heat-pump recovery
@@ -373,7 +376,8 @@ the measurements.
 **A learned duration.** A ``RecoveryModel`` (``sim.extensions``) may
 replace the physics' duration with one learned from a heater's own
 recoveries. It is asked with the physics' answer and the recovery's
-context, and may decline, in which case the physics is served.
+context (the air at its start and its mean over the physics' span among
+it), and may decline, in which case the physics is served.
 
 
 The elements
