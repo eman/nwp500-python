@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from sim_cases import PARAMS, T0, days_of_draws
+from sim_cases import PARAMS, T0, days_of_draws, peak
 
 from nwp500 import sim
 from nwp500.sim import Loads
@@ -309,3 +309,43 @@ def test_standby_starts_the_heat_pump_when_it_comes_back_into_range() -> None:
     assert trace.starts_at == pytest.approx(
         first.start.at, abs=timedelta(minutes=10)
     )
+
+
+def test_standby_keeps_a_tou_hold_when_the_heat_pump_comes_back() -> None:
+    """As above, with a TOU window from the first hour to the fourth: the
+    window holds the trigger past the heat pump's return, to its close,
+    in the forecast as in the walk."""
+    base = days_of_draws(1)
+    air = tuple(
+        (base.start + timedelta(minutes=10 * i), 20.0 if i < 12 else 65.0)
+        for i in range(-6, 160)
+    )
+    s = base.model_copy(
+        update={
+            "state": sim.HeaterState(upper_f=109.0, lower_f=109.0),
+            "settings": sim.Settings(setpoint_f=110.0, hp_lower_on_f=111.0),
+            "environment": sim.Environment(ambient_f=air, inlet_f=60.0),
+            "loads": Loads(),
+            "horizon": timedelta(hours=24),
+            "schedules": peak(base.start.hour + 1, base.start.hour + 4),
+        }
+    )
+    params = sim.site_example_params()
+    trace = sim.standby(
+        s.state,
+        s.environment,
+        s.loads,
+        params,
+        start=s.start,
+        until=s.start + timedelta(hours=24),
+        settings=s.settings,
+        schedules=s.schedules,
+        tz=s.tz,
+    )
+    first = sim.simulate(s, params).heating[0]
+    closes = s.start + timedelta(hours=4)
+    assert (first.start.at, first.start.trigger) == (
+        closes,
+        "lower_at_tou_close",
+    )
+    assert (trace.starts_at, trace.trigger) == (closes, "lower_at_tou_close")

@@ -111,7 +111,6 @@ from nwp500.sim.tank_physics import (
 )
 from nwp500.sim.tou_triggers import (
     LOWER_TRIGGER_HELD,
-    Trigger,
     heater_start,
     in_window,
     while_enabled,
@@ -868,10 +867,11 @@ def standby(
     ``hp_lower_on``, or the upper zone far short at a TOU window's
     opening, with the lower trigger held as the heater holds it), and
     how far above ``hp_lower_on`` the coast leaves the lower zone. In
-    Electric, or with the heat pump outside its range where the trigger
-    would fire (or, for the margin, at the end), the elements answer it
-    at their own level (``controller.lower_trigger_f``); the heat pump
-    starts if it comes back into range before they reach it.
+    Electric, or with the heat pump outside its range, the elements
+    answer it at their own level (``controller.lower_trigger_f``): the
+    start is found as the walk finds it, a stretch at a time between the
+    heat pump leaving and re-entering its range, each by its own rule,
+    and the margin by the rule at the end.
     ``schedules`` brings the TOU windows, their local times in ``tz``.
     """
     start, until = _instant(start), _instant(until)
@@ -946,45 +946,31 @@ def standby(
             else ()
         )
         if not disabled:
-
-            def start_on(
-                on: float,
-            ) -> tuple[datetime | None, Trigger | None, bool]:
-                return heater_start(
-                    trajectory,
+            # As the walk finds it, a stretch at a time between the
+            # heat pump's leaving and re-entering its range, each with
+            # its own rule: outside it the elements read the trigger at
+            # their own level.
+            flags = [elements_at(p.at) for p in coast.points]
+            edges = [0] + [
+                i for i in range(1, len(flags)) if flags[i] != flags[i - 1]
+            ]
+            for k, i in enumerate(edges):
+                j = edges[k + 1] if k + 1 < len(edges) else len(flags) - 1
+                a, b = coast.points[i].at, coast.points[j].at
+                at, why, held_here = heater_start(
+                    trajectory[i : j + 1],
                     # None: no lower trigger, the TOU-opening one still.
-                    on,
-                    coast.impulses,
+                    lower_on(flags[i]),
+                    [m for m in coast.impulses if a <= m.at <= b],
                     windows=windows,
                     setpoint_f=settings.setpoint_f,
                     mode=mode,
                 )
-
-            if mode == ENGINE_MODE[ELECTRIC]:
-                starts_at, trigger, held = start_on(lower_on(elements=True))
-            else:
-                # Where the heat pump would start, judged there. Outside
-                # its range the elements read the trigger at their own
-                # level, unless it comes back into range first: it starts
-                # then, the call for heat standing.
-                starts_at, trigger, held = start_on(lower_on(elements=False))
-                if starts_at is not None and elements_at(starts_at):
-                    called = starts_at
-                    el = start_on(lower_on(elements=True))
-                    back = next(
-                        (
-                            p.at
-                            for p in coast.points
-                            if called < p.at
-                            and (el[0] is None or p.at < el[0])
-                            and not elements_at(p.at)
-                        ),
-                        None,
-                    )
-                    if back is not None:
-                        starts_at = back
-                    else:
-                        starts_at, trigger, held = el
+                held = held or held_here
+                last_stretch = k + 1 == len(edges)
+                if at is not None and (at < b or last_stretch):
+                    starts_at, trigger = at, why
+                    break
             if held:
                 reasons.append(LOWER_TRIGGER_HELD)
         if schedules is None or (

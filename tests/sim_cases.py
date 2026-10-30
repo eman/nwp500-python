@@ -16,7 +16,9 @@ from nwp500.sim import (
     History,
     Loads,
     Scenario,
+    Schedules,
     Settings,
+    TouPeriod,
 )
 from nwp500.sim.engine import Entry, Heater, RawWrite
 from nwp500.sim.params import params_from_document
@@ -152,3 +154,33 @@ def walk_case(seed: int, spans: tuple[int, ...] = (8, 24)) -> dict[str, Any]:
         else t0 - timedelta(minutes=rng.choice((1, 3, 30, 300))),
         "running_hold": rng.choice((0.0, 2.0)) if running else 0.0,
     }
+
+
+def peak(opens: int, closes: int) -> Schedules:
+    """TOU on, a peak from ``opens``:00 to ``closes``:00 UTC: across
+    midnight when it closes earlier in the day than it opens."""
+
+    def period(h0: int, m0: int, h1: int, m1: int, price: int) -> TouPeriod:
+        return TouPeriod(
+            season=0xFFF,
+            week=0xFE,
+            start_hour=h0,
+            start_minute=m0,
+            end_hour=h1,
+            end_minute=m1,
+            price_max=price,
+        )
+
+    if closes < opens:
+        periods = (
+            period(0, 0, closes - 1, 59, 5),
+            period(closes, 0, opens - 1, 59, 1),
+            period(opens, 0, 23, 59, 5),
+        )
+    else:
+        periods = (
+            period(0, 0, opens - 1, 59, 1),
+            period(opens, 0, closes - 1, 59, 5),
+            period(closes, 0, 23, 59, 1),
+        )
+    return Schedules(tou_enabled=True, tou_periods=periods)
