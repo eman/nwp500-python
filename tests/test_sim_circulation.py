@@ -613,9 +613,11 @@ class TestThePipe:
         assert heat(2.0, 30.0) == pytest.approx(heat(2.0))
         # Past it, nothing without a loss; with one, its share.
         assert heat(10.0) == pytest.approx(heat(4.0))
-        lost = 1.0 - steady_share(30.0, 1.5, 130.0)
+        # The run's own water back at the rest plus its share of the
+        # lift: the heat it gives the pipe is the top's over that.
+        back = 65.0 + steady_share(30.0, 1.5, 130.0) * 65.0
         assert heat(10.0, 30.0) == pytest.approx(
-            (6.0 + lost * 9.0) * 8.34 * lift
+            (6.0 * lift + 9.0 * (heat_f(130.0) - heat_f(back))) * 8.34
         )
 
     def test_the_rest_and_the_cooling_are_found_again(self) -> None:

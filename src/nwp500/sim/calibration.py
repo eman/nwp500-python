@@ -852,22 +852,26 @@ def run_heat_btu(
     water, the gallons it displaces in them of the volume times the
     share cooled since the run before (``circulation.displaced_gal`` of
     ``circulation.cooled_share``'s part, as the walk returns it), and
-    what the pipe's loss takes off it (1 less
-    ``circulation.steady_share``) for the rest it moves; never
-    negative."""
+    for the rest it moves the heat between the upper zone and the
+    return's, at the rest plus ``circulation.steady_share`` of the lift;
+    never negative."""
     if minutes <= 0.0 or flow_gpm <= 0.0:
         return 0.0
     cooled = displaced * cooled_share(rest_h, cool_tau_h)
     piped = circulation_displaced_gal(
         before_min + minutes, cooled, flow_gpm
     ) - circulation_displaced_gal(before_min, cooled, flow_gpm)
-    lost = 1.0 - steady_share(pipe_ua_btu_hr_f, flow_gpm, upper_f)
-    gal = piped + lost * (flow_gpm * minutes - piped)
+    rest_f = air_f + rest_offset_f
+    share = steady_share(pipe_ua_btu_hr_f, flow_gpm, upper_f)
+    back_f = rest_f + share * (upper_f - rest_f)
+    top = heat_f(upper_f)
     return max(
         0.0,
-        gal
-        * WATER_BTU_PER_GAL_F
-        * (heat_f(upper_f) - heat_f(air_f + rest_offset_f)),
+        WATER_BTU_PER_GAL_F
+        * (
+            piped * (top - heat_f(rest_f))
+            + (flow_gpm * minutes - piped) * (top - heat_f(back_f))
+        ),
     )
 
 
