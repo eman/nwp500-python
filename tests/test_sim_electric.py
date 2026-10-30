@@ -349,3 +349,36 @@ def test_standby_keeps_a_tou_hold_when_the_heat_pump_comes_back() -> None:
         "lower_at_tou_close",
     )
     assert (trace.starts_at, trace.trigger) == (closes, "lower_at_tou_close")
+
+
+def test_standby_finds_the_air_edge_between_its_samples() -> None:
+    """Air read every five minutes, back in the heat pump's range off the
+    coast's ten-minute grid: the forecast starts the heat pump at the
+    air's edge, as the walk does."""
+    base = days_of_draws(1)
+    air = tuple(
+        (base.start + timedelta(minutes=5 * i), 20.0 if i < 23 else 65.0)
+        for i in range(-12, 320)
+    )
+    s = base.model_copy(
+        update={
+            "state": sim.HeaterState(upper_f=109.8, lower_f=109.5),
+            "settings": sim.Settings(setpoint_f=110.0, hp_lower_on_f=111.0),
+            "environment": sim.Environment(ambient_f=air, inlet_f=60.0),
+            "loads": Loads(),
+            "horizon": timedelta(hours=24),
+        }
+    )
+    params = sim.site_example_params()
+    trace = sim.standby(
+        s.state,
+        s.environment,
+        s.loads,
+        params,
+        start=s.start,
+        until=s.start + timedelta(hours=24),
+        settings=s.settings,
+    )
+    first = sim.simulate(s, params).heating[0]
+    assert first.source == "compressor"
+    assert trace.starts_at == first.start.at
