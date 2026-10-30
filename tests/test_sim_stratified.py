@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from nwp500.sim import default_params
@@ -619,6 +619,8 @@ class TestDraw:
         st.floats(0.5, 40.0),
         st.floats(0.0, 1.0),
     )
+    # No step: a tank at the mains, equal but for roundoff.
+    @example(lower=40.0, gap=0.0, a=0.5, b=13.0, cold=1.0)
     def test_split_is_whole_but_for_the_grid(
         self, lower: float, gap: float, a: float, b: float, cold: float
     ) -> None:
@@ -644,7 +646,7 @@ class TestDraw:
         for x, y in zip(
             S.observe(L, whole.state), S.observe(L, split.state), strict=True
         ):
-            assert x == pytest.approx(y, abs=0.025 * step)
+            assert x == pytest.approx(y, abs=max(0.025 * step, 1e-6))
 
     @pytest.mark.parametrize("valve", [S.NO_VALVE, SITE_VALVE])
     @pytest.mark.parametrize(
