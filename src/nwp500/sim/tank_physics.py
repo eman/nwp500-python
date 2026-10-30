@@ -527,10 +527,12 @@ class TankPhysics:
         points = out
         mean = ambient_window_mean(self.series, start, walked.end)
         reasons: tuple[str, ...] = ()
-        if (
-            running.compressor is not None
-            and mean is not None
-            and heat_air_outside(self.params.compressor, mean)
+        if running.compressor is not None and (
+            (
+                mean is not None
+                and heat_air_outside(self.params.compressor, mean)
+            )
+            or walked.books.compressor_outside_water_h > 0.0
         ):
             reasons = (HEAT_MAP_OUT_OF_DOMAIN,)
         books = walked.books
@@ -759,7 +761,10 @@ class TankPhysics:
                 under_way=under_way,
             )
         reasons = scaled.reasons
-        if heat_air_outside(self.params.compressor, air):
+        if (
+            heat_air_outside(self.params.compressor, air)
+            or walked.books.compressor_outside_water_h > 0.0
+        ):
             reasons = (*reasons, HEAT_MAP_OUT_OF_DOMAIN)
         return Recovered(
             minutes=(walked.end - start).total_seconds() / 60.0,

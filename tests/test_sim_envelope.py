@@ -13,6 +13,7 @@ from nwp500 import sim
 from nwp500.sim import controller as ctl
 from nwp500.sim.decay import AmbientSampler
 from nwp500.sim.params import ControllerParams
+from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import HEAT_MAP_OUT_OF_DOMAIN
 
 T0 = datetime(2026, 1, 10, 6, 0, tzinfo=UTC)
@@ -779,3 +780,82 @@ class TestInThePlaceOfTheHeatPump:
         assert sim.next_recovery(s, params).tou_capped
         ready = sim.time_to_ready(s, params, bath_gal=60.0)
         assert ctl.HEAT_PUMP_UNAVAILABLE not in ready.reasons
+
+
+class TestTheHeatMapsWater:
+    """The heat's map was fitted on mixed climbs against the probes'
+    mean, 114 to 144 °F on the site's record: a recovery with the mean
+    outside that span reads the plane past its evidence and says so,
+    the air in its span or not."""
+
+    SETTINGS = sim.Settings(setpoint_f=130.0, hp_lower_on_f=111.0, mode=1)
+
+    def _walk(self, upper: float, lower: float) -> sim.SimulationResult:
+        return sim.simulate(
+            sim.Scenario(
+                start=T0,
+                horizon=timedelta(hours=12),
+                tz="UTC",
+                state=sim.HeaterState(upper_f=upper, lower_f=lower),
+                settings=self.SETTINGS,
+                environment=sim.Environment(ambient_f=67.5, inlet_f=58.0),
+            ),
+            sim.site_example_params(),
+        )
+
+    def test_a_cold_tank_says_so(self) -> None:
+        cold = self._walk(58.0, 58.0)
+        assert any(h.source == "compressor" for h in cold.heating)
+        assert HEAT_MAP_OUT_OF_DOMAIN in cold.reasons
+
+    def test_a_tank_at_its_trigger_does_not(self) -> None:
+        """The lower probe at the trigger, the upper near the setpoint:
+        the mean is in the span, though the condenser's water the map is
+        read at is under it."""
+        warm = self._walk(125.0, 110.9)
+        assert any(h.source == "compressor" for h in warm.heating)
+        assert HEAT_MAP_OUT_OF_DOMAIN not in warm.reasons
+
+    def test_a_forecast_from_a_cold_tank_says_so(self) -> None:
+        params = sim.site_example_params()
+        for state, flagged in (
+            (sim.HeaterState(upper_f=60.0, lower_f=58.0), True),
+            (sim.HeaterState(upper_f=128.0, lower_f=110.0), False),
+        ):
+            got = sim.forecast(
+                state,
+                self.SETTINGS,
+                sim.Environment(ambient_f=67.5),
+                params,
+                at=T0,
+                target_time=at(10),
+            )
+            assert (HEAT_MAP_OUT_OF_DOMAIN in got.reasons) is flagged
+
+    def test_the_walk_books_the_hours(self) -> None:
+        """Its books count the compressor's hours with the mean outside
+        the span, and none inside it."""
+        params = sim.site_example_params()
+        lay = st.layout(params)
+        books: dict[str, st.Books] = {}
+        for name, (upper, lower) in (
+            ("cold", (60.0, 58.0)),
+            ("warm", (128.0, 120.0)),
+        ):
+            walked = st.walk(
+                lay,
+                st.estimate(lay, upper, lower),
+                T0,
+                T0 + timedelta(hours=1),
+                air_f=lambda _: 67.5,
+                heating=st.Heating(
+                    compressor=st.Compressor(
+                        params=params.compressor, on_at=T0, heats_at=T0
+                    )
+                ),
+            )
+            books[name] = walked.books
+        assert books["cold"].compressor_outside_water_h == pytest.approx(
+            books["cold"].compressor_h
+        )
+        assert books["warm"].compressor_outside_water_h == 0.0

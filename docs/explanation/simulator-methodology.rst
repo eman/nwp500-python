@@ -249,7 +249,14 @@ cold bottom can leave the condenser's below the envelope while the
 compressor runs; there the maps are read at the envelope's edge
 (``stratified.Layout.map_air_f``, ``map_water_f``), so no read falls
 where no fit was checked. A recovery whose air is outside the heat's
-span says so (``heat_map_out_of_domain``).
+span says so (``heat_map_out_of_domain``), and so does one that heats
+with the probes' mean outside the heat's water span: the heat was
+fitted on mixed climbs against that mean, 114 to 144 °F on the site's
+record, so a cold tank's recovery, or one after a large draw, reads the
+plane past its evidence. The map is read at the condenser's water,
+which in a layered tank runs under that mean (a recovery from the lower
+trigger starts it 5 to 9 °F under 114 °F, and averages 116 to 117 °F
+over the run): that alone does not say so.
 
 A fit's slopes take the sign the cycle gives them: warmer air boils the
 refrigerant warmer and denser, so the heat rises with :math:`T_a`

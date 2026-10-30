@@ -263,7 +263,8 @@ class TestTheRecovery:
             recovery_model=_Model(("model_extrapolated",), confidence=0.5),
             low_confidence_floor=0.6,
         )
-        got = physics.recover(T0, physics.estimate(125.0, 100.0), 130.0)
+        # A tank inside the heat map's water span, which says nothing.
+        got = physics.recover(T0, physics.estimate(128.0, 108.0), 130.0)
         assert got.reasons == ("model_extrapolated", "recovery_low_confidence")
 
     def test_short_of_its_target_it_says_so(self) -> None:

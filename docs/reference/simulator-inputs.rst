@@ -802,7 +802,8 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 61-89 and 114-144 degF; 53-90 and 67-145 degF
      - The span each map was fitted over, to the whole degree. Each is
        read along its plane past it as within it; a recovery whose air
-       is outside the heat's span says ``heat_map_out_of_domain``.
+       is outside the heat's span, or that heats with the probes' mean
+       outside its water span, says ``heat_map_out_of_domain``.
      - Set by each fit
    * - ``compressor.start_hold_min`` by ``start_hold_after_min``
      - 0 min in every band
@@ -1098,8 +1099,11 @@ The ones about inputs and parameters:
        manual's rule, not seen on the record.
    * - ``heat_map_out_of_domain``
      - A recovery's air is outside the span the heat pump's heat was
-       fitted on (``compressor.heat_domain_air_f``), so its heat is the
-       plane carried past the record.
+       fitted on (``compressor.heat_domain_air_f``), or it heats with
+       the probes' mean outside the heat's water span
+       (``heat_domain_water_f``, the water the heat was fitted against
+       on mixed climbs), so its heat is the plane carried past the
+       record.
 
 The ones about the heater's own rules, each resting on the device runs
 :doc:`/explanation/what-starts-a-recovery`,

@@ -102,7 +102,10 @@ def start_hold_min(c: CompressorParams, minutes_off: float | None) -> float:
 
 
 #: The reason a recovery carries whose air is outside the heat map's
-#: fitted span (``CompressorParams.heat_domain_air_f``): its heat is the
+#: fitted span (``CompressorParams.heat_domain_air_f``), or that heats
+#: with the probes' mean, the water the map was fitted against on mixed
+#: climbs, outside its water span (``heat_domain_water_f``,
+#: ``stratified.Books.compressor_outside_water_h``): its heat is the
 #: plane carried past the record, not a reading's.
 HEAT_MAP_OUT_OF_DOMAIN = "heat_map_out_of_domain"
 
