@@ -58,6 +58,26 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **A simulation goes on from where another ended.** A scheduler that
+  stands the simulator in for a heater calls it once a step, and each
+  call began as a mode entry: a running compressor's hold, lockout and
+  pending start, an element's dead time and the heat pump's
+  unavailability were taken afresh, and the heating intervals running
+  at the cut were cut. ``SimulationResult.end_state``, ``end_history``
+  and ``end_settings`` are the heater at the end: the probes and
+  layers, what runs, and ``HeaterState.resume``, a versioned JSON
+  document of the controller's state. Passed as the next
+  ``Scenario``'s ``state``, ``history`` and ``settings``, the walk goes
+  on: chained at marks of the clock's 10-minute grid, the calls give
+  the path and heating of one walk with marks at the cuts, through
+  ``codec`` and JSON too. A cut off the grid splits a walk's step
+  (0.002 °F after two days of 15-minute calls). A setpoint or mode
+  other than the one the last call left is a write at the start
+  (``serves="settings"``). ``engine.simulate`` takes ``resume`` and
+  ``Simulation.resume`` gives it (``engine.Resume``, ``to_document``,
+  ``from_document``); one from another instant, or of another
+  version, is refused.
+
 - **The mains by the day, from the climate.** ``cold_supply.mains_f``
   is Burch and Christensen's correlation of a utility's water with the
   year's outdoor air (its mean, and its warmest monthly mean less its
@@ -602,6 +622,23 @@ Changed
 
 Fixed
 -----
+
+- **The upper element's later start is found on a recovery's path.**
+  High Demand's start of the upper element when the upper probe falls
+  short, and Energy Saver's, were found along a coast but only read at
+  the walk's events during a recovery, so a mark or a call's end moved
+  them. Across 800 random walks on one NWP500-65's parameters, 66
+  change: the element starts 0.2–60 min earlier in most and up to
+  650 min in a few, starts in 6 that had none, and the energy moves
+  −259 to +1249 Wh and the tank at the end up to 6.1 °F.
+- **An element in the heat pump's place runs to the horizon.** The air
+  read past the walk's end ended its window there, so the element
+  stopped as ``heat_pump``, often with a compressor interval of no
+  length after it; it now stops as ``horizon``. 44 of the 800 walks
+  change; the tank does not.
+- A start TOU defers past the walk's end stays pending, for a walk
+  going on from there; ``controller.TriggerDeferred`` has no
+  ``horizon``. No single walk changes.
 
 - ``sim_score`` replays every draw before an event's start, and leaves
   a delivery's own draw out. The replay an event starts from stops at

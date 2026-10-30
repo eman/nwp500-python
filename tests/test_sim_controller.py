@@ -236,7 +236,6 @@ class TestTheCompressor:
                 at=T0,
                 starts_at=ahead.starts_at,
                 trigger=ahead.trigger,
-                horizon=at(60),
             ),
         )
         assert st.compressor.pending == Start(
@@ -248,7 +247,6 @@ class TestTheCompressor:
                 at=T0,
                 starts_at=at(8),
                 trigger="lower",
-                horizon=at(60),
             ),
         )
         assert later.compressor.pending == st.compressor.pending

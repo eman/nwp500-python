@@ -22,6 +22,7 @@ from nwp500.sim.engine import (
     energy_by_slot,
     energy_by_source,
 )
+from nwp500.sim.inputs import HeaterState, History, Settings
 from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import Point
 
@@ -51,6 +52,15 @@ class SimulationResult:
     #: range to the end (``DrawParams.domain_upper_f``); None when the
     #: walk ends in range.
     draw_out_of_domain_at: datetime | None = None
+    #: The heater at ``until``, for a scenario from there to go on from
+    #: (its ``state``, ``history`` and ``settings``): the probes and the
+    #: layers where the walk ended, what was running, and what the
+    #: heater keeps beyond them (``HeaterState.resume``). The settings
+    #: are the setpoint and the mode in force then; a scenario given
+    #: others has them written at its start.
+    end_state: HeaterState | None = None
+    end_history: History | None = None
+    end_settings: Settings | None = None
 
     @property
     def points(self) -> list[PathPoint]:

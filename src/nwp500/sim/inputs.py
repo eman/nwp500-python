@@ -31,6 +31,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     field_validator,
     model_validator,
 )
@@ -89,6 +90,13 @@ class HeaterState(_Value):
     #: recovery target (``DeviceStatus.energy_to_setpoint``), Wh; None:
     #: not read (an injected state's is never its own).
     energy_to_setpoint_wh: float | None = None
+    #: Where a simulation that ended at this scenario's start left the
+    #: heater (``SimulationResult.end_state``): what it keeps beyond the
+    #: probes and the layers, so the walk goes on as if unbroken.
+    #: Opaque; kept as given. With it the compressor, the element and
+    #: ``History`` are its, not these flags'. None: the walk starts
+    #: afresh.
+    resume: dict[str, JsonValue] | None = None
 
 
 class Settings(_Value):

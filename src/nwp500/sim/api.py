@@ -42,6 +42,7 @@ from nwp500.sim.engine import (
     HeatingInterval,
     PathPoint,
     RawWrite,
+    Resume,
     Simulation,
     SimulationError,
     quantise,
@@ -450,6 +451,11 @@ def simulate(
     """
     s = scenario
     _check_setpoints(s)
+    resume = (
+        None
+        if s.state.resume is None
+        else Resume.from_document(dict(s.state.resume))
+    )
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
@@ -498,7 +504,8 @@ def simulate(
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
         # The lower trigger was never searched; the TOU-opening one was.
         reasons.append(HP_LOWER_ON_UNKNOWN)
-    _history_defaults(s.state, s.history, defaults)
+    if resume is None:
+        _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
     draws = [(d.at, d.gallons) for d in s.loads.draws]
@@ -540,6 +547,7 @@ def simulate(
         ),
         running_hold=running_hold,
         running_starts=running_starts,
+        resume=resume,
     )
     delivery = delivery_along(sim.points, params)
     out_of_domain_at: datetime | None = None
@@ -577,7 +585,48 @@ def simulate(
             )
         ),
         draw_out_of_domain_at=out_of_domain_at,
+        **_end(s, sim),
     )
+
+
+#: The device's mode for each of the engine's.
+_DEVICE_MODE: Mapping[HeaterMode, int] = MappingProxyType(
+    {named: mode for mode, named in ENGINE_MODE.items()}
+)
+
+
+def _end(s: Scenario, sim: Simulation) -> dict[str, Any]:
+    """The heater where ``sim`` ended, as the state, the history and the
+    settings of a scenario from there (``SimulationResult.end_state``)."""
+    r = sim.resume
+    assert r is not None
+    last = sim.points[-1]
+    el = r.element
+    commanded = r.controller.mode.commanded
+    # The mode in force at the start unless a write moved it: Vacation
+    # and Power Off are the engine's Heat Pump, with heating disabled.
+    mode = (
+        s.settings.mode
+        if commanded == _engine_mode(s.settings.mode)[0]
+        else _DEVICE_MODE[commanded]
+    )
+    return {
+        "end_state": HeaterState(
+            upper_f=last.upper_f,
+            lower_f=last.lower_f,
+            layers_f=last.layers_f,
+            compressor_running=r.cycle is not None,
+            element_running=el is not None,
+            element_running_since=None if el is None else el.on_at,
+            resume=r.to_document(),
+        ),
+        "end_history": History(
+            compressor_stopped_at=r.controller.compressor.last_stop
+        ),
+        "end_settings": s.settings.model_copy(
+            update={"setpoint_f": r.controller.setpoint_f, "mode": mode}
+        ),
+    }
 
 
 def readiness(

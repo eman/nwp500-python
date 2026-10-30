@@ -437,11 +437,11 @@ class HeaterTrigger(Event):
 class TriggerDeferred(Event):
     """A trigger on the coast ahead falls in the restart lockout, and
     its start, at ``starts_at``, beyond where this coast stops: it waits
-    as a pending start, unless it is at or past ``horizon``."""
+    as a pending start, past the walk's end too, as the heater keeps it
+    for a walk that goes on from there."""
 
     starts_at: datetime
     trigger: Trigger | None
-    horizon: datetime
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1515,9 +1515,7 @@ def _trigger_deferred(s: _Step, ev: TriggerDeferred) -> None:
     the lockout ends (the 2026-09-23 restarts, 5 min 28 s and 5 min 31 s
     after the stop): carried as a pending start, the earliest kept."""
     pending = s.state.compressor.pending
-    if ev.starts_at < ev.horizon and (
-        pending is None or ev.starts_at < pending.at
-    ):
+    if pending is None or ev.starts_at < pending.at:
         s.pend(Start(ev.starts_at, "heater", trigger=ev.trigger))
 
 
