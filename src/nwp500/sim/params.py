@@ -214,7 +214,7 @@ class TankParams:
     #: probes' disagreement in a mixed tank.
     lower_probe_offset_f: float = field(default=0.0, metadata=_p(DEFAULT, "°F"))
     #: Where the elements heat, the same way, each into the layer at its
-    #: height: the upper element with 17.5 gal of the 63.2 above it, the
+    #: height: the upper element with 17.7 gal of the 63.2 above it, the
     #: volume its rise on 29 clean runs (2.01 °F/min at 5,148 W) heats,
     #: and the lower near the bottom. Priors, not fitted: an element's
     #: heat turns its layer over into the ones above, so the height
@@ -254,7 +254,8 @@ class TankParams:
 
     @property
     def thermal_mass_btu_f(self) -> float:
-        """Full-tank thermal mass, BTU/°F (≈ 527 at 63.2 gal)."""
+        """Full-tank thermal mass at the mains, BTU/°F (≈ 527 at 63.2
+        gal); 518 at 140 °F (``physics.water``)."""
         return self.volume_gal * WATER_BTU_PER_GAL_F
 
 
@@ -330,13 +331,13 @@ class CompressorParams:
     #: ``MAP_REF_WATER_F`` water, BTU/h, and how it moves per °F of
     #: air, of water, and of both together.
     heat_btu_h: float = field(
-        default=4499.4, metadata=_p(FITTED, "BTU/hr", note=_HEAT_MAP)
+        default=4444.8, metadata=_p(FITTED, "BTU/hr", note=_HEAT_MAP)
     )
     heat_btu_h_per_air_f: float = field(
-        default=55.5, metadata=_p(FITTED, "BTU/hr/°F", note=_HEAT_MAP)
+        default=54.8, metadata=_p(FITTED, "BTU/hr/°F", note=_HEAT_MAP)
     )
     heat_btu_h_per_water_f: float = field(
-        default=-15.95, metadata=_p(FITTED, "BTU/hr/°F", note=_HEAT_MAP)
+        default=-16.68, metadata=_p(FITTED, "BTU/hr/°F", note=_HEAT_MAP)
     )
     heat_btu_h_per_air_water_f: float = field(
         default=0.0, metadata=_p(DEFAULT, "BTU/hr/°F²")

@@ -50,7 +50,8 @@ from nwp500.sim.params import (
 )
 from nwp500.sim.physics import heat_pump as hp
 from nwp500.sim.physics import stratified as st
-from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
+from nwp500.sim.physics.water import btu_per_gal_f
+from nwp500.sim.units import BTU_PER_WH
 
 #: The grid a recovery is read on.
 GRID = timedelta(minutes=1)
@@ -457,7 +458,8 @@ def climb_heat(
 ) -> pd.DataFrame:
     """The heat a recovery puts into the tank, from its draw-free climbs
     with the tank mixed (``recovery_frame``): the probes' mean is then
-    the tank's, and the heat is its mass times the mean's rise (a
+    the tank's, and the heat is its mass, at the mean's water
+    (``physics.water``), times the mean's rise (a
     least-squares slope over at least ``min_minutes``) plus what the
     tank ``params`` lay out loses at that temperature, mixed: its sides',
     top's and bottom's UA (``physics.stratified.layout``) against the
@@ -467,7 +469,6 @@ def climb_heat(
     ``loss_btu_h``, ``heat_btu_h``, the metered ``power_w`` (NaN
     without a reading) and ``cop`` (the heat over the power)."""
     lay = st.layout(params)
-    mass = lay.volume_gal * WATER_BTU_PER_GAL_F
     ua = lay.ua_btu_hr_f + lay.ua_top_btu_hr_f + lay.ua_bottom_btu_hr_f
     rows: list[dict[str, object]] = []
     for g in _cycles(frame):
@@ -492,7 +493,7 @@ def climb_heat(
             water = float(np.mean(mean))
             air = float(np.mean(s["air_f"].to_numpy(dtype=float)))
             lost = ua * (water - air)
-            heat = mass * rise + lost
+            heat = lay.volume_gal * btu_per_gal_f(water) * rise + lost
             power = _mean(s["power_w"].to_numpy(dtype=float))
             rows.append(
                 {

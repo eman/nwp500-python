@@ -53,9 +53,12 @@ a 141 °F tank leaves the lower probe at 95.6 °F at once, 99.2 °F in
 nine pieces and 99.4 °F in 36. A flow that leaves an inversion turns
 it over at its end (``mix``), so where such a flow is cut matters.
 
-Water's density and heat capacity are taken constant (8.34 BTU per
-gallon per °F), so a layer's energy is linear in its temperature and
-conservation is exact; the error is about 1.5 % over the tank's span.
+A layer's heat is its volume's at its temperature: water holds 8.34
+BTU per gallon per °F at the mains and 8.20 at 140 °F
+(``physics.water``). Every operator moves heat as the water's
+``heat_f``, in which a layer's energy is linear, so energy is
+conserved to rounding; what drives the heat, the air, a neighbour, the
+condenser, reads the temperature.
 """
 
 import math
@@ -63,12 +66,14 @@ from bisect import bisect_right
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, fields
 from datetime import UTC, datetime, timedelta
+from functools import cached_property
 from itertools import pairwise
 from typing import Literal
 
 from nwp500.sim.params import CompressorParams, HeaterParams
 from nwp500.sim.physics.draw import delivery_temp_f, hot_fraction
 from nwp500.sim.physics.heat_pump import heat_btu_h, power_w
+from nwp500.sim.physics.water import btu_per_gal_f, heat_f, temp_f
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 Zone = Literal["upper", "lower"]
@@ -120,6 +125,24 @@ class TankState:
     def uniform(cls, layers: int, temp_f: float) -> TankState:
         """A mixed tank of ``layers`` layers at ``temp_f``."""
         return cls((float(temp_f),) * layers)
+
+    @cached_property
+    def heats_f(self) -> tuple[float, ...]:
+        """The layers' heats (``physics.water.heat_f``), °F."""
+        return tuple(heat_f(t) for t in self.layers_f)
+
+    @classmethod
+    def of_heats(
+        cls, heats: Sequence[float], temps: Sequence[float] | None = None
+    ) -> TankState:
+        """The state whose layers' heats are ``heats``, ``temps`` their
+        temperatures where the caller has them. A state is its
+        temperatures alone, its heats read from them, so one rebuilt
+        from its ``layers_f`` (a walk resumed from another's end) is it
+        exactly; the heats keep to rounding (3e-13 of a layer's)."""
+        return cls(
+            tuple(temp_f(h) for h in heats) if temps is None else tuple(temps)
+        )
 
 
 def _share(name: str, value: float) -> None:
@@ -349,8 +372,9 @@ def _layers(lay: Layout, state: TankState) -> tuple[float, ...]:
 
 
 def energy_btu(lay: Layout, state: TankState) -> float:
-    """The tank's heat above 0 °F, BTU."""
-    return lay.layer_btu_f * sum(_layers(lay, state))
+    """The tank's heat, BTU, from where ``heat_f`` reads 0 °F."""
+    _layers(lay, state)
+    return lay.layer_btu_f * sum(state.heats_f)
 
 
 # ── operators ──
@@ -364,17 +388,27 @@ def mix(state: TankState) -> TankState:
     layers = state.layers_f
     if all(a <= b for a, b in pairwise(layers)):
         return state
+    heats = state.heats_f
     pools: list[tuple[float, int]] = []
-    for t in layers:
+    for t in heats:
         total, count = t, 1
         while pools and pools[-1][0] * count > total * pools[-1][1]:
             below, n = pools.pop()
             total, count = total + below, count + n
         pools.append((total, count))
     out: list[float] = []
+    pooled: list[float] = []
     for total, count in pools:
-        out.extend([total / count] * count)
-    return TankState(tuple(out))
+        # A layer left alone keeps its temperature exactly.
+        i = len(out)
+        if count == 1:
+            out.append(layers[i])
+            pooled.append(heats[i])
+        else:
+            mean = total / count
+            out.extend([temp_f(mean)] * count)
+            pooled.extend([mean] * count)
+    return TankState.of_heats(pooled, out)
 
 
 def lose(
@@ -396,11 +430,13 @@ def lose(
             ua += lay.ua_bottom_btu_hr_f
         if i == top:
             ua += lay.ua_top_btu_hr_f
-        out.append(
-            air_f + (t - air_f) * math.exp(-ua * hours / lay.layer_btu_f)
-        )
-    lost = lay.layer_btu_f * (sum(layers) - sum(out))
-    return TankState(tuple(out)), lost
+        # The layer's heat per °F where it starts: the relaxation is
+        # exact for it, and never passes the air.
+        mass = lay.layer_gal * btu_per_gal_f(t)
+        out.append(air_f + (t - air_f) * math.exp(-ua * hours / mass))
+    heats = tuple(heat_f(t) for t in out)
+    lost = lay.layer_btu_f * (sum(state.heats_f) - sum(heats))
+    return TankState.of_heats(heats, out), lost
 
 
 def conduct(lay: Layout, state: TankState, hours: float) -> TankState:
@@ -412,21 +448,28 @@ def conduct(lay: Layout, state: TankState, hours: float) -> TankState:
     if hours <= 0.0 or lay.conductance_btu_hr_f <= 0.0:
         return state
     # Layers in series: each interface conducts the column's
-    # conductance times their number.
-    rate = lay.conductance_btu_hr_f * lay.layers / lay.layer_btu_f
+    # conductance times their number. The heat moves on the
+    # temperatures' gaps, into the layers' heat; the step is sized on
+    # the lightest layer's heat per °F.
+    # The heat per °F falls with the temperature over the tank's span
+    # and rises again below freezing: the lightest is an end's.
+    lightest = lay.layer_gal * min(
+        btu_per_gal_f(max(layers)), btu_per_gal_f(min(layers))
+    )
+    rate = lay.conductance_btu_hr_f * lay.layers / lightest
     steps = max(1, math.ceil(rate * hours / _CONDUCT_SHARE))
-    r = rate * hours / steps
+    k = lay.conductance_btu_hr_f * lay.layers * hours / steps
     t = list(layers)
+    h = list(state.heats_f)
     n = len(t)
     for _ in range(steps):
-        flux = [r * (t[i + 1] - t[i]) for i in range(n - 1)]
-        t = [
-            t[i]
-            + (flux[i] if i < n - 1 else 0.0)
-            - (flux[i - 1] if i > 0 else 0.0)
+        q = [k * (t[i + 1] - t[i]) / lay.layer_btu_f for i in range(n - 1)]
+        h = [
+            h[i] + (q[i] if i < n - 1 else 0.0) - (q[i - 1] if i > 0 else 0.0)
             for i in range(n)
         ]
-    return TankState(tuple(t))
+        t = [temp_f(x) for x in h]
+    return TankState.of_heats(h, t)
 
 
 def add_heat(lay: Layout, state: TankState, btu: Sequence[float]) -> TankState:
@@ -435,14 +478,14 @@ def add_heat(lay: Layout, state: TankState, btu: Sequence[float]) -> TankState:
     layers = _layers(lay, state)
     if len(btu) != len(layers):
         raise ValueError("one heat per layer")
-    return mix(
-        TankState(
-            tuple(
-                t + q / lay.layer_btu_f
-                for t, q in zip(layers, btu, strict=True)
-            )
-        )
+    heats = tuple(
+        h + q / lay.layer_btu_f for h, q in zip(state.heats_f, btu, strict=True)
     )
+    temps = tuple(
+        temp_f(h) if q else t
+        for h, q, t in zip(heats, btu, layers, strict=True)
+    )
+    return mix(TankState.of_heats(heats, temps))
 
 
 def stir(lay: Layout, state: TankState) -> TankState:
@@ -452,13 +495,22 @@ def stir(lay: Layout, state: TankState) -> TankState:
     same heat; the lower probe reads the pool, below what it read with
     the cold bottom left alone."""
     layers = _layers(lay, state)
+    heats = state.heats_f
     w = lay.stir_weights
-    pool = sum(a * t for a, t in zip(w, layers, strict=True)) / sum(w)
-    return mix(
-        TankState(
-            tuple(t + a * (pool - t) for a, t in zip(w, layers, strict=True))
-        )
+    # About the bottom's, so a pool of equal heats is exactly theirs.
+    base = heats[0]
+    pool = base + sum(
+        a * (h - base) for a, h in zip(w, heats, strict=True)
+    ) / sum(w)
+    stirred = tuple(
+        h + a * (pool - h) if a and h != pool else h
+        for a, h in zip(w, heats, strict=True)
     )
+    temps = tuple(
+        t if s == h else temp_f(s)
+        for s, h, t in zip(stirred, heats, layers, strict=True)
+    )
+    return mix(TankState.of_heats(stirred, temps))
 
 
 def condenser_water_f(lay: Layout, state: TankState) -> float:
@@ -491,7 +543,9 @@ class _Column:
     ``inlet_mix_gal``, mixes the inflow in as a well-mixed zone would
     (its mean) while its own unevenness decays on the same scale, and
     passes its mean up into a plug above it, which leaves at the
-    top."""
+    top. Its layers and inflow are the water's heats (``heat_f``), in
+    which the mixing is linear: so are what it gives back, "°F" below
+    reading as such."""
 
     lay: Layout
     layers: tuple[float, ...]
@@ -680,21 +734,22 @@ def flow(
     Solved exactly, remapped onto the layers by exact integrals, then
     mixed. A delivered draw (``draw``) keeps to the plug, which its
     outlet is solved along."""
-    layers = _layers(lay, state)
+    _layers(lay, state)
     if gal <= 0.0:
         return Flowed(state, 0.0)
-    col = _Column(lay, layers, inflow_f)
+    heats = state.heats_f
+    col = _Column(lay, heats, heat_f(inflow_f))
     h = lay.layer_gal
     n = lay.layers
-    bottom = col.mix_start_f if col.mix_gal > 0.0 else layers[0]
-    column = _risen if rises and inflow_f > bottom else _Column.after
+    bottom = col.mix_start_f if col.mix_gal > 0.0 else heats[0]
+    column = _risen if rises and col.inflow_f > bottom else _Column.after
     after = tuple(
         column(col, gal, i * h, lay.volume_gal if i == n - 1 else (i + 1) * h)
         / h
         for i in range(n)
     )
-    new = mix(TankState(after))
-    return Flowed(new, lay.layer_btu_f * (sum(layers) - sum(new.layers_f)))
+    new = mix(TankState.of_heats(after))
+    return Flowed(new, lay.layer_btu_f * (sum(heats) - sum(new.heats_f)))
 
 
 # ── draws through the valve ──
@@ -740,11 +795,11 @@ def draw(
     layers = _layers(lay, state)
     if delivered_gal <= 0.0:
         return Drawn(state, 0.0, 0.0, layers[-1])
-    col = _Column(lay, layers, inflow_f)
+    col = _Column(lay, state.heats_f, heat_f(inflow_f))
     remaining, withdrawn, last = delivered_gal, 0.0, layers[-1]
-    for gal, temp in col.leaving():
-        last = temp
-        share = _tank_share(temp, inflow_f, valve)
+    for gal, heat in col.leaving():
+        last = temp_f(heat)
+        share = _tank_share(last, inflow_f, valve)
         if share <= 0.0:
             # The valve takes nothing from the tank: the cold side
             # delivers the rest.
@@ -772,7 +827,7 @@ def deliverable_gal(
     line; the inlet zone's passes to where its temperature reaches the
     line's (``line_f``, or the tank temperature the valve delivers it
     from), in closed form."""
-    layers = _layers(lay, state)
+    _layers(lay, state)
     intercept, slope = valve
     if slope > 0.0:
         need = max(line_f, (line_f - intercept) / slope)
@@ -780,14 +835,15 @@ def deliverable_gal(
         need = line_f
     else:
         return 0.0
-    col = _Column(lay, layers, inflow_f)
+    col = _Column(lay, state.heats_f, heat_f(inflow_f))
+    line = heat_f(need)
     total = 0.0
-    for gal, temp in col.plug():
-        if temp < need:
+    for gal, heat in col.plug():
+        if heat < line:
             return total
-        total += gal / _tank_share(temp, inflow_f, valve)
+        total += gal / _tank_share(temp_f(heat), inflow_f, valve)
     m, start = col.mix_gal, col.mix_start_f
-    if m > 0.0 and start < need:
+    if m > 0.0 and start < line:
         # The inlet zone's water passes up under the line first.
         return total
     if inflow_f >= need:
@@ -795,13 +851,14 @@ def deliverable_gal(
         return math.inf
     if m <= 0.0:
         return total
-    # The inlet zone's water reaches the top: it passes ``need`` or
-    # warmer for ``m · ln((start − in) / (need − in))`` gallons.
-    span = m * math.log((start - inflow_f) / (need - inflow_f))
+    # The inlet zone's water reaches the top: it passes the line or
+    # warmer for ``m · ln((start − in) / (line − in))`` gallons, in the
+    # water's heats.
+    span = m * math.log((start - col.inflow_f) / (line - col.inflow_f))
     pieces = 64
     dx = span / pieces
     for k in range(pieces):
-        temp = col.mix_f((k + 0.5) * dx)
+        temp = temp_f(col.mix_f((k + 0.5) * dx))
         total += dx / _tank_share(temp, inflow_f, valve)
     return total
 
@@ -910,16 +967,25 @@ class Heating:
 class Flowing:
     """Water flowing through the tank from ``start`` to ``end`` at
     ``gpm``, coming in at ``inflow_f``; None, the water leaving the top
-    coming back (a circulation run's own): at ``rest_f`` plus ``share``
-    of the top layer's lift over it as each step starts, so at the top
-    layer's temperature with the default share of 1."""
+    coming back (a circulation run's own): at ``rest_f`` plus the share
+    of the top layer's lift over it a pipe of ``pipe_ua_btu_hr_f`` keeps
+    as each step starts (``circulation.steady_share``), so at the top
+    layer's temperature with the default of none."""
 
     start: datetime
     end: datetime
     gpm: float
     inflow_f: float | None
     rest_f: float = 0.0
-    share: float = 1.0
+    pipe_ua_btu_hr_f: float = 0.0
+
+
+def _kept(f: Flowing, top_f: float) -> float:
+    """The share of the top's lift over the rest ``f``'s pipe keeps,
+    the top at ``top_f``: ``circulation.steady_share``."""
+    if f.pipe_ua_btu_hr_f <= 0.0:
+        return 1.0
+    return math.exp(-f.pipe_ua_btu_hr_f / (f.gpm * 60.0 * btu_per_gal_f(top_f)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1180,8 +1246,9 @@ class _Walk:
         for f in self.flows_over(a, b):
             gal = f.gpm * 60.0 * _overlap_h(a, b, f.start, f.end)
             if gal > 0.0:
+                top = state.layers_f[-1]
                 inflow = (
-                    f.rest_f + f.share * (state.layers_f[-1] - f.rest_f)
+                    f.rest_f + _kept(f, top) * (top - f.rest_f)
                     if f.inflow_f is None
                     else f.inflow_f
                 )

@@ -42,7 +42,7 @@ from typing import Literal, Protocol
 
 import pandas as pd
 
-from nwp500.sim.circulation import Circulation, cooled_share, steady_share
+from nwp500.sim.circulation import Circulation, cooled_share
 from nwp500.sim.decay import AmbientSampler, Impulse
 from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.heat_pump_recovery import (
@@ -323,7 +323,7 @@ def circulation_flows(
                     gpm=terms.flow_gpm,
                     inflow_f=None,
                     rest_f=rest_f,
-                    share=steady_share(terms.pipe_ua_btu_hr_f, terms.flow_gpm),
+                    pipe_ua_btu_hr_f=terms.pipe_ua_btu_hr_f,
                 )
             )
     return out

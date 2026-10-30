@@ -32,7 +32,7 @@ Summary
    * - A circulation run
      - The pipe's **6.86 gal** back at the return's rest, the air plus
        3.74 degF, then the tank's own water **1.6 degF** under the top
-       at 1.08 gal/min (a loss of **14.6 BTU/hr per degF**), measured on
+       at 1.08 gal/min (a loss of **14.4 BTU/hr per degF**), measured on
        one run after a 4 h rest. At the loop fitted in September
        (6.38 gal), a typical run was about 5 degF of the whole tank,
        and the probes showed 0.44 of it.
@@ -209,11 +209,11 @@ off (the readings are ``tests/fixtures/sim/circulation_run_2026-10-29.json``):
   volume, ``calibration.measure_pipe``) and was 95 % of the way by
   12 gal.
 * Its steady value was **1.6 degF** under the tank's upper probe at
-  1.08 gal/min, a loss of **14.6 BTU/hr per degF**. Later in the run
+  1.08 gal/min, a loss of **14.4 BTU/hr per degF**. Later in the run
   the return slid to 5 degF under, but the upper probe fell with it:
   the tank's top was cooling, not the pipe losing more.
-* The tank gave up 4,589 BTU to the run, as its flow times the drop
-  from the upper probe to the return.
+* The tank gave up 4,545 BTU to the run, as its flow times the drop in
+  the water's heat from the upper probe to the return.
 
 **The return's rest and cooling**, fitted with that pipe on 122 runs
 with the compressor off (2026-04-04 to 2026-10-24, ``fit_return``): the

@@ -10,6 +10,7 @@ from nwp500.sim.physics.draw import (
     hot_fraction,
     withdrawn_gal,
 )
+from nwp500.sim.physics.water import heat_f
 
 DELIVERY = 128.0
 #: The installation's mixing valve the delivery line was measured at.
@@ -30,12 +31,16 @@ class TestHotFraction:
         assert hot_fraction(DELIVERY - 10, DELIVERY, COLD) == 1.0
 
     def test_it_matches_the_mixing_identity(self) -> None:
-        """V_hot·T_up + V_cold·T_cold = V_del·T_del, checked rather
-        than asserted from the rearranged form the module uses."""
+        """V_hot·h(T_up) + V_cold·h(T_cold) = V_del·h(T_del), the heat
+        each gallon holds (``physics.water``), checked rather than
+        asserted from the rearranged form the module uses: a hot gallon
+        holds less, so it takes a little more of the tank than the
+        temperatures alone say."""
         t_upper = 145.0
         frac = hot_fraction(t_upper, DELIVERY, COLD)
-        delivered = frac * t_upper + (1 - frac) * COLD
-        assert delivered == pytest.approx(DELIVERY)
+        delivered = frac * heat_f(t_upper) + (1 - frac) * heat_f(COLD)
+        assert delivered == pytest.approx(heat_f(DELIVERY))
+        assert frac > (DELIVERY - COLD) / (t_upper - COLD)
 
     def test_a_tank_at_or_below_the_inlet_delivers_nothing(self) -> None:
         assert hot_fraction(COLD, DELIVERY, COLD) == 0.0

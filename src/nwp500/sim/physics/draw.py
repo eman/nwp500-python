@@ -14,7 +14,11 @@ how hot it is.
 
 Mixing to a delivery temperature gives the hot fraction::
 
-    V_hot / V_del = (T_del − T_cold) / (T_upper − T_cold),   capped at 1
+    V_hot / V_del = (h(T_del) − h(T_cold)) / (h(T_upper) − h(T_cold)),
+                                                         capped at 1
+
+with ``h`` the water's heat per gallon (``physics.water.heat_f``): a
+gallon of hot water holds less heat per degree than a cold one
 
 and the tank loses that hot water while taking cold back in at the
 bottom.
@@ -30,6 +34,8 @@ heat. Below `T_del` the valve has nothing to blend with and passes
 tank water straight through; on the measured line that is below
 about 104 °F.
 """
+
+from nwp500.sim.physics.water import heat_f
 
 #: One installation's September mains, °F (``site_example_params``'
 #: ``draw.inlet_temp_f``; its climate places them by the day, and the
@@ -95,9 +101,13 @@ def hot_fraction(
         return 0.0
     if t_upper_f <= t_delivery_f:
         return 1.0
-    return min(
-        1.0, max(0.0, (t_delivery_f - t_cold_f) / (t_upper_f - t_cold_f))
+    # The valve mixes heat: a gallon holds less of it hot than cold.
+    hot, delivered, cold = (
+        heat_f(t_upper_f),
+        heat_f(t_delivery_f),
+        heat_f(t_cold_f),
     )
+    return min(1.0, max(0.0, (delivered - cold) / (hot - cold)))
 
 
 def withdrawn_gal(

@@ -246,6 +246,28 @@ Added
 Changed
 -------
 
+- **A gallon of hot water holds less heat.** Every heat in the
+  simulator took water at 8.34 BTU per gallon per °F, the mains'
+  value; hot water is lighter, 8.24 at 120 °F and 8.20 at 140, so the
+  tank held up to 2 % more heat than it does. The new
+  ``physics.water`` has the heat per gallon by temperature
+  (``btu_per_gal_f``, Kell's density and IAPWS-95's heat capacity to
+  0.002) and keeps each layer's heat as ``heat_f``, the temperature
+  water of a constant 8.34 would have with it, so mixing, flows and
+  heat put in stay linear and conserve energy. The loss, the
+  column's conduction, the delivered water's mix, the pipe's loss
+  (``stratified.Flowing.pipe_ua_btu_hr_f`` replaces ``share``;
+  ``circulation.steady_share`` takes the water's temperature) and the
+  heat fits (``heat_pump_fit.climb_heat``, ``calibration``'s run heat
+  and ``measure_pipe``) read it. The 65's heat map and loss, fitted in
+  BTU against the constant, are restated at their reference water
+  (``defaults._restated``): 4,445 BTU/h at 65 °F air and 120 °F water
+  (from 4,499), -16.7 per °F of water (from -15.9); refitted under the
+  water's heat the map lands within 0.1 % of that. The site's pipe
+  measures 14.4 BTU/h·°F (from 14.6). The element's metered power
+  stands, so it heats hot water faster: the goldens' element runs end
+  4 s to 2.2 min sooner, and the golden 8 h coast starts its heat
+  7 min sooner. ``simulate`` takes about 20 % longer.
 - **A simulation's cost grows with its span.** A coast walked the tank
   to the next fixed event, often the horizon, to find the heater's own
   start, then again to the start; and every step of a walk scanned all
@@ -270,7 +292,8 @@ Changed
   own water comes back at the rest plus ``circulation.steady_share``
   of the top's lift over it (``exp(−UA / ṁc)``), in the walk
   (``tank_physics.circulation_flows``, ``stratified.Flowing``'s new
-  ``rest_f`` and ``share``), the tank's fit and ``run_heat_btu``.
+  ``rest_f`` and ``pipe_ua_btu_hr_f``), the tank's fit and
+  ``run_heat_btu``.
   ``calibration.measure_pipe`` measures the two on such a run, and
   ``fit_return`` fits the return's rest and cooling given them (3.74 °F
   and 0.72 h at the site, on 122 runs). The run's readings are a test
@@ -633,8 +656,8 @@ Fixed
   water column: the 50 is narrower than the 65 and as tall, the 80 as
   wide and taller. The sides' and bottom's loss, the axial conductance,
   the probes' spreads and the inlet zone follow the walls and the
-  cross-section. The tanks lose 3.59 and 4.80 BTU/h·°F (each was
-  4.18). The 50's first draw from a tank mixed at 125 °F to a 110 °F
+  cross-section. The tanks lose 3.55 and 4.74 BTU/h·°F (each was
+  4.12). The 50's first draw from a tank mixed at 125 °F to a 110 °F
   line is 37.5 gal (34.3 before), 14.8 under the 65's against the
   ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
   gal: 12.9 over the 65's, where the ratings differ by 5.

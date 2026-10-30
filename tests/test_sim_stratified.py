@@ -20,6 +20,7 @@ from nwp500.sim.params import (
     params_to_document,
 )
 from nwp500.sim.physics import stratified as S
+from nwp500.sim.physics.water import btu_per_gal_f, heat_f, temp_f
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 #: The layered tank's priors: the operators' tests are the physics',
@@ -137,8 +138,14 @@ class TestMix:
         assert S.mix(state) is state
 
     def test_an_inversion_pools_to_its_mean(self) -> None:
+        """To the mean of their heats: a gallon at 130 °F holds less per
+        degree than one at 110, so the pool is a little under 120."""
         state = S.TankState((130.0, 110.0, *([140.0] * 10)))
-        assert S.mix(state).layers_f[:2] == (120.0, 120.0)
+        pooled = S.mix(state).layers_f
+        mean = temp_f((heat_f(130.0) + heat_f(110.0)) / 2.0)
+        assert pooled[:2] == (mean, mean)
+        assert 119.98 < mean < 120.0
+        assert pooled[2:] == state.layers_f[2:]
 
 
 class TestLose:
@@ -207,7 +214,8 @@ class TestConduct:
         assert max(after.layers_f) <= max(state.layers_f) + 1e-9
 
     def test_it_closes_a_gap_on_its_time_constant(self) -> None:
-        """The column's slowest mode decays on mass / (π² · C)."""
+        """The column's slowest mode decays on mass / (π² · C), the mass
+        the water's heat per °F at its temperature."""
         n = L.layers
         state = S.TankState(
             tuple(
@@ -215,7 +223,8 @@ class TestConduct:
                 for i in range(n)
             )
         )
-        tau = L.layer_btu_f * n / (math.pi**2 * L.conductance_btu_hr_f)
+        mass = L.layer_gal * btu_per_gal_f(100.0)
+        tau = mass * n / (math.pi**2 * L.conductance_btu_hr_f)
         after = S.conduct(L, state, tau)
         ratio = (after.layers_f[0] - 100.0) / (state.layers_f[0] - 100.0)
         assert ratio == pytest.approx(math.exp(-1.0), rel=0.02)
@@ -481,7 +490,9 @@ class TestFlow:
         inlet zone, the column above where it settles, then itself),
         less what came in."""
         out = S.flow(L, state, gal, inflow)
-        col = S._Column(L, state.layers_f, inflow)
+        # The column runs on the water's heats (``physics.water``).
+        inflow = heat_f(inflow)
+        col = S._Column(L, tuple(map(heat_f, state.layers_f)), inflow)
         top, plug = L.volume_gal, col.plug_gal
         if inflow > col.mix_start_f:
             g = min(gal, top - S._settles_at(col))
