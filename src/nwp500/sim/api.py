@@ -914,8 +914,14 @@ def standby(
         electric = mode == ENGINE_MODE[ELECTRIC]
         a_lo, a_hi = params.controller.hp_air_range_f
         w_lo, w_hi = params.controller.hp_water_range_f
+        # Read to just past the end, as the walk reads it: a span the end
+        # cuts does not end there.
         air_out = (
-            [] if electric else physics.air_outside(start, until, a_lo, a_hi)
+            []
+            if electric
+            else physics.air_outside(
+                start, until + timedelta(microseconds=1), a_lo, a_hi
+            )
         )
         trajectory = [(p.at, p.upper_f, p.lower_f) for p in coast.points]
         known = {p.at for p in coast.points}
@@ -933,8 +939,7 @@ def standby(
             # than their restart (``controller.lower_trigger_f``).
             return (
                 electric
-                # A span to the coast's end holds at its end.
-                or any(a <= at < b or at == b == until for a, b in air_out)
+                or any(a <= at < b for a, b in air_out)
                 or not w_lo <= lower_f < w_hi
             )
 

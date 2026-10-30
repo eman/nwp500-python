@@ -382,3 +382,30 @@ def test_standby_finds_the_air_edge_between_its_samples() -> None:
     first = sim.simulate(s, params).heating[0]
     assert first.source == "compressor"
     assert trace.starts_at == first.start.at
+
+
+def test_standby_margin_with_the_heat_pump_back_at_the_end() -> None:
+    """The air reaches the bottom of the heat pump's range exactly at the
+    coast's end: the heat pump is back there, so the margin is to its own
+    threshold, not the elements'."""
+    base = days_of_draws(1)
+    until = base.start + timedelta(hours=2)
+    low = sim.site_example_params().controller.hp_air_range_f[0]
+    air = (
+        (base.start - timedelta(hours=1), 20.0),
+        (until - timedelta(minutes=10), 20.0),
+        (until, low),
+        (until + timedelta(hours=1), 65.0),
+    )
+    trace = sim.standby(
+        sim.HeaterState(upper_f=109.8, lower_f=109.5),
+        sim.Environment(ambient_f=air, inlet_f=60.0),
+        Loads(),
+        sim.site_example_params(),
+        start=base.start,
+        until=until,
+        settings=sim.Settings(setpoint_f=110.0, hp_lower_on_f=111.0),
+    )
+    assert trace.lower_margin_f == pytest.approx(
+        trace.points[-1].lower_f - 111.0
+    )
