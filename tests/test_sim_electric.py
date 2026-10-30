@@ -235,3 +235,40 @@ def test_standby_reads_the_lower_trigger_where_the_walk_does() -> None:
     assert trace.lower_margin_f == pytest.approx(
         trace.points[-1].lower_f - (110.0 - 4.1)
     )
+
+
+def test_standby_reads_the_fallbacks_lower_trigger_where_the_walk_does() -> (
+    None
+):
+    """Heat Pump mode with the air out of the heat pump's range and a
+    setpoint under the lower threshold: the elements answer the trigger,
+    and the standby forecast reads it where the walk does."""
+    s = days_of_draws(1).model_copy(
+        update={
+            "state": sim.HeaterState(upper_f=109.8, lower_f=109.5),
+            "settings": sim.Settings(setpoint_f=110.0, hp_lower_on_f=111.0),
+            "environment": sim.Environment(ambient_f=20.0, inlet_f=60.0),
+            "loads": Loads(),
+        }
+    )
+    params = sim.site_example_params()
+    trace = sim.standby(
+        s.state,
+        s.environment,
+        s.loads,
+        params,
+        start=s.start,
+        until=s.start + timedelta(hours=24),
+        settings=s.settings,
+    )
+    walk = sim.simulate(
+        s.model_copy(update={"horizon": timedelta(hours=24)}), params
+    )
+    assert trace.starts_at is not None
+    assert trace.starts_at > s.start
+    assert walk.heating[0].start.at == pytest.approx(
+        trace.starts_at, abs=timedelta(minutes=10)
+    )
+    assert trace.lower_margin_f == pytest.approx(
+        trace.points[-1].lower_f - (110.0 - 4.1)
+    )

@@ -636,7 +636,8 @@ says when the heater would start itself on that coast, and why:
 ``upper_at_tou_open`` or ``lower_at_tou_close``; ``start_held`` says a
 TOU window or a hot upper zone held the lower trigger back.
 ``lower_margin_f`` is how far above ``hp_lower_on`` the coast leaves the
-lower zone; in Electric, above where its elements answer it, at most
+lower zone; in Electric, or with the heat pump outside its range, above
+where the elements answer it, at most
 ``element.upper_reengages_below_setpoint_f`` under the setpoint.
 
 

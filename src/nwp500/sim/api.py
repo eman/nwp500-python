@@ -107,9 +107,11 @@ from nwp500.sim.tank_physics import (
     RECOVERY_BOUND,
     Recovered,
     TankPhysics,
+    point_at,
 )
 from nwp500.sim.tou_triggers import (
     LOWER_TRIGGER_HELD,
+    Trigger,
     heater_start,
     in_window,
     while_enabled,
@@ -865,7 +867,10 @@ def standby(
     coast (``tou_triggers.heater_start``: the lower zone reaching
     ``hp_lower_on``, or the upper zone far short at a TOU window's
     opening, with the lower trigger held as the heater holds it), and
-    how far above ``hp_lower_on`` the coast leaves the lower zone.
+    how far above ``hp_lower_on`` the coast leaves the lower zone. In
+    Electric, or with the heat pump outside its range where the trigger
+    would fire (or, for the margin, at the end), the elements answer it
+    at their own level (``controller.lower_trigger_f``).
     ``schedules`` brings the TOU windows, their local times in ``tz``.
     """
     start, until = _instant(start), _instant(until)
@@ -903,15 +908,28 @@ def standby(
         mode, disabled = _engine_mode(settings.mode)
         if settings.hp_lower_on_f is None:
             reasons.append(HP_LOWER_ON_UNKNOWN)
-        # Where the simulation reads it: Electric's elements answer it no
-        # nearer the setpoint than their restart.
-        on = lower_trigger_f(
-            settings.hp_lower_on_f,
-            settings.setpoint_f,
-            params.element,
-            elements=mode == ENGINE_MODE[ELECTRIC],
-        )
+        trajectory = [(p.at, p.upper_f, p.lower_f) for p in coast.points]
+
+        def elements_at(at: datetime) -> bool:
+            # Electric, or the heat pump outside its range there: the
+            # elements answer the lower trigger, no nearer the setpoint
+            # than their restart (``controller.lower_trigger_f``).
+            return mode == ENGINE_MODE[ELECTRIC] or _out_of_range(
+                params,
+                [_ambient_at(environment, at)],
+                point_at(coast.points, at).lower_f,
+            )
+
+        def lower_on(elements: bool) -> float:
+            return lower_trigger_f(
+                settings.hp_lower_on_f,
+                settings.setpoint_f,
+                params.element,
+                elements=elements,
+            )
+
         last = coast.points[-1]
+        on = lower_on(elements_at(last.at))
         margin = None if math.isinf(on) else last.lower_f - on
         windows = (
             while_enabled(
@@ -927,15 +945,25 @@ def standby(
             else ()
         )
         if not disabled:
-            starts_at, trigger, held = heater_start(
-                [(p.at, p.upper_f, p.lower_f) for p in coast.points],
-                # None: no lower trigger, the TOU-opening one still.
-                on,
-                coast.impulses,
-                windows=windows,
-                setpoint_f=settings.setpoint_f,
-                mode=mode,
-            )
+
+            def start_on(
+                on: float,
+            ) -> tuple[datetime | None, Trigger | None, bool]:
+                return heater_start(
+                    trajectory,
+                    # None: no lower trigger, the TOU-opening one still.
+                    on,
+                    coast.impulses,
+                    windows=windows,
+                    setpoint_f=settings.setpoint_f,
+                    mode=mode,
+                )
+
+            # Where the heat pump would start, judged there: the elements
+            # in its place read the trigger at their own level.
+            starts_at, trigger, held = start_on(lower_on(elements=False))
+            if starts_at is not None and elements_at(starts_at):
+                starts_at, trigger, held = start_on(lower_on(elements=True))
             if held:
                 reasons.append(LOWER_TRIGGER_HELD)
         if schedules is None or (

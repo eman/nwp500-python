@@ -640,8 +640,9 @@ Fixed
   of the setpoint, as High Demand's does (``controller.later_start``).
   Each walk that uses them says ``electric_later_starts_unverified``,
   and so does one going on from such a run. Two days in Electric at a
-  130 °F setpoint from 128 °F now keep the upper probe at 124.9-132.1 °F
-  for 4.5 kWh with no draws and 13.6 kWh with a household's, where
+  130 °F setpoint from 128 °F now keep the upper probe between 124.9
+  and 132.05 °F, for 4.54 kWh with no draws and 13.55 kWh with a
+  household's, where
   before they heated nothing and ended at 104.6 and 72.9 °F. Across 800
   random walks on one NWP500-65's parameters, 427 with Electric in
   force at some point change: 93 only in their reasons, 319 heat more
@@ -655,8 +656,9 @@ Fixed
   about 110 starts in two days at a 104 °F setpoint and a 104.9 °F
   threshold, most of them seconds long. They now answer it at the
   upper element's restart when that is lower (12 starts), and
-  ``standby`` reads it there in Electric too, its ``lower_margin_f``
-  with it (``controller.lower_trigger_f``). Of the 800
+  ``standby`` reads it there too, in Electric or with the heat pump
+  outside its range where the trigger would fire, its
+  ``lower_margin_f`` with it (``controller.lower_trigger_f``). Of the 800
   walks, 37 that never enter Electric change: 26 heat less and 10 more,
   the energy moving −7.5 to +0.5 kWh (a median −0.15) and the end tank
   up to 6.3 °F.
