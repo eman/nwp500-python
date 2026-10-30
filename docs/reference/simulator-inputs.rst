@@ -441,8 +441,10 @@ Draws: ``Loads``
        ``HeaterParams.circulation`` (`Circulation`_).
    * - ``circulation_known_until``
      - instant
-     - The runs are known for a span starting by this instant, and not
-       after it, where nothing is charged (``circulation_unknown``).
+     - The runs are known as far as this instant, judged run by run:
+       one starting by it is charged whole, even past it; one starting
+       after it is not known and charges nothing, wherever a walk is
+       cut. A scenario running past it says ``circulation_unknown``.
        None: known throughout.
 
 
