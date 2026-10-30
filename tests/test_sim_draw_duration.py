@@ -163,3 +163,26 @@ def test_next_recovery_takes_the_rest_of_the_draw_at_its_start() -> None:
 def test_a_draw_runs_a_day_at_most(seconds: float) -> None:
     with pytest.raises(ValidationError):
         Draw(at=T0, gallons=1.0, duration_s=seconds)
+
+
+def test_a_running_recovery_takes_the_rest_of_a_draw_under_way() -> None:
+    """Ten minutes into the shower with the compressor running, the
+    recovery goes on from the tank its other 40 gal leave."""
+    s = _scenario((SHOWER,), 1)
+    s = s.model_copy(
+        update={
+            "start": SHOWER.at + timedelta(minutes=10),
+            "state": sim.HeaterState(
+                upper_f=125.0, lower_f=100.0, compressor_running=True
+            ),
+        }
+    )
+    rest = s.model_copy(
+        update={"loads": Loads(draws=(Draw(at=s.start, gallons=40.0),))}
+    )
+    none = s.model_copy(update={"loads": Loads()})
+    under_way = sim.next_recovery(s, PARAMS)
+    assert under_way.points == sim.next_recovery(rest, PARAMS).points
+    assert (
+        under_way.points[-1][0] > sim.next_recovery(none, PARAMS).points[-1][0]
+    )

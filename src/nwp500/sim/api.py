@@ -1493,7 +1493,9 @@ def next_recovery(
             if coast.starts_at is None:
                 return Recovery("idle")
             start = max(now, coast.starts_at)
-            upper, lower = _to_start(s, params, start)
+        # A running one goes on from now: its tank is the one a draw
+        # there, or the rest of one under way, leaves.
+        upper, lower = _to_start(s, params, start)
         if mode != "electric" and _out_of_range(
             params, [_ambient_at(s.environment, start)], lower
         ):

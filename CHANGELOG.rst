@@ -645,7 +645,9 @@ Fixed
   element 17 minutes later. A draw with no duration is taken at its
   instant, as before. ``next_recovery`` and ``time_to_ready``, whose
   recovery forecast takes no draws, take the rest of a draw under way
-  at the recovery's start there.
+  at the recovery's start there, a recovery already running at the
+  call included; that one left out a draw at its start before, one
+  at an instant too.
 - **Electric heats again after its first run.** A walk in Electric
   heated only on entering the mode, so a tank left in it coasted to the
   room and drew nothing (``element_later_starts_not_modelled``). Its
