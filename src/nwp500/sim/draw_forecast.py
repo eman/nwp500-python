@@ -400,12 +400,13 @@ def draw_profile(
 def draws_first(
     profile: DrawProfile, start: datetime
 ) -> tuple[
-    list[tuple[datetime, float, float]], list[tuple[datetime, datetime] | None]
+    list[tuple[datetime, float, float, float]],
+    list[tuple[datetime, datetime] | None],
 ]:
     """The worst case for each draw window: its long draws come first,
     back to back from its onset (or ``start``, for a window already
     open), before any recovery. The profile's draws so placed, as
-    ``(at, gallons, per-draw gallons)`` (short ones and those outside
+    ``(at, gallons, per-draw gallons, seconds)`` (short ones and those outside
     every window where the profile put them), and per window the span
     they occupy, never past its end, where no heat is credited (None
     for a window expecting no long draw; the whole window when its
@@ -433,7 +434,7 @@ def draws_first(
             at += timedelta(seconds=d.duration_s)
         spans.append((opens, min(w.end, at)) if at > opens else None)
     draws = sorted(
-        (moved.get(i, d.onset), d.volume_gal, d.per_draw_gal)
+        (moved.get(i, d.onset), d.volume_gal, d.per_draw_gal, d.duration_s)
         for i, d in enumerate(profile.draws)
     )
     return draws, spans
@@ -446,7 +447,8 @@ def forecast_loads(
     worst_case: bool = False,
 ) -> tuple[Loads, list[tuple[datetime, datetime]]]:
     """The profile as a scenario's ``Loads`` (each expected draw a
-    ``Draw`` carrying its per-draw volume, each window a ``DrawWindow``
+    ``Draw`` carrying its per-draw volume and its time drawing, each
+    window a ``DrawWindow``
     expecting its long draws' volume and count, and when they end) and
     the spans to withhold heat
     over (``simulate``'s ``withheld_windows``): none, or with
@@ -459,13 +461,14 @@ def forecast_loads(
         withheld = [x for x in spans if x is not None]
     else:
         placed = [
-            (d.onset, d.volume_gal, d.per_draw_gal) for d in profile.draws
+            (d.onset, d.volume_gal, d.per_draw_gal, d.duration_s)
+            for d in profile.draws
         ]
         withheld = []
     loads = Loads(
         draws=tuple(
-            Draw(at=at, gallons=g, per_draw_gal=per or None)
-            for at, g, per in placed
+            Draw(at=at, gallons=g, per_draw_gal=per or None, duration_s=sec)
+            for at, g, per, sec in placed
             if g > 0.0
         ),
         windows=tuple(

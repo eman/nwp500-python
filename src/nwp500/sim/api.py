@@ -548,7 +548,7 @@ def simulate(
         _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
-    draws = [(d.at, d.gallons) for d in s.loads.draws]
+    draws = [p for d in s.loads.draws for p in d.pieces()]
     tank, estimated = _tank(physics, s.state)
     reasons += estimated
     sim = walk(
@@ -775,6 +775,11 @@ def _refusal(served: Recovered) -> SimulationError:
     )
 
 
+def _drawn_in(d: Draw, start: datetime, until: datetime) -> bool:
+    """Some of ``d`` is drawn in ``[start, until)``."""
+    return any(start <= at < until for at, _ in d.pieces())
+
+
 def _largest_draw(draws: Sequence[Draw]) -> float:
     """The largest draw a domain is judged against: each one's own
     per-draw volume where it is an expected draw, else its gallons."""
@@ -891,7 +896,8 @@ def standby(
         defaults=defaults,
         circulation=circulation,
     )
-    draws = [(d.at, d.gallons) for d in loads.draws if start <= d.at < until]
+    within = [d for d in loads.draws if _drawn_in(d, start, until)]
+    draws = [p for d in within for p in d.pieces() if start <= p[0] < until]
     first, reasons = _tank(physics, state)
     coast = physics.advance(start, first, until, draws)
     out_of_domain_at: datetime | None = None
@@ -900,7 +906,7 @@ def standby(
             params.draw,
             [(start, state.upper_f)]
             + [(p.at, p.upper_f) for p in coast.points],
-            _largest_draw([d for d in loads.draws if start <= d.at < until]),
+            _largest_draw(within),
         )
         if any_out:
             reasons.append("draw_out_of_domain")
@@ -1019,7 +1025,7 @@ def standby(
             # and no window was laid out to judge either.
             reasons.append("tou_schedule_unknown")
     reasons += _unfitted(params, "tank")
-    if any(start <= d.at < until for d in loads.draws):
+    if any(_drawn_in(d, start, until) for d in loads.draws):
         reasons += _unfitted(params, "draw")
     if _circulation_unknown(params, loads, until):
         reasons.append(CIRCULATION_UNKNOWN)
@@ -1397,7 +1403,9 @@ def _to_start(
     """The probes of the tank the heater's own start at ``start`` heats
     from, coasting from now under ``s.loads``. A draw at ``start``
     itself, the one that trips the trigger, is taken before the
-    recovery: its tank is the one the draw leaves."""
+    recovery: its tank is the one the draw leaves. So is the rest of one
+    under way there, all at ``start``: the recovery forecast takes no
+    draws (``forecast``)."""
     now = s.start
     upper, lower = s.state.upper_f, s.state.lower_f
     if start > now:
@@ -1415,7 +1423,12 @@ def _to_start(
                 to_start.points[-1].upper_f,
                 to_start.points[-1].lower_f,
             )
-    at_start = sorted(d.gallons for d in s.loads.draws if d.at == start)
+    at_start = sorted(
+        sum(g for at, g in d.pieces() if at >= start)
+        for d in s.loads.draws
+        if d.at == start
+        or d.at < start < d.at + timedelta(seconds=d.duration_s)
+    )
     if at_start:
         physics = _physics(
             params,
@@ -1480,7 +1493,9 @@ def next_recovery(
             if coast.starts_at is None:
                 return Recovery("idle")
             start = max(now, coast.starts_at)
-            upper, lower = _to_start(s, params, start)
+        # A running one goes on from now: its tank is the one a draw
+        # there, or the rest of one under way, leaves.
+        upper, lower = _to_start(s, params, start)
         if mode != "electric" and _out_of_range(
             params, [_ambient_at(s.environment, start)], lower
         ):
