@@ -319,8 +319,8 @@ class CompressorParams:
     conserves energy by construction. The maps are read along their
     planes past the span each was fitted on (``heat_domain_*``,
     ``power_domain_*``) as within it; a recovery whose air is outside
-    the heat's span, or that heats with the probes' mean outside its
-    water span, says so (``heat_map_out_of_domain``).
+    the heat's span, or whose probes' mean over its heating is outside
+    its water span, says so (``heat_map_out_of_domain``).
 
     Defaults: one NWP500-65's record, 2025-12-28 to 2026-10-26
     (``heat_pump_fit``, ``docs/explanation/recovery-speed.rst``).

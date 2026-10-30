@@ -54,11 +54,12 @@ from nwp500.sim.heat_pump_recovery import (
     rate_scale,
 )
 from nwp500.sim.heating_trajectory import HeatingPoint, from_walk
-from nwp500.sim.params import CirculationParams, HeaterParams
+from nwp500.sim.params import CirculationParams, CompressorParams, HeaterParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
     heat_air_outside,
+    heat_water_outside,
 )
 
 #: A delivered draw at the inlet: its onset, and the gallons the meter
@@ -159,7 +160,7 @@ class Stretch:
     and at the end of each step the circulation cooled it over; the
     delivered gallons drawn and the heat they took, the heat the
     flows took, and the mean air over it; and the reasons it carries
-    (a heat pump heating outside its map's air)."""
+    (a heat pump heating outside its map's air or water)."""
 
     points: list[Point]
     stopped: bool = False
@@ -240,6 +241,14 @@ class Physics(Protocol):
     def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
         """The tank just after a delivered draw of ``gal`` at ``at``."""
         ...
+
+
+def _water_outside(c: CompressorParams, books: st.Books) -> bool:
+    """Whether a walk's heating, if any, ran with the probes' mean over
+    it outside the heat map's water span."""
+    return books.compressor_heat_h > 0.0 and heat_water_outside(
+        c, books.compressor_mean_f_h / books.compressor_heat_h
+    )
 
 
 def ambient_window_mean(
@@ -532,7 +541,7 @@ class TankPhysics:
                 mean is not None
                 and heat_air_outside(self.params.compressor, mean)
             )
-            or walked.books.compressor_outside_water_h > 0.0
+            or _water_outside(self.params.compressor, walked.books)
         ):
             reasons = (HEAT_MAP_OUT_OF_DOMAIN,)
         books = walked.books
@@ -761,9 +770,8 @@ class TankPhysics:
                 under_way=under_way,
             )
         reasons = scaled.reasons
-        if (
-            heat_air_outside(self.params.compressor, air)
-            or walked.books.compressor_outside_water_h > 0.0
+        if heat_air_outside(self.params.compressor, air) or _water_outside(
+            self.params.compressor, walked.books
         ):
             reasons = (*reasons, HEAT_MAP_OUT_OF_DOMAIN)
         return Recovered(
