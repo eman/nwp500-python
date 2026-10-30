@@ -1587,29 +1587,30 @@ class _Engine:
         stretch = self._coast_stretch(end)
         at: datetime | None = None
         own = self._trigger_ahead(stretch)
+        element_at = upper_on_crossing(
+            self.state, self.settings, stretch.points
+        )
+        if element_at is not None and element_at >= stretch.end:
+            element_at = None
         if own is not None:
             if own.starts_at >= stretch.end:
                 # Inside the restart lockout, starting past this
                 # segment: carried to it as a pending start, the instant
                 # it is due at, since a later segment's coast may begin
-                # outside the window it fired in.
-                self._dispatch(
-                    ctl.TriggerDeferred(
-                        at=self.t,
-                        starts_at=own.starts_at,
-                        trigger=own.trigger,
+                # outside the window it fired in. Not one the element's
+                # start comes first to: the tank is not the coast's
+                # after it.
+                if element_at is None or own.trigger_at < element_at:
+                    self._dispatch(
+                        ctl.TriggerDeferred(
+                            at=self.t,
+                            starts_at=own.starts_at,
+                            trigger=own.trigger,
+                        )
                     )
-                )
             else:
                 at = own.starts_at
-        element_at = upper_on_crossing(
-            self.state, self.settings, stretch.points
-        )
-        if (
-            element_at is not None
-            and element_at < stretch.end
-            and (at is None or element_at < at)
-        ):
+        if element_at is not None and (at is None or element_at < at):
             self._coast_to(element_at)
             if any(d[0] == element_at for d in self.draws):
                 # The crossing is the draw's there: the element answers
