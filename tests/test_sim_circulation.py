@@ -21,6 +21,7 @@ import pytest
 from nwp500 import sim_adapters as sa
 from nwp500.sim import (
     CirculationRun,
+    Commands,
     Draw,
     Environment,
     HeaterParams,
@@ -46,6 +47,7 @@ from nwp500.sim.codec import (
     scenario_from_document,
     scenario_to_document,
 )
+from nwp500.sim.inputs import Write
 from nwp500.sim.params import (
     CirculationParams,
     params_from_document,
@@ -175,9 +177,11 @@ class TestTheRuns:
         assert cooled.start == at(0)
 
     def test_unknown_after_known_until_and_quiet_when_empty(self) -> None:
-        c = Circulation(RUNS, known_until=at(2.0))
+        c = Circulation(RUNS, known_until=at(1.2))
         assert c.over(at(0), at(1.2)) == list(RUNS[:2])
-        assert c.over(at(3), at(5)) is None
+        # The run under way at 1.2 h is known whole; the one at 4 h is not.
+        assert c.over(at(1.4), at(5)) == [RUNS[1]]
+        assert c.over(at(3), at(5)) == []
         assert Circulation(()).over(at(0), at(1)) == []
 
 
@@ -226,6 +230,41 @@ class TestThroughTheAPI:
         # An installation without circulation has nothing unknown.
         bare = simulate(_scenario(loads=Loads()), default_params())
         assert "circulation_unknown" not in bare.reasons
+
+    def test_what_is_known_is_known_wherever_a_walk_is_cut(
+        self, params: HeaterParams
+    ) -> None:
+        """Known to 0.5 h, the run at 1 h is not known and charges
+        nothing, wherever the walk is cut. A walk begun by 0.5 h used to
+        charge it, and writes that change nothing, cutting the recovery
+        past 0.5 h, dropped it: 3 °F at the end."""
+        base = _scenario(
+            state=HeaterState(upper_f=120.0, lower_f=100.0),
+            horizon=timedelta(hours=3),
+            loads=_loads(circulation_known_until=at(0.5)),
+        )
+        whole = simulate(base, params)
+        assert "circulation_unknown" in whole.reasons
+        known = simulate(
+            base.model_copy(update={"loads": _loads(RUNS[:1])}), params
+        )
+        assert whole.points == known.points
+        sp = base.settings.setpoint_f
+        cut = simulate(
+            base.model_copy(
+                update={
+                    "commands": Commands(
+                        writes=tuple(
+                            Write(at=at(h), setpoint_f=sp)
+                            for h in (0.25, 0.7, 1.2)
+                        )
+                    )
+                }
+            ),
+            params,
+        )
+        assert cut.points == whole.points
+        assert cut.simulation.heating == whole.simulation.heating
 
     def test_the_merge_gap_is_the_installations(
         self, params: HeaterParams

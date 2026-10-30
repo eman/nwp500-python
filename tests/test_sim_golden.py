@@ -389,7 +389,6 @@ class _SealedPhysics:
         *,
         running: Running = Running(),
         stop: Stop | None = None,
-        walk_from: datetime | None = None,
     ) -> Stretch:
         got = self.inner.advance(
             start,
@@ -398,7 +397,6 @@ class _SealedPhysics:
             draws,
             running=running,
             stop=stop,
-            walk_from=walk_from,
         )
         return dataclasses.replace(got, points=self._seal(got.points))
 

@@ -322,8 +322,9 @@ class Loads(_Value):
     #: circulation, and nothing is charged. An empty tuple is a circuit
     #: known to be quiet.
     circulation: tuple[CirculationRun, ...] | None = None
-    #: The runs are known for a span starting by this instant, and not
-    #: after it (nothing charged there). None: known throughout.
+    #: The runs are known as far as this instant: one starting after it
+    #: is not known and charges nothing, one under way at it is charged
+    #: whole. None: known throughout.
     circulation_known_until: Instant | None = None
 
 

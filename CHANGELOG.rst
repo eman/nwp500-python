@@ -259,11 +259,6 @@ Changed
   392 ms against 2.6 s in Heat Pump mode and 441 ms against 4.8 s in
   High Demand. A coast of 224 days with draws and a circulation run
   four times a day takes 1.9 s against 46 s. The answers are the same.
-  ``Physics.advance`` takes ``walk_from``, where the walk a piece
-  continues began, and ``Circulation.over`` and
-  ``tank_physics.circulation_flows`` take ``known_from``: a circulation
-  known up to ``known_until`` is charged on every piece of a walk that
-  began inside what is known.
 - **A circulation run returns its pipe, then the tank's own water a
   little cooler.** A run was priced on an effective volume (19.36 gal
   at the site) back at the return's rest, then the tank's own water as
@@ -632,6 +627,16 @@ Changed
 Fixed
 -----
 
+- **A circulation known part way is known wherever a walk is cut.** A
+  span starting after ``Loads.circulation_known_until`` charged
+  nothing, judged for each walk, so a run past it was charged by a walk
+  begun before it and dropped by one begun after: a write that changed
+  nothing, a draw or a mark inside a recovery took it away. With runs
+  at 0.2 and 1 h known to 0.5 h, a write of the same setpoint at 0.7 h
+  left the tank 3 °F warmer at 3 h. Which runs are known is now judged
+  for each run: one starting by ``known_until`` is charged whole, one
+  after it is not, and the answer says ``circulation_unknown`` as
+  before. ``Circulation.over`` returns the known runs, no longer None.
 - **A recovery from a cold tank says its heat is carried past the
   record.** The heat's map was fitted on mixed climbs against the
   probes' mean, 114 to 144 °F on the site's record, and is read along
