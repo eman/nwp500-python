@@ -115,7 +115,8 @@ again at once. The same holds for the elements in the heat pump's place.
 It says so (``electric_later_starts_unverified``). No element starts
 later in a stint where it would stop at once: Energy Saver's 104.9 degF
 is over its 1.62 degF off point under a setpoint below 106.6 degF, so
-there it starts at the off point.
+there it starts as High Demand's does, 4.1 degF short of the setpoint,
+as Electric's does. Neither is measured there.
 
 **The compressor's lower trigger** reads at ``hp_lower_on_f``, but no
 nearer than the setpoint, ``hp_stop_overshoot_f`` short of where a

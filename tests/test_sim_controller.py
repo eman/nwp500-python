@@ -14,7 +14,6 @@ import pytest
 from nwp500.sim import controller
 from nwp500.sim.controller import (
     ELECTRIC_LATER_STARTS_UNVERIFIED,
-    ELEMENT_DONE_F,
     LOWER_TRIGGER_AT_SETPOINT,
     POWERED_ON_BY_ENTRY,
     Action,
@@ -30,6 +29,7 @@ from nwp500.sim.controller import (
     EntrySkipped,
     Event,
     HeaterTrigger,
+    HeatPumpAvailability,
     Horizon,
     LockoutEnds,
     ModeHeld,
@@ -433,15 +433,13 @@ class TestTheCompressor:
         a coast from the stop had it, while one from a later instant
         started."""
         st, _ = step(running(fresh()), RecoveryDone(at=T0, tank=tank(140, 140)))
-        coast = [
-            (T0, 130.0, 104.0),
-            (at(1), 129.9, 103.9),
-            (at(10), 129.0, 103.0),
-        ]
+        coast = [(T0, 130.0, 104.0), (at(10), 129.0, 103.0)]
         assert st.compressor.finished_at == T0
         ahead = trigger_ahead(st, settings(), P, coast, [], T0)[0]
         assert ahead is not None
-        assert (ahead.trigger_at, ahead.starts_at) == (at(1), T0 + LOCKOUT)
+        # Just after the stop, not at the coast's next sample 10 min on.
+        assert T0 < ahead.trigger_at < at(1)
+        assert ahead.starts_at == T0 + LOCKOUT
 
     def test_a_lower_trigger_over_the_setpoint_reads_at_it(self) -> None:
         """Over the setpoint, the trigger would start a recovery that
@@ -461,28 +459,33 @@ class TestTheCompressor:
         _, notes = trigger_ahead(warm, settings(), P, coast, [], T0)
         assert LOWER_TRIGGER_AT_SETPOINT not in notes
 
-    def test_an_upper_start_over_its_off_point_starts_at_it(self) -> None:
+    def test_an_upper_start_over_its_off_point_starts_short_of_it(
+        self,
+    ) -> None:
         """Energy Saver's later start is an absolute 104.9 °F, over a
-        96 °F setpoint's off point (1.62 °F short): the element starts
-        under the off point, on the path as at an event, never only to
-        stop at once."""
+        96 °F setpoint's off point (1.62 °F short): there the element
+        starts as High Demand's, 4.1 °F short of the setpoint, on the
+        path as at an event, and runs: never only to stop at once."""
         ep = ElementParams()
         st = fresh(setpoint=96.0, mode="energy_saver")
-        off = 96.0 - ep.energy_saver_upper_off_below_setpoint_f
+        on = 96.0 - ep.upper_reengages_below_setpoint_f
         assert later_on(st, settings()) == (
-            pytest.approx(off - ELEMENT_DONE_F),
+            pytest.approx(on),
             "energy_saver_upper_on",
         )
         hot = fresh(setpoint=120.0, mode="energy_saver")
         assert later_on(hot, settings()) == (104.9, "energy_saver_upper_on")
-        _, acts = step(st, UpperRead(at=T0, tank=tank(95.9, 80.0)))
+        _, acts = step(st, UpperRead(at=T0, tank=tank(93.0, 80.0)))
         assert not of(acts, StartElement)
         path = [
-            Point(T0, 95.9, 80.0, 0.0, 0.0),
-            Point(at(10), 93.9, 79.0, 0.0, 0.0),
+            Point(T0, 93.0, 80.0, 0.0, 0.0),
+            Point(at(10), 91.0, 79.0, 0.0, 0.0),
         ]
         crossed = upper_on_crossing(st, settings(), path)
         assert crossed is not None and T0 < crossed < at(10)
+        later, acts = step(st, UpperOnCrossed(at=crossed, tank=tank(on, 79.5)))
+        assert of(acts, StartElement) and not of(acts, StopElement)
+        assert later.element.running
 
     def test_a_pending_start_comes_due(self) -> None:
         """A write's start lands about 30 s after the write (a median
@@ -1106,6 +1109,29 @@ class TestModeWrites:
 
 
 class TestTheElements:
+    def test_the_elements_finish_what_the_heat_pump_left_them(self) -> None:
+        """Back in its range with too little left, the heat pump leaves
+        the recovery to the elements, upper then lower: judged once, not
+        again at a later event with more room."""
+        st = replace(
+            fresh(setpoint=120.0),
+            hp_available=False,
+            element=controller.Element(
+                "heating", "upper", T0, in_place=True, finishes=True
+            ),
+        )
+        st, acts = step(st, ElementCheck(at=T0, tank=tank(120.0, 100.0)))
+        assert of(acts, StartElement)[0].zone == "lower"
+        assert st.element.finishes
+        st, acts = step(
+            st,
+            HeatPumpAvailability(
+                at=at(5), tank=tank(119.0, 90.0), available=True
+            ),
+        )
+        assert not of(acts, StartCompressor)
+        assert not st.hp_available and st.element.zone == "lower"
+
     @pytest.mark.parametrize(
         ("mode", "on", "off"),
         [

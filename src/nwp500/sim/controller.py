@@ -114,6 +114,9 @@ from nwp500.sim.tou_triggers import (
 
 # ── Vocabulary ──────────────────────────────────────────────────────
 
+#: The least step past an instant: "just after" it.
+_INSTANT = timedelta(microseconds=1)
+
 #: The heater's modes, by the names the simulation speaks.
 HEAT_PUMP: Final = "heat_pump"
 ENERGY_SAVER: Final = "energy_saver"
@@ -1029,8 +1032,11 @@ def _start_element(
     since: datetime | None = None,
     *,
     later: bool = False,
+    finishes: bool = False,
 ) -> None:
-    """An element starts; ``later`` by Electric's later rules. The
+    """An element starts; ``later`` by Electric's later rules, and
+    ``finishes`` the recovery the heat pump left it (``_availability``).
+    The
     upper zone does not move for the dead time after an on-edge
     (1.21 min, 2026-10-02); the lower zone's rate spans its own. One
     already running at the walk's start has the rest of its dead time
@@ -1057,6 +1063,7 @@ def _start_element(
             live_at,
             in_place,
             later,
+            finishes,
         ),
     )
     s.act(
@@ -1123,7 +1130,8 @@ def _stop_element(
     off point or a lowered setpoint's, unless a mode write at the same
     instant changes the mode at once (``mode_follows``; not one held to
     a window's end): the new mode's rule decides then."""
-    zone, later = s.state.element.zone, s.state.element.later
+    e = s.state.element
+    zone, later, finishes = e.zone, e.later, e.finishes
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
         coast = DEVICE_MODE[s.heats_as]  # type: ignore[assignment]
@@ -1148,6 +1156,7 @@ def _stop_element(
             ),
             "lower",
             later=later,
+            finishes=finishes,
         )
 
 
@@ -1192,15 +1201,23 @@ def later_on(
     state: State, settings: Settings
 ) -> tuple[float, ElementTrigger] | None:
     """Where the upper element starts later in a stint, and why: at the
-    mode's level (``later_start``), and no nearer the setpoint than
-    where it stops (``_check_element``), so it never starts only to stop
-    at once: Energy Saver's 104.9 °F is over the off point of a
-    setpoint under 106.6 °F."""
+    mode's level (``later_start``), short of where it stops
+    (``_check_element``), so it never starts only to stop at once.
+    Energy Saver's 104.9 °F is at or over the off point of a setpoint
+    under 106.6 °F: there it starts as High Demand's does, 4.1 °F short
+    of the setpoint (``upper_reengages_below_setpoint_f``), as Electric's
+    does. Neither is measured there."""
     later = later_start(state, settings.element)
     if later is None:
         return None
     off = state.setpoint_f - _upper_off_deficit(state, settings)
-    return min(later[0], off - ELEMENT_DONE_F), later[1]
+    if later[0] < off - ELEMENT_DONE_F:
+        return later
+    element = settings.element
+    return (
+        state.setpoint_f - element.upper_reengages_below_setpoint_f,
+        later[1],
+    )
 
 
 def _read_upper(s: _Step) -> None:
@@ -1891,10 +1908,15 @@ def trigger_ahead(
     ):
         at = None
     if at is not None and at == now and state.compressor.finished_at == now:
-        # Read from just after: a recovery stopped short of the trigger
-        # (by a write, say) calls for heat again, after the lockout.
+        # Read from just after, the tank as the stop (and a draw at it)
+        # left it: a recovery stopped short of the trigger (by a write,
+        # say) calls for heat again, after the lockout.
+        left = [p for p in trajectory if p[0] <= now][-1]
         at, trigger, _ = heater_start(
-            [p for p in trajectory if p[0] > now],
+            [
+                (now + _INSTANT, left[1], left[2]),
+                *(p for p in trajectory if p[0] > now + _INSTANT),
+            ],
             on,
             [i for i in impulses if i.at > now],
             windows=settings.tou_windows,

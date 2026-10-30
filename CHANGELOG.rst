@@ -635,8 +635,9 @@ Fixed
   - The upper element does not start where it would stop at once:
     Energy Saver's 104.9 °F later start is over its off point, 1.62 °F
     under a setpoint below 106.6 °F, so at an event it started and
-    stopped in the same instant and on the path never. It starts under
-    the off point (``controller.later_on``).
+    stopped in the same instant and on the path never. There it starts
+    as High Demand's does, 4.1 °F short of the setpoint, as Electric's
+    does (``controller.later_on``); neither is measured there.
   - The compressor's lower trigger reads no nearer than the setpoint,
     ``hp_stop_overshoot_f`` short of where a recovery stops: over it,
     a recovery started at each event and stopped at once
@@ -651,7 +652,8 @@ Fixed
     first. It fired at a TOU window's opening whatever the tank did.
   - The heat pump back in its range with too little left for it, the
     elements finish the recovery as judged where it came back
-    (``controller.Element.finishes``), not again at each event.
+    (``controller.Element.finishes``), through the upper element's
+    handover to the lower, not again at each event.
 
   On 1,500 random walks, hourly marks now move no start or stop by a
   second or more (a crossing is interpolated a fraction of a second
