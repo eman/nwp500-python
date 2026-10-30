@@ -930,7 +930,7 @@ def standby(
         # heat pump (``controller._window_opens``).
         electric = mode == ENGINE_MODE[ELECTRIC]
         dropped = (
-            min((w0 for w0, _ in windows if start < w0 <= until), default=None)
+            min((w0 for w0, _ in windows if start <= w0 <= until), default=None)
             if electric
             else None
         )
