@@ -255,13 +255,16 @@ async def test_handle_status_request_raw_with_standard_key(
 def energy_views(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record which energy view a handler call renders."""
     rendered: list[str] = []
+
+    def print_monthly(response: Any) -> None:
+        rendered.append("monthly")
+
+    def print_daily(response: Any, year: int, month: int) -> None:
+        rendered.append(f"daily:{month}")
+
+    monkeypatch.setattr("nwp500.cli.handlers.print_energy_usage", print_monthly)
     monkeypatch.setattr(
-        "nwp500.cli.handlers.print_energy_usage",
-        lambda response: rendered.append("monthly"),
-    )
-    monkeypatch.setattr(
-        "nwp500.cli.output_formatters.print_daily_energy_usage",
-        lambda response, year, month: rendered.append(f"daily:{month}"),
+        "nwp500.cli.output_formatters.print_daily_energy_usage", print_daily
     )
     return rendered
 

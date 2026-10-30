@@ -67,7 +67,7 @@ class TestTriStateRendering:
         return {
             (section, label): value
             for section, label, value in build_device_status_rows(
-                DeviceStatus(**data)
+                DeviceStatus.model_validate(data)
             )
         }
 

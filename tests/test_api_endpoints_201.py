@@ -482,6 +482,7 @@ async def test_get_error_history_first_page() -> None:
     assert second.occurred_at is None
     assert first.time_zone == "America/Los_Angeles"
     assert first.occurred_at_local == first.occurred_at
+    assert first.occurred_at_local is not None
     assert first.occurred_at_local.utcoffset() == -timedelta(hours=8)
 
 

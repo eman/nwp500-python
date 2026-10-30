@@ -39,6 +39,11 @@ def _run(
     element_running: bool = False,
     **scenario: Any,
 ) -> sim.SimulationResult:
+    given: dict[str, Any] = {
+        "history": sim.History(compressor_stopped_at=at(-3)),
+        "environment": sim.Environment(ambient_f=air),
+        **scenario,
+    }
     return sim.simulate(
         sim.Scenario(
             start=T0,
@@ -56,11 +61,7 @@ def _run(
                 hp_lower_on_f=on,
                 mode=mode,
             ),
-            **{
-                "history": sim.History(compressor_stopped_at=at(-3)),
-                "environment": sim.Environment(ambient_f=air),
-                **scenario,
-            },
+            **given,
         ),
         params if params is not None else sim.site_example_params(),
     )

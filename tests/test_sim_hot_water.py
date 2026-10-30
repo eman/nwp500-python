@@ -360,7 +360,9 @@ class TestReadiness:
         settings = Settings(setpoint_f=140.9)
         for upper, lower in (FULL, (136.4, 111.4), (128.0, 95.0)):
             heating = readiness(
-                HeaterState(upper_f=upper, lower_f=lower, **running),
+                HeaterState.model_validate(
+                    {"upper_f": upper, "lower_f": lower, **running}
+                ),
                 settings,
                 params,
             )

@@ -237,7 +237,7 @@ class TestTheRunningCycle:
         state = HeaterState(
             upper_f=130.0,
             lower_f=115.0,
-            layers_f=[80.0, 90.0, *([115.0] * (n - 4)), 130.0, 132.0],
+            layers_f=(80.0, 90.0, *([115.0] * (n - 4)), 130.0, 132.0),
             compressor_running=True,
         )
         going = active_cycle(state, SETTINGS, ENV, params, at=T0)
@@ -284,6 +284,7 @@ class TestTheRunningCycle:
             at=T0,
         )
         assert a.target_f == 140.0
+        assert a.remaining_minutes is not None
         assert 0.0 < a.remaining_minutes < 15.0
 
 

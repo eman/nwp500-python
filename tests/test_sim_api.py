@@ -137,9 +137,11 @@ def _by_hand(
         "heater",
         Heater(hp_lower_on_f=105.0, element=params.element),
     )
-    kw.setdefault(
-        "start_hold", lambda off: start_hold_min(params.compressor, off)
-    )
+
+    def start_hold(off: float | None) -> float:
+        return start_hold_min(params.compressor, off)
+
+    kw.setdefault("start_hold", start_hold)
     return walk(
         start=s.start,
         upper_f=s.state.upper_f,
@@ -464,7 +466,7 @@ class TestAModelsInputs:
         # starting at the scenario's start (a recorded start replayed),
         # the stir is its own, and the condenser heats the pool back.
         n = params.tank.layers
-        layers = [80.0, 90.0, *([115.0] * (n - 4)), 130.0, 132.0]
+        layers = (80.0, 90.0, *([115.0] * (n - 4)), 130.0, 132.0)
         s = _scenario(
             state=HeaterState(
                 upper_f=130.0,
@@ -731,6 +733,7 @@ class TestRecoveryAndStandby:
         )
         assert r.interval == whole.heating[0]
         assert r.ready_at == whole.heating[0].end
+        assert r.ready_at is not None
         assert r.minutes == pytest.approx(
             (r.ready_at - T0).total_seconds() / 60
         )

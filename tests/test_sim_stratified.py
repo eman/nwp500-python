@@ -772,8 +772,12 @@ def _heating(at: datetime) -> S.Heating:
 
 def _day(state: S.TankState, **kw: object) -> S.Walked:
     """A day of everything: heat pump, element, draws, a flow."""
+
+    def air_f(t: datetime) -> float:
+        return 60.0 + 10.0 * (t.hour / 24.0)
+
     args: dict[str, object] = {
-        "air_f": lambda t: 60.0 + 10.0 * (t.hour / 24.0),
+        "air_f": air_f,
         "heating": _heating(T0),
         "draws": [
             S.Delivered(at=T0 + timedelta(hours=h), gal=g, inflow_f=58.0)

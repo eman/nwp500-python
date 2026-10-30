@@ -60,7 +60,7 @@ class TestRecirculationMode:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         data = {**device_status_dict, "recircOperationMode": 3}
-        status = DeviceStatus(**data)
+        status = DeviceStatus.model_validate(data)
         assert status.recirc_operation_mode is RecirculationMode.HOT_BUTTON_ONLY
 
 
@@ -125,7 +125,7 @@ class TestDhwOperationSettingStandby:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         data = {**device_status_dict, "dhwOperationSetting": 0}
-        status = DeviceStatus(**data)
+        status = DeviceStatus.model_validate(data)
         assert status.dhw_operation_setting is DhwOperationSetting.STANDBY
 
     def test_other_values_unchanged(self) -> None:
@@ -151,7 +151,9 @@ class TestDREvent:
     def test_status_decodes_six(
         self, device_status_dict: dict[str, Any]
     ) -> None:
-        status = DeviceStatus(**{**device_status_dict, "drEventStatus": 6})
+        status = DeviceStatus.model_validate(
+            {**device_status_dict, "drEventStatus": 6}
+        )
         assert status.dr_event_status is DREvent.GRID_EMERGENCY
 
 
@@ -190,7 +192,9 @@ class TestDrOverrideStatus:
     def test_dr_override_active(
         self, device_status_dict: dict[str, Any], raw: int, active: bool
     ) -> None:
-        status = DeviceStatus(**{**device_status_dict, "drOverrideStatus": raw})
+        status = DeviceStatus.model_validate(
+            {**device_status_dict, "drOverrideStatus": raw}
+        )
         assert status.dr_override_status == raw
         assert status.dr_override_active is active
 
@@ -200,7 +204,9 @@ class TestDrOverrideStatus:
         assert not (isinstance(extra, dict) and "unit_of_measurement" in extra)
 
     def test_in_model_dump(self, device_status_dict: dict[str, Any]) -> None:
-        status = DeviceStatus(**{**device_status_dict, "drOverrideStatus": 2})
+        status = DeviceStatus.model_validate(
+            {**device_status_dict, "drOverrideStatus": 2}
+        )
         assert status.model_dump()["dr_override_active"] is True
 
 
@@ -225,8 +231,8 @@ class TestAirFilterRemainingHours:
         fan: int,
         expected: int | None,
     ) -> None:
-        status = DeviceStatus(
-            **{
+        status = DeviceStatus.model_validate(
+            {
                 **device_status_dict,
                 "airFilterAlarmPeriod": period,
                 "cumulatedOpTimeEvaFan": fan,
@@ -236,18 +242,20 @@ class TestAirFilterRemainingHours:
         assert status.air_filter_remaining_hours == expected
 
     def test_in_model_dump(self, device_status_dict: dict[str, Any]) -> None:
-        status = DeviceStatus(**device_status_dict)
+        status = DeviceStatus.model_validate(device_status_dict)
         assert "air_filter_remaining_hours" in status.model_dump()
 
 
 class TestMinorCode:
     def test_default_zero(self, device_status_dict: dict[str, Any]) -> None:
         assert "minorCode" not in device_status_dict
-        assert DeviceStatus(**device_status_dict).minor_code == 0
+        assert DeviceStatus.model_validate(device_status_dict).minor_code == 0
 
     def test_parsed_from_camel_case(
         self, device_status_dict: dict[str, Any]
     ) -> None:
-        status = DeviceStatus(**{**device_status_dict, "minorCode": 101})
+        status = DeviceStatus.model_validate(
+            {**device_status_dict, "minorCode": 101}
+        )
         assert status.minor_code == 101
         assert status.model_dump()["minor_code"] == 101

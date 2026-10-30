@@ -5,7 +5,7 @@ entity history (``sim_home_assistant.read_heater_history``), the frame
 
 import asyncio
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -59,7 +59,9 @@ def changes_of(
     """What an entity history of ``readings`` holds: each value only
     where it changed."""
 
-    def series(value: Any) -> list[tuple[datetime, Any]]:
+    def series(
+        value: Callable[[DeviceStatus], Any],
+    ) -> list[tuple[datetime, Any]]:
         out: list[tuple[datetime, Any]] = []
         for t, s in readings:
             v = value(s)
@@ -67,7 +69,9 @@ def changes_of(
                 out.append((t, v))
         return out
 
-    def f(raw: Any) -> Any:
+    def f(
+        raw: Callable[[DeviceStatus], int],
+    ) -> Callable[[DeviceStatus], float]:
         return lambda s: sa._from_device(DeciCelsius(raw(s)))
 
     return sa.ChangeRows(
@@ -157,7 +161,7 @@ class TestTheFrame:
         # The heater's own air only while the compressor runs.
         air = frame["heater_air_f"].tolist()
         assert math.isnan(air[1]) and air[2] == 61.0
-        assert not frame["dhw_in_use"].any()
+        assert not bool(frame["dhw_in_use"].any())
         assert "power_w" not in frame.columns
 
     def test_what_is_excluded(self) -> None:
@@ -178,7 +182,7 @@ class TestTheFrame:
         frame = sa.change_history(rows, [T0 + i * H for i in range(5)])
         excluded = frame["excluded"].tolist()
         assert excluded[:4] == [False, True, False, True]
-        assert frame["element_on"].all()
+        assert bool(frame["element_on"].all())
 
     def test_an_outage_is_unobserved(self) -> None:
         rows = sa.ChangeRows(
@@ -479,7 +483,7 @@ class TestTheFirstReview:
         frame = sa.change_history(rows, [T0 + i * H for i in range(4)])
         sa.add_inputs(frame, drawing=[], circulating=[])
         assert frame["drawing"].tolist() == [False, True, False, False]
-        assert not frame["circulating"].any()
+        assert not bool(frame["circulating"].any())
 
     def test_an_unavailable_heartbeat_is_no_response(self) -> None:
         # Down from 22 h to 26 h: across the second window's start.

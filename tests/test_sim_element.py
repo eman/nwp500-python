@@ -48,8 +48,8 @@ def _scenario(
         "horizon": timedelta(hours=12),
         "tz": "UTC",
         "state": HeaterState(upper_f=upper, lower_f=lower),
-        "settings": Settings(
-            **{
+        "settings": Settings.model_validate(
+            {
                 "setpoint_f": SETPOINT,
                 "hp_lower_on_f": 105.0,
                 "hp_upper_on_f": RESTING,

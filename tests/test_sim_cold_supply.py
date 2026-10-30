@@ -181,7 +181,9 @@ class TestTheClimateOfAYear:
             55.0,
             51.0,
         ]
-        mean, swing = climate_of(_daily(means, date(2025, 1, 1)))
+        got = climate_of(_daily(means, date(2025, 1, 1)))
+        assert got is not None
+        mean, swing = got
         assert mean == pytest.approx(sum(means) / 12)
         assert swing == pytest.approx(20.0)
 
@@ -265,11 +267,17 @@ class TestTheParametersMains:
             },
         }
         modelled = simulate(
-            Scenario(**base, environment=Environment(ambient_f=65.0)), params
+            Scenario.model_validate(
+                {**base, "environment": Environment(ambient_f=65.0)}
+            ),
+            params,
         )
         given = simulate(
-            Scenario(
-                **base, environment=Environment(ambient_f=65.0, inlet_f=mains)
+            Scenario.model_validate(
+                {
+                    **base,
+                    "environment": Environment(ambient_f=65.0, inlet_f=mains),
+                }
             ),
             params,
         )
@@ -360,7 +368,14 @@ class TestTheParametersMains:
         mains = params.draw.mains_on(start)
         modelled, given = (
             time_to_ready(
-                Scenario(**base, environment=Environment(ambient_f=65.0, **kw)),
+                Scenario.model_validate(
+                    {
+                        **base,
+                        "environment": Environment.model_validate(
+                            {"ambient_f": 65.0, **kw}
+                        ),
+                    }
+                ),
                 params,
                 bath_gal=40.0,
             )

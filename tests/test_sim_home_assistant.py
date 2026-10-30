@@ -639,7 +639,7 @@ class TestCompose:
         env = composed.scenario.environment
         assert env.ambient_f == 75.0
         assert env.humidity == 41.0
-        assert not math.isnan(env.ambient_f)
+        assert not math.isnan(cast(float, env.ambient_f))
 
 
 @pytest.mark.asyncio

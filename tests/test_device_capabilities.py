@@ -1,5 +1,6 @@
 """Tests for device capability checking."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -137,7 +138,9 @@ class TestMqttDeviceCapabilityChecker:
     def test_register_capability(self) -> None:
         """Test custom capability registration."""
         mock_feature = Mock()
-        custom_check = lambda f: True  # noqa: E731
+
+        def custom_check(f: Any) -> bool:
+            return True
 
         MqttDeviceCapabilityChecker.register_capability(
             "custom_feature", custom_check

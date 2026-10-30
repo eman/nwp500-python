@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -543,7 +543,7 @@ class TestTheCabinetAir:
         idle = status.model_copy(update={"comp_use": False})
         running = status.model_copy(update={"comp_use": True})
         unknown = status.model_copy(update={"comp_use": None})
-        air = float(sa.environment(running).ambient_f)
+        air = cast(float, sa.environment(running).ambient_f)
         assert sa.environment(idle).ambient_f == pytest.approx(
             air - sa.IDLE_CABINET_WARM_F
         )
