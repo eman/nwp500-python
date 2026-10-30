@@ -15,6 +15,8 @@ from nwp500.sim.defaults import (
     SITE_VALVE,
     default_params,
     site_example_params,
+    sized,
+    tank_column_in,
     with_valve,
 )
 from nwp500.sim.params import (
@@ -39,13 +41,46 @@ def test_the_65_round_trips_as_a_document() -> None:
     assert params_from_document(params_to_document(p)) == p
 
 
-@pytest.mark.parametrize(("code", "gal"), [(1, 45.2), (3, 76.1)])
-def test_other_sizes_scale_the_tank(code: int, gal: float) -> None:
-    """The tank volume scales by the manual's rated storage; nothing
-    else does."""
+@pytest.mark.parametrize(
+    ("code", "gal", "column", "ua", "inlet"),
+    [
+        # Narrower than the 65 and as tall: less wall, less water in a
+        # length of the column.
+        (1, 45.2, (17.70, 42.41), 3.592, 10.10),
+        # As wide and taller: more wall, the same cross-section.
+        (3, 76.1, (21.00, 50.73), 4.804, 14.22),
+    ],
+)
+def test_other_sizes_resize_the_tank(
+    code: int,
+    gal: float,
+    column: tuple[float, float],
+    ua: float,
+    inlet: float,
+) -> None:
+    """The tank takes the model's rated storage and its column from the
+    manual's outside dimensions; the losses, the axial conductance, the
+    probes' spreads and the inlet zone follow the walls and the
+    cross-section. Nothing but the tank and its loss moves."""
     base, other = default_params(2), default_params(code)
     assert other.tank.volume_gal == pytest.approx(gal)
-    assert replace(other, tank=base.tank) == base
+    assert tank_column_in(code) == pytest.approx(column, abs=0.01)
+    loss = other.loss
+    total = (
+        loss.ua_side_btu_hr_f + loss.ua_bottom_btu_hr_f + loss.ua_top_btu_hr_f
+    )
+    assert total == pytest.approx(ua, abs=1e-3)
+    assert loss.ua_top_btu_hr_f == base.loss.ua_top_btu_hr_f
+    assert other.tank.inlet_mix_gal == pytest.approx(inlet, abs=0.01)
+    assert replace(other, tank=base.tank, loss=base.loss) == base
+
+
+def test_the_column_closes_on_the_65() -> None:
+    """The wall the 65 and the 80 give, taken on the 50, makes the 50 as
+    tall as the 65 within 0.3 in: both stand 63 in outside."""
+    (_, h50), (_, h65) = tank_column_in(1), tank_column_in(2)
+    assert abs(h50 - h65) < 0.3
+    assert sized(default_params(2), 2) == default_params(2)
 
 
 def test_an_unknown_size_is_refused() -> None:

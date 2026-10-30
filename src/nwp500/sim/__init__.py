@@ -15,7 +15,7 @@
 - ``default_params(volume_code)``: one NWP500-65's parameters with no
   mixing valve; ``site_example_params`` that installation whole, valve
   included (``with_valve`` sets one); the parameters of one NWP500-65,
-  with the tank volume scaled for the 50 and 80 gal models.
+  with the tank resized to the 50 and 80 gal models' (``defaults.sized``).
 
 ``nwp500.sim_adapters`` builds a scenario's parts from the library's
 models; ``sim.codec`` reads and writes scenarios as JSON documents.

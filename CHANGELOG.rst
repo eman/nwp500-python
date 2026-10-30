@@ -627,6 +627,18 @@ Changed
 Fixed
 -----
 
+- The 50 and 80 gal defaults resize the 65's tank to theirs
+  (``defaults.sized``, ``defaults.tank_column_in``), where they scaled
+  only the volume. The manual's outside dimensions give each model's
+  water column: the 50 is narrower than the 65 and as tall, the 80 as
+  wide and taller. The sides' and bottom's loss, the axial conductance,
+  the probes' spreads and the inlet zone follow the walls and the
+  cross-section. The tanks lose 3.59 and 4.80 BTU/h·°F (each was
+  4.18). The 50's first draw from a tank mixed at 125 °F to a 110 °F
+  line is 37.5 gal (34.3 before), 14.8 under the 65's against the
+  ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
+  gal: 12.9 over the 65's, where the ratings differ by 5.
+
 - The methodology's "The air" said a recovery runs in its span's mean
   air; every step reads the air at its start, coast and recovery alike.
   The mean judges only the heat map's domain and is a learned
