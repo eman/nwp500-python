@@ -191,7 +191,7 @@ A ``Scenario`` is a frozen value made of parts:
      - The air temperature at the heater, one value or readings; the
        humidity; the inlet water temperature.
    * - ``loads``
-     - Draws: an instant and delivered gallons.
+     - Draws: an onset, delivered gallons and how long they run.
    * - ``commands``
      - Setpoint and mode writes at instants, a reservation schedule
        written at the start, and the TOU switch set at the start.

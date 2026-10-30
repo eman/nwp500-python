@@ -118,7 +118,7 @@ class TestTheProfile:
         draws, (span,) = F.draws_first(p, T0)
         (w,) = p.windows
         assert span == (w.start, w.start + timedelta(seconds=240))
-        assert (w.start, 8.0, 20.0) in draws
+        assert (w.start, 8.0, 20.0, 240.0) in draws
 
 
 class TestTheShower:
@@ -161,7 +161,9 @@ class TestInAWalk:
         p = F.draw_profile(issue({60: 0.4}), T0, T0 + timedelta(hours=24))
         loads, withheld = F.forecast_loads(p, T0, worst_case=True)
         assert withheld and loads.windows
-        assert any(d.per_draw_gal == 20.0 for d in loads.draws)
+        assert any(
+            (d.per_draw_gal, d.duration_s) == (20.0, 240.0) for d in loads.draws
+        )
         s = self._scenario(()).model_copy(
             update={"loads": loads, "horizon": timedelta(hours=24)}
         )

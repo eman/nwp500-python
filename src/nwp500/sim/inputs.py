@@ -224,10 +224,17 @@ class Environment(_Value):
         return v
 
 
+#: A draw over time is taken at each whole minute of it: the
+#: stratified walk's step while water moves
+#: (``physics.stratified.ACTIVE_STEP``).
+DRAW_STEP = timedelta(minutes=1)
+
+
 class Draw(_Value):
     """Hot water drawn: ``gallons`` as a meter on the delivered (mixed)
-    line counts them, at ``at``. The tank gives up the hot share through
-    the mixing valve (``DrawParams``) and refills at the inlet."""
+    line counts them, from ``at`` for ``duration_s`` at an even flow
+    (``pieces``). The tank gives up the hot share through the mixing
+    valve (``DrawParams``) and refills at the inlet."""
 
     at: Instant
     gallons: Annotated[float, Field(gt=0.0)]
@@ -235,6 +242,31 @@ class Draw(_Value):
     #: is fractional, the slot's own per-draw volume: what the draw's
     #: domain is judged against. None: ``gallons`` itself.
     per_draw_gal: Annotated[float, Field(gt=0.0)] | None = None
+    #: How long it runs, s. 0: all at ``at``.
+    duration_s: Annotated[float, Field(ge=0.0)] = 0.0
+
+    def pieces(self) -> tuple[tuple[datetime, float], ...]:
+        """The draw as the walk takes it, ``(instant, gallons)``: at
+        ``at`` and at each whole minute of the clock before its end
+        (the walk's step while water moves), each the gallons of the
+        span to the next, so a draw over several minutes meets the
+        heating between them."""
+        if self.duration_s <= 0.0:
+            return ((self.at, self.gallons),)
+        end = self.at + timedelta(seconds=self.duration_s)
+        gpm = self.gallons / (self.duration_s / 60.0)
+        cuts = [self.at]
+        t = self.at.replace(second=0, microsecond=0) + DRAW_STEP
+        while t < end:
+            cuts.append(t)
+            t += DRAW_STEP
+        out: list[tuple[datetime, float]] = []
+        left = self.gallons
+        for a, b in zip(cuts, [*cuts[1:], end], strict=True):
+            g = left if b == end else gpm * (b - a).total_seconds() / 60.0
+            left -= g
+            out.append((a, g))
+        return tuple(out)
 
 
 class DrawWindow(_Value):
