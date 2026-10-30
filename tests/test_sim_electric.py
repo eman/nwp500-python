@@ -272,3 +272,40 @@ def test_standby_reads_the_fallbacks_lower_trigger_where_the_walk_does() -> (
     assert trace.lower_margin_f == pytest.approx(
         trace.points[-1].lower_f - (110.0 - 4.1)
     )
+
+
+def test_standby_starts_the_heat_pump_when_it_comes_back_into_range() -> None:
+    """Heat Pump mode, the lower zone under its threshold with the air
+    too cold for the heat pump, then warm two hours on: the elements'
+    lower level is not reached before, so the heat pump starts as it
+    comes back into range, in the forecast as in the walk."""
+    base = days_of_draws(1)
+    air = tuple(
+        (base.start + timedelta(minutes=10 * i), 20.0 if i < 12 else 65.0)
+        for i in range(-6, 160)
+    )
+    s = base.model_copy(
+        update={
+            "state": sim.HeaterState(upper_f=109.8, lower_f=109.5),
+            "settings": sim.Settings(setpoint_f=110.0, hp_lower_on_f=111.0),
+            "environment": sim.Environment(ambient_f=air, inlet_f=60.0),
+            "loads": Loads(),
+            "horizon": timedelta(hours=24),
+        }
+    )
+    params = sim.site_example_params()
+    trace = sim.standby(
+        s.state,
+        s.environment,
+        s.loads,
+        params,
+        start=s.start,
+        until=s.start + timedelta(hours=24),
+        settings=s.settings,
+    )
+    first = sim.simulate(s, params).heating[0]
+    assert first.source == "compressor"
+    assert trace.starts_at is not None
+    assert trace.starts_at == pytest.approx(
+        first.start.at, abs=timedelta(minutes=10)
+    )

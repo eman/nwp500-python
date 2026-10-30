@@ -870,7 +870,8 @@ def standby(
     how far above ``hp_lower_on`` the coast leaves the lower zone. In
     Electric, or with the heat pump outside its range where the trigger
     would fire (or, for the margin, at the end), the elements answer it
-    at their own level (``controller.lower_trigger_f``).
+    at their own level (``controller.lower_trigger_f``); the heat pump
+    starts if it comes back into range before they reach it.
     ``schedules`` brings the TOU windows, their local times in ``tz``.
     """
     start, until = _instant(start), _instant(until)
@@ -959,11 +960,31 @@ def standby(
                     mode=mode,
                 )
 
-            # Where the heat pump would start, judged there: the elements
-            # in its place read the trigger at their own level.
-            starts_at, trigger, held = start_on(lower_on(elements=False))
-            if starts_at is not None and elements_at(starts_at):
+            if mode == ENGINE_MODE[ELECTRIC]:
                 starts_at, trigger, held = start_on(lower_on(elements=True))
+            else:
+                # Where the heat pump would start, judged there. Outside
+                # its range the elements read the trigger at their own
+                # level, unless it comes back into range first: it starts
+                # then, the call for heat standing.
+                starts_at, trigger, held = start_on(lower_on(elements=False))
+                if starts_at is not None and elements_at(starts_at):
+                    called = starts_at
+                    el = start_on(lower_on(elements=True))
+                    back = next(
+                        (
+                            p.at
+                            for p in coast.points
+                            if called < p.at
+                            and (el[0] is None or p.at < el[0])
+                            and not elements_at(p.at)
+                        ),
+                        None,
+                    )
+                    if back is not None:
+                        starts_at = back
+                    else:
+                        starts_at, trigger, held = el
             if held:
                 reasons.append(LOWER_TRIGGER_HELD)
         if schedules is None or (
