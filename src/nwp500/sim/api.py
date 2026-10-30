@@ -871,7 +871,9 @@ def standby(
     answer it at their own level (``controller.lower_trigger_f``): the
     start is found as the walk finds it, a stretch at a time between the
     heat pump leaving and re-entering its range, each by its own rule,
-    and the margin by the rule at the end.
+    and the margin by the rule at the end. Electric's rule holds until a
+    TOU window's opening drops it to the heat pump; the drop's own start
+    and the other element modes' are not forecast.
     ``schedules`` brings the TOU windows, their local times in ``tz``.
     """
     start, until = _instant(start), _instant(until)
@@ -909,23 +911,42 @@ def standby(
         mode, disabled = _engine_mode(settings.mode)
         if settings.hp_lower_on_f is None:
             reasons.append(HP_LOWER_ON_UNKNOWN)
+        windows = (
+            while_enabled(
+                tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until),
+                schedules.tou_enabled,
+                schedules.tou_switches,
+            )
+            if schedules is not None
+            and (
+                schedules.tou_enabled
+                or any(on for _, on in schedules.tou_switches)
+            )
+            else ()
+        )
         # The coast, with a point at each edge of the air's range for the
-        # heat pump (``physics.air_outside``, as the walk cuts there).
+        # heat pump (``physics.air_outside``, as the walk cuts there), and
+        # at the first window's opening, which drops Electric to the
+        # heat pump (``controller._window_opens``).
         electric = mode == ENGINE_MODE[ELECTRIC]
+        dropped = (
+            min((w0 for w0, _ in windows if start < w0 <= until), default=None)
+            if electric
+            else None
+        )
         a_lo, a_hi = params.controller.hp_air_range_f
         w_lo, w_hi = params.controller.hp_water_range_f
         # Read to just past the end, as the walk reads it: a span the end
         # cuts does not end there.
-        air_out = (
-            []
-            if electric
-            else physics.air_outside(
-                start, until + timedelta(microseconds=1), a_lo, a_hi
-            )
+        air_out = physics.air_outside(
+            start, until + timedelta(microseconds=1), a_lo, a_hi
         )
         trajectory = [(p.at, p.upper_f, p.lower_f) for p in coast.points]
         known = {p.at for p in coast.points}
-        for at in sorted({t for span in air_out for t in span}):
+        cuts = {t for span in air_out for t in span}
+        if dropped is not None:
+            cuts.add(dropped)
+        for at in sorted(cuts):
             if coast.points[0].at < at < coast.points[-1].at and (
                 at not in known
             ):
@@ -938,7 +959,7 @@ def standby(
             # elements answer the lower trigger, no nearer the setpoint
             # than their restart (``controller.lower_trigger_f``).
             return (
-                electric
+                (electric and (dropped is None or at < dropped))
                 or any(a <= at < b for a, b in air_out)
                 or not w_lo <= lower_f < w_hi
             )
@@ -954,25 +975,21 @@ def standby(
         last = coast.points[-1]
         on = lower_on(elements_at(last.at, last.lower_f))
         margin = None if math.isinf(on) else last.lower_f - on
-        windows = (
-            while_enabled(
-                tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until),
-                schedules.tou_enabled,
-                schedules.tou_switches,
-            )
-            if schedules is not None
-            and (
-                schedules.tou_enabled
-                or any(on for _, on in schedules.tou_switches)
-            )
-            else ()
-        )
         if not disabled:
             # As the walk finds it, a stretch at a time between the
             # heat pump's leaving and re-entering its range, each with
             # its own rule: outside it the elements read the trigger at
             # their own level.
-            flags = [elements_at(t, lower) for t, _, lower in trajectory]
+            # The mode too: Electric's drop is an edge of its own.
+            flags = [
+                (
+                    elements_at(t, lower),
+                    ENGINE_MODE[HEAT_PUMP]
+                    if dropped is not None and t >= dropped
+                    else mode,
+                )
+                for t, _, lower in trajectory
+            ]
             edges = [0] + [
                 i for i in range(1, len(flags)) if flags[i] != flags[i - 1]
             ]
@@ -982,11 +999,11 @@ def standby(
                 at, why, held_here = heater_start(
                     trajectory[i : j + 1],
                     # None: no lower trigger, the TOU-opening one still.
-                    lower_on(flags[i]),
+                    lower_on(flags[i][0]),
                     [m for m in coast.impulses if a <= m.at <= b],
                     windows=windows,
                     setpoint_f=settings.setpoint_f,
-                    mode=mode,
+                    mode=flags[i][1],
                 )
                 held = held or held_here
                 last_stretch = k + 1 == len(edges)

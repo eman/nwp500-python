@@ -409,3 +409,42 @@ def test_standby_margin_with_the_heat_pump_back_at_the_end() -> None:
     assert trace.lower_margin_f == pytest.approx(
         trace.points[-1].lower_f - 111.0
     )
+
+
+def test_standby_follows_electric_dropped_at_a_window_opening() -> None:
+    """Electric, a TOU window opening two hours on: the opening drops it
+    to the heat pump, whose own threshold the forecast reads from there,
+    as the walk does."""
+    base = days_of_draws(1)
+    s = base.model_copy(
+        update={
+            "state": sim.HeaterState(upper_f=109.8, lower_f=109.5),
+            "settings": sim.Settings(
+                setpoint_f=110.0, mode=2, hp_lower_on_f=111.0
+            ),
+            "loads": Loads(),
+            "horizon": timedelta(hours=24),
+            "schedules": peak(base.start.hour + 2, base.start.hour + 5),
+        }
+    )
+    params = sim.site_example_params()
+    trace = sim.standby(
+        s.state,
+        s.environment,
+        s.loads,
+        params,
+        start=s.start,
+        until=s.start + timedelta(hours=24),
+        settings=s.settings,
+        schedules=s.schedules,
+        tz=s.tz,
+    )
+    first = sim.simulate(s, params).heating[0]
+    assert first.source == "compressor"
+    assert (trace.starts_at, trace.trigger) == (
+        first.start.at,
+        first.start.trigger,
+    )
+    assert trace.lower_margin_f == pytest.approx(
+        trace.points[-1].lower_f - 111.0
+    )
