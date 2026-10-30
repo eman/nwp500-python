@@ -114,6 +114,9 @@ from nwp500.sim.tou_triggers import (
 
 # ── Vocabulary ──────────────────────────────────────────────────────
 
+#: The least step past an instant: "just after" it.
+_INSTANT = timedelta(microseconds=1)
+
 #: The heater's modes, by the names the simulation speaks.
 HEAT_PUMP: Final = "heat_pump"
 ENERGY_SAVER: Final = "energy_saver"
@@ -145,6 +148,11 @@ HEAT_PUMP_UNAVAILABLE = "heat_pump_unavailable"
 #: triggers and High Demand's upper rule, as the elements heat in the
 #: heat pump's place. One mid-stint start is on the record.
 ELECTRIC_LATER_STARTS_UNVERIFIED = "electric_later_starts_unverified"
+#: ``hp_lower_on_f`` is at or over the setpoint, so the compressor's
+#: lower trigger reads at the setpoint (``lower_trigger_f``): the record
+#: holds the trigger at 104.9 °F for setpoints of 106.7-149 °F and none
+#: under it.
+LOWER_TRIGGER_AT_SETPOINT = "lower_trigger_at_setpoint"
 #: A mode write held in a TOU window, landing at its close.
 MODE_WRITE_HELD_PROJECTED = "mode_write_held_projected"
 #: The elements heated in its place, by the manual's rule alone
@@ -247,6 +255,9 @@ class Element:
     #: Started by Electric's later rules, or the lower element after an
     #: upper one that was (``ELECTRIC_LATER_STARTS_UNVERIFIED``).
     later: bool = False
+    #: In the heat pump's place, which came back with too little left
+    #: for it: the elements finish the recovery (``_availability``).
+    finishes: bool = False
 
     @property
     def running(self) -> bool:
@@ -995,13 +1006,22 @@ def _mode_write_starts(
 # ── The elements ──
 
 
+def _upper_off_deficit(state: State, settings: Settings) -> float:
+    """How far short of the setpoint the upper element switches off:
+    Energy Saver's ``upper_off_deficit_f`` (1.62 °F, n = 21 off-edges on
+    15 days), else 0."""
+    h = heats_as(state)
+    if h in ELEMENT_MODES:
+        mode: ElementMode = DEVICE_MODE[h]  # type: ignore[assignment]
+        return upper_off_deficit_f(mode, settings.element)
+    return 0.0
+
+
 def _off_deficit(s: _Step, zone: Zone | None) -> float:
     """How far short of the setpoint an element in ``zone`` switches
-    off: Energy Saver's upper element ``upper_off_deficit_f`` (1.62 °F,
-    n = 21 off-edges on 15 days), else 0."""
-    if zone == "upper" and s.heats_as in ELEMENT_MODES:
-        mode: ElementMode = DEVICE_MODE[s.heats_as]  # type: ignore[assignment]
-        return upper_off_deficit_f(mode, s.settings.element)
+    off (``_upper_off_deficit``; the lower element at the setpoint)."""
+    if zone == "upper":
+        return _upper_off_deficit(s.state, s.settings)
     return 0.0
 
 
@@ -1012,8 +1032,11 @@ def _start_element(
     since: datetime | None = None,
     *,
     later: bool = False,
+    finishes: bool = False,
 ) -> None:
-    """An element starts; ``later`` by Electric's later rules. The
+    """An element starts; ``later`` by Electric's later rules, and
+    ``finishes`` the recovery the heat pump left it (``_availability``).
+    The
     upper zone does not move for the dead time after an on-edge
     (1.21 min, 2026-10-02); the lower zone's rate spans its own. One
     already running at the walk's start has the rest of its dead time
@@ -1040,6 +1063,7 @@ def _start_element(
             live_at,
             in_place,
             later,
+            finishes,
         ),
     )
     s.act(
@@ -1106,7 +1130,8 @@ def _stop_element(
     off point or a lowered setpoint's, unless a mode write at the same
     instant changes the mode at once (``mode_follows``; not one held to
     a window's end): the new mode's rule decides then."""
-    zone, later = s.state.element.zone, s.state.element.later
+    e = s.state.element
+    zone, later, finishes = e.zone, e.later, e.finishes
     coast: ElementMode | None = None
     if reason in ("target", "write") and _off_deficit(s, zone) > 0.0:
         coast = DEVICE_MODE[s.heats_as]  # type: ignore[assignment]
@@ -1131,6 +1156,7 @@ def _stop_element(
             ),
             "lower",
             later=later,
+            finishes=finishes,
         )
 
 
@@ -1171,15 +1197,39 @@ def later_start(
     return later_upper_on(heats_as(state), state.setpoint_f, element)
 
 
+def later_on(
+    state: State, settings: Settings
+) -> tuple[float, ElementTrigger] | None:
+    """Where the upper element starts later in a stint, and why: at the
+    mode's level (``later_start``), short of where it stops
+    (``_check_element``), so it never starts only to stop at once.
+    Energy Saver's 104.9 °F is at or over the off point of a setpoint
+    under 106.6 °F: there it starts as High Demand's does, 4.1 °F short
+    of the setpoint (``upper_reengages_below_setpoint_f``), as Electric's
+    does. Neither is measured there."""
+    later = later_start(state, settings.element)
+    if later is None:
+        return None
+    off = state.setpoint_f - _upper_off_deficit(state, settings)
+    if later[0] < off - ELEMENT_DONE_F:
+        return later
+    element = settings.element
+    return (
+        state.setpoint_f - element.upper_reengages_below_setpoint_f,
+        later[1],
+    )
+
+
 def _read_upper(s: _Step) -> None:
-    """The upper element later in a stint (``later_start``): on with
-    the upper zone at or under the mode's level."""
-    later = later_start(s.state, s.settings.element)
+    """The upper element later in a stint (``later_on``): on with the
+    upper zone at or under its level, short of its off point."""
+    later = later_on(s.state, s.settings)
+    off = s.sp - _off_deficit(s, "upper")
     if (
         later is None
         or s.disabled
         or s.state.element.running
-        or s.upper >= s.sp - ELEMENT_DONE_F
+        or s.upper >= off - ELEMENT_DONE_F
         or s.upper > later[0]
     ):
         return
@@ -1232,10 +1282,12 @@ def _setpoint(
     otherwise the write may start one (``_write_starts``). Each write
     decides afresh: a later one that does not start the heater cancels
     a start an earlier write had set going. The heater's own, waiting
-    out the lockout, stands."""
+    out the lockout, stands. It decides afresh whether the heat pump
+    takes back a recovery the elements were finishing (``_unlatch``)."""
     previous = s.sp
     s.state = replace(s.state, setpoint_f=value)
     s.act(SetpointSet(s.at, value))
+    _unlatch(s)
     e = s.state.element
     if e.running:
         temp = s.upper if e.zone == "upper" else s.lower
@@ -1380,9 +1432,19 @@ def _apply_mode(
     _element_entry(s, Start(s.at, "write", serves=serves, source="element"))
 
 
+def _unlatch(s: _Step) -> None:
+    """A write calls for heat anew: the elements no longer finish what
+    the heat pump left them (``Element.finishes``), and the heat pump's
+    return is judged again at the next check, against the new call."""
+    e = s.state.element
+    if e.finishes:
+        s.state = replace(s.state, element=replace(e, finishes=False))
+
+
 def _set_mode(s: _Step, mode: HeaterMode, ended_by: ModeEnd) -> None:
     s.modes(in_force=mode)
     s.act(ModeSet(s.at, mode, ended_by))
+    _unlatch(s)
     if mode == ELECTRIC:
         # No heat pump in Electric: a start a write set going is off.
         s.pend(None)
@@ -1585,10 +1647,10 @@ def _upper_read(s: _Step, ev: UpperRead) -> None:
 
 
 def _upper_on_crossed(s: _Step, ev: UpperOnCrossed) -> None:
-    """A coast took the upper zone to the mode's later start
-    (``later_upper_on``): the element starts there (``_read_upper``'s
-    rule, met on the path)."""
-    later = later_start(s.state, s.settings.element)
+    """A coast took the upper zone to the element's later start
+    (``later_on``): the element starts there (``_read_upper``'s rule,
+    met on the path)."""
+    later = later_on(s.state, s.settings)
     if later is None:
         return
     _start_element(
@@ -1669,13 +1731,18 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
     at once, or as a pending start when its lockout ends, and the
     element stops then if its mode would not run it
     (``_start_compressor``). With less left, the elements finish the
-    recovery as Electric, and the heat pump is back once they stop.
+    recovery as Electric, and the heat pump is back once they stop:
+    judged where it came back, not again at each event after
+    (``Element.finishes``).
     Without one heating, nothing starts: the heater's own triggers
     decide. The record shows none of it."""
     if ev.available == s.state.hp_available:
         return
+    e = s.state.element
     if not ev.available:
-        s.state = replace(s.state, hp_available=False)
+        s.state = replace(
+            s.state, hp_available=False, element=replace(e, finishes=False)
+        )
         if s.state.compressor.running:
             _stop_compressor(s, "envelope")
             _fallback(s, Start(s.at, "heater", trigger="heat_pump_unavailable"))
@@ -1684,7 +1751,6 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
         if s.state.element.running:
             _check_element(s)
         return
-    e = s.state.element
     carrying = (
         e.running
         and e.in_place
@@ -1692,13 +1758,17 @@ def _availability(s: _Step, ev: HeatPumpAvailability) -> None:
         and s.mode in COMPRESSOR_MODES
         and not s.state.compressor.running
     )
-    if carrying and not (
-        _mode_write_starts(s, s.mode, ELECTRIC, note=False)
-        and s.lower
-        <= s.params.hp_water_range_f[1] - s.params.mode_write_lower_starts_f
+    if carrying and (
+        e.finishes
+        or not (
+            _mode_write_starts(s, s.mode, ELECTRIC, note=False)
+            and s.lower
+            <= s.params.hp_water_range_f[1] - s.params.mode_write_lower_starts_f
+        )
     ):
         # Too little left for the heat pump: the elements finish it,
-        # a start pending or not.
+        # a start pending or not, as judged where it came back.
+        s.state = replace(s.state, element=replace(e, finishes=True))
         return
     eligible = carrying and s.state.compressor.pending is None
     s.state = replace(s.state, hp_available=True)
@@ -1806,8 +1876,9 @@ def trigger_ahead(
     a raise that releases a held lower trigger is answered as a write,
     as the 2026-10-03 device test's closing entry was (31.6 s after it
     landed, the lower zone 5.4 °F under the setting). Nor at the instant
-    a recovery ended: the trigger reads the tank it left at its target.
-    A trigger inside the restart lockout starts when the lockout ends."""
+    a recovery ended: the trigger reads the tank it left from just after
+    it. A trigger inside the restart lockout starts when the lockout
+    ends."""
     if disabled(state, settings):
         return None, ()
     # Electric, or the heat pump outside its range: the elements answer
@@ -1816,14 +1887,15 @@ def trigger_ahead(
     if elements and state.element.running:
         # The call for heat is being answered.
         return None, ()
+    on = lower_trigger_f(
+        settings.hp_lower_on_f,
+        state.setpoint_f,
+        settings.element,
+        elements=elements,
+    )
     at, trigger, held = heater_start(
         trajectory,
-        lower_trigger_f(
-            settings.hp_lower_on_f,
-            state.setpoint_f,
-            settings.element,
-            elements=elements,
-        ),
+        on,
         impulses,
         windows=settings.tou_windows,
         setpoint_f=state.setpoint_f,
@@ -1832,6 +1904,12 @@ def trigger_ahead(
     # The lower trigger held by an upper zone at or above the setpoint
     # rests on one device run.
     notes = (LOWER_TRIGGER_HELD,) if held else ()
+    if (
+        not elements
+        and settings.hp_lower_on_f is not None
+        and settings.hp_lower_on_f >= state.setpoint_f
+    ):
+        notes += (LOWER_TRIGGER_AT_SETPOINT,)
     pending = state.compressor.pending
     if (
         at is not None
@@ -1842,7 +1920,21 @@ def trigger_ahead(
     ):
         at = None
     if at is not None and at == now and state.compressor.finished_at == now:
-        at = None
+        # Read from just after, the tank as the stop (and a draw at it)
+        # left it: a recovery stopped short of the trigger (by a write,
+        # say) calls for heat again, after the lockout.
+        left = [p for p in trajectory if p[0] <= now][-1]
+        at, trigger, _ = heater_start(
+            [
+                (now + _INSTANT, left[1], left[2]),
+                *(p for p in trajectory if p[0] > now + _INSTANT),
+            ],
+            on,
+            [i for i in impulses if i.at > now],
+            windows=settings.tou_windows,
+            setpoint_f=state.setpoint_f,
+            mode=state.mode.in_force,
+        )
     if at is not None and elements:
         # The elements answer the call, with no lockout to wait out,
         # from where Electric's entry rule starts one: a trigger at or
@@ -1879,13 +1971,15 @@ def lower_trigger_f(
     window's opening does not read it). When the elements answer it
     (``elements``: Electric, or the heat pump outside its range), no
     nearer the setpoint than the upper element's restart
-    (``later_start``): they stop at the setpoint, not past it as the
-    compressor does, so a threshold at or near it would start them
-    again at once."""
+    (``later_start``): they stop at the setpoint, so a threshold at or
+    near it would start them again at once. When the compressor does,
+    no nearer than the setpoint, ``hp_stop_overshoot_f`` short of where
+    a recovery stops: over it, the trigger would start a recovery that
+    stops at once (``LOWER_TRIGGER_AT_SETPOINT``)."""
     on = -math.inf if hp_lower_on_f is None else hp_lower_on_f
     if elements:
-        on = min(on, setpoint_f - element.upper_reengages_below_setpoint_f)
-    return on
+        return min(on, setpoint_f - element.upper_reengages_below_setpoint_f)
+    return min(on, setpoint_f)
 
 
 def _tank_on(
@@ -1905,15 +1999,15 @@ def _tank_on(
 def upper_on_crossing(
     state: State, settings: Settings, points: Sequence[Point]
 ) -> datetime | None:
-    """Where a coast takes the upper zone down to the mode's later
-    element start (``later_upper_on``) with no element running
-    (``_read_upper``); None when it does not."""
-    later = later_start(state, settings.element)
+    """Where a coast takes the upper zone down to the element's later
+    start (``later_on``) with no element running (``_read_upper``);
+    None when it does not."""
+    later = later_on(state, settings)
     if later is None or disabled(state, settings) or state.element.running:
         return None
     on = later[0]
     for p0, p1 in pairwise(points):
-        if p0.upper_f > on >= p1.upper_f and p1.upper_f < state.setpoint_f:
+        if p0.upper_f > on >= p1.upper_f:
             f = (p0.upper_f - on) / (p0.upper_f - p1.upper_f)
             return p0.at + (p1.at - p0.at) * f
     return None

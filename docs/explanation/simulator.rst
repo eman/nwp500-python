@@ -112,7 +112,19 @@ as High Demand's does. The elements stop at the setpoint, not past it as
 the compressor does, so they answer the lower trigger no nearer than that
 4.1 degF: a setpoint at or under ``hp_lower_on_f`` would start them
 again at once. The same holds for the elements in the heat pump's place.
-It says so (``electric_later_starts_unverified``).
+It says so (``electric_later_starts_unverified``). No element starts
+later in a stint where it would stop at once: Energy Saver's 104.9 degF
+is over its 1.62 degF off point under a setpoint below 106.6 degF, so
+there it starts as High Demand's does, 4.1 degF short of the setpoint,
+as Electric's does. Neither is measured there.
+
+**The compressor's lower trigger** reads at ``hp_lower_on_f``, but no
+nearer than the setpoint, ``hp_stop_overshoot_f`` short of where a
+recovery stops: a threshold over it would start a recovery that stops
+at once, at every event the walk meets. The heater's threshold is
+104.9 degF on the record for setpoints of 106.7 to 149 degF, and none
+lower was set, so what it does there is not measured. It says so
+(``lower_trigger_at_setpoint``).
 
 **Draws.** A draw is gallons on the delivered (mixed) line. The tank
 gives up the hot share of them through the mixing valve, from the top,

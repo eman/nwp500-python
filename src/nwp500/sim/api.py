@@ -27,6 +27,7 @@ from nwp500.sim.circulation import RUN_GAP, Circulation
 from nwp500.sim.controller import (
     ELEMENT_DONE_F,
     HEAT_PUMP_UNAVAILABLE,
+    LOWER_TRIGGER_AT_SETPOINT,
     lower_trigger_f,
 )
 from nwp500.sim.decay import AmbientSampler, compute_start_time
@@ -1018,6 +1019,12 @@ def standby(
                     break
             if held:
                 reasons.append(LOWER_TRIGGER_HELD)
+            if (
+                settings.hp_lower_on_f is not None
+                and settings.hp_lower_on_f >= settings.setpoint_f
+                and not all(f[0] for f in flags)
+            ):
+                reasons.append(LOWER_TRIGGER_AT_SETPOINT)
         if schedules is None or (
             schedules.tou_enabled and not schedules.tou_periods
         ):

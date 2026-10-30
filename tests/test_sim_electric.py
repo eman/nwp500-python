@@ -387,7 +387,8 @@ def test_standby_finds_the_air_edge_between_its_samples() -> None:
 def test_standby_margin_with_the_heat_pump_back_at_the_end() -> None:
     """The air reaches the bottom of the heat pump's range exactly at the
     coast's end: the heat pump is back there, so the margin is to its own
-    threshold, not the elements'."""
+    threshold (the setpoint, under ``hp_lower_on_f``), not the
+    elements' (4.1 °F under it)."""
     base = days_of_draws(1)
     until = base.start + timedelta(hours=2)
     low = sim.site_example_params().controller.hp_air_range_f[0]
@@ -406,8 +407,9 @@ def test_standby_margin_with_the_heat_pump_back_at_the_end() -> None:
         until=until,
         settings=sim.Settings(setpoint_f=110.0, hp_lower_on_f=111.0),
     )
+    # The heat pump's threshold: 111 °F over the setpoint reads at it.
     assert trace.lower_margin_f == pytest.approx(
-        trace.points[-1].lower_f - 111.0
+        trace.points[-1].lower_f - 110.0
     )
 
 
@@ -445,8 +447,9 @@ def test_standby_follows_electric_dropped_at_a_window_opening() -> None:
         first.start.at,
         first.start.trigger,
     )
+    # The heat pump's threshold: 111 °F over the setpoint reads at it.
     assert trace.lower_margin_f == pytest.approx(
-        trace.points[-1].lower_f - 111.0
+        trace.points[-1].lower_f - 110.0
     )
 
 
@@ -483,6 +486,7 @@ def test_standby_follows_electric_dropped_at_its_own_start() -> None:
         first.start.at,
         first.start.trigger,
     )
+    # The heat pump's threshold: 111 °F over the setpoint reads at it.
     assert trace.lower_margin_f == pytest.approx(
-        trace.points[-1].lower_f - 111.0
+        trace.points[-1].lower_f - 110.0
     )

@@ -627,6 +627,41 @@ Changed
 Fixed
 -----
 
+- **A mark changes nothing.** A mark, a resume cut or any event the walk
+  stops at read the tank there by the controller's rules, and some of
+  those rules read it otherwise along the path, so a mark moved 83 of
+  600 random walks' heating. Each now reads the tank the same way:
+
+  - The upper element does not start where it would stop at once:
+    Energy Saver's 104.9 °F later start is over its off point, 1.62 °F
+    under a setpoint below 106.6 °F, so at an event it started and
+    stopped in the same instant and on the path never. There it starts
+    as High Demand's does, 4.1 °F short of the setpoint, as Electric's
+    does (``controller.later_on``); neither is measured there.
+  - The compressor's lower trigger reads no nearer than the setpoint,
+    ``hp_stop_overshoot_f`` short of where a recovery stops: over it,
+    a recovery started at each event and stopped at once
+    (``lower_trigger_at_setpoint``). The heater's own threshold is
+    104.9 °F on the record for setpoints of 106.7 to 149 °F.
+  - A recovery stopped short of the trigger (by a write, say) is read
+    from just after its stop and starts again after the lockout. A
+    coast from the stop started nothing to its end, and one from a
+    later event did.
+  - A start a coast's look-ahead finds past the upper element's own
+    start is not kept as a pending start: the element changes the tank
+    first. It fired at a TOU window's opening whatever the tank did.
+  - The heat pump back in its range with too little left for it, the
+    elements finish the recovery as judged where it came back
+    (``controller.Element.finishes``), through the upper element's
+    handover to the lower, not again at each event; a setpoint or mode
+    write calls for heat anew and has it judged again.
+
+  On 1,500 random walks, hourly marks now move no start or stop by a
+  second or more (a crossing is interpolated a fraction of a second
+  apart), and marks every 20 min one start in 300 by a minute, where a
+  draw lands each minute and which of them crossed the trigger is read
+  to the step. Marks off the minute grid split a walk step, which moves
+  a slow crossing by up to 35 s.
 - **A circulation known part way is known wherever a walk is cut.** A
   span starting after ``Loads.circulation_known_until`` charged
   nothing, judged for each walk, so a run past it was charged by a walk

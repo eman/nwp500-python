@@ -14,6 +14,7 @@ import pytest
 from nwp500.sim import controller
 from nwp500.sim.controller import (
     ELECTRIC_LATER_STARTS_UNVERIFIED,
+    LOWER_TRIGGER_AT_SETPOINT,
     POWERED_ON_BY_ENTRY,
     Action,
     Begins,
@@ -28,6 +29,7 @@ from nwp500.sim.controller import (
     EntrySkipped,
     Event,
     HeaterTrigger,
+    HeatPumpAvailability,
     Horizon,
     LockoutEnds,
     ModeHeld,
@@ -63,6 +65,8 @@ from nwp500.sim.controller import (
     cap_outcome,
     initial_state,
     judge_cap,
+    later_on,
+    lower_trigger_f,
     transition,
     trigger_ahead,
     upper_on_crossing,
@@ -424,11 +428,64 @@ class TestTheCompressor:
         """A recovery that ended has left the lower zone at its target:
         no start reads that tank at the same instant (on the record,
         starts within ten minutes of a stop waited a median 86 s and up
-        to 329 s, never none)."""
+        to 329 s, never none). One stopped short of the trigger reads it
+        from just after, and starts once the lockout ends: not never, as
+        a coast from the stop had it, while one from a later instant
+        started."""
         st, _ = step(running(fresh()), RecoveryDone(at=T0, tank=tank(140, 140)))
         coast = [(T0, 130.0, 104.0), (at(10), 129.0, 103.0)]
         assert st.compressor.finished_at == T0
-        assert trigger_ahead(st, settings(), P, coast, [], T0)[0] is None
+        ahead = trigger_ahead(st, settings(), P, coast, [], T0)[0]
+        assert ahead is not None
+        # Just after the stop, not at the coast's next sample 10 min on.
+        assert T0 < ahead.trigger_at < at(1)
+        assert ahead.starts_at == T0 + LOCKOUT
+
+    def test_a_lower_trigger_over_the_setpoint_reads_at_it(self) -> None:
+        """Over the setpoint, the trigger would start a recovery that
+        stops at once (``hp_stop_overshoot_f`` past it), at each event
+        but not along a coast: it reads at the setpoint, and says so."""
+        ep = ElementParams()
+        assert lower_trigger_f(118.0, 102.5, ep, elements=False) == 102.5
+        assert lower_trigger_f(104.9, 120.0, ep, elements=False) == 104.9
+        coast = [(T0, 126.0, 116.0), (at(10), 125.0, 115.0)]
+        st = fresh(setpoint=102.5, stopped_at=T0 - timedelta(hours=1))
+        ahead, notes = trigger_ahead(
+            st, settings(hp_lower_on=118.0), P, coast, [], T0
+        )
+        assert ahead is None
+        assert LOWER_TRIGGER_AT_SETPOINT in notes
+        warm = fresh(setpoint=120.0, stopped_at=T0 - timedelta(hours=1))
+        _, notes = trigger_ahead(warm, settings(), P, coast, [], T0)
+        assert LOWER_TRIGGER_AT_SETPOINT not in notes
+
+    def test_an_upper_start_over_its_off_point_starts_short_of_it(
+        self,
+    ) -> None:
+        """Energy Saver's later start is an absolute 104.9 °F, over a
+        96 °F setpoint's off point (1.62 °F short): there the element
+        starts as High Demand's, 4.1 °F short of the setpoint, on the
+        path as at an event, and runs: never only to stop at once."""
+        ep = ElementParams()
+        st = fresh(setpoint=96.0, mode="energy_saver")
+        on = 96.0 - ep.upper_reengages_below_setpoint_f
+        assert later_on(st, settings()) == (
+            pytest.approx(on),
+            "energy_saver_upper_on",
+        )
+        hot = fresh(setpoint=120.0, mode="energy_saver")
+        assert later_on(hot, settings()) == (104.9, "energy_saver_upper_on")
+        _, acts = step(st, UpperRead(at=T0, tank=tank(93.0, 80.0)))
+        assert not of(acts, StartElement)
+        path = [
+            Point(T0, 93.0, 80.0, 0.0, 0.0),
+            Point(at(10), 91.0, 79.0, 0.0, 0.0),
+        ]
+        crossed = upper_on_crossing(st, settings(), path)
+        assert crossed is not None and T0 < crossed < at(10)
+        later, acts = step(st, UpperOnCrossed(at=crossed, tank=tank(on, 79.5)))
+        assert of(acts, StartElement) and not of(acts, StopElement)
+        assert later.element.running
 
     def test_a_pending_start_comes_due(self) -> None:
         """A write's start lands about 30 s after the write (a median
@@ -1052,6 +1109,45 @@ class TestModeWrites:
 
 
 class TestTheElements:
+    def test_the_elements_finish_what_the_heat_pump_left_them(self) -> None:
+        """Back in its range with too little left, the heat pump leaves
+        the recovery to the elements, upper then lower: judged once, not
+        again at a later event with more room."""
+        st = replace(
+            fresh(setpoint=120.0),
+            hp_available=False,
+            element=controller.Element(
+                "heating", "upper", T0, in_place=True, finishes=True
+            ),
+        )
+        st, acts = step(st, ElementCheck(at=T0, tank=tank(120.0, 100.0)))
+        assert of(acts, StartElement)[0].zone == "lower"
+        assert st.element.finishes
+        st, acts = step(
+            st,
+            HeatPumpAvailability(
+                at=at(5), tank=tank(119.0, 90.0), available=True
+            ),
+        )
+        assert not of(acts, StartCompressor)
+        assert not st.hp_available and st.element.zone == "lower"
+        # A raise calls for heat anew: the heat pump's return is judged
+        # again, and takes the recovery back.
+        st, _ = step(
+            st,
+            SetpointWrite(
+                at=at(6), tank=tank(119.0, 90.0), setpoint_f=140.0, serves="w"
+            ),
+        )
+        assert not st.element.finishes
+        st, _ = step(
+            st,
+            HeatPumpAvailability(
+                at=at(6), tank=tank(119.0, 90.0), available=True
+            ),
+        )
+        assert st.hp_available
+
     @pytest.mark.parametrize(
         ("mode", "on", "off"),
         [

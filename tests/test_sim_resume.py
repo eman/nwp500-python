@@ -191,6 +191,53 @@ def test_a_mark_does_not_move_the_upper_elements_later_start(
     assert _same_heating(plain.heating, marked.heating)
 
 
+#: Cases a mark moved, by what read the tank at an event but not along
+#: the path: Energy Saver's 104.9 °F upper start over its off point
+#: (8, 34, 44); a lower trigger over the setpoint (25, 36, 193); a stop
+#: short of the trigger, read again only at the next event (61); a start
+#: found past the upper element's own (18, 380, 540); the heat pump's
+#: return judged again at each event (137).
+MOVED = (8, 18, 25, 34, 36, 44, 61, 137, 193, 380, 540)
+
+
+def _close(
+    a: list[engine.HeatingInterval], b: list[engine.HeatingInterval]
+) -> bool:
+    """The same intervals but for where a crossing is interpolated: the
+    tank a mark cuts is walked to the same grid, to rounding, which
+    moves a slow crossing by a fraction of a second."""
+    second = timedelta(seconds=1)
+
+    def same(x: engine.HeatingInterval, y: engine.HeatingInterval) -> bool:
+        return (
+            dataclasses.replace(
+                x, start=y.start, end=y.end, input_wh=y.input_wh
+            )
+            == y
+            and dataclasses.replace(x.start, at=y.start.at) == y.start
+            and abs(x.start.at - y.start.at) <= second
+            and abs(x.end - y.end) <= second
+            and (x.input_wh is None) == (y.input_wh is None)
+            and (
+                x.input_wh is None
+                or y.input_wh is None
+                or math.isclose(x.input_wh, y.input_wh, rel_tol=1e-3)
+            )
+        )
+
+    return len(a) == len(b) and all(map(same, a, b))
+
+
+@pytest.mark.parametrize("seed", MOVED)
+def test_a_mark_changes_nothing(seed: int) -> None:
+    """A mark stops the walk and reads the tank there, as each rule
+    reads it along the path."""
+    kw = walk_case(seed)
+    marked = engine.simulate(**_marked(kw, _cuts(kw, timedelta(hours=1))))
+    plain = engine.simulate(**walk_case(seed))
+    assert _close(plain.heating, marked.heating)
+
+
 def test_a_resume_from_another_instant_is_refused() -> None:
     kw = walk_case(1)
     first = engine.simulate(**kw)

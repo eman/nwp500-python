@@ -1064,6 +1064,12 @@ The ones about inputs and parameters:
    * - ``lower_trigger_held_uncertain``
      - The lower trigger was held (the upper zone at the setpoint, or a
        window), which moved or dropped a start.
+   * - ``lower_trigger_at_setpoint``
+     - ``Settings.hp_lower_on_f`` is at or over the setpoint, so the
+       compressor's lower trigger read at the setpoint instead: over it,
+       a recovery would start only to stop at once. The heater's own
+       threshold is 104.9 °F on the record, for setpoints of 106.7 to
+       149 °F, and what it does under a lower setpoint is not measured.
    * - ``inlet_temp_modelled``
      - The readiness answer's gallons meet an inlet nobody measured at
        the mains (``time_to_ready`` without ``inlet_measured``).
