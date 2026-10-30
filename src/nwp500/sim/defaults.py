@@ -4,9 +4,11 @@ Every value comes from one NWP500-65 on 240 V: its parameters as fitted
 on 2026-10-11 from its own record, with the constants measured by
 targeted device runs and the engineering constants the fit assumes
 (each field's ``Provenance`` says which: ``provenance_of``). The 50 and
-80 gal models get the same parameters with the tank's volume scaled by
-rated storage, and nothing else: their compressor, elements, jacket
-loss and controller are the 65's until one of them is measured.
+80 gal models get the 65's tank resized to their own (``sized``): the
+50 is narrower than the 65 and as tall, the 80 as wide and taller, and
+the terms that go with the tank's walls and cross-section scale with
+them. Their compressor, elements and controller are the 65's, and none
+of their terms is measured.
 
 The fit is one unit's, in one place, and part of it describes that
 place rather than the heater (``params.Scope``): the draw terms were
@@ -21,6 +23,7 @@ valve or its own climate (``DrawParams.climate_f``) passes its own
 ``HeaterParams``.
 """
 
+import math
 from dataclasses import replace
 
 from nwp500.sim.params import (
@@ -44,6 +47,16 @@ VOLUME_80 = 3
 #: Rated storage volume by model, gallons: the manual's specification
 #: table (45.2, 63.2 and 76.1 for the 50, 65 and 80 gal models).
 RATED_GAL = ((VOLUME_50, 45.2), (VOLUME_65, 63.2), (VOLUME_80, 76.1))
+
+#: Each model's outside, inches: its diameter and height, from the same
+#: table (Ø21.7 × 63, Ø25 × 63 and Ø25 × 71.6).
+OUTSIDE_IN = (
+    (VOLUME_50, 21.7, 63.0),
+    (VOLUME_65, 25.0, 63.0),
+    (VOLUME_80, 25.0, 71.6),
+)
+
+_IN3_PER_GAL = 231.0
 
 #: One installation's thermostatic mixing valve: delivered water at
 #: 53.56 + 0.485 × the upper zone, °F, never above the tank. Measured
@@ -191,6 +204,75 @@ def with_valve(
     )
 
 
+def tank_column_in(volume_code: int) -> tuple[float, float]:
+    """The water column of model ``volume_code``, inches: its inner
+    diameter and its height. The 65 and the 80 are as wide outside, so
+    the 80's 12.9 gal more over its 8.6 in more height is the water's
+    cross-section: 21.0 in across inside 25, under 2.0 in of wall and
+    foam. Taking the same wall on the 50, each model's rated storage
+    over its cross-section is its column: 17.7 × 42.4 in, 21.0 × 42.1
+    and 21.0 × 50.7. The 50 and the 65 come out as tall within 0.3 in
+    under their equal 63 in, as they should."""
+    outside = {code: (d, h) for code, d, h in OUTSIDE_IN}
+    rated = dict(RATED_GAL)
+    if volume_code not in rated:
+        raise ValueError(f"unknown volume_code {volume_code!r}")
+    (d65, h65), (_, h80) = outside[VOLUME_65], outside[VOLUME_80]
+    added = (rated[VOLUME_80] - rated[VOLUME_65]) * _IN3_PER_GAL
+    inner65 = math.sqrt(4.0 * added / (math.pi * (h80 - h65)))
+    wall = (d65 - inner65) / 2.0
+    inner = outside[volume_code][0] - 2.0 * wall
+    height = rated[volume_code] * _IN3_PER_GAL / (math.pi * inner**2 / 4.0)
+    return inner, height
+
+
+def sized(params: HeaterParams, volume_code: int) -> HeaterParams:
+    """``params``, a 65's, for model ``volume_code`` (``tank_column_in``):
+    its volume the model's rated storage, and the terms that go with the
+    tank's shape scaled by it, each by what it is.
+
+    - The sides' loss by the shell's conductance, ``h / ln(r_o / r_i)``
+      at the same wall: 0.86 of the 65's on the 50, 1.20 on the 80.
+    - The bottom's by the cross-section: 0.71 on the 50.
+    - The column's axial conductance by the cross-section over the
+      height: 0.71 on the 50, 0.83 on the 80.
+    - The probes' spreads and the inlet zone, gallons along the column,
+      by the cross-section: a length of the column holds 0.71 of the
+      water on the 50, and the same on the 80.
+
+    The top's loss (the head, its fittings and pipes) is the 65's, and
+    so are the heights, each a share of the volume from the bottom:
+    the 50's column is the 65's height, so its probes, elements and
+    coil sit as high; where the 80's sit in its taller column is not
+    known. The heat pump's maps, the elements and the controller are
+    the 65's."""
+    inner, height = tank_column_in(volume_code)
+    inner65, height65 = tank_column_in(VOLUME_65)
+    outside = {code: d for code, d, _ in OUTSIDE_IN}
+    area = (inner / inner65) ** 2
+    tall = height / height65
+    side = (height / math.log(outside[volume_code] / inner)) / (
+        height65 / math.log(outside[VOLUME_65] / inner65)
+    )
+    tank, loss = params.tank, params.loss
+    return replace(
+        params,
+        tank=replace(
+            tank,
+            volume_gal=dict(RATED_GAL)[volume_code],
+            upper_probe_spread_gal=tank.upper_probe_spread_gal * area,
+            lower_probe_spread_gal=tank.lower_probe_spread_gal * area,
+            inlet_mix_gal=tank.inlet_mix_gal * area,
+            conductance_btu_hr_f=tank.conductance_btu_hr_f * area / tall,
+        ),
+        loss=replace(
+            loss,
+            ua_side_btu_hr_f=loss.ua_side_btu_hr_f * side,
+            ua_bottom_btu_hr_f=loss.ua_bottom_btu_hr_f * area,
+        ),
+    )
+
+
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
@@ -222,17 +304,12 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     Several of its values move with every refit there (the
     circulation's displaced volume and flow, the heat pump's map, the
     tank's losses), so read it as an example, not as that
-    installation's current state. The 50 and 80 gal models scale its
-    tank volume by rated storage (``RATED_GAL``), and nothing else."""
-    rated = dict(RATED_GAL)
-    if volume_code not in rated:
+    installation's current state. The 50 and 80 gal models resize its
+    tank to theirs (``sized``)."""
+    if volume_code not in dict(RATED_GAL):
         raise ValueError(f"unknown volume_code {volume_code!r}")
     site = _nwp500_65()
     base = replace(with_valve(site, SITE_VALVE), circulation=SITE_CIRCULATION)
     if volume_code == VOLUME_65:
         return base
-    scale = rated[volume_code] / rated[VOLUME_65]
-    return replace(
-        base,
-        tank=replace(base.tank, volume_gal=base.tank.volume_gal * scale),
-    )
+    return sized(base, volume_code)

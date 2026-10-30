@@ -700,16 +700,20 @@ where it matters, the frame it was fitted in (``params.note_of``):
      - Parameters
    * - 1
      - NWP500-50
-     - The 65's, with the tank volume (``tank``) scaled by
-       rated storage, 45.2 gal against the 65's 63.2.
+     - The 65's, with the tank resized to the model's (45.2 gal of
+       rated storage, from the manual's outside dimensions;
+       ``defaults.sized``): its losses, axial conductance, probe
+       spreads and inlet zone scaled with its walls and cross-section.
    * - 2
      - NWP500-65
      - Fitted on one NWP500-65 at 240 V, 2026-10-11 to 10-24, at one
        installation; without its mixing valve.
    * - 3
      - NWP500-80
-     - The 65's, with the tank volume (``tank``) scaled by
-       rated storage, 76.1 gal against the 65's 63.2.
+     - The 65's, with the tank resized to the model's (76.1 gal of
+       rated storage, from the manual's outside dimensions;
+       ``defaults.sized``): its losses, axial conductance, probe
+       spreads and inlet zone scaled with its walls and cross-section.
 
 Any other code raises ``ValueError``. The defaults belong to one tank
 in one place: its losses reflect the air around that tank, its probes'

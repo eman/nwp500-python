@@ -246,9 +246,20 @@ installation with a valve sets its line (``with_valve``). It also has
 no circulation, and it names the installation's draw terms as not
 fitted (``HeaterParams.unfitted``), so the answers they reach say
 ``draw_uncalibrated`` until an installation's own meter fits them. The 50 and
-80 gal models get the same parameters with the tank's volume scaled by
-rated storage (45.2 and 76.1 gal against the 65's 63.2), and nothing
-else: their compressors, elements and jacket loss have not been
+80 gal models get the 65's tank resized to theirs
+(``defaults.sized``). The manual gives each model's rated storage and
+outside dimensions (Ø21.7 × 63, Ø25 × 63 and Ø25 × 71.6 in). The 65
+and the 80 are as wide, so the 80's extra water over its extra height
+gives the inside diameter, 21.0 in under 2.0 in of wall. The same wall
+on the 50 gives a column 17.7 in across and 42.4 tall, as tall as the
+65's 42.1: the 50 is narrower, the 80 taller. The sides' loss scales
+with the shell, the bottom's with the cross-section, and the column's
+conductance with the cross-section over its height. The probes'
+spreads and the inlet zone are gallons along the column, so they
+scale with the cross-section. The tanks lose 3.59, 4.18 and 4.80
+BTU/h·°F. The top's loss (the head, its fittings and pipes), the
+heights as shares of the volume, the compressor, the elements and the
+controller are the 65's. None of the 50's or the 80's terms is
 measured.
 
 What carries to another installation, and what does not:
