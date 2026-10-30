@@ -24,7 +24,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from nwp500.sim.circulation import RUN_GAP, Circulation
-from nwp500.sim.controller import ELEMENT_DONE_F, HEAT_PUMP_UNAVAILABLE
+from nwp500.sim.controller import (
+    ELEMENT_DONE_F,
+    HEAT_PUMP_UNAVAILABLE,
+    lower_trigger_f,
+)
 from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
@@ -103,6 +107,7 @@ from nwp500.sim.tank_physics import (
     RECOVERY_BOUND,
     Recovered,
     TankPhysics,
+    point_at,
 )
 from nwp500.sim.tou_triggers import (
     LOWER_TRIGGER_HELD,
@@ -861,7 +866,14 @@ def standby(
     coast (``tou_triggers.heater_start``: the lower zone reaching
     ``hp_lower_on``, or the upper zone far short at a TOU window's
     opening, with the lower trigger held as the heater holds it), and
-    how far above ``hp_lower_on`` the coast leaves the lower zone.
+    how far above ``hp_lower_on`` the coast leaves the lower zone. In
+    Electric, or with the heat pump outside its range, the elements
+    answer it at their own level (``controller.lower_trigger_f``): the
+    start is found as the walk finds it, a stretch at a time between the
+    heat pump leaving and re-entering its range, each by its own rule,
+    and the margin by the rule at the end. Electric's rule holds until a
+    TOU window's opening drops it to the heat pump; the drop's own start
+    and the other element modes' are not forecast.
     ``schedules`` brings the TOU windows, their local times in ``tz``.
     """
     start, until = _instant(start), _instant(until)
@@ -896,12 +908,9 @@ def standby(
     held = False
     margin: float | None = None
     if settings is not None:
-        on = settings.hp_lower_on_f
-        if on is None:
-            reasons.append(HP_LOWER_ON_UNKNOWN)
-        last = coast.points[-1]
-        margin = None if on is None else last.lower_f - on
         mode, disabled = _engine_mode(settings.mode)
+        if settings.hp_lower_on_f is None:
+            reasons.append(HP_LOWER_ON_UNKNOWN)
         windows = (
             while_enabled(
                 tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until),
@@ -915,16 +924,92 @@ def standby(
             )
             else ()
         )
-        if not disabled:
-            starts_at, trigger, held = heater_start(
-                [(p.at, p.upper_f, p.lower_f) for p in coast.points],
-                # None: no lower trigger, the TOU-opening one still.
-                -math.inf if on is None else on,
-                coast.impulses,
-                windows=windows,
-                setpoint_f=settings.setpoint_f,
-                mode=mode,
+        # The coast, with a point at each edge of the air's range for the
+        # heat pump (``physics.air_outside``, as the walk cuts there), and
+        # at the first window's opening, which drops Electric to the
+        # heat pump (``controller._window_opens``).
+        electric = mode == ENGINE_MODE[ELECTRIC]
+        dropped = (
+            min((w0 for w0, _ in windows if start <= w0 <= until), default=None)
+            if electric
+            else None
+        )
+        a_lo, a_hi = params.controller.hp_air_range_f
+        w_lo, w_hi = params.controller.hp_water_range_f
+        # Read to just past the end, as the walk reads it: a span the end
+        # cuts does not end there.
+        air_out = physics.air_outside(
+            start, until + timedelta(microseconds=1), a_lo, a_hi
+        )
+        trajectory = [(p.at, p.upper_f, p.lower_f) for p in coast.points]
+        known = {p.at for p in coast.points}
+        cuts = {t for span in air_out for t in span}
+        if dropped is not None:
+            cuts.add(dropped)
+        for at in sorted(cuts):
+            if coast.points[0].at < at < coast.points[-1].at and (
+                at not in known
+            ):
+                q = point_at(coast.points, at)
+                trajectory.append((at, q.upper_f, q.lower_f))
+        trajectory.sort(key=lambda p: p[0])
+
+        def elements_at(at: datetime, lower_f: float) -> bool:
+            # Electric, or the heat pump outside its range there: the
+            # elements answer the lower trigger, no nearer the setpoint
+            # than their restart (``controller.lower_trigger_f``).
+            return (
+                (electric and (dropped is None or at < dropped))
+                or any(a <= at < b for a, b in air_out)
+                or not w_lo <= lower_f < w_hi
             )
+
+        def lower_on(elements: bool) -> float:
+            return lower_trigger_f(
+                settings.hp_lower_on_f,
+                settings.setpoint_f,
+                params.element,
+                elements=elements,
+            )
+
+        last = coast.points[-1]
+        on = lower_on(elements_at(last.at, last.lower_f))
+        margin = None if math.isinf(on) else last.lower_f - on
+        if not disabled:
+            # As the walk finds it, a stretch at a time between the
+            # heat pump's leaving and re-entering its range, each with
+            # its own rule: outside it the elements read the trigger at
+            # their own level.
+            # The mode too: Electric's drop is an edge of its own.
+            flags = [
+                (
+                    elements_at(t, lower),
+                    ENGINE_MODE[HEAT_PUMP]
+                    if dropped is not None and t >= dropped
+                    else mode,
+                )
+                for t, _, lower in trajectory
+            ]
+            edges = [0] + [
+                i for i in range(1, len(flags)) if flags[i] != flags[i - 1]
+            ]
+            for k, i in enumerate(edges):
+                j = edges[k + 1] if k + 1 < len(edges) else len(flags) - 1
+                a, b = trajectory[i][0], trajectory[j][0]
+                at, why, held_here = heater_start(
+                    trajectory[i : j + 1],
+                    # None: no lower trigger, the TOU-opening one still.
+                    lower_on(flags[i][0]),
+                    [m for m in coast.impulses if a <= m.at <= b],
+                    windows=windows,
+                    setpoint_f=settings.setpoint_f,
+                    mode=flags[i][1],
+                )
+                held = held or held_here
+                last_stretch = k + 1 == len(edges)
+                if at is not None and (at < b or last_stretch):
+                    starts_at, trigger = at, why
+                    break
             if held:
                 reasons.append(LOWER_TRIGGER_HELD)
         if schedules is None or (

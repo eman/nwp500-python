@@ -18,7 +18,7 @@ from itertools import pairwise
 from typing import Any
 
 import pytest
-from sim_cases import days_of_draws, walk_case
+from sim_cases import days_of_draws, peak, walk_case
 
 from nwp500 import sim
 from nwp500.sim import (
@@ -27,7 +27,6 @@ from nwp500.sim import (
     Loads,
     ReservationEntry,
     Schedules,
-    TouPeriod,
     codec,
     engine,
 )
@@ -295,36 +294,6 @@ def _hourly(base: sim.Scenario) -> list[datetime]:
     ]
 
 
-def _peak(opens: int, closes: int) -> Schedules:
-    """TOU on, a peak from ``opens``:00 to ``closes``:00 UTC: across
-    midnight when it closes earlier in the day than it opens."""
-
-    def period(h0: int, m0: int, h1: int, m1: int, price: int) -> TouPeriod:
-        return TouPeriod(
-            season=0xFFF,
-            week=0xFE,
-            start_hour=h0,
-            start_minute=m0,
-            end_hour=h1,
-            end_minute=m1,
-            price_max=price,
-        )
-
-    if closes < opens:
-        periods = (
-            period(0, 0, closes - 1, 59, 5),
-            period(closes, 0, opens - 1, 59, 1),
-            period(opens, 0, 23, 59, 5),
-        )
-    else:
-        periods = (
-            period(0, 0, opens - 1, 59, 1),
-            period(opens, 0, closes - 1, 59, 5),
-            period(closes, 0, 23, 59, 1),
-        )
-    return Schedules(tou_enabled=True, tou_periods=periods)
-
-
 @pytest.mark.parametrize("tou", [False, True], ids=["no-tou", "tou"])
 @pytest.mark.parametrize("mode", [1, 2, 3, 4])
 def test_scenarios_chained_by_their_end_state_are_one(
@@ -336,7 +305,7 @@ def test_scenarios_chained_by_their_end_state_are_one(
     it as one walk caps it."""
     base = _settings_in(days_of_draws(2), mode)
     if tou:
-        base = base.model_copy(update={"schedules": _peak(14, 2)})
+        base = base.model_copy(update={"schedules": peak(14, 2)})
     params = sim.site_example_params()
     whole = sim.simulate(base, params)
     calls = _api_chained(base, params, _hourly(base))
@@ -359,7 +328,7 @@ def test_a_held_mode_lands_at_its_windows_close_when_resumed_there() -> None:
             "settings": sim.Settings(
                 setpoint_f=120.0, hp_lower_on_f=105.0, mode=3
             ),
-            "schedules": _peak(11, 14),
+            "schedules": peak(11, 14),
             "commands": Commands(
                 writes=(CommandWrite(at=t0 + timedelta(minutes=5), mode=4),)
             ),
@@ -657,7 +626,7 @@ def _peak_afternoon(start: datetime, hours: float) -> sim.Scenario:
             "horizon": timedelta(hours=hours),
             "state": sim.HeaterState(upper_f=110.0, lower_f=95.0),
             "settings": sim.Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
-            "schedules": _peak(14, 18),
+            "schedules": peak(14, 18),
             "loads": Loads(),
         }
     )
@@ -698,7 +667,7 @@ def test_a_held_heat_pump_entry_landing_later_says_its_rule() -> None:
             "settings": sim.Settings(
                 setpoint_f=120.0, hp_lower_on_f=105.0, mode=3
             ),
-            "schedules": _peak(11, 14).model_copy(
+            "schedules": peak(11, 14).model_copy(
                 update={"reservations": (entry,)}
             ),
             "loads": Loads(),

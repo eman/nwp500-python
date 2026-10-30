@@ -665,7 +665,7 @@ class TestWhatEndsTheRecovery:
         )
         r = element_mode(s, params, mode=HIGH_DEMAND)
         assert r.end_minute == 0.0
-        assert "element_later_starts_not_modelled" not in r.reasons
+        assert "electric_later_starts_unverified" not in r.reasons
 
     def test_the_writes_own_stop_at_the_start_does_not_cut(
         self, params: HeaterParams

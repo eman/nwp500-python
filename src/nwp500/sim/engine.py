@@ -787,7 +787,9 @@ class _Engine:
             self.reasons.update(self.cycle.why)
         el = self.state.element
         if el.running and el.zone is not None:
-            self.reasons.update(ctl.element_notes(el.zone, el.in_place))
+            self.reasons.update(
+                ctl.element_notes(el.zone, el.in_place, el.later)
+            )
         if held is not None:
             assert resume.held_write is not None
             self.reasons.update(
@@ -1602,7 +1604,7 @@ class _Engine:
         if at is not None:
             assert own is not None
             self._coast_to(at)
-            if not self.state.hp_available and any(
+            if ctl.heats_as(self.state) == ctl.ELECTRIC and any(
                 d[0] <= at for d in self.draws
             ):
                 # The elements answer from the tank a draw landing here
@@ -1610,7 +1612,7 @@ class _Engine:
                 # back in the heat pump's range.
                 self._coast_draw()
                 self._check_availability()
-                if self.state.hp_available:
+                if ctl.heats_as(self.state) != ctl.ELECTRIC:
                     # Back in range: the trigger is the heat pump's, with
                     # its lockout, found afresh from here.
                     return
