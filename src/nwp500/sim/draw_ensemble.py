@@ -47,6 +47,8 @@ from nwp500.sim.inputs import Draw, DrawWindow, Loads, Scenario
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.result import SimulationResult
 
+#: The longest draw, s (``Draw.duration_s``).
+MAX_DRAW_S = 86400.0
 #: The standard normal's 90th percentile.
 _Z90 = 1.2815515655446004
 
@@ -80,7 +82,7 @@ def members(
     windows = forecast_loads(profile, start)[0].windows
     inside = [s for s in slots if start <= s.valid_at < end]
     return tuple(
-        _member(inside, windows, np.random.default_rng([seed, k]))
+        _member(inside, windows, end, np.random.default_rng([seed, k]))
         for k in range(count)
     )
 
@@ -88,6 +90,7 @@ def members(
 def _member(
     slots: Sequence[ForecastSlot],
     windows: Sequence[DrawWindow],
+    end: datetime,
     rng: np.random.Generator,
 ) -> Member:
     draws: list[Draw] = []
@@ -102,17 +105,22 @@ def _member(
             n = int(rng.poisson(rate))
             if n == 0:
                 continue
-            offsets = rng.uniform(0.0, SLOT.total_seconds(), n)
+            # Inside the span: a last slot cut short by ``end`` counts
+            # whole, as ``draw_profile`` counts it, its draws in it.
+            reach = min(SLOT, end - s.valid_at).total_seconds()
+            offsets = rng.uniform(0.0, reach, n)
             if draw_class == "long":
                 seconds = _long_seconds(s, mean_s, rng, n)
             else:
                 seconds = np.full(n, mean_s)
             for off, sec in zip(offsets, seconds, strict=True):
-                gal = volume * sec / mean_s if mean_s > 0.0 else volume
+                # A draw runs at most a day (``Draw.duration_s``), at the
+                # slot's flow.
+                duration = float(min(max(sec, 0.0), MAX_DRAW_S))
+                gal = volume * duration / mean_s if mean_s > 0.0 else volume
                 if gal <= 0.0:
                     continue
                 at = s.valid_at + timedelta(seconds=float(off))
-                duration = float(min(max(sec, 0.0), 86400.0))
                 draws.append(
                     Draw(
                         at=at,
@@ -252,15 +260,12 @@ def _judged(
     lows: list[float] = []
     cold = False
     for a, b in member.long_draws:
-        if b <= walk.start or a >= walk.until:
+        if a >= walk.until or b < walk.start or (b == walk.start and a < b):
             continue
-        d = depletion(
-            points,
-            max(a, walk.start),
-            min(b, walk.until),
-            delivery,
-            params.readiness,
-        )
+        a, b = max(a, walk.start), min(b, walk.until)
+        # A draw of no length is a step at its instant: judged through it.
+        b = max(b, a + timedelta(microseconds=1))
+        d = depletion(points, a, b, delivery, params.readiness)
         lows.append(d.min_f)
         cold = cold or d.depleted
     return MemberWalk(

@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from nwp500.sim import (
+    Draw,
     Environment,
     HeaterState,
     Loads,
@@ -145,6 +146,27 @@ class TestMembers:
             m.loads.windows == windows for m in E.members(slots, *DAY, count=5)
         )
 
+    def test_a_draw_runs_at_most_a_day_at_the_slots_flow(self) -> None:
+        slots = [
+            replace(s, long_duration_mean_s=20000.0, long_duration_p90_s=1e7)
+            for s in issue()
+        ]
+        ensemble = E.members(slots, *DAY, count=50)
+        longs = [
+            d
+            for m in ensemble
+            for d in m.loads.draws
+            if any(a == d.at for a, _ in m.long_draws)
+        ]
+        assert max(d.duration_s for d in longs) == E.MAX_DRAW_S
+        for d in longs:
+            assert d.gallons == pytest.approx(15.0 * d.duration_s / 20000.0)
+
+    def test_a_span_ending_inside_a_slot_draws_inside_it(self) -> None:
+        end = T0 + timedelta(hours=20, minutes=55)
+        for m in E.members(issue(), T0, end, count=200):
+            assert all(T0 <= d.at < end for d in m.loads.draws)
+
     def test_a_span_the_issue_does_not_cover_is_refused(self) -> None:
         late = T0 + timedelta(days=7)
         with pytest.raises(ValueError, match="no_covering_issue"):
@@ -199,6 +221,20 @@ class TestWeigh:
             sum(v for v in w.input_wh if v is not None) / 3
         )
         assert w.mean(lambda r: None) is None
+
+    def test_a_long_draw_of_no_length_is_judged_through_its_step(self) -> None:
+        at = T0 + timedelta(hours=19)
+        for when in (at, T0):
+            member = E.Member(
+                loads=Loads(draws=(Draw(at=when, gallons=60.0),)),
+                long_draws=((when, when),),
+            )
+            params = site_example_params()
+            (w,) = E.weigh([scenario(120.0)], [member], params)
+            (walk,) = w.walks
+            assert walk.long_min_f is not None
+            assert walk.long_min_f < params.readiness.line_f
+            assert walk.cold
 
     def test_an_empty_ensemble_is_refused(self) -> None:
         with pytest.raises(ValueError):

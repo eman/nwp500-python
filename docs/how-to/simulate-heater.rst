@@ -644,9 +644,14 @@ A walk on a forecast's expected draws meets a household that draws a
 fraction of a shower in each slot. It gets the day's heat about right
 and never runs out: a tank runs cold on the evening two showers come
 close together, which an expectation does not have. Sample households
-from the forecast instead, and walk every candidate on the same ones:
+from the forecast instead, and walk every candidate on the same ones.
+Given an issue's ``slots``, when it was issued (``issued_at``) and
+``now``, the standing ``scenario``, a ``boost`` to weigh against it,
+``params`` and a ``price(at)`` per kWh:
 
 .. code-block:: python
+
+   from datetime import timedelta
 
    from nwp500.sim import draw_ensemble, draw_forecast
 
@@ -664,15 +669,22 @@ from the forecast instead, and walk every candidate on the same ones:
            return sum(wh / 1000 * price(at) for at, wh in slots_wh)
 
        print(standing.cold_share, boosted.cold_share)
-       print(boosted.mean(cost) - standing.mean(cost))
-       saved = [cost(a.walk) - cost(b.walk)
-                for a, b in zip(standing.walks, boosted.walks)]
+       saved = [
+           None if (x := cost(a.walk)) is None or (y := cost(b.walk)) is None
+           else x - y
+           for a, b in zip(standing.walks, boosted.walks)
+       ]
+       priced = [v for v in saved if v is not None]
+       if priced:
+           print(sum(priced) / len(priced), len(saved) - len(priced))
 
 Each member draws, in each slot and class, a Poisson count of draws at
-the slot's rate, each at a uniform instant in the slot. A long draw
+the slot's rate, each at a uniform instant in the slot (in the span,
+for a last slot it cuts short). A long draw
 lasts the slot's minimum and a lognormal part matched to its published
 mean and 90th percentile; its volume goes with its duration at the
-slot's mean flow, so the expected volume is the published one. A short
+slot's mean flow, so the expected volume is the published one; one
+longer than a day is cut to a day, at that flow. A short
 draw is its slot's means. A seed gives the same members whatever their
 number. ``weigh`` gives each walk the member's draws and the
 forecast's draw windows, keeping its own circulation and all else.
@@ -694,7 +706,7 @@ newest issue before it, 500 members):
   CI 14 to 36 %) against the 20 % a right spread gives. The recorded
   evenings averaged 13.5 gallons against the forecast's 10.4, so its
   evening rates run low; the single expected trace drew less than the
-  day did on 25 of the 47, and under two-thirds of it on 17.
+  evening did on 25 of the 47, and under two-thirds of it on 17.
 - **The whole day**: 4 of the 47, 9 % (90 % CI 3 to 18 %): the members
   spread wider than the days did, as independent counts would for a
   household steadier from day to day. The means agree, 29.2 gallons
