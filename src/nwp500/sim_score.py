@@ -680,15 +680,25 @@ def _stops_at_setpoint(
     heater: rec.Record, before: datetime, end: datetime
 ) -> bool:
     """Whether the lower stop threshold sat on the setpoint (within
-    ``STOP_AT_SETPOINT_F``) from ``before`` to ``end``: at ``before``
-    and ``STOP_FOLLOWS`` after each change of either, as one reported
-    apart from the other follows it."""
-    changes = [
-        t + STOP_FOLLOWS
-        for series in (heater.hp_lower_off_f, heater.setpoint_f)
-        for t, _ in rec.between(series, before, end)
+    ``STOP_AT_SETPOINT_F``) from ``before`` to ``end``, read wherever
+    both had settled: at ``before`` and ``STOP_FOLLOWS`` after each
+    change of either, each read with no change in the ``STOP_FOLLOWS``
+    before it (one reported apart from the other follows it), and none
+    read past ``end``, the next day's."""
+    changes = sorted(
+        {
+            t
+            for series in (heater.hp_lower_off_f, heater.setpoint_f)
+            for t, _ in rec.between(series, before - STOP_FOLLOWS, end)
+        }
+    )
+    reads = [before, *(t + STOP_FOLLOWS for t in changes)]
+    settled = [
+        r
+        for r in reads
+        if r < end and not any(r - STOP_FOLLOWS < c <= r for c in changes)
     ]
-    for t in [before, *changes]:
+    for t in settled:
         off = _at(heater.hp_lower_off_f, t, heater)
         setpoint = _at(heater.setpoint_f, t, heater)
         if off is None or setpoint is None:
@@ -751,7 +761,10 @@ def _one_day(
     # A write at the day's first instant is the day's, replayed against
     # what was in force before it.
     for w in heater.writes(before, end):
-        if w.dropped:
+        # The walk drops an element mode where a window opens; one the
+        # heater dropped for a window opened before the day began, the
+        # walk cannot, so it is replayed.
+        if w.dropped and w.at >= start + heater.drop_within:
             continue
         if w.mode is not None:
             if _mode(w.mode) in (VACATION, POWER_OFF):

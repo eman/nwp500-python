@@ -11,7 +11,7 @@ import pytest
 from nwp500 import sim
 from nwp500 import sim_score as ss
 from nwp500.sim import tank_fit
-from nwp500.sim.inputs import HEAT_PUMP, VACATION
+from nwp500.sim.inputs import ENERGY_SAVER, HEAT_PUMP, VACATION
 from nwp500.sim.record import Record
 from nwp500.sim_calibrate import Prepared
 
@@ -333,6 +333,48 @@ class TestTheDays:
             ),
         )
         assert [d.start for d in _days(walked, late)] == [T0, T0 + DAY]
+
+    def test_a_setpoint_changed_just_before_midnight(
+        self, walked: Walked
+    ) -> None:
+        raised = (
+            *walked.record.setpoint_f,
+            (T0 + DAY - timedelta(seconds=10), 130.1),
+        )
+        late = replace(
+            walked.record,
+            setpoint_f=tuple(sorted(raised)),
+            hp_lower_off_f=tuple(
+                sorted(
+                    (
+                        *walked.record.hp_lower_off_f,
+                        (T0 + DAY + timedelta(seconds=5), 130.1),
+                    )
+                )
+            ),
+        )
+        assert [d.start for d in _days(walked, late)] == [T0, T0 + DAY]
+
+    def test_a_drop_for_a_window_opened_before_midnight(
+        self, walked: Walked
+    ) -> None:
+        dropped = replace(
+            walked.record,
+            mode=(
+                (BEFORE, float(ENERGY_SAVER)),
+                (T0 + DAY + timedelta(seconds=2), float(HEAT_PUMP)),
+            ),
+            hp_upper_on_f=(
+                (BEFORE, 104.9),
+                (T0 + DAY - timedelta(seconds=2), 124.0),
+                (T0 + DAY + timedelta(hours=1), 104.9),
+            ),
+        )
+        second = _days(walked, dropped)[1]
+        assert second.scenario.settings.mode == ENERGY_SAVER
+        assert [w.mode for w in second.scenario.commands.writes][:1] == [
+            HEAT_PUMP
+        ]
 
     def test_a_recorder_gap_is_not_observed(self, walked: Walked) -> None:
         frame = walked.ready.frame.copy()
