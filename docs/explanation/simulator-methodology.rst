@@ -218,6 +218,21 @@ air through its span. The air's mean is used only to judge where the
 heat pump heats against its map (``heat_map_out_of_domain``, below)
 and as context for a learned duration (``t_amb_mean``).
 
+The air is an input, not a state: the heat pump takes about 3,000
+BTU/hr from its room while it runs, and the simulator does not cool
+the room for it. At one installation that cooling was 0.49 degF on
+average over a run (0.04-0.95, :doc:`recovery-speed`), 27 BTU/hr of the
+heat at the map's air slope, about a ninth of the map's own error
+(236 BTU/hr RMS). A replay reads a sensor's air, the cooling in it. A
+forecast's air is shifted through a fresh reading beside the heater,
+else the heater's own from the last hour while its compressor ran, else
+left unanchored (the inputs, below); it carries the cooling only as its
+anchor did, and otherwise leaves it out: at this installation 0.49
+degF on average, 0.95 at the top of the measurement's range; other
+rooms may differ. A room of its own
+would need its capacity and its loss to outdoors, which no heater's
+record measures.
+
 
 A heat-pump recovery
 ====================

@@ -662,6 +662,12 @@ Fixed
   ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
   gal: 12.9 over the 65's, where the ratings differ by 5.
 
+- The methodology says why the air is an input and not a state: the
+  heat pump takes about 3,000 BTU/h from its room, which cooled 0.49 °F
+  on average over a run at one installation; at the heat map's air
+  slope that costs 0.6 % of the heat into the tank. A replay's air
+  carries it, and a forecast's as its anchor does.
+
 - ``recovery-speed`` says why the heat map stops at 61 °F of air: the
   winter's 48,000 compressor minutes at 45-60 °F have no draw detector
   behind them, and the heater's own flag, the only stand-in, reads the
