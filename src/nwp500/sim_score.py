@@ -711,13 +711,20 @@ def _one_day(
             writes.append(sim.Write(at=w.at, setpoint_f=w.setpoint_f))
     starts = heater.starts(start, end)
     running = {(s.source, s.zone) for s in starts.starts if s.running}
-    stops = [t for t in starts.stops if t < start]
+    stops = [t for t in starts.stops if t <= start]
     compressor = ("compressor", None) in running
     upper_since = _on_since(heater.upper_element, start)
     lower_since = _on_since(heater.lower_element, start)
     element_since = upper_since if upper_since is not None else lower_since
     element = any(src == "element" for src, _ in running)
     tou = _at(heater.tou, start, heater)
+    lower_on = _at(heater.hp_lower_on_f, start, heater)
+    lower_off = _at(heater.hp_lower_off_f, start, heater)
+    upper_on = _at(heater.hp_upper_on_f, start, heater)
+    # Without them the walk starts no lower-zone recovery, aims at the
+    # setpoint, or keeps no TOU window: not the heater's day.
+    if None in (tou, lower_on, lower_off, upper_on):
+        return None
     draws = tuple(
         sim.Draw(at=t, gallons=g)
         for t, g in record.draws
@@ -737,9 +744,9 @@ def _one_day(
         settings=sim.Settings(
             setpoint_f=setpoint,
             mode=_mode(mode),
-            hp_lower_on_f=_at(heater.hp_lower_on_f, start, heater),
-            hp_lower_off_f=_at(heater.hp_lower_off_f, start, heater),
-            hp_upper_on_f=_at(heater.hp_upper_on_f, start, heater),
+            hp_lower_on_f=lower_on,
+            hp_lower_off_f=lower_off,
+            hp_upper_on_f=upper_on,
         ),
         history=sim.History(
             compressor_stopped_at=None if compressor or not stops else stops[-1]
@@ -795,7 +802,9 @@ def day_events(
     and that ``ready``'s history observed throughout: the heater heard
     and the air read (its frame's ``heater_unobserved`` and
     ``air_unobserved``), what ran, its power and what it was told
-    recorded in ``heater`` with no gap (``DAY_SIGNALS``), and the
+    recorded in ``heater`` with no gap (``DAY_SIGNALS``), the lower
+    probe's thresholds, the upper's start threshold and the TOU switch
+    known at its start, and the
     tank's ``record`` (``tank_fit.tank_record``) covering it, its
     metered draws the day's. A day with a write into or out of
     Vacation or Power Off, or spent in either, is left out: the
@@ -1142,14 +1151,18 @@ def _delivery_score(
 
 def _placed(recorded: Sequence[datetime], predicted: Sequence[datetime]) -> int:
     """How many ``recorded`` starts a ``predicted`` one places, within
-    ``START_MATCH``, each prediction placing the nearest free start."""
+    ``START_MATCH``, each prediction placing one at most: the most such
+    pairs. In time order, each start takes the earliest free prediction
+    near enough; one too early for it is too early for every later
+    start."""
     free = sorted(predicted)
-    placed = 0
+    placed = i = 0
     for t in sorted(recorded):
-        near = [p for p in free if abs(p - t) <= START_MATCH]
-        if near:
-            free.remove(min(near, key=lambda p: abs(p - t)))
+        while i < len(free) and free[i] < t - START_MATCH:
+            i += 1
+        if i < len(free) and free[i] <= t + START_MATCH:
             placed += 1
+            i += 1
     return placed
 
 
@@ -1208,9 +1221,13 @@ def _day_score(
         )
     # When in the day it was used, whatever the day's total: half the
     # summed difference of each slot's share of its own day's energy.
+    # Read on the clock's 10-minute grid, which a local midnight is on
+    # in every zone offset by whole tens of minutes (within 5 minutes in
+    # the quarter-hour few), and laid out from the day's start as the
+    # meter's slots are.
     predicted = [0.0] * len(e.slots_wh)
-    for at, slot_wh in result.energy_by_slot(DAY_SLOT):
-        k = int((at - e.start) / DAY_SLOT)
+    for at, slot_wh in result.energy_by_slot(obs.SLOT):
+        k = math.floor((at - e.start) / DAY_SLOT)
         if 0 <= k < len(predicted) and slot_wh is not None:
             predicted[k] += slot_wh
     if wh > 0.0 and e.metered_wh > 0.0:
@@ -1227,7 +1244,11 @@ def _day_score(
         source: [
             h.start.at
             for h in result.heating
-            if h.source == source and e.start < h.start.at < e.end
+            # One running at the day's start is not a start; one the
+            # walk makes at its first instant is.
+            if h.source == source
+            and h.start.cause != "running"
+            and h.start.at < e.end
         ]
         for source in ("compressor", "element")
     }
@@ -1245,6 +1266,11 @@ def _day_score(
             day,
         )
     tally.add("day_compressor_starts_false", float(len(got) - placed), day)
+    tally.add(
+        "day_compressor_starts_missed",
+        float(len(e.compressor_starts) - placed),
+        day,
+    )
     tally.add(
         "day_element_starts_bias",
         float(len(starts["element"]) - len(e.element_starts)),
@@ -1404,10 +1430,12 @@ def score(
       (higher is better), the share of the other days it is ordered
       against, more electricity or less, as the meter orders them;
       ``day_compressor_starts_bias``, the predicted starts less the
-      recorded, ``_placed_share`` the recorded starts a prediction
-      places within ``START_MATCH``, ``_false`` the predicted starts
-      that place none; ``day_element_starts_bias``; ``day_min_upper_abs_f``
-      and ``_bias_f``, the upper probe's lowest over the day;
+      recorded, ``_placed_share`` the share of a day's recorded starts
+      a prediction places within ``START_MATCH`` (days with none left
+      out), ``_missed`` the recorded starts no prediction places and
+      ``_false`` the predicted starts that place none, each a day;
+      ``day_element_starts_bias``; ``day_min_upper_abs_f`` and
+      ``_bias_f``, the upper probe's lowest over the day;
       ``day_line_disagree_share``, how often the prediction and the
       record disagree on whether it fell below the line; and
       ``day_end_mean_abs_f``, the probes' mean at the day's end.

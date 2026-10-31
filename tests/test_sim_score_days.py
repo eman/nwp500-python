@@ -199,6 +199,12 @@ class TestTheDays:
         first = _days(walked, old)[0]
         assert first.scenario.settings.hp_lower_on_f == 111.0
 
+    def test_a_day_with_a_threshold_unknown_is_not_one(
+        self, walked: Walked
+    ) -> None:
+        for name in ("hp_lower_on_f", "hp_lower_off_f", "hp_upper_on_f", "tou"):
+            assert _days(walked, replace(walked.record, **{name: ()})) == ()
+
     def test_the_span_asked_for_only(self, walked: Walked) -> None:
         got = ss.day_events(
             walked.ready, walked.record, walked.tank, tz="UTC", since=T0 + DAY
@@ -272,6 +278,21 @@ class TestTheDayScore:
         assert m["day_energy_misplaced_share"].value < 0.1
         assert "day_energy_concordance" in m
 
+    def test_a_start_at_the_days_first_instant_is_one(
+        self, walked: Walked, site: sim.HeaterParams
+    ) -> None:
+        first = _days(walked)[0]
+        cold = replace(
+            first,
+            scenario=first.scenario.model_copy(
+                update={"state": sim.HeaterState(upper_f=95.0, lower_f=90.0)}
+            ),
+            compressor_starts=(T0 + timedelta(seconds=20),),
+        )
+        got = ss.score(ss.Events(days=(cold,)), site, inlet_f=58.0).metrics
+        assert got["day_compressor_starts_placed_share"].value == 1.0
+        assert got["day_compressor_starts_missed"].value == 0.0
+
     def test_days_are_a_kind_of_their_own(
         self, walked: Walked, site: sim.HeaterParams
     ) -> None:
@@ -299,6 +320,14 @@ class TestPlacing:
         a, b = t, t + timedelta(minutes=25)
         # The prediction 5 min from b is b's; a's is 20 min from it.
         assert ss._placed([a, b], [t + timedelta(minutes=20), b - MINUTE]) == 2
+
+    def test_the_most_pairs(self) -> None:
+        t = T0 + timedelta(hours=6)
+        # The nearest to 0 is +20, which leaves +50 nothing; -25 and +20
+        # place both.
+        recorded = [t, t + timedelta(minutes=50)]
+        predicted = [t - timedelta(minutes=25), t + timedelta(minutes=20)]
+        assert ss._placed(recorded, predicted) == 2
 
     def test_not_past_the_match(self) -> None:
         t = T0 + timedelta(hours=6)

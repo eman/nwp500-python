@@ -252,8 +252,10 @@ over them, and set what it predicts beside what the heater did:
 the heater's record (``sim.record.Record``): the mode, the setpoint,
 the lower probe's start and stop thresholds, the upper's start
 threshold (whose rise marks a TOU window in force), the TOU switch,
-what ran and the heater's power. A day is scored only when all of
-those, the air and the heater were heard throughout it. Each day starts
+what ran and the heater's power. A day is scored only when what ran,
+the power, the mode and the setpoint have no gap over it, the
+thresholds and the TOU switch are known at its start, and the heater
+and the air were heard throughout it. Each day starts
 from the layers its replay leaves and is walked with the recorded
 setpoint and mode writes, the TOU windows the heater marked, the
 metered draws, the circulation and the air:
@@ -264,7 +266,8 @@ metered draws, the circulation and the air:
 
    from nwp500.sim.record import Record
 
-   heater = Record(compressor=..., power_w=..., mode=..., setpoint_f=...,
+   heater = Record(compressor=..., upper_element=..., lower_element=...,
+                   power_w=..., mode=..., setpoint_f=...,
                    upper_f=..., lower_f=..., hp_lower_on_f=...,
                    hp_lower_off_f=..., hp_upper_on_f=..., tou=...)
    tank = tank_fit.tank_record(ready.frame, draws)
@@ -282,8 +285,9 @@ hour than the meter put it in, whatever the total
 (``day_energy_misplaced_share``), how often two days are ordered by
 their electricity as the meter orders them (``day_energy_concordance``),
 the compressor's starts (``day_compressor_starts_bias``, the share of
-recorded starts a prediction places within 30 minutes,
-``_placed_share``, and the predictions that place none, ``_false``), the
+a day's recorded starts a prediction places within 30 minutes,
+``_placed_share``, and each day's recorded starts no prediction places,
+``_missed``, and predictions that place none, ``_false``), the
 elements' (``day_element_starts_bias``), the upper probe's lowest over
 the day (``day_min_upper_abs_f``, ``_bias_f``) and whether either side
 took it below the line (``day_line_disagree_share``), and the probes'

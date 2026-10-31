@@ -445,14 +445,17 @@ the TOU windows it marked (16:00 to 21:00, on 10-02 broken from 19:50
 to 20:20), the metered draws, the circulation and the air:
 
 - the day's electricity: mean absolute error 16.5 % (10.8-22.9), a mean
-  12.8 % low; within 12 % on 23 of the 29 days;
+  12.8 % low; within 12 % on 23 of the 29 days. The meter's figure
+  holds the heater's idle draw, about 1 Wh an hour, which the walk
+  does not: about 1 % of a day's;
 - when in the day it was used: 18 % of the day's electricity predicted
   in another hour than the meter put it in (11-27 %);
 - two days ordered by their electricity as the meter orders them, 84 %
   of the time (80-87 %);
-- the compressor's starts: 79 % of the recorded starts placed within 30
-  minutes (68-90 %), 0.31 a day missed (0.14-0.52) and 0.10 a day
-  predicted that the record lacks (0.03-0.21);
+- the compressor's starts: on a day with any, 79 % of its recorded
+  starts placed by a prediction within 30 minutes (68-90 %); 0.41 a
+  day placed by none (0.21-0.66), and 0.10 a day predicted that placed
+  none (0.03-0.21);
 - the upper probe's lowest over the day within 3.8 degF (2.2-5.7), a
   mean 2.8 degF warm.
 
