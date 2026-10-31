@@ -227,7 +227,9 @@ heat at the map's air slope, about a ninth of the map's own error
 forecast's air is shifted through a fresh reading beside the heater,
 else the heater's own from the last hour while its compressor ran, else
 left unanchored (the inputs, below); it carries the cooling only as its
-anchor did, and at most leaves out those 0.49 degF. A room of its own
+anchor did, and otherwise leaves it out: at this installation 0.49
+degF on average, 0.95 at the top of the measurement's range; other
+rooms may differ. A room of its own
 would need its capacity and its loss to outdoors, which no heater's
 record measures.
 
