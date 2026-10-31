@@ -339,7 +339,8 @@ Entry points
    is from the first walk's (``residual_f``, ``residual_wh``,
    ``heating_alike``): a tail that ends them alike, the same layers
    and, walked on as itself, with no water drawn or circulation
-   started past its end (the tail itself runs none started past it),
+   started past its end (the tail itself runs none started at or after
+   it),
    past every start, hold and lockout still due and every TOU window
    opening on the way (up to 16 h), the same electricity and layers,
    leaves nothing between them unvalued. It takes

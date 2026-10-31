@@ -795,10 +795,10 @@ class TestCarryOn:
         assert not owing.heating_alike
 
     def test_a_tail_runs_no_circulation_started_past_its_end(self) -> None:
-        # A recovery under way at the end, a window opening after it: its
-        # cap is judged without the run starting past the end, and the
-        # run under way there goes on as given. Given only the runs
-        # starting before its end, the tail is simulate's.
+        # A recovery under way at the end, a window opening after it: the
+        # tail keeps the run under way at the end, to its given end, and
+        # not the one starting past it. Given only the runs starting
+        # before its end, the tail is simulate's.
         m = timedelta(minutes=1)
         start = TAIL.start
         end = start + 60 * m
@@ -842,12 +842,11 @@ class TestCarryOn:
                 tou_windows_in_force=window,
             )
 
+        kept = carry._circulated_by(tail.loads, tail.until, PARAMS)
+        assert kept.circulation == (under_way,)
         before = alone((under_way,))
         assert carried.tail.input_wh == before.input_wh
         assert carried.tail.end_state == before.end_state
-        assert carried.tail.end_state != alone((under_way, later)).end_state
-        clipped = sim.CirculationRun(start=under_way.start, end=end)
-        assert carried.tail.end_state != alone((clipped,)).end_state
 
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):

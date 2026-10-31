@@ -159,7 +159,7 @@ def carry_on(
     (``_circulated_by``): the runs merged as ``simulate`` merges them
     (``CirculationParams.run_gap_min``) and those starting before the
     end kept, a run under way there to its given end, a gap merged
-    across the end flowing to it, no run starting past it. What looks
+    across the end flowing to it, no run starting at or after it. What looks
     past the end (a recovery model's climb, the judgement of a TOU cap
     on a recovery) sees no run starting after it, as it sees no draw
     there. Inside the tail's span this changes nothing without a
