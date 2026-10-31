@@ -34,8 +34,8 @@ each candidate on each member; compare candidates member by member.
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
@@ -86,6 +86,11 @@ def members(
     if count < 1:
         raise ValueError("an ensemble has at least one member")
     profile = draw_profile(slots, start, end)
+    # In UTC: offsets and durations added to a local instant are the
+    # wall clock's, which an hour repeated or skipped by daylight saving
+    # moves.
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    slots = [replace(s, valid_at=s.valid_at.astimezone(UTC)) for s in slots]
     # The windows as ``forecast_loads`` makes them, without its expected
     # draws, which a valid slot can make longer than a ``Draw`` runs.
     windows = tuple(
@@ -323,7 +328,8 @@ def _draws_in(
     out: list[Draw] = []
     for d in draws:
         end = d.at + timedelta(seconds=d.duration_s)
-        if d.duration_s <= 0.0:
+        # One shorter than the clock's resolution is all at ``at``.
+        if d.duration_s <= 0.0 or end == d.at:
             if start <= d.at < until:
                 out.append(d)
             continue

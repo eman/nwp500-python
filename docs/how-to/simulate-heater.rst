@@ -689,7 +689,7 @@ longer than a day is cut to a day at that flow, so a slot whose
 durations reach past a day draws less than it publishes. A short
 draw is its slot's means. A seed gives the same members whatever their
 number. ``weigh`` gives each walk the member's draws and the
-forecast's draw windows inside its span, a draw across an edge cut to
+forecast's draw windows overlapping its span, a draw across an edge cut to
 it at its own flow, keeping its own circulation and all else; a
 scenario reaching outside the members' span is refused, since past it
 the draws are unknown. Its other keyword inputs are ``simulate``'s.

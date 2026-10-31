@@ -4,6 +4,7 @@ on the same members."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
@@ -221,6 +222,25 @@ class TestMembers:
         (m,) = E.members(slots, *DAY, count=1)
         assert m.long_draws and m.loads.windows
 
+    def test_a_local_span_across_the_repeated_hour_draws_inside_it(
+        self,
+    ) -> None:
+        # 2026-11-01 01:00 to 02:00 PDT then PST in Los Angeles: a span
+        # starting in the repeated hour's second pass.
+        la = ZoneInfo("America/Los_Angeles")
+        t0 = datetime(2026, 11, 1, 8, 0, tzinfo=UTC)
+        slots = [
+            replace(s, valid_at=t0 + F.SLOT * k) for k, s in enumerate(issue())
+        ]
+        start = datetime(2026, 11, 1, 1, 10, tzinfo=la, fold=1)
+        # A fold=1 instant compares unequal across zones (PEP 495).
+        utc = start.astimezone(UTC)
+        assert utc == datetime(2026, 11, 1, 9, 10, tzinfo=UTC)
+        end = utc + timedelta(hours=2)
+        for m in E.members(slots, start, end, count=200):
+            assert all(utc <= d.at < end for d in m.loads.draws)
+            assert m.start == utc and m.start.tzinfo is UTC
+
     def test_a_span_the_issue_does_not_cover_is_refused(self) -> None:
         late = T0 + timedelta(days=7)
         with pytest.raises(ValueError, match="no_covering_issue"):
@@ -325,6 +345,8 @@ class TestWeigh:
             start=DAY[0],
             end=DAY[1],
         )
+        tiny = Draw(at=start + timedelta(hours=1), gallons=3.0, duration_s=4e-7)
+        assert E._draws_in([tiny], start, until) == (tiny,)
         (cut,) = E._draws_in(member.loads.draws, start, until)
         assert cut.at == start and cut.duration_s == 210.0
         assert cut.gallons == pytest.approx(6.0 * 210 / 300)
