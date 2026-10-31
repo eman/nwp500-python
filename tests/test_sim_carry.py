@@ -576,7 +576,7 @@ class TestCarryOn:
                 sim.Draw(at=end + timedelta(seconds=30), gallons=20.0),
             )
         )
-        kept = carry._drawn_by(loads, end)
+        kept = carry._drawn_by(loads, end, PARAMS)
         assert [
             (at, round(g, 6)) for d in kept.draws for at, g in d.pieces()
         ] == [
@@ -587,11 +587,51 @@ class TestCarryOn:
         whole = sim.Loads(
             draws=(sim.Draw(at=at(12), gallons=6.0, duration_s=60.0),)
         )
-        assert carry._drawn_by(whole, end) == whole
+        assert carry._drawn_by(whole, end, PARAMS) == whole
 
-        assert carry._drawn_by(loads, end).circulation_known_until is None
+        assert (
+            carry._drawn_by(loads, end, PARAMS).circulation_known_until is None
+        )
         quiet = sim.Loads(circulation=())
-        assert carry._drawn_by(quiet, end).circulation_known_until == end
+        assert (
+            carry._drawn_by(quiet, end, PARAMS).circulation_known_until == end
+        )
+        # A run starting at the end is past it; two either side of it,
+        # closer than the run gap, are the one run the tail ran through
+        # its end, kept whole.
+        m = timedelta(minutes=1)
+        runs = sim.Loads(
+            circulation=(
+                sim.CirculationRun(start=end - 9 * m, end=end - 2 * m),
+                sim.CirculationRun(start=end + m, end=end + 4 * m),
+                sim.CirculationRun(start=end + 30 * m, end=end + 35 * m),
+            )
+        )
+        kept_runs = carry._drawn_by(runs, end, PARAMS).circulation
+        assert kept_runs is not None
+        assert [(r.start, r.end) for r in kept_runs] == [
+            (end - 9 * m, end + 4 * m)
+        ]
+        at_end = sim.Loads(
+            circulation=(sim.CirculationRun(start=end, end=end + 5 * m),)
+        )
+        assert carry._drawn_by(at_end, end, PARAMS).circulation == ()
+        # Walked with what is kept, the tail is the tail.
+        cold = TAIL.model_copy(
+            update={
+                "state": sim.HeaterState(upper_f=110, lower_f=100),
+                "loads": runs.model_copy(update={"draws": loads.draws}),
+            }
+        )
+        cut = cold.model_copy(
+            update={"loads": carry._drawn_by(cold.loads, end, PARAMS)}
+        )
+        whole_tail, cut_tail = (
+            sim.simulate(cold, PARAMS),
+            sim.simulate(cut, PARAMS),
+        )
+        assert cut_tail.input_wh == whole_tail.input_wh
+        assert cut_tail.end_state == whole_tail.end_state
 
     def test_nothing_past_a_tail_hides_a_start_owed(self) -> None:
         # In a window to 17:30, one tank at 17:03 waits for its close to

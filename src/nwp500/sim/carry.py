@@ -26,9 +26,18 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from nwp500.sim.api import ENGINE_MODE, simulate
+from nwp500.sim.circulation import RUN_GAP, Circulation
 from nwp500.sim.engine import RECOVERY_AHEAD, Resume
 from nwp500.sim.extensions import RecoveryModel
-from nwp500.sim.inputs import HEAT_PUMP, Commands, Draw, Loads, Scenario, Write
+from nwp500.sim.inputs import (
+    HEAT_PUMP,
+    CirculationRun,
+    Commands,
+    Draw,
+    Loads,
+    Scenario,
+    Write,
+)
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
 from nwp500.sim.result import SimulationResult
@@ -68,7 +77,8 @@ class Carried:
     #: circulation starting past its end, past every instant still due
     #: at any tail's end (a start's hold ending, a start pending, the
     #: restart lockout releasing, an element's heat reaching the water,
-    #: a held mode landing) and every TOU window open on the way, up to
+    #: a held mode landing, a capped stop's window closing) and every
+    #: TOU window open on the way, up to
     #: ``RECOVERY_AHEAD``, and ``GO_ON_PAST`` more, spending the same
     #: electricity past the end, within ``GO_ON_WH``, and ending with
     #: the same layers, within ``SETTLED_F`` (an element's heat still
@@ -290,7 +300,7 @@ def _go_on(
             scenario.model_copy(
                 update={
                     "horizon": scenario.horizon + span,
-                    "loads": _drawn_by(scenario.loads, until),
+                    "loads": _drawn_by(scenario.loads, until, params),
                 }
             ),
             params,
@@ -305,13 +315,14 @@ def _go_on(
     return out
 
 
-def _drawn_by(loads: Loads, until: datetime) -> Loads:
-    """``loads`` with only the water drawn before ``until``, a draw
-    running past it kept as the pieces the walk took before it, each at
-    its instant with the draw's own per-draw volume; circulation known
-    no further than ``until``, so a run starting past it charges
-    nothing and one under way at it is charged as the tail charged
-    it."""
+def _drawn_by(loads: Loads, until: datetime, params: HeaterParams) -> Loads:
+    """``loads`` with only the water drawn and the circulation started
+    before ``until``. A draw running past it is kept as the pieces the
+    walk took before it, each at its instant with the draw's own
+    per-draw volume. The runs are merged first, as ``simulate`` merges
+    them over the whole input (``CirculationParams.run_gap_min``), and
+    those starting before ``until`` kept: one under way there, runs
+    past it merged in, goes on whole as the tail ran it."""
     draws: list[Draw] = []
     for d in loads.draws:
         pieces = [(at, g) for at, g in d.pieces() if at < until]
@@ -324,17 +335,26 @@ def _drawn_by(loads: Loads, until: datetime) -> Loads:
             for at, g in pieces
             if g > 0.0
         ]
+    if loads.circulation is None:
+        return loads.model_copy(update={"draws": tuple(draws)})
+    gap = (
+        RUN_GAP
+        if params.circulation is None
+        else timedelta(minutes=params.circulation.run_gap_min)
+    )
     known = loads.circulation_known_until
+    merged = Circulation(
+        tuple((r.start, r.end) for r in loads.circulation), known, gap
+    ).runs
     return loads.model_copy(
         update={
             "draws": tuple(draws),
-            "circulation_known_until": (
-                None
-                if loads.circulation is None
-                else until
-                if known is None
-                else min(known, until)
+            "circulation": tuple(
+                CirculationRun(start=a, end=b) for a, b in merged if a < until
             ),
+            "circulation_known_until": until
+            if known is None
+            else min(known, until),
         }
     )
 

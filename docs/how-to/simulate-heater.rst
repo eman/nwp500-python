@@ -613,7 +613,8 @@ tails going on alike (``heating_alike``: each tail walked on as
 itself, its settings, writes and schedules going on, with no water
 drawn and no circulation starting past its end, beyond every hold,
 pending start, lockout, element heat and held mode still due at
-either's end and every TOU window open on the way, spends the same
+either's end and every TOU window open on the way, up to 16 h
+(``engine.RECOVERY_AHEAD``), spends the same
 electricity and ends with the same layers; a run, or a start pending
 or held off, in one tail and not another is heat still to pay for),
 and

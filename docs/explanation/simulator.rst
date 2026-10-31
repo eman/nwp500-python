@@ -338,9 +338,10 @@ Entry points
    and its tail, their electricity by slot, and how far the tail's end
    is from the first walk's (``residual_f``, ``residual_wh``,
    ``heating_alike``): a tail that ends them alike, the same layers
-   and, walked on as itself past every start, hold, lockout and TOU
-   window still due, the same electricity and layers, leaves nothing
-   between them unvalued. It takes
+   and, walked on as itself, with no water drawn or circulation
+   started past its end, past every start, hold and lockout still due
+   and every TOU window opening on the way (up to 16 h), the same
+   electricity and layers, leaves nothing between them unvalued. It takes
    ``simulate``'s keyword inputs for every tail: a ``recovery`` model
    and ``start_hold`` as the walks had them, any windows over the
    tail's own span.
