@@ -668,7 +668,8 @@ Fixed
   of the fitted model: with the 65's terms held, 6 to 96 layers move a
   recovery from 253 to 281 min and back, and 24 layers, refitted,
   scored no better than 12 on the held-out record (recoveries 38.2 min
-  off against 37.7) and walk 1.55 times as long. A test holds the
+  off against 37.7, both without the site's installation) and walk
+  1.55 times as long. A test holds the
   default at 12.
 
 - The methodology says why the air is an input and not a state: the

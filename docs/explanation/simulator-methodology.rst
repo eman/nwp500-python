@@ -174,8 +174,13 @@ terms (the probes' heights, spreads and offset, the condenser's span,
 the inlet zone, the column's conductance and the losses) are fitted at
 12 layers and absorb what 12 layers do. ``TankParams.layers`` is not a
 resolution to turn up: with the terms held, other counts move the
-answers, and not steadily. On the 65's defaults, from a 130 degF tank
-after a 40 gal draw at 58 degF:
+answers, and not steadily. On the 65's defaults (no mixing valve), with
+the air held at 65 degF: a mixed 130 degF tank gives a 40 gal draw at
+once, the mains at 58 degF, and from the draw's end the compressor
+alone runs until the lower probe reads 130.9 degF, or the upper
+element alone, 5,148 W, until the upper probe reads 130 degF; the
+gallons are those the drawn tank then delivers over 105 degF
+(``stratified.draw``, ``walk``, ``deliverable_gal``):
 
 .. list-table::
    :header-rows: 1
@@ -222,14 +227,17 @@ after a 40 gal draw at 58 degF:
      - 15.0
      - 124.39
 
-A day's standby is the same at every count, to 0.15 degF. The
+A day's standby from 130 degF is the same at every count, to 0.15
+degF. The
 recovery's swings are the condenser's: what it heats turns over into
 the layers above a whole layer at a time, so when the lower probe
 reaches its stop depends on where the layers' edges fall. The
 element's are its own: it heats its layer whole (below).
 
 Moving to 24 layers and refitting was tried (2026-10-30) and dropped.
-Fitted before 2026-09-18 and scored after, it read recoveries 38.2 min
+Fitted before 2026-09-18 and scored after, both without the site's
+installation (``score_sim`` without ``--site-installation``, so not
+the basis of :doc:`simulator`'s accuracy), it read recoveries 38.2 min
 off against 37.7 at 12, their energy 12.9 % against 12.4, the draws'
 lower probe 3.00 degF RMS against 3.03: no difference outside the
 scores' intervals. Refitted on the whole record, its upper probe

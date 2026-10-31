@@ -22,7 +22,9 @@ and an upper element nearer its measured climb.
 
 **Found.** Fitted before 2026-09-18 and scored after, no answer moved
 outside the scores' intervals: recoveries 38.2 min off against 37.7,
-their energy 12.9 % against 12.4. The upper probe climbs under the
+their energy 12.9 % against 12.4. Both were scored without the site's
+installation, so these are not the basis of :doc:`simulator`'s
+accuracy; compare a new score only with one made the same way. The upper probe climbs under the
 upper element 1.70 degF/min against 1.58 at 12 and the record's 2.01,
 as the refit widens the probe's spread. A walk takes 1.55 times as
 long, and the refit lands on another point of the ridge the bottom's
@@ -42,8 +44,9 @@ A room the heat pump cools (2026-10-30)
 **Tried.** Measured, not built: the air beside the heater over 230
 runs against the same hours on nearby days with nothing running.
 
-**Found.** The room cooled 0.49 degF on average over a run (0.04-0.95),
-27 BTU/hr of the heat, about a ninth of the heat map's own error. A
+**Found.** Over a run the air rose 0.49 degF less than at the same
+hours with nothing running (0.04-0.95), 27 BTU/hr of the heat at the
+map's air slope, about a ninth of the heat map's own error. A
 replay's air carries it; a forecast's carries it as its anchor does.
 
 **Why dropped.** Too small to model, and a room of its own needs its
@@ -89,8 +92,11 @@ probe's reading.
 min and the electricity's from 5.7 % to 9.9 %. Over the 21 from
 2026-04-16, the 8 under 90 minutes went from 1.9 min short to 8.2.
 
-**Why dropped.** Worse where it counts. Two errors partly cancel in
-the model as it is, and fixing one alone makes the other show.
+**Why dropped.** Worse where it counts. At the time two errors partly
+cancelled: the power, read at the condenser's water below the probe it
+was fitted on, priced the long runs low. The power has since been
+refitted where it is read, so that offset is gone, and the trial,
+against that older model, does not say how the offset would do now.
 
 **Account.** :doc:`simulator`, "Two errors in a heat-pump recovery
 partly cancel".
@@ -101,8 +107,8 @@ A hold imposed at the compressor's start (2026-10-28)
 
 **Tried.** The minutes the lower probe holds after a start, fitted by
 how long the compressor was off and imposed on the walk
-(``CompressorParams.start_hold_min``, still a parameter, None by
-default).
+(``CompressorParams.start_hold_min``, still a parameter, by default
+five holds of 0 minutes).
 
 **Found.** The tank's fit had to bend to it: the bottom's loss came out
 0.887 BTU/hr per degF with the hold imposed against 0.168 without, and
