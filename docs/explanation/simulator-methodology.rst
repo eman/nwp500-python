@@ -169,6 +169,82 @@ layers' energy to rounding. Where a temperature drives the heat, the
 air, a neighbour, the condenser's water, the operator reads it, and
 books the heat it moves in :math:`h`.
 
+**The layer count is part of the fitted model.** The tank's fitted
+terms (the probes' heights, spreads and offset, the condenser's span,
+the inlet zone, the column's conductance and the losses) are fitted at
+12 layers and absorb what 12 layers do. ``TankParams.layers`` is not a
+resolution to turn up: with the terms held, other counts move the
+answers, and not steadily. On the 65's defaults, from a 130 degF tank
+after a 40 gal draw at 58 degF:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 21 21 21 21
+
+   * - Layers
+     - Heat-pump recovery to the lower probe at 130.9 degF
+     - Upper element to the upper probe at 130 degF
+     - Gallons delivered over 105 degF
+     - Upper probe after the draw
+   * - 6
+     - 262.0 min
+     - 9.2 min
+     - 15.8
+     - 122.02 degF
+   * - 10
+     - 276.1
+     - 7.0
+     - 15.8
+     - 123.30
+   * - 11
+     - 281.0
+     - 11.2
+     - 15.8
+     - 123.56
+   * - 12
+     - 264.4
+     - 9.1
+     - 15.8
+     - 123.73
+   * - 13
+     - 252.9
+     - 7.4
+     - 14.6
+     - 123.83
+   * - 24
+     - 264.4
+     - 6.5
+     - 15.1
+     - 124.21
+   * - 96
+     - 262.2
+     - 6.1
+     - 15.0
+     - 124.39
+
+A day's standby is the same at every count, to 0.15 degF. The
+recovery's swings are the condenser's: what it heats turns over into
+the layers above a whole layer at a time, so when the lower probe
+reaches its stop depends on where the layers' edges fall. The
+element's are its own: it heats its layer whole (below).
+
+Moving to 24 layers and refitting was tried (2026-10-30) and dropped.
+Fitted before 2026-09-18 and scored after, it read recoveries 38.2 min
+off against 37.7 at 12, their energy 12.9 % against 12.4, the draws'
+lower probe 3.00 degF RMS against 3.03: no difference outside the
+scores' intervals. Refitted on the whole record, its upper probe
+climbs under the upper element 1.70 degF/min against 1.58 at 12 and
+the record's 2.01: the fit widens the upper probe's spread (5.6 to 6.5
+gal), and the probe feels the water under the heated layers. A walk
+takes 1.55 times as long. The fit also moved the bottom's loss and the
+inlet zone, which the record barely tells apart (0.006 BTU/hr per degF
+and 10.5 gal at 12 layers, 0.57 and 5.25 at 24): a refit at another
+count lands on another point of that ridge, not a better one. The
+element's shortfall is how it heats, a whole layer, not how many
+layers there are; a change that would close it is one that heats the
+volume over its height at any count. :doc:`simulator-tried` keeps this
+and the simulator's other changes tried and dropped.
+
 **The probes.** The probes read the layers; they are not the state.
 Each reads the layers around its height (a share of the volume from
 the bottom), weighted by :math:`e^{-d/s}` with the distance :math:`d`
@@ -413,7 +489,8 @@ layer as the layers turn over, so the upper element heats the water
 above it and the lower the whole tank. The height therefore acts in
 whole layers: the upper's layer and those above it hold 21.1 gal, so
 its heat climbs the upper probe 1.59 degF/min, where the record's clean
-runs climb it 2.01 (the next layer up, 15.8 gal, gives 2.00). The
+runs climb it 2.01 (the next layer up, 15.8 gal, gives 2.00). More
+layers do not close it (the layer count, above). The
 record's element runs mostly come with water drawn or the compressor
 running, and replayed they read the upper probe closer from the lower
 layer (7.9 degF RMS on 24 runs against 10.2), so that one is kept.
