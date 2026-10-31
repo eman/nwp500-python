@@ -34,7 +34,7 @@ from nwp500.sim.api import (
     standby,
     time_to_ready,
 )
-from nwp500.sim.carry import Carried, carry_on
+from nwp500.sim.carry import SETTLED_F, Carried, carry_on
 from nwp500.sim.defaults import (
     NO_VALVE,
     SITE_VALVE,
@@ -86,6 +86,7 @@ __all__ = (
     "CirculationRun",
     "NO_VALVE",
     "SITE_VALVE",
+    "SETTLED_F",
     "BathReady",
     "Carried",
     "Deliverable",

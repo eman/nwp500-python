@@ -17,11 +17,12 @@ of what the change costs. How alike the tails end is given
 settle them leaves that much out.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from nwp500.sim.api import simulate
+from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.inputs import Scenario
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
@@ -83,6 +84,12 @@ def carry_on(
     walks: Sequence[SimulationResult],
     tail: Scenario,
     params: HeaterParams,
+    *,
+    recovery: RecoveryModel | None = None,
+    tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
+    withheld_windows: Sequence[tuple[datetime, datetime]] = (),
+    inlet_measured: bool = False,
+    start_hold: Callable[[float | None], float] | None = None,
 ) -> tuple[Carried, ...]:
     """Each of ``walks`` walked on through ``tail`` from where it ended,
     in their order, each tail's end set beside the first's.
@@ -94,7 +101,13 @@ def carry_on(
     written at its start over what the walk left. Every walk must end
     where ``tail`` starts. A tail long enough to take each tank through
     the recovery the heater makes anyway ends them alike
-    (``Carried.settled``).
+    (``Carried.settled``). A walk that ends in, or a tail that starts
+    in, Vacation or Power Off with the other not is carried on afresh
+    from the walk's layers and history, as ``simulate`` goes on from
+    any (``resume_dropped_*`` in the tail's ``reasons``).
+
+    The keyword inputs are ``simulate``'s, the same for every tail: a
+    walk made with a recovery model is carried on with it.
 
     Raises ``ValueError`` when ``walks`` is empty, or a walk does not
     end where ``tail`` starts or carries no end, and
@@ -120,6 +133,11 @@ def carry_on(
                     }
                 ),
                 params,
+                recovery=recovery,
+                tou_windows_in_force=tou_windows_in_force,
+                withheld_windows=withheld_windows,
+                inlet_measured=inlet_measured,
+                start_hold=start_hold,
             )
         )
     lay = layout(params)

@@ -7,7 +7,6 @@ import pytest
 from sim_cases import PARAMS
 
 from nwp500 import sim
-from nwp500.sim.carry import SETTLED_F
 
 TZ = "America/Los_Angeles"
 T0 = datetime(2026, 10, 6, 0, 0, tzinfo=ZoneInfo(TZ))
@@ -147,7 +146,7 @@ class TestCarryOn:
         )
         early = short[2]
         assert not early.settled
-        assert early.residual_f > SETTLED_F
+        assert early.residual_f > sim.SETTLED_F
         # Its tank still short of the base plan's when the tail ends.
         assert early.residual_wh < 0.0
 
@@ -178,6 +177,18 @@ class TestCarryOn:
         slots = c.energy_by_slot(SLOT)
         assert len({t for t, _ in slots}) == len(slots)
         assert sum(wh for _, wh in slots if wh) == pytest.approx(c.input_wh)
+
+    def test_the_tail_walks_with_the_walks_inputs(
+        self, plans: list[sim.SimulationResult]
+    ) -> None:
+        def held(_off: float | None) -> float:
+            return 30.0
+
+        [plain] = sim.carry_on(plans[2:], TAIL, PARAMS)
+        [slow] = sim.carry_on(plans[2:], TAIL, PARAMS, start_hold=held)
+        first = plain.tail.heating[0].start.at
+        assert slow.tail.heating[0].start.at == first
+        assert slow.tail.heating[0].end > plain.tail.heating[0].end
 
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):
