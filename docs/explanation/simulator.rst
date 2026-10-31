@@ -371,7 +371,11 @@ are the held-out scoreboard's (``sim_score``): parameters calibrated
 (``sim_calibrate.calibrate_changes``) on the record and its metered
 draws from 2026-04-16 to 2026-09-18, and scored on the events from
 then to 2026-10-26, each started from the layers the record's replay
-leaves, with 90 % day-block bootstrap intervals.
+leaves, with 90 % day-block bootstrap intervals. These were measured
+on 2026-10-28, before the start's stir replaced the imposed hold; the
+changes since are scored after the list, each against the model before
+it, and a new change is scored beside the code it changes
+(:doc:`/how-to/calibrate-simulator`), not against these.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
   error 11.9 min (7.5-16.6) on the 11 with no water moving, a mean

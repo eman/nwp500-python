@@ -662,6 +662,15 @@ Fixed
   ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
   gal: 12.9 over the 65's, where the ratings differ by 5.
 
+- :doc:`/how-to/calibrate-simulator` says how a change to the
+  simulator is scored: the record's pinned span and split, the site's
+  installation (in code), and the code before the change scored the
+  same way beside it. :doc:`/explanation/simulator`'s accuracy says
+  when it was measured. :doc:`/explanation/simulator-tried` adds the
+  circulation's earlier return forms, the upper element at 0.79, the
+  heat map fitted on the model's probes, the condenser's span fitted
+  on recoveries alone, and events started from the two probes.
+
 - The new :doc:`/explanation/simulator-tried` page lists the simulator's changes
   tried against the record and not kept, each with what it found and
   where it is written up. The methodology says the layer count is part
