@@ -13,6 +13,53 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The lower probe allowed higher (2026-10-31)
+===========================================
+
+**Tried.** The tank refitted with the lower probe's height free to
+0.75 of the column instead of 0.5, after the held-out recoveries with
+water in use (drawn, or the circulation running) inside them or in the
+30 minutes before came out short, a mean 34.1 min; the five 38 min or
+more short (38-284) each start within 30 minutes of 10-31 gal drawn,
+or have a 15 gal draw inside. Fitted before 2026-09-18 and scored on
+the 27 recoveries after, on the site's installation.
+
+**Found.** The fit had not been held by the bound: the height came out
+0.481 against the base's 0.485, which was already 0.015 under the old
+bound, and every held-out score stayed inside its interval (the 16
+recoveries with water in use 41.6 min off against 42.5, a mean 32.8
+short against 34.1; the 11 without 5.6 against 5.7). The shortfall
+follows the water drawn in the 30 minutes before the start (correlation -0.63
+over 15 of the 16, the one of 2026-09-30 02:51 UTC, 284 min short,
+left out) more than the water drawn inside it (-0.43), and neither the
+start's correction to the probes (at most 1.6 degF, mostly cooling)
+nor the circulation (none on 13 of the 16) nor the mains (a mean 1.5
+degF under an inlet probe, 0.1-3.9 over 25 days of 2026-09-20..10-28,
+``cold_supply.mains_f``) accounts for it. After the three traced
+draws of 10-16 gal just before a recovery's start or inside it,
+the record's lower probe fell 13-15 degF over the next 10-35 minutes,
+with the compressor running, where the walk's moved under 3 degF; over
+the 34 held-out draws of 8 gal or more with it off, the record's fell a
+median of 12.2 degF over the hour and the walk's 10.0, less on 31 of
+the 34. So the gap lies in how a walk with the compressor running
+treats a draw's cold: its rise past the lower probe, or the
+condenser's heat where its span overlaps the inlet zone (the condenser
+0.16-0.27 of the column, the zone the bottom 0.22). The record does
+not tell those apart. Either way the walk's lower probe reaches its
+target sooner than the record's, and the heat pump stops on that
+probe.
+
+**Why dropped.** No change: the probe's range was not what held the
+fit. A change to how a running walk treats the draw's cold is what
+would close it. A correction to a recovery's duration alone would
+leave the walk's layers as they are: the lower probe read from them,
+which sets the starts, and the deliverable gallons, which are read
+from them directly.
+
+**Account.** :doc:`simulator`, "Accuracy"; :doc:`simulator-methodology`,
+"How a draw moves the tank".
+
+
 The inlet's mixing by the draw's flow (2026-10-31)
 =================================================
 

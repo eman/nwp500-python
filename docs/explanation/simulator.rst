@@ -414,8 +414,9 @@ it, and a new change is scored beside the code it changes
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
   error 11.9 min (7.5-16.6) on the 11 with no water moving, a mean
-  6.6 min long; 46.4 min (25.6-75.3) on the 16 with draws or
-  circulation inside them, a mean 20.2 min short. Over 119 recoveries
+  6.6 min long; 46.4 min (25.6-75.3) on the 16 with water in use
+  (drawn, or the circulation running) inside them or in the 30 minutes
+  before, a mean 20.2 min short. Over 119 recoveries
   each hot gallon drawn inside one added about 4.7 min to it and each
   minute of circulation about 1.3 min;
 - a recovery's electricity, from the map, against the heater's metered
@@ -470,7 +471,16 @@ gives rather than the heat at 114 degF: with the tank refitted so, on
 the same 11 recoveries the duration's mean absolute error went from 6.9
 to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
 5.0 % to 4.5 %, from 0.4 % high to 0.6 % low on average; the 16 with
-draws inside them went from 47.2 to 48.2 min.
+water in use (drawn, or the circulation running) inside them or in the
+30 minutes before went from 47.2 to 48.2 min. On the code of
+2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
+five 38 min or more short (38-284) each start within 30 minutes of
+10-31 gal drawn, or have a 15 gal draw inside; in the three of these
+traced, after draws of 10-16 gal just before the start or inside it,
+the record's lower probe fell 13-15 degF with the compressor running
+and the walk's far less, so the walk's probe reaches its target
+sooner, and the heat pump stops on that probe (:doc:`simulator-tried`, "The lower probe allowed
+higher").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
