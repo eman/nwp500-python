@@ -221,6 +221,9 @@ Removed
 - **aiohttp**: Used for async HTTP requests to the Navien API
 - **pydantic**: Used for data validation and models
 
+## Simulator Changes Tried and Dropped
+Before changing the simulator's physics or its fitted defaults (`src/nwp500/sim/`), read `docs/explanation/simulator-tried.rst`: the changes already built or measured against the record and not kept (24 layers, a winter heat-map refit, a frost derate, a room node, a running-probe offset, an imposed start hold), what the record said, and where each is written up. When a change you try is not kept, add it there.
+
 ## Key Files & Directories
 - `src/nwp500/` - Main library code
 - `examples/` - Example scripts for API and MQTT usage

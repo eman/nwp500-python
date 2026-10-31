@@ -15,6 +15,7 @@ Understanding-oriented deep dives into the library's design and advanced feature
    tank-energy
    simulator
    simulator-methodology
+   simulator-tried
    tou-recovery-cap
    unknown-values
    what-starts-a-recovery

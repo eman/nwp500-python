@@ -41,6 +41,14 @@ def test_the_65_round_trips_as_a_document() -> None:
     assert params_from_document(params_to_document(p)) == p
 
 
+def test_the_layer_count_is_the_one_the_terms_were_fitted_at() -> None:
+    """The tank's terms are fitted at 12 layers. Another count moves the
+    answers with them held, and 24 refitted scored no better: see
+    docs/explanation/simulator-tried.rst before changing it, and refit
+    the terms with it if you do."""
+    assert default_params().tank.layers == 12
+
+
 @pytest.mark.parametrize(
     ("code", "gal", "column", "ua", "inlet"),
     [
