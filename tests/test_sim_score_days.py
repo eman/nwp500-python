@@ -376,6 +376,27 @@ class TestTheDays:
             HEAT_PUMP
         ]
 
+    def test_a_drop_for_a_window_opened_after_midnight(
+        self, walked: Walked
+    ) -> None:
+        dropped = replace(
+            walked.record,
+            mode=(
+                (BEFORE, float(ENERGY_SAVER)),
+                (T0 + DAY + timedelta(seconds=2), float(HEAT_PUMP)),
+            ),
+            hp_upper_on_f=(
+                (BEFORE, 104.9),
+                (T0 + DAY + timedelta(seconds=4), 124.0),
+                (T0 + DAY + timedelta(hours=1), 104.9),
+            ),
+        )
+        second = _days(walked, dropped)[1]
+        # The walk drops it itself, where the window opens.
+        assert HEAT_PUMP not in [
+            w.mode for w in second.scenario.commands.writes
+        ]
+
     def test_a_recorder_gap_is_not_observed(self, walked: Walked) -> None:
         frame = walked.ready.frame.copy()
         frame["unrecorded"] = (frame.index >= T0 + timedelta(hours=5)) & (
@@ -524,16 +545,20 @@ class TestPlacing:
 
 class TestConcordance:
     def test_days_ordered_as_the_meter_orders_them(self) -> None:
-        assert ss._concordance([1.0, 2.0, 3.0], [10.0, 20.0, 30.0]) == [
-            1.0,
-            1.0,
-            1.0,
-        ]
+        assert ss._concordance([1.0, 2.0, 3.0], [10.0, 20.0, 30.0]) == 1.0
 
     def test_against_it(self) -> None:
-        got = ss._concordance([3.0, 2.0, 1.0], [10.0, 20.0, 30.0])
-        assert got == [0.0, 0.0, 0.0]
+        assert ss._concordance([3.0, 2.0, 1.0], [10.0, 20.0, 30.0]) == 0.0
 
     def test_a_tie_on_the_meter_says_nothing(self) -> None:
-        got = ss._concordance([1.0, 2.0], [10.0, 10.0])
-        assert all(np.isnan(got))
+        assert np.isnan(ss._concordance([1.0, 2.0], [10.0, 10.0]))
+        assert ss._concordance([1.0, 2.0, 0.0], [10.0, 10.0, 5.0]) == 1.0
+
+    def test_its_interval_draws_the_pairs_afresh(self) -> None:
+        # One day out of order among ten: 9 of 45 pairs.
+        metered = [float(k) for k in range(10)]
+        predicted = [*metered[1:], -1.0]
+        got = ss._concordance_stat(predicted, metered)
+        assert got.value == pytest.approx(36 / 45)
+        assert got.n == 10
+        assert got.lo < got.value < got.hi

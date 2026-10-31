@@ -764,7 +764,7 @@ def _one_day(
         # The walk drops an element mode where a window opens; one the
         # heater dropped for a window opened before the day began, the
         # walk cannot, so it is replayed.
-        if w.dropped and w.at >= start + heater.drop_within:
+        if w.dropped and (w.dropped_for is None or w.dropped_for >= start):
             continue
         if w.mode is not None:
             if _mode(w.mode) in (VACATION, POWER_OFF):
@@ -1404,21 +1404,44 @@ def _day_score(
 
 
 def _concordance(
+    predicted: Sequence[float] | np.ndarray,
+    metered: Sequence[float] | np.ndarray,
+) -> float:
+    """The share of pairs of days the prediction orders as the meter
+    does (more electricity or less); a pair the meter ties, a day and
+    itself among them, is left out. NaN with no such pair."""
+    p = np.asarray(predicted, dtype=float)
+    m = np.asarray(metered, dtype=float)
+    dm = m[:, None] - m[None, :]
+    upper = np.triu(np.ones_like(dm, dtype=bool), k=1) & (dm != 0.0)
+    total = int(upper.sum())
+    if not total:
+        return math.nan
+    agree = ((p[:, None] - p[None, :]) * dm > 0.0) & upper
+    return float(agree.sum()) / total
+
+
+def _concordance_stat(
     predicted: Sequence[float], metered: Sequence[float]
-) -> list[float]:
-    """For each day, the share of the other days the prediction orders
-    against it as the meter does (more electricity or less); a pair the
-    meter ties is left out. None for a day with no such pair."""
-    out: list[float] = []
-    for i, (p, m) in enumerate(zip(predicted, metered, strict=True)):
-        agree = total = 0
-        for j, (q, n) in enumerate(zip(predicted, metered, strict=True)):
-            if i == j or m == n:
-                continue
-            total += 1
-            agree += (p - q) * (m - n) > 0.0
-        out.append(agree / total if total else math.nan)
-    return out
+) -> Stat:
+    """``_concordance`` over the days, and its 90 % interval from a
+    bootstrap of them, the pairs drawn afresh in each: a day is in as
+    many pairs as there are other days, so its pairs are not apart."""
+    p = np.asarray(predicted, dtype=float)
+    m = np.asarray(metered, dtype=float)
+    rng = np.random.default_rng(SEED)
+    boot = [
+        _concordance(p[pick], m[pick])
+        for pick in (rng.integers(0, len(p), len(p)) for _ in range(N_BOOT))
+    ]
+    finite = [b for b in boot if math.isfinite(b)]
+    value = _concordance(p, m)
+    return Stat(
+        n=len(p),
+        value=value,
+        lo=float(np.quantile(finite, 0.05)) if finite else math.nan,
+        hi=float(np.quantile(finite, 0.95)) if finite else math.nan,
+    )
 
 
 # ── the score ──────────────────────────────────────────────────────
@@ -1535,8 +1558,9 @@ def score(
       against the meter's; ``day_energy_misplaced_share``, the share of
       its electricity predicted in another ``DAY_SLOT`` than the meter
       put it in (0 to 1, whatever the total); ``day_energy_concordance``
-      (higher is better), the share of the other days it is ordered
-      against, more electricity or less, as the meter orders them;
+      (higher is better), the share of pairs of days it orders, more
+      electricity or less, as the meter does (its interval from pairs
+      drawn afresh in each resample of days);
       ``day_compressor_starts_bias``, the predicted starts less the
       recorded, ``_placed_share`` the share of a day's recorded starts
       a prediction places within ``START_MATCH`` (days with none left
@@ -1587,18 +1611,15 @@ def score(
             failed["days"].append(_iso(e.start))
         else:
             scored.append((e, wh))
-    for (e, _), share in zip(
-        scored,
-        _concordance(
-            [wh for _, wh in scored], [e.metered_wh for e, _ in scored]
-        ),
-        strict=True,
-    ):
-        tally.add("day_energy_concordance", share, _day(e.start, zone))
     metrics = {
         name: _stat(values, tally.days[name])
         for name, values in sorted(tally.values.items())
     }
+    if len(scored) > 1:
+        metrics["day_energy_concordance"] = _concordance_stat(
+            [wh for _, wh in scored], [e.metered_wh for e, _ in scored]
+        )
+        metrics = dict(sorted(metrics.items()))
     return Score(
         events=found.keys(),
         metrics=metrics,

@@ -451,7 +451,7 @@ to 20:20), the metered draws, the circulation and the air:
 - when in the day it was used: 18 % of the day's electricity predicted
   in another hour than the meter put it in (11-27 %);
 - two days ordered by their electricity as the meter orders them, 84 %
-  of the time (80-87 %);
+  of the time (76-91 %);
 - the compressor's starts: on a day with any, 79 % of its recorded
   starts placed by a prediction within 30 minutes (68-90 %); 0.41 a
   day placed by none (0.21-0.66), and 0.10 a day predicted that placed
