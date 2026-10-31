@@ -239,7 +239,8 @@ Fitted before 2026-09-18 and scored after (``sim_score``, as in
 :doc:`/how-to/calibrate-simulator`), both from the defaults'
 installation, without ``site_example_params``'s mixing valve,
 circulation and mains that :doc:`simulator`'s accuracy is measured
-with, it read recoveries 38.2 min
+with (with no circulation terms the replay that starts each event
+leaves out the record's pump runs), it read recoveries 38.2 min
 off against 37.7 at 12, their energy 12.9 % against 12.4, the draws'
 lower probe 3.00 degF RMS against 3.03: no difference outside the
 scores' intervals. Refitted on the whole record, its upper probe

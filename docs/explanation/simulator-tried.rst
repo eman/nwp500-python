@@ -24,8 +24,9 @@ and an upper element nearer its measured climb.
 outside the scores' intervals: recoveries 38.2 min off against 37.7,
 their energy 12.9 % against 12.4. Both were fitted and scored from the
 defaults' installation, without ``site_example_params``'s mixing
-valve, circulation and mains, so these are not the basis of
-:doc:`simulator`'s accuracy; compare a new score only with one made
+valve, circulation and mains (with no circulation terms the replay
+that starts each event leaves out the record's pump runs), so these
+are not the basis of :doc:`simulator`'s accuracy; compare a new score only with one made
 the same way. The upper probe climbs under the
 upper element 1.70 degF/min against 1.58 at 12 and the record's 2.01,
 as the refit widens the probe's spread. A walk takes 1.55 times as
