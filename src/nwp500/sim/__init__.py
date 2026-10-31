@@ -12,6 +12,8 @@
   ready for;
 - ``element_mode(scenario, params, mode=...)``: a stint in an element
   mode, the scenario walked with the mode written at its start;
+- ``carry_on(walks, tail, params)``: each walk's end walked on through
+  one tail, so changes are weighed with what each leaves behind;
 - ``default_params(volume_code)``: one NWP500-65's parameters with no
   mixing valve; ``site_example_params`` that installation whole, valve
   included (``with_valve`` sets one); the parameters of one NWP500-65,
@@ -32,6 +34,7 @@ from nwp500.sim.api import (
     standby,
     time_to_ready,
 )
+from nwp500.sim.carry import Carried, carry_on
 from nwp500.sim.defaults import (
     NO_VALVE,
     SITE_VALVE,
@@ -84,6 +87,7 @@ __all__ = (
     "NO_VALVE",
     "SITE_VALVE",
     "BathReady",
+    "Carried",
     "Deliverable",
     "Draw",
     "DrawWindow",
@@ -111,6 +115,7 @@ __all__ = (
     "TouPeriod",
     "Trace",
     "Write",
+    "carry_on",
     "default_params",
     "element_mode",
     "active_cycle",
