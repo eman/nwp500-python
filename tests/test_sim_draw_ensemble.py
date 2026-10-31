@@ -240,6 +240,15 @@ class TestMembers:
         for m in E.members(slots, start, end, count=200):
             assert all(utc <= d.at < end for d in m.loads.draws)
             assert m.start == utc and m.start.tzinfo is UTC
+        # Slots given on the local clock, long draws over the change: the
+        # same members, windows too.
+        near = [
+            replace(s, long_rate=0.3 if k < 24 else 0.0)
+            for k, s in enumerate(slots)
+        ]
+        local = [replace(s, valid_at=s.valid_at.astimezone(la)) for s in near]
+        day = (t0, t0 + timedelta(days=1))
+        assert E.members(local, *day, count=3) == E.members(near, *day, count=3)
 
     def test_a_span_the_issue_does_not_cover_is_refused(self) -> None:
         late = T0 + timedelta(days=7)
