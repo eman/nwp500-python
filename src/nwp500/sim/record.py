@@ -51,12 +51,14 @@ class RecordedWrite:
     """A recorded change of the setpoint or of the mode (a
     ``DhwOperationSetting`` value), at the instant it was recorded.
     ``dropped``: the heater's own drop to Heat Pump at a window, not a
-    write."""
+    write; ``dropped_for``, the window opening or TOU switch-on it was
+    dropped for, the nearest."""
 
     at: datetime
     setpoint_f: float | None = None
     mode: int | None = None
     dropped: bool = False
+    dropped_for: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,7 @@ class Record:
     upper_f: Rows = ()
     lower_f: Rows = ()
     hp_lower_on_f: Rows = ()
+    hp_lower_off_f: Rows = ()
     hp_upper_on_f: Rows = ()
     tou: Rows = ()
     #: How far back a setting's value in force (the TOU switch, the
@@ -248,12 +251,28 @@ class Record:
             if m == mode:
                 continue
             if mode is not None and start < at < end:
+                near_edges = [e for e in edges if abs(e - at) <= near]
                 dropped = (
                     m == HEAT_PUMP
                     and mode in _ELEMENT_MODES
-                    and any(abs(e - at) <= near for e in edges)
+                    and bool(near_edges)
                 )
-                out.append((at, 0, RecordedWrite(at, mode=m, dropped=dropped)))
+                out.append(
+                    (
+                        at,
+                        0,
+                        RecordedWrite(
+                            at,
+                            mode=m,
+                            dropped=dropped,
+                            dropped_for=min(
+                                near_edges, key=lambda e: abs(e - at)
+                            )
+                            if dropped
+                            else None,
+                        ),
+                    )
+                )
             mode = m
         return [w for _, _, w in sorted(out, key=lambda x: (x[0], x[1]))]
 

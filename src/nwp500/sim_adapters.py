@@ -1126,6 +1126,9 @@ def record(readings: Iterable[tuple[datetime, DeviceStatus]]) -> Record:
         hp_lower_on_f=changes(
             lambda s: _from_device(HalfCelsius(s.hp_lower_on_temp_setting_raw))
         ),
+        hp_lower_off_f=changes(
+            lambda s: _from_device(HalfCelsius(s.hp_lower_off_temp_setting_raw))
+        ),
         hp_upper_on_f=changes(
             lambda s: _from_device(HalfCelsius(s.hp_upper_on_temp_setting_raw))
         ),
