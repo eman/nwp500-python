@@ -327,6 +327,66 @@ recoveries, metered (below), heat per unit of electricity was 2.50 with
 the air below 65 degF, 2.84 between 65 and 75 degF, and 3.12 above
 75 degF.
 
+**Below 61 degF the heat is not measured.** The compressor ran 48,000
+minutes with the air at 45-60 degF, nearly all from December 2025 to
+April 2026, and none of it is in the heat map. A climb counts only in a
+run with no water moving from 30 minutes before it to its end, judged
+by the draw detector and the circulation pump. The detector began
+reporting on 2026-04-16, so every earlier minute may have had a draw. The heater's
+own in-use flag did report, but it fires on circulation too, and with
+the pump's runs every few hours no whole run passes it.
+
+Neither way of admitting those climbs can be trusted. Each was tried
+on 2026-04-16 to 10-26, where the detector is known, against the
+whole-run test (45 stretches there; the fit, which also needs no water
+in the 30 minutes before the run, keeps 38):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 15 15 15 15
+
+   * - Climbs admitted by
+     - Stretches
+     - BTU/hr at 65 degF air, 120 degF water
+     - Per degF of air
+     - Per degF of water
+   * - The whole run, the detector
+     - 45
+     - 4,430
+     - +55.0
+     - -16.5
+   * - The stretch alone, the detector, 30-60 min clear before it
+     - 167-198
+     - 4,587-4,612
+     - +51.6 to +53.0
+     - -22.7 to -23.7
+   * - The stretch alone, the heater's flag, 30-60 min clear
+     - 96-130
+     - 5,052-5,062
+     - +34.0 to +36.5
+     - -25.9 to -26.5
+
+A climb after a draw reads high even when clear of it: the water under
+the lower probe stays cold, so the probes' mean is warmer than the
+tank's. Judged by the heater's flag the heat reads 14 % high and its
+rise with the air flattens by a third. The flag is all the winter has,
+and it would lift the cold end most: fitted that way over the year the
+map is 4,810 + 39.0 x (air - 65), the bias and not the heat pump. A
+rough count of the winter climbs on the same flag put the heat 19-22 %
+over the map below 60 degF for the same reason, against 3-9 % over it
+above 60.
+
+Nor does the record show frost. A frosted evaporator loses heat the
+longer it runs, and defrosting stops the compressor for minutes at a
+time; in air of 50-55 degF the runs lasted a median 369 minutes and 2 %
+of them were followed by an off under 15 minutes, against 5-9 % above
+60 degF. The controller runs the heat pump down to 41 degF
+(``ControllerParams.hp_air_range_f``). Below 61 degF the simulator
+carries the map's plane on. An answer says ``heat_map_out_of_domain``
+when a run's mean air is outside the fitted span; a run that dips under
+61 degF with its mean inside it reads the plane there unflagged. Measuring it needs a winter with the draw
+detector running.
+
 
 Electricity per recovery
 ========================
@@ -462,7 +522,8 @@ Limits
 ======
 
 One NWP500-65, at one installation, with the air beside the heater
-between about 54 and 88 degF. Deep recoveries were rare: 10 of 283
+between 45.9 and 89.3 degF; the heat pump's heat is measured only from
+61 degF (above). Deep recoveries were rare: 10 of 283
 metered recoveries in a year started with the tank averaging 125 degF
 or less, so the efficiency figures rest mostly on top-offs from a warm
 tank. The Energy Saver comparison is small and confounded by the
