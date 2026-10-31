@@ -60,6 +60,13 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **Candidates weighed over many households.** ``sim.draw_ensemble``
+  samples members from a weekly draw forecast (Poisson counts at each
+  slot's rate, long draws' durations lognormal on the published mean
+  and 90th percentile, volume with duration) and ``weigh`` walks every
+  candidate on the same members: ``cold_share``, each member's lowest
+  delivery over its long draws, and its electricity, for a cost and its
+  spread.
 - **What a change leaves behind.** ``sim.carry_on`` walks each walk's
   end on through one tail, the heater in its standing settings, so
   changes are weighed with the tank each leaves rather than over their

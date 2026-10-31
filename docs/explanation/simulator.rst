@@ -331,6 +331,13 @@ Entry points
    together, so the times, the energy and the tank at the end are one
    walk's.
 
+``draw_ensemble.weigh(scenarios, members, params)``
+   "How often does each candidate run cold, and what does it cost over
+   the households a forecast allows?": each scenario walked on every
+   member (``draw_ensemble.members``, households sampled from a weekly
+   draw forecast), the same members for every scenario, so candidates
+   are compared on the same draws.
+
 ``carry_on(walks, tail, params)``
    "What does each change leave behind?": every walk's end walked on
    through one tail, the heater in its standing settings, so changes

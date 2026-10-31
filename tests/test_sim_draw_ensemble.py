@@ -1,0 +1,205 @@
+"""Draws sampled from a weekly draw forecast (``sim.draw_ensemble``):
+members drawn as the forecast publishes them, and candidates weighed
+on the same members."""
+
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+
+import numpy as np
+import pytest
+
+from nwp500.sim import (
+    Environment,
+    HeaterState,
+    Loads,
+    Scenario,
+    Settings,
+    site_example_params,
+)
+from nwp500.sim import draw_ensemble as E
+from nwp500.sim import draw_forecast as F
+
+T0 = datetime(2026, 10, 5, tzinfo=UTC)
+#: Evening slots, 18:00 to 21:00, where the long draws come.
+EVENING = range(18 * 6, 21 * 6)
+
+
+def issue(long_rate: float = 0.25) -> list[F.ForecastSlot]:
+    """A week of slots: short draws at 0.1 a slot, long ones at
+    ``long_rate`` a slot over each evening."""
+    return [
+        F.ForecastSlot(
+            valid_at=T0 + F.SLOT * k,
+            long_rate=long_rate if k % 144 in EVENING else 0.0,
+            long_min_s=240.0,
+            long_duration_mean_s=600.0,
+            long_duration_p90_s=900.0,
+            long_volume_mean_gal=15.0,
+            long_duration_support=10.0,
+            long_volume_support=10.0,
+            short_rate=0.1,
+            short_duration_mean_s=30.0,
+            short_duration_support=10.0,
+            short_volume_mean_gal=0.5,
+            short_volume_support=10.0,
+        )
+        for k in range(1008)
+    ]
+
+
+DAY = (T0, T0 + timedelta(days=1))
+
+
+def scenario(setpoint_f: float = 120.0) -> Scenario:
+    return Scenario(
+        start=DAY[0],
+        horizon=DAY[1] - DAY[0],
+        tz="UTC",
+        state=HeaterState(upper_f=setpoint_f, lower_f=setpoint_f - 2.0),
+        settings=Settings(
+            setpoint_f=setpoint_f,
+            hp_lower_on_f=setpoint_f - 9.0,
+            hp_lower_off_f=setpoint_f,
+        ),
+        environment=Environment(ambient_f=65.0),
+        loads=Loads(),
+    )
+
+
+class TestMembers:
+    def test_a_seed_gives_the_same_members_whatever_their_number(
+        self,
+    ) -> None:
+        few = E.members(issue(), *DAY, count=3, seed=7)
+        many = E.members(issue(), *DAY, count=10, seed=7)
+        assert few == many[:3]
+        assert E.members(issue(), *DAY, count=3, seed=8) != few
+
+    def test_members_draw_what_the_forecast_expects(self) -> None:
+        slots = issue()
+        profile = F.draw_profile(slots, *DAY)
+        expected = {
+            c: sum(d.volume_gal for d in profile.draws if d.draw_class == c)
+            for c in ("long", "short")
+        }
+        ensemble = E.members(slots, *DAY, count=400)
+        long_gal = [
+            sum(
+                d.gallons
+                for d in m.loads.draws
+                if any(a == d.at for a, _ in m.long_draws)
+            )
+            for m in ensemble
+        ]
+        all_gal = [sum(d.gallons for d in m.loads.draws) for m in ensemble]
+        short_gal = [a - b for a, b in zip(all_gal, long_gal, strict=True)]
+        # The means within a few standard errors of the expectation.
+        for got, want in (
+            (long_gal, expected["long"]),
+            (short_gal, expected["short"]),
+        ):
+            err = 4.0 * float(np.std(got)) / np.sqrt(len(got))
+            assert abs(float(np.mean(got)) - want) < err
+
+    def test_a_long_draw_has_the_published_floor_and_spread(self) -> None:
+        ensemble = E.members(issue(), *DAY, count=300)
+        seconds = np.array(
+            [(b - a).total_seconds() for m in ensemble for a, b in m.long_draws]
+        )
+        assert seconds.min() >= 240.0
+        assert float(np.mean(seconds)) == pytest.approx(600.0, rel=0.05)
+        assert float(np.quantile(seconds, 0.9)) == pytest.approx(
+            900.0, rel=0.06
+        )
+        # Its volume goes with its duration, at the slot's mean flow.
+        for m in ensemble[:20]:
+            for d in m.loads.draws:
+                if any(a == d.at for a, _ in m.long_draws):
+                    assert d.gallons == pytest.approx(
+                        15.0 * d.duration_s / 600.0
+                    )
+                    assert d.per_draw_gal == d.gallons
+
+    def test_a_short_draw_is_its_slots_means(self) -> None:
+        (m,) = E.members(issue(long_rate=0.0), *DAY, count=1)
+        assert m.long_draws == ()
+        assert m.loads.draws
+        assert {(d.gallons, d.duration_s) for d in m.loads.draws} == {
+            (0.5, 30.0)
+        }
+
+    def test_with_no_spread_published_a_long_draw_is_the_mean(self) -> None:
+        slots = [replace(s, long_duration_p90_s=None) for s in issue()]
+        ensemble = E.members(slots, *DAY, count=20)
+        assert {
+            (b - a).total_seconds() for m in ensemble for a, b in m.long_draws
+        } == {600.0}
+
+    def test_every_member_keeps_the_forecasts_windows(self) -> None:
+        slots = issue()
+        windows = F.forecast_loads(F.draw_profile(slots, *DAY), DAY[0])[
+            0
+        ].windows
+        assert windows
+        assert all(
+            m.loads.windows == windows for m in E.members(slots, *DAY, count=5)
+        )
+
+    def test_a_span_the_issue_does_not_cover_is_refused(self) -> None:
+        late = T0 + timedelta(days=7)
+        with pytest.raises(ValueError, match="no_covering_issue"):
+            E.members(
+                issue(), late - timedelta(hours=1), late + timedelta(hours=1)
+            )
+        with pytest.raises(ValueError):
+            E.members(issue(), *DAY, count=0)
+
+
+class TestWeigh:
+    def test_every_candidate_meets_the_same_households(self) -> None:
+        ensemble = E.members(issue(), *DAY, count=6)
+        low, high = E.weigh(
+            [scenario(120.0), scenario(140.0)], ensemble, site_example_params()
+        )
+        for a, b, m in zip(low.walks, high.walks, ensemble, strict=True):
+            assert a.member is m and b.member is m
+        assert len(low.input_wh) == len(ensemble)
+
+    def test_a_hotter_tank_runs_cold_less_often(self) -> None:
+        params = site_example_params()
+        ensemble = E.members(issue(long_rate=0.1), *DAY, count=20)
+        low, high = E.weigh(
+            [scenario(110.0), scenario(140.0)], ensemble, params
+        )
+        assert low.cold_share > high.cold_share
+        for a, b in zip(low.walks, high.walks, strict=True):
+            if not a.member.long_draws:
+                assert a.long_min_f is None and not a.cold
+                continue
+            assert a.long_min_f is not None and b.long_min_f is not None
+            assert b.long_min_f >= a.long_min_f - 1e-9
+            assert a.cold == (a.long_min_f < params.readiness.line_f)
+
+    def test_a_difference_on_the_same_households_is_less_noisy(self) -> None:
+        ensemble = E.members(issue(long_rate=0.1), *DAY, count=20)
+        low, high = E.weigh(
+            [scenario(120.0), scenario(135.0)], ensemble, site_example_params()
+        )
+        a = np.array(low.input_wh, dtype=float)
+        b = np.array(high.input_wh, dtype=float)
+        # Against the same two walked on independent households, whose
+        # difference's spread is both spreads together.
+        assert a.std() > 0.0
+        assert (b - a).std() < 0.5 * np.hypot(a.std(), b.std())
+
+    def test_the_mean_is_none_when_a_member_is_unpriced(self) -> None:
+        ensemble = E.members(issue(), *DAY, count=3)
+        (w,) = E.weigh([scenario()], ensemble, site_example_params())
+        assert w.mean(lambda r: r.input_wh) == pytest.approx(
+            sum(v for v in w.input_wh if v is not None) / 3
+        )
+        assert w.mean(lambda r: None) is None
+
+    def test_an_empty_ensemble_is_refused(self) -> None:
+        with pytest.raises(ValueError):
+            E.weigh([scenario()], (), site_example_params())
