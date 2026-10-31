@@ -599,18 +599,23 @@ with the tail's settings written at its start over whatever the walk
 left in force: a boost left at 140 °F is returned to the standing
 setpoint, as the heater would be. A Heat Pump write a walk left held
 in a TOU window is withdrawn at a Heat Pump tail's start, as a direct
-write withdraws one; an element mode held stays held to the window's
-close, as one written inside a window would be. ``Carried.energy_by_slot`` holds the
+write withdraws one. An element mode held, carried into a tail
+standing in that mode, stays held to the window's close, as one
+written inside a window would be; a tail standing in another mode
+writes it over the hold. ``Carried.energy_by_slot`` holds the
 walk's electricity and its tail's, for any tariff; ``input_wh`` is
 their sum.
 
 The comparison is whole only when the tails end alike:
 ``Carried.settled`` says each layer at the tail's end is within
 ``sim.SETTLED_F`` (0.5 °F) of the first walk's tail's, with the same
-tails going on alike (``heating_alike``: each walked on with no draw
-past every hold, pending start, lockout and element heat still due at
-its end spends the same electricity; a run or a start pending in one
-tail and not another is heat still to pay for), and
+tails going on alike (``heating_alike``: each tail walked on as
+itself, its settings, writes and schedules going on, with no draw past
+its end, beyond every hold, pending start, lockout, element heat, held
+mode and TOU window still due at either's end, spends the same
+electricity and ends with the same layers; a run, or a start pending
+or held off, in one tail and not another is heat still to pay for),
+and
 ``residual_wh`` is the heat left over that the tail did not value.
 Lengthen the tail until every walk is settled; one that runs through
 the recovery the heater makes anyway usually is. Walks made with

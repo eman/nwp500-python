@@ -315,6 +315,38 @@ class TestCarryOn:
         assert not walk.end_state.element_running
         assert not walk.end_state.compressor_running
         assert walk.until < max(carry._due(walk, PARAMS))
+        # The same layers with no heat on its way: their tails end
+        # within SETTLED_F, the heat still arriving parts them after.
+        e = walk.end_state
+        bare = sim.simulate(
+            BASE.model_copy(
+                update={
+                    "start": walk.until - timedelta(seconds=1),
+                    "horizon": timedelta(seconds=1),
+                    "loads": sim.Loads(),
+                    "state": sim.HeaterState(
+                        upper_f=e.upper_f,
+                        lower_f=e.lower_f,
+                        layers_f=e.layers_f,
+                    ),
+                    "history": walk.end_history,
+                    "settings": SETTINGS.model_copy(update={"mode": 4}),
+                }
+            ),
+            PARAMS,
+        )
+        tail = TAIL.model_copy(
+            update={
+                "start": walk.until,
+                "horizon": timedelta(seconds=10),
+                "loads": sim.Loads(),
+                "settings": SETTINGS.model_copy(update={"mode": 4}),
+            }
+        )
+        _, other = sim.carry_on([bare, walk], tail, PARAMS)
+        assert other.residual_f <= sim.SETTLED_F
+        assert not other.heating_alike
+        assert not other.settled
 
     def test_a_lockout_with_no_start_wanted_is_none(self) -> None:
         # Both compressors off at the tail's end, one stopped a minute
@@ -411,6 +443,125 @@ class TestCarryOn:
             }
         )
         assert carry._over_a_hold(heat_pump_held, midnight).writes == ()
+        # One the simulation does not model (Power Off) decides nothing.
+        off = TAIL.model_copy(
+            update={
+                "commands": sim.Commands(
+                    reservations=(
+                        sa.reservation_entry(
+                            days=range(7),
+                            hour=0,
+                            minute=0,
+                            mode=5,
+                            temperature=120.0,
+                        ),
+                    )
+                )
+            }
+        )
+        writes = carry._over_a_hold(heat_pump_held, off).writes
+        assert [(w.at, w.mode) for w in writes] == [(TAIL.start, 1)]
+
+    def test_a_tail_goes_on_with_its_own_schedule(self) -> None:
+        # The tail's own entry raises the setpoint at 00:02; one tank's
+        # start waits out a lockout, the recoveries run out of step, and
+        # at 02:22 one is still heating to the new setpoint, the other
+        # done. Gone on in the tail's standing settings, both would stop
+        # and read alike.
+        from nwp500 import sim_adapters as sa
+
+        def walk(stopped: timedelta) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=120, lower_f=110.8),
+                        "history": sim.History(
+                            compressor_stopped_at=T0 - stopped
+                        ),
+                    }
+                ),
+                PARAMS,
+            )
+
+        tail = TAIL.model_copy(
+            update={
+                "start": T0 + timedelta(minutes=1),
+                "horizon": timedelta(minutes=141),
+                "loads": sim.Loads(),
+                "commands": sim.Commands(),
+                "schedules": sim.Schedules(
+                    reservations=(
+                        sa.reservation_entry(
+                            days=range(7),
+                            hour=0,
+                            minute=2,
+                            mode=1,
+                            temperature=130.0,
+                        ),
+                    )
+                ),
+            }
+        )
+        first, other = sim.carry_on(
+            [walk(timedelta(hours=3)), walk(timedelta(minutes=1))], tail, PARAMS
+        )
+        assert first.tail.end_state is not None
+        assert other.tail.end_state is not None
+        assert first.tail.end_state.compressor_running
+        assert not other.tail.end_state.compressor_running
+        assert other.residual_f <= sim.SETTLED_F
+        assert not other.heating_alike
+
+    def test_a_start_a_window_holds_off_is_heating_to_come(self) -> None:
+        # A peak 00:30-01:15: at 01:03 the tank below its trigger waits
+        # for the window's close, stored as no pending start.
+        periods = (
+            sim.TouPeriod(
+                season=0xFFF, week=0xFE, start_hour=0, start_minute=0,
+                end_hour=0, end_minute=29, price_max=10,
+            ),
+            sim.TouPeriod(
+                season=0xFFF, week=0xFE, start_hour=0, start_minute=30,
+                end_hour=1, end_minute=14, price_max=50,
+            ),
+            sim.TouPeriod(
+                season=0xFFF, week=0xFE, start_hour=1, start_minute=15,
+                end_hour=23, end_minute=59, price_max=10,
+            ),
+        )  # fmt: skip
+        schedules = sim.Schedules(tou_enabled=True, tou_periods=periods)
+
+        def walk(lower_f: float) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "start": at(1),
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=120, lower_f=lower_f),
+                        "schedules": schedules,
+                        "history": sim.History(
+                            compressor_stopped_at=at(1) - timedelta(hours=3)
+                        ),
+                    }
+                ),
+                PARAMS,
+            )
+
+        tail = TAIL.model_copy(
+            update={
+                "start": at(1) + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+                "schedules": schedules,
+            }
+        )
+        _, owing = sim.carry_on([walk(111.2), walk(110.8)], tail, PARAMS)
+        assert owing.residual_f <= sim.SETTLED_F
+        assert not owing.heating_alike
+        assert not owing.settled
 
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):
