@@ -18,10 +18,11 @@ The lower probe allowed higher (2026-10-31)
 
 **Tried.** The tank refitted with the lower probe's height free to
 0.75 of the column instead of 0.5, after the held-out recoveries with
-water drawn in them came out short, a mean 34.1 min; the five 38 min or
-more short (38-284) each start within 30 minutes of 10-31 gal drawn, or
-have a 15 gal draw inside. Fitted before 2026-09-18 and scored on the
-27 recoveries after, on the site's installation.
+water drawn in them or in the 30 minutes before came out short, a mean
+34.1 min; the five 38 min or more short (38-284) each start within 30
+minutes of 10-31 gal drawn, or have a 15 gal draw inside. Fitted
+before 2026-09-18 and scored on the 27 recoveries after, on the site's
+installation.
 
 **Found.** The fit had not been held by the bound: the height came out
 0.481 against the base's 0.485, which was already 0.015 under the old
