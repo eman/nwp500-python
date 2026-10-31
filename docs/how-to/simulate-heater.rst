@@ -566,6 +566,60 @@ is not modelled: it is left out, and ``reasons`` says so (``write_mode_not_model
 interval's energy could not be priced.
 
 
+Weigh what a change leaves behind
+=================================
+
+A walk's electricity says nothing of the tank it ends with. A change
+that heats late, or stops short, can come out cheapest over its own
+day and owe the difference the next. ``sim.carry_on`` walks each
+walk's end on through one tail, the span after it with the heater in
+its standing settings, so every change is weighed with what it left:
+
+.. code-block:: python
+
+   from datetime import timedelta
+
+   walks = [sim.simulate(s, params) for s in (scenario, eco)]
+   tail = scenario.model_copy(update={
+       "start": scenario.until,
+       "horizon": timedelta(hours=24),
+       "commands": sim.Commands(),
+       "loads": sim.Loads(draws=tomorrow),  # the draws expected after
+   })
+   for name, c in zip(["as it stands", "eco"], sim.carry_on(walks, tail, params)):
+       if c.input_wh is None:
+           print(name, "unpriced")  # an interval's energy is unknown
+           continue
+       cost = sum(price(at) * wh / 1000
+                  for at, wh in c.energy_by_slot(timedelta(minutes=15)))
+       print(name, cost, c.settled, c.residual_wh)
+
+Each tail starts from its walk's end (``end_state``, ``end_history``),
+with the tail's settings written at its start over whatever the walk
+left in force: a boost left at 140 °F is returned to the standing
+setpoint, as the heater would be. A Heat Pump write a walk left held
+in a TOU window is withdrawn at a Heat Pump tail's start, as a direct
+write withdraws one; an element mode held stays held to the window's
+close, as one written inside a window would be. ``Carried.energy_by_slot`` holds the
+walk's electricity and its tail's, for any tariff; ``input_wh`` is
+their sum.
+
+The comparison is whole only when the tails end alike:
+``Carried.settled`` says each layer at the tail's end is within
+``sim.SETTLED_F`` (0.5 °F) of the first walk's tail's, with the same
+tails going on alike (``heating_alike``: each walked on with no draw
+past every hold, pending start, lockout and element heat still due at
+its end spends the same electricity; a run or a start pending in one
+tail and not another is heat still to pay for), and
+``residual_wh`` is the heat left over that the tail did not value.
+Lengthen the tail until every walk is settled; one that runs through
+the recovery the heater makes anyway usually is. Walks made with
+``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``)
+are carried on with the same, passed to ``carry_on``; TOU windows
+given in force (``tou_windows_in_force``) are the tail's, over its
+span.
+
+
 Ask when the tank will be hot
 =============================
 
