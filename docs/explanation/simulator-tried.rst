@@ -18,17 +18,17 @@ The lower probe allowed higher (2026-10-31)
 
 **Tried.** The tank refitted with the lower probe's height free to
 0.75 of the column instead of 0.5, after the held-out recoveries with
-water drawn in them or in the 30 minutes before came out short, a mean
-34.1 min; the five 38 min or more short (38-284) each start within 30
-minutes of 10-31 gal drawn, or have a 15 gal draw inside. Fitted
-before 2026-09-18 and scored on the 27 recoveries after, on the site's
-installation.
+water in use (drawn, or the circulation running) inside them or in the
+30 minutes before came out short, a mean 34.1 min; the five 38 min or
+more short (38-284) each start within 30 minutes of 10-31 gal drawn,
+or have a 15 gal draw inside. Fitted before 2026-09-18 and scored on
+the 27 recoveries after, on the site's installation.
 
 **Found.** The fit had not been held by the bound: the height came out
 0.481 against the base's 0.485, which was already 0.015 under the old
 bound, and every held-out score stayed inside its interval (the 16
-recoveries with draws 41.6 min off against 42.5, a mean 32.8 short
-against 34.1; the 11 without 5.6 against 5.7). The shortfall follows
+recoveries with water in use 41.6 min off against 42.5, a mean 32.8
+short against 34.1; the 11 without 5.6 against 5.7). The shortfall follows
 the water drawn in the 30 minutes before the start (correlation -0.63
 over 15 of the 16, the one of 2026-09-30 02:51 UTC, 284 min short,
 left out) more than the water drawn inside it (-0.43), and neither the

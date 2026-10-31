@@ -470,14 +470,15 @@ gives rather than the heat at 114 degF: with the tank refitted so, on
 the same 11 recoveries the duration's mean absolute error went from 6.9
 to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
 5.0 % to 4.5 %, from 0.4 % high to 0.6 % low on average; the 16 with
-water drawn inside them or in the 30 minutes before went from 47.2 to
-48.2 min. On the code of
+water in use (drawn, or the circulation running) inside them or in the
+30 minutes before went from 47.2 to 48.2 min. On the code of
 2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
 five 38 min or more short (38-284) each start within 30 minutes of
 10-31 gal drawn, or have a 15 gal draw inside; in the three of these
-traced, after draws of 10-16 gal with the compressor running, the
-walk's lower probe fell far less than the record's, and the heat pump
-stops on that probe (:doc:`simulator-tried`, "The lower probe allowed
+traced, after draws of 10-16 gal at or just before the start or inside
+it, the record's lower probe fell 13-15 degF with the compressor
+running and the walk's far less, and the heat pump stops on that
+probe (:doc:`simulator-tried`, "The lower probe allowed
 higher").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
