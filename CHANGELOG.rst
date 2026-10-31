@@ -662,6 +662,10 @@ Fixed
   ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
   gal: 12.9 over the 65's, where the ratings differ by 5.
 
+- The methodology says why the air is an input and not a state: the
+  heat pump cools its room 0.49 °F on average over a run, 0.6 % of its
+  heat, and replays and forecasts both carry it in their air.
+
 - ``recovery-speed`` says why the heat map stops at 61 °F of air: the
   winter's 48,000 compressor minutes at 45-60 °F have no draw detector
   behind them, and the heater's own flag, the only stand-in, reads the
