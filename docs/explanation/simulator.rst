@@ -472,8 +472,8 @@ to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
 5.0 % to 4.5 %, from 0.4 % high to 0.6 % low on average; the 16 with
 draws inside them went from 47.2 to 48.2 min. On the code of
 2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
-short ones start minutes after a shower or have one inside them; after
-such a draw, with the compressor running, the walk's lower probe falls
+five 38 min or more short (38-284) each start within 30 minutes of
+10-31 gal drawn, or have a 15 gal draw inside; after such a draw, with the compressor running, the walk's lower probe falls
 far less than the record's, and the heat pump stops on that probe
 (:doc:`simulator-tried`, "The lower probe allowed higher").
 

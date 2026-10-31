@@ -18,8 +18,9 @@ The lower probe allowed higher (2026-10-31)
 
 **Tried.** The tank refitted with the lower probe's height free to
 0.75 of the column instead of 0.5, after the held-out recoveries with
-water drawn in them came out short: a recovery that starts minutes
-after a shower, or has one inside it, ends early in the walk. Fitted
+water drawn in them came out short, a mean 34.1 min, most of all those
+that start minutes after a shower or have one inside them: those end
+early in the walk. Fitted
 before 2026-09-18 and scored on the 27 recoveries after, on the site's
 installation.
 
@@ -33,7 +34,7 @@ over 15 of the 16, the one of 2026-09-30 02:51 UTC, 284 min short,
 left out) more than the water drawn inside it (-0.43), and neither the
 start's correction to the probes (at most 1.6 degF, mostly cooling)
 nor the circulation (none on 13 of the 16) nor the mains (a mean 1.5
-degF under an inlet probe, 0.1-3.9 over 25 days,
+degF under an inlet probe, 0.1-3.9 over 25 days of 2026-09-20..10-28,
 ``cold_supply.mains_f``) accounts for it. After the three traced
 draws of 10-16 gal at or just before a recovery's start or inside it,
 the record's lower probe fell 13-15 degF over the next 10-35 minutes,
@@ -51,8 +52,9 @@ probe.
 **Why dropped.** No change: the probe's range was not what held the
 fit. A change to how a running walk treats the draw's cold is what
 would close it. A correction to a recovery's duration alone would
-leave the lower probe, and so the starts and the deliverable gallons
-it sets, as they are.
+leave the walk's layers as they are: the lower probe read from them,
+which sets the starts, and the deliverable gallons, which are read
+from them directly.
 
 **Account.** :doc:`simulator`, "Accuracy"; :doc:`simulator-methodology`,
 "How a draw moves the tank".
