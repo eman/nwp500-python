@@ -637,6 +637,88 @@ given in force (``tou_windows_in_force``) are the tail's, over its
 span.
 
 
+Weigh candidates over many households
+=====================================
+
+A walk on a forecast's expected draws meets a household that draws a
+fraction of a shower in each slot. It gets the day's heat about right
+and never runs out: a tank runs cold on the evening two showers come
+close together, which an expectation does not have. Sample households
+from the forecast instead, and walk every candidate on the same ones.
+Given an issue's ``slots``, when it was issued (``issued_at``) and
+``now``, the standing ``scenario``, a ``boost`` to weigh against it,
+``params`` and a ``price(at)`` per kWh:
+
+.. code-block:: python
+
+   from datetime import timedelta
+
+   from nwp500.sim import draw_ensemble, draw_forecast
+
+   if draw_forecast.check_issue(slots, scenario.start, scenario.until,
+                                issued_at=issued_at, now=now) is None:
+       households = draw_ensemble.members(
+           slots, scenario.start, scenario.until, count=50, seed=0)
+       standing, boosted = draw_ensemble.weigh(
+           [scenario, boost], households, params)
+
+       def cost(walk):
+           slots_wh = walk.energy_by_slot(timedelta(hours=1))
+           if any(wh is None for _, wh in slots_wh):
+               return None
+           return sum(wh / 1000 * price(at) for at, wh in slots_wh)
+
+       print(standing.cold_share, boosted.cold_share)
+       saved = [
+           None if (x := cost(a.walk)) is None or (y := cost(b.walk)) is None
+           else x - y
+           for a, b in zip(standing.walks, boosted.walks)
+       ]
+       priced = [v for v in saved if v is not None]
+       if priced:
+           print(sum(priced) / len(priced), len(saved) - len(priced))
+
+Each member draws, in each slot and class, a Poisson count of draws at
+the slot's rate, each at a uniform instant in the slot (a slot the
+span cuts, over the part inside it, at its rate for that part). A long draw
+lasts the slot's minimum and a lognormal part matched to its published
+mean and 90th percentile (above a lower floor, where none above the
+minimum reaches that 90th percentile); its volume goes with its duration at the
+slot's mean flow, so the expected volume is the published one. A draw
+longer than a day is cut to a day at that flow, so a slot whose
+durations reach past a day draws less than it publishes. A short
+draw is its slot's means. A seed gives the same members whatever their
+number. ``weigh`` gives each walk the member's draws and the
+forecast's draw windows overlapping its span, a draw across an edge cut to
+it at its own flow, keeping its own circulation and all else; a
+scenario reaching outside the members' span is refused, since past it
+the draws are unknown. Its other keyword inputs are ``simulate``'s.
+
+``cold_share`` is the share of members in which a long draw's
+delivery fell below the line (``ReadinessParams.line_f``);
+``MemberWalk.long_min_f`` is each member's lowest, and
+``MemberWalk.cut_short`` counts the long draws running past the walk's
+start or end, judged only over it. Over 50 members a
+share near 10 % has a standard error of about 4 points. Compare two
+candidates member by member (``saved`` above): both met the same
+households, so their difference is far less noisy than it would be
+between two ensembles drawn apart.
+
+How well the spread matches a household's (measured 2026-10-31 on one
+installation's 47 metered days, 2026-09-12 to 10-30, each against the
+newest issue before it, 500 members):
+
+- **The evening, 16:00 to 21:00**: 11 of the 47 days drew a volume
+  below the members' 10th percentile or above their 90th, 23 % (90 %
+  CI 14 to 36 %) against the 20 % a right spread gives. The recorded
+  evenings averaged 13.5 gallons against the forecast's 10.4, so its
+  evening rates run low; the single expected trace drew less than the
+  evening did on 25 of the 47, and under two-thirds of it on 17.
+- **The whole day**: 4 of the 47, 9 % (90 % CI 3 to 18 %): the members
+  spread wider than the days did, as independent counts would for a
+  household steadier from day to day. The means agree, 29.2 gallons
+  recorded against 30.8 expected.
+
 Ask when the tank will be hot
 =============================
 
