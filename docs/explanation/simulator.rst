@@ -473,9 +473,11 @@ to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
 draws inside them went from 47.2 to 48.2 min. On the code of
 2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
 five 38 min or more short (38-284) each start within 30 minutes of
-10-31 gal drawn, or have a 15 gal draw inside; after such a draw, with the compressor running, the walk's lower probe falls
-far less than the record's, and the heat pump stops on that probe
-(:doc:`simulator-tried`, "The lower probe allowed higher").
+10-31 gal drawn, or have a 15 gal draw inside; after the three of
+these traced (draws of 10-16 gal), with the compressor running, the
+walk's lower probe fell far less than the record's, and the heat pump
+stops on that probe (:doc:`simulator-tried`, "The lower probe allowed
+higher").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
