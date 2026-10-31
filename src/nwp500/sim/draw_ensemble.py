@@ -11,11 +11,14 @@ cold and the spread of the cost.
 
 **A member** draws, in each slot and class, a count of draws from a
 Poisson distribution at the slot's rate, each starting at a uniform
-instant in the slot. A long draw's duration is the slot's minimum
+instant in the slot; a slot the span cuts, over the part inside it at
+its rate for that part. A long draw's duration is the slot's minimum
 (``long_min_s``) and a lognormal part matched to the published mean and
-90th percentile above it; with no 90th percentile above the mean it is
-the mean. Its volume goes with its duration at the slot's mean flow
-(``volume_mean / duration_mean``), so the expected volume is the
+90th percentile above it; where no lognormal above the minimum reaches
+that 90th percentile, above a lower floor that matches both; with no
+90th percentile above the mean it is the mean. Its volume goes with
+its duration at the slot's mean flow (``volume_mean /
+duration_mean``), so the expected volume is the
 published one. A short draw, whose spread is not published, is its
 slot's means. Each member is seeded on its own (``seed`` and its
 index), so a member is the same whatever the number asked for.
@@ -62,6 +65,9 @@ class Member:
     loads: Loads
     #: Each long draw's span: what a shower asks of the tank.
     long_draws: tuple[tuple[datetime, datetime], ...]
+    #: The span sampled, ``[start, end)``.
+    start: datetime
+    end: datetime
 
 
 def members(
@@ -80,9 +86,13 @@ def members(
         raise ValueError("an ensemble has at least one member")
     profile = draw_profile(slots, start, end)
     windows = forecast_loads(profile, start)[0].windows
-    inside = [s for s in slots if start <= s.valid_at < end]
+    overlapping = [
+        s for s in slots if s.valid_at < end and s.valid_at + SLOT > start
+    ]
     return tuple(
-        _member(inside, windows, end, np.random.default_rng([seed, k]))
+        _member(
+            overlapping, windows, start, end, np.random.default_rng([seed, k])
+        )
         for k in range(count)
     )
 
@@ -90,6 +100,7 @@ def members(
 def _member(
     slots: Sequence[ForecastSlot],
     windows: Sequence[DrawWindow],
+    start: datetime,
     end: datetime,
     rng: np.random.Generator,
 ) -> Member:
@@ -102,13 +113,15 @@ def _member(
             mean_s = float(getattr(s, f"{draw_class}_duration_mean_s") or 0.0)
             if rate <= 0.0 or volume <= 0.0:
                 continue
-            n = int(rng.poisson(rate))
+            # A slot the span cuts is drawn over the part inside it, at
+            # its rate for that part.
+            a = max(s.valid_at, start)
+            b = min(s.valid_at + SLOT, end)
+            share = (b - a) / SLOT
+            n = int(rng.poisson(rate * share))
             if n == 0:
                 continue
-            # Inside the span: a last slot cut short by ``end`` counts
-            # whole, as ``draw_profile`` counts it, its draws in it.
-            reach = min(SLOT, end - s.valid_at).total_seconds()
-            offsets = rng.uniform(0.0, reach, n)
+            offsets = rng.uniform(0.0, (b - a).total_seconds(), n)
             if draw_class == "long":
                 seconds = _long_seconds(s, mean_s, rng, n)
             else:
@@ -120,7 +133,7 @@ def _member(
                 gal = volume * duration / mean_s if mean_s > 0.0 else volume
                 if gal <= 0.0:
                     continue
-                at = s.valid_at + timedelta(seconds=float(off))
+                at = a + timedelta(seconds=float(off))
                 draws.append(
                     Draw(
                         at=at,
@@ -135,6 +148,8 @@ def _member(
     return Member(
         loads=Loads(draws=tuple(draws), windows=tuple(windows)),
         long_draws=tuple(sorted(long_draws)),
+        start=start,
+        end=end,
     )
 
 
@@ -142,29 +157,37 @@ def _long_seconds(
     s: ForecastSlot, mean_s: float, rng: np.random.Generator, n: int
 ) -> np.ndarray:
     """``n`` long draws' durations: the slot's minimum and a lognormal
-    part with the mean and the 90th percentile above it; the mean when
-    the spread is not known."""
-    floor = float(s.long_min_s or 0.0)
-    floor = min(floor, mean_s)
+    part with the mean and the 90th percentile above it (``_shape``);
+    the mean when the spread is not known."""
+    floor, sigma = _shape(mean_s, s.long_min_s, s.long_duration_p90_s)
     m = mean_s - floor
-    p90 = s.long_duration_p90_s
-    sigma = _sigma(m, None if p90 is None else float(p90) - floor)
     if m <= 0.0 or sigma <= 0.0:
         return np.full(n, mean_s)
     mu = math.log(m) - sigma * sigma / 2.0
     return floor + rng.lognormal(mu, sigma, n)
 
 
-def _sigma(mean: float, p90: float | None) -> float:
-    """The lognormal's sigma with ``mean`` and 90th percentile ``p90``
-    (both above the floor): the smaller root of
-    ``z90 sigma - sigma^2 / 2 = ln(p90 / mean)``, at most ``z90``; 0
-    with no 90th percentile above the mean."""
-    if p90 is None or mean <= 0.0 or p90 <= mean:
-        return 0.0
-    r = math.log(p90 / mean)
-    disc = _Z90 * _Z90 - 2.0 * r
-    return _Z90 if disc <= 0.0 else _Z90 - math.sqrt(disc)
+def _shape(
+    mean: float, minimum: float | None, p90: float | None
+) -> tuple[float, float]:
+    """The floor and the sigma of a lognormal above it with ``mean``
+    and 90th percentile ``p90``: the smaller root of
+    ``z90 sigma - sigma^2 / 2 = ln((p90 - floor) / (mean - floor))``.
+    The floor is ``minimum``, or lower where no lognormal above it
+    reaches ``p90`` (the ratio past ``z90^2 / 2``): there the floor at
+    which sigma is ``z90`` and both match, or 0 and sigma ``z90``, the
+    nearest it comes, when even no floor reaches it. Sigma 0 with no
+    90th percentile above the mean, or one not finite."""
+    floor = min(max(float(minimum or 0.0), 0.0), mean)
+    if p90 is None or not math.isfinite(p90) or mean <= 0.0 or p90 <= mean:
+        return floor, 0.0
+    widest = math.exp(_Z90 * _Z90 / 2.0)
+    if (p90 - floor) > widest * (mean - floor):
+        floor = max(0.0, (widest * mean - p90) / (widest - 1.0))
+        if (p90 - floor) >= widest * (mean - floor):
+            return floor, _Z90
+    r = math.log((p90 - floor) / (mean - floor))
+    return floor, _Z90 - math.sqrt(max(_Z90 * _Z90 - 2.0 * r, 0.0))
 
 
 @dataclass(frozen=True)
@@ -179,6 +202,9 @@ class MemberWalk:
     #: Whether a long draw's delivery fell below the line
     #: (``ReadinessParams.line_f``).
     cold: bool
+    #: The long draws running past the walk's start or end, judged only
+    #: over the walk: one judged warm may yet run cold past it.
+    cut_short: int = 0
 
 
 @dataclass(frozen=True)
@@ -218,13 +244,26 @@ def weigh(
     withheld_windows: Sequence[tuple[datetime, datetime]] = (),
     inlet_measured: bool = False,
     start_hold: Callable[[float | None], float] | None = None,
+    running_hold: float = 0.0,
+    running_starts: bool = False,
 ) -> tuple[Weighed, ...]:
     """Each of ``scenarios`` walked on every member of ``ensemble``:
     its draws and draw windows the member's, its circulation and all
     else its own. The keyword inputs are ``simulate``'s, the same for
-    every walk. Raises ``ValueError`` for an empty ensemble."""
+    every walk. Raises ``ValueError`` for an empty ensemble, or a
+    scenario reaching outside a member's span: past it the draws are
+    unknown, not none."""
     if not ensemble:
         raise ValueError("an ensemble has at least one member")
+    for scenario in scenarios:
+        for member in ensemble:
+            if scenario.start < member.start or scenario.until > member.end:
+                raise ValueError(
+                    f"a scenario from {scenario.start.isoformat()} to "
+                    f"{scenario.until.isoformat()} reaches outside the "
+                    f"members' {member.start.isoformat()} to "
+                    f"{member.end.isoformat()}"
+                )
     out: list[Weighed] = []
     for scenario in scenarios:
         walks: list[MemberWalk] = []
@@ -246,6 +285,8 @@ def weigh(
                 withheld_windows=withheld_windows,
                 inlet_measured=inlet_measured,
                 start_hold=start_hold,
+                running_hold=running_hold,
+                running_starts=running_starts,
             )
             walks.append(_judged(member, walk, params))
         out.append(Weighed(walks=tuple(walks)))
@@ -259,9 +300,11 @@ def _judged(
     delivery = list(walk.delivery) or delivery_along(points, params)
     lows: list[float] = []
     cold = False
+    cut = 0
     for a, b in member.long_draws:
         if a >= walk.until or b < walk.start or (b == walk.start and a < b):
             continue
+        cut += a < walk.start or b > walk.until
         a, b = max(a, walk.start), min(b, walk.until)
         # A draw of no length is a step at its instant: judged through it.
         b = max(b, a + timedelta(microseconds=1))
@@ -273,4 +316,5 @@ def _judged(
         walk=walk,
         long_min_f=min(lows) if lows else None,
         cold=cold,
+        cut_short=cut,
     )

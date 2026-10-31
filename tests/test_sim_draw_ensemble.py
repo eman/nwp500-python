@@ -167,6 +167,48 @@ class TestMembers:
         for m in E.members(issue(), T0, end, count=200):
             assert all(T0 <= d.at < end for d in m.loads.draws)
 
+    def test_a_slot_the_span_cuts_draws_for_the_part_inside(self) -> None:
+        # Half of each of two slots: one slot's worth of short draws.
+        start = T0 + timedelta(minutes=5)
+        end = T0 + timedelta(minutes=15)
+        slots = issue(long_rate=0.0)
+        ensemble = E.members(slots, start, end, count=4000)
+        assert all(start <= d.at < end for m in ensemble for d in m.loads.draws)
+        counts = np.array([len(m.loads.draws) for m in ensemble])
+        assert float(counts.mean()) == pytest.approx(
+            0.1, abs=4 * 0.1**0.5 / 4000**0.5
+        )
+
+    def test_a_ninetieth_percentile_out_of_reach_lowers_the_floor(self) -> None:
+        # No lognormal above 240 s has mean 600 s and p90 1200 s: the
+        # floor comes down to where one does.
+        slots = [
+            replace(s, long_duration_p90_s=1200.0) for s in issue(long_rate=0.5)
+        ]
+        seconds = np.array(
+            [
+                (b - a).total_seconds()
+                for m in E.members(slots, *DAY, count=400)
+                for a, b in m.long_draws
+            ]
+        )
+        assert float(seconds.mean()) == pytest.approx(600.0, rel=0.03)
+        assert float(np.quantile(seconds, 0.9)) == pytest.approx(
+            1200.0, rel=0.04
+        )
+        floor, sigma = E._shape(600.0, 240.0, 1200.0)
+        assert 0.0 < floor < 240.0
+        assert sigma == pytest.approx(1.2815515655446004)
+        assert seconds.min() >= floor
+
+    def test_a_ninetieth_percentile_not_finite_is_not_published(self) -> None:
+        slots = [replace(s, long_duration_p90_s=float("nan")) for s in issue()]
+        assert {
+            (b - a).total_seconds()
+            for m in E.members(slots, *DAY, count=20)
+            for a, b in m.long_draws
+        } == {600.0}
+
     def test_a_span_the_issue_does_not_cover_is_refused(self) -> None:
         late = T0 + timedelta(days=7)
         with pytest.raises(ValueError, match="no_covering_issue"):
@@ -228,6 +270,8 @@ class TestWeigh:
             member = E.Member(
                 loads=Loads(draws=(Draw(at=when, gallons=60.0),)),
                 long_draws=((when, when),),
+                start=DAY[0],
+                end=DAY[1],
             )
             params = site_example_params()
             (w,) = E.weigh([scenario(120.0)], [member], params)
@@ -235,6 +279,35 @@ class TestWeigh:
             assert walk.long_min_f is not None
             assert walk.long_min_f < params.readiness.line_f
             assert walk.cold
+
+    def test_a_scenario_reaching_outside_the_members_is_refused(self) -> None:
+        ensemble = E.members(issue(), *DAY, count=2)
+        longer = scenario().model_copy(update={"horizon": timedelta(days=2)})
+        with pytest.raises(ValueError, match="reaches outside"):
+            E.weigh([longer], ensemble, site_example_params())
+        shorter = scenario().model_copy(update={"horizon": timedelta(hours=6)})
+        E.weigh([shorter], ensemble, site_example_params(), running_hold=5.0)
+
+    def test_a_long_draw_past_the_walks_end_is_counted_cut_short(self) -> None:
+        end = DAY[1]
+        member = E.Member(
+            loads=Loads(
+                draws=(
+                    Draw(
+                        at=end - timedelta(minutes=2),
+                        gallons=15.0,
+                        duration_s=600,
+                    ),
+                )
+            ),
+            long_draws=(
+                (end - timedelta(minutes=2), end + timedelta(minutes=8)),
+            ),
+            start=DAY[0],
+            end=DAY[1],
+        )
+        (w,) = E.weigh([scenario()], [member], site_example_params())
+        assert w.walks[0].cut_short == 1
 
     def test_an_empty_ensemble_is_refused(self) -> None:
         with pytest.raises(ValueError):

@@ -679,19 +679,24 @@ Given an issue's ``slots``, when it was issued (``issued_at``) and
            print(sum(priced) / len(priced), len(saved) - len(priced))
 
 Each member draws, in each slot and class, a Poisson count of draws at
-the slot's rate, each at a uniform instant in the slot (in the span,
-for a last slot it cuts short). A long draw
+the slot's rate, each at a uniform instant in the slot (a slot the
+span cuts, over the part inside it, at its rate for that part). A long draw
 lasts the slot's minimum and a lognormal part matched to its published
-mean and 90th percentile; its volume goes with its duration at the
+mean and 90th percentile (above a lower floor, where none above the
+minimum reaches that 90th percentile); its volume goes with its duration at the
 slot's mean flow, so the expected volume is the published one; one
 longer than a day is cut to a day, at that flow. A short
 draw is its slot's means. A seed gives the same members whatever their
 number. ``weigh`` gives each walk the member's draws and the
-forecast's draw windows, keeping its own circulation and all else.
+forecast's draw windows, keeping its own circulation and all else; a
+scenario reaching outside the members' span is refused, since past it
+the draws are unknown. Its other keyword inputs are ``simulate``'s.
 
 ``cold_share`` is the share of members in which a long draw's
 delivery fell below the line (``ReadinessParams.line_f``);
-``MemberWalk.long_min_f`` is each member's lowest. Over 50 members a
+``MemberWalk.long_min_f`` is each member's lowest, and
+``MemberWalk.cut_short`` counts the long draws running past the walk's
+end, judged only up to it. Over 50 members a
 share near 10 % has a standard error of about 4 points. Compare two
 candidates member by member (``saved`` above): both met the same
 households, so their difference is far less noisy than it would be
