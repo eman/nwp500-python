@@ -25,9 +25,10 @@ cooled since the last run ended (``cooled_share``, on
 ``CirculationParams.return_cool_tau_h``); the rest comes back at the
 rest plus ``steady_share`` of the top's lift over it. Water warmer than
 the tank's bottom rises to its own level there
-(``physics.stratified.flow``). Runs closer than ``RUN_GAP`` are one
-run: a restart displaces water the last run warmed, and the return's
-rest and cooling are fitted on runs merged that way.
+(``physics.stratified.flow``). Runs no farther apart than
+``RUN_GAP`` are one run: a restart displaces water the last run
+warmed, and the return's rest and cooling are fitted on runs merged
+that way.
 """
 
 import math
@@ -40,7 +41,7 @@ from nwp500.sim.physics.water import btu_per_gal_f
 #: A run: when it starts and when it ends.
 Run = tuple[datetime, datetime]
 
-#: Runs closer than this are one run.
+#: Runs no farther apart than this are one run.
 RUN_GAP = timedelta(minutes=10)
 
 
@@ -76,7 +77,7 @@ def steady_share(ua_btu_hr_f: float, flow_gpm: float, water_f: float) -> float:
 
 
 def merge_runs(runs: Iterable[Run], gap: timedelta = RUN_GAP) -> list[Run]:
-    """``runs`` closer than ``gap`` joined into one, sorted."""
+    """``runs`` no farther apart than ``gap`` joined into one, sorted."""
     merged: list[Run] = []
     for start, end in sorted(runs, key=lambda r: r[0]):
         if merged and start - merged[-1][1] <= gap:
