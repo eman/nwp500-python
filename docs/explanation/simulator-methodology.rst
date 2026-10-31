@@ -223,10 +223,13 @@ BTU/hr from its room while it runs, and the simulator does not cool
 the room for it. At one installation that cooling was 0.49 degF on
 average over a run (0.04-0.95, :doc:`recovery-speed`), 27 BTU/hr of the
 heat at the map's air slope, about a ninth of the map's own error
-(236 BTU/hr RMS). A replay reads a sensor's air, the cooling in it; a
-forecast's air is anchored to the heater's reading while its
-compressor runs (``location_air``). A room of its own would need its
-capacity and its loss to outdoors, which no heater's record measures.
+(236 BTU/hr RMS). A replay reads a sensor's air, the cooling in it. A
+forecast's air is shifted through a fresh reading beside the heater,
+else the heater's own from the last hour while its compressor ran, else
+left unanchored (the inputs, below); it carries the cooling only as its
+anchor did, and at most leaves out those 0.49 degF. A room of its own
+would need its capacity and its loss to outdoors, which no heater's
+record measures.
 
 
 A heat-pump recovery

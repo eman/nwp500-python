@@ -664,7 +664,8 @@ Fixed
 
 - The methodology says why the air is an input and not a state: the
   heat pump cools its room 0.49 °F on average over a run, 0.6 % of its
-  heat, and replays and forecasts both carry it in their air.
+  heat; a replay's air carries it, and a forecast's as its anchor
+  does.
 
 - ``recovery-speed`` says why the heat map stops at 61 °F of air: the
   winter's 48,000 compressor minutes at 45-60 °F have no draw detector
