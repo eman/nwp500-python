@@ -82,9 +82,16 @@ def members(
     """``count`` members over ``[start, end)`` from an issue
     (``draw_forecast.check_issue``'s, the span included). A span the
     issue does not cover is a ``ValueError``, as for
-    ``draw_forecast.draw_profile``."""
+    ``draw_forecast.draw_profile``, and so is a span or slot without a
+    time zone."""
     if count < 1:
         raise ValueError("an ensemble has at least one member")
+    if any(
+        t.utcoffset() is None
+        for t in (start, end, *(s.valid_at for s in slots))
+    ):
+        # ``astimezone`` would read it on the host's clock.
+        raise ValueError("an ensemble's span and slots carry a time zone")
     # In UTC: offsets and durations added to a local instant are the
     # wall clock's, which an hour repeated or skipped by daylight saving
     # moves; the windows made from the same slots.

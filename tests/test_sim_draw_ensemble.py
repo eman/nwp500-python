@@ -258,6 +258,15 @@ class TestMembers:
             )
         with pytest.raises(ValueError):
             E.members(issue(), *DAY, count=0)
+        naive = DAY[0].replace(tzinfo=None)
+        with pytest.raises(ValueError, match="time zone"):
+            E.members(issue(), naive, DAY[1])
+        slots = issue()
+        slots[3] = replace(
+            slots[3], valid_at=slots[3].valid_at.replace(tzinfo=None)
+        )
+        with pytest.raises(ValueError, match="time zone"):
+            E.members(slots, *DAY)
 
 
 class TestWeigh:
