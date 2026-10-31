@@ -622,7 +622,11 @@ and
 Lengthen the tail until every walk is settled; one that runs through
 the recovery the heater makes anyway usually is. Circulation runs
 starting past the tail's end are not run, by the tail or its walk on;
-a run under way at the end goes on as given. Walks made with
+a run under way at the end goes on as given. What looks past the end
+(a recovery model's climb, a TOU cap judged on a recovery under way)
+sees none of them, so a recovery running at the tail's end has its
+stop judged without them: give the tail its circulation up to its end
+and its end is ``simulate``'s. Walks made with
 ``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``)
 are carried on with the same, passed to ``carry_on``; TOU windows
 given in force (``tou_windows_in_force``) are the tail's, over its

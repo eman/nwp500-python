@@ -156,9 +156,14 @@ def carry_on(
     any (``resume_dropped_*`` in the tail's ``reasons``).
 
     Each tail runs the circulation given that starts before its end,
-    no more (``_circulated_by``): a recovery model's climb, which looks
-    past the end, sees no run starting after it, as the tail walked on
-    sees none.
+    no more (``_circulated_by``), as its walk on does: what looks past
+    the end (a recovery model's climb, the judgement of a TOU cap on a
+    recovery) sees no run starting after it, as it sees no draw there.
+    Inside the tail's span this changes nothing without a recovery
+    model; a recovery under way at the end has its stop and cap judged
+    without those runs, so with circulation given past the end
+    ``Carried.tail.end_state`` is that of the tail with its
+    circulation cut at the end, not of ``simulate`` on the tail.
 
     The keyword inputs are ``simulate``'s, the same for every tail.
     ``recovery``, ``start_hold`` and ``inlet_measured`` go on as the

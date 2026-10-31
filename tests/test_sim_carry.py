@@ -794,6 +794,39 @@ class TestCarryOn:
         assert owing.residual_f <= sim.SETTLED_F
         assert not owing.heating_alike
 
+    def test_a_tail_circulating_only_to_its_end_is_simulates(self) -> None:
+        m = timedelta(minutes=1)
+        end = TAIL.until
+        tail = TAIL.model_copy(
+            update={
+                "loads": sim.Loads(
+                    draws=(sim.Draw(at=end - 50 * m, gallons=50.0),),
+                    circulation=(
+                        sim.CirculationRun(
+                            start=end - 40 * m, end=end - 30 * m
+                        ),
+                        sim.CirculationRun(start=end - 3 * m, end=end + 5 * m),
+                    ),
+                )
+            }
+        )
+        window = [(end - 45 * m, end + 300 * m)]
+        walk = sim.simulate(
+            BASE.model_copy(update={"horizon": TAIL.start - T0}), PARAMS
+        )
+        (carried,) = sim.carry_on(
+            [walk], tail, PARAMS, tou_windows_in_force=window
+        )
+        alone = sim.simulate(
+            tail.model_copy(
+                update={"state": walk.end_state, "history": walk.end_history}
+            ),
+            PARAMS,
+            tou_windows_in_force=window,
+        )
+        assert carried.tail.input_wh == alone.input_wh
+        assert carried.tail.end_state == alone.end_state
+
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):
             sim.carry_on([], TAIL, PARAMS)
