@@ -783,7 +783,9 @@ def _one_day(
     for s in seen.slots:
         slots[int((s.start - start) / DAY_SLOT)] += float(s.energy_wh or 0.0)
     a = int(np.searchsorted(seconds, start.timestamp(), side="right"))
-    b = int(np.searchsorted(seconds, end.timestamp(), side="left"))
+    # To the reading at the day's end, which the walk's lowest and the
+    # day's end probes both hold.
+    b = int(np.searchsorted(seconds, end.timestamp(), side="right"))
     inside = upper_v[a:b]
     uppers = [upper, *(float(v) for v in inside[np.isfinite(inside)])]
     return Day(

@@ -214,6 +214,14 @@ class TestTheDays:
         got = ss.day_events(dark, walked.record, walked.tank, tz="UTC")
         assert [d.start for d in got] == [T0]
 
+    def test_the_days_lowest_holds_its_end(self, walked: Walked) -> None:
+        frame = walked.ready.frame.copy()
+        frame.loc[T0 + DAY, "upper_f"] = 100.0
+        low = replace(walked.ready, frame=frame)
+        first = ss.day_events(low, walked.record, walked.tank, tz="UTC")[0]
+        assert first.min_upper_f == 100.0
+        assert first.end_upper_f == 100.0
+
     def test_the_span_asked_for_only(self, walked: Walked) -> None:
         got = ss.day_events(
             walked.ready, walked.record, walked.tank, tz="UTC", since=T0 + DAY
