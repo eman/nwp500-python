@@ -10,11 +10,11 @@ walk is carried on until what they left no longer differs.
 ``carry_on`` walks every walk's end through the same ``tail``: the
 heater in its standing settings (written at the tail's start over
 whatever a walk left in force), the same draws, air and schedules.
-Tails that end alike, the same layers with the same heating running,
+Tails that end alike, the same layers with the same heating under way,
 leave nothing between the walks unvalued, so a walk's electricity and
 its tail's, priced at any tariff, are the whole of what the change
 costs. How alike the tails end is given (``Carried.residual_f``,
-``Carried.residual_wh``, ``Carried.running_alike``): a tail too short
+``Carried.residual_wh``, ``Carried.heating_alike``): a tail too short
 to settle them leaves that much out.
 """
 
@@ -22,19 +22,29 @@ import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
+from zoneinfo import ZoneInfo
 
 from nwp500.sim.api import simulate
 from nwp500.sim.engine import Resume
 from nwp500.sim.extensions import RecoveryModel
-from nwp500.sim.inputs import POWER_OFF, VACATION, Commands, Scenario, Write
+from nwp500.sim.inputs import HEAT_PUMP, Commands, Loads, Scenario, Write
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
 from nwp500.sim.result import SimulationResult
+from nwp500.sim.schedules import reservation_firings
 from nwp500.sim.units import BTU_PER_WH
 
 #: How near, °F in every layer, a tail's end must come to the first
 #: walk's tail's for the two to count as settled (``Carried.settled``).
 SETTLED_F = 0.5
+#: How far past the last instant still due at the tails' ends (a
+#: hold's end, a pending start, a lockout's release, an element's heat
+#: reaching the water) each tail is walked on to see it go on.
+GO_ON_PAST = timedelta(minutes=1)
+#: How near, Wh, the electricity of a tail walked on must come to the
+#: first walk's tail's for the two to go on alike.
+GO_ON_WH = 1.0
 
 
 @dataclass(frozen=True)
@@ -50,18 +60,22 @@ class Carried:
     #: The largest difference of a layer at the tail's end from the
     #: first walk's tail's, °F.
     residual_f: float
-    #: Whether the tail ends with the compressor running or its start
-    #: pending (its lag or lockout), and the elements running or their
-    #: heat still arriving after a stop, or not, as the first walk's
-    #: tail does: heating under way in one and not the other is heat
-    #: one is still to pay for, or still to reach the water.
-    running_alike: bool
+    #: Whether the tail goes on as the first walk's tail does: each
+    #: walked on with no draw past every instant still due at either's
+    #: end (a start's hold ending, a start pending, the restart lockout
+    #: releasing, an element's heat reaching the water) and
+    #: ``GO_ON_PAST`` more, spending the same electricity, within
+    #: ``GO_ON_WH``. Heating under way in one and not the other is heat
+    #: one is still to pay for; a lockout with no start wanted in it is
+    #: none.
+    heating_alike: bool
 
     @property
     def settled(self) -> bool:
         """Whether the tail ends as the first walk's tail does: within
-        ``SETTLED_F`` in every layer, the same heating running."""
-        return self.residual_f <= SETTLED_F and self.running_alike
+        ``SETTLED_F`` in every layer, and going on as it does
+        (``heating_alike``)."""
+        return self.residual_f <= SETTLED_F and self.heating_alike
 
     @property
     def input_wh(self) -> float | None:
@@ -110,10 +124,13 @@ def carry_on(
     written at its start over what the walk left. Every walk must end
     where ``tail`` starts. A tail long enough to take each tank through
     the recovery the heater makes anyway ends them alike
-    (``Carried.settled``). A walk that ends with a mode write held in a
-    window has the tail's mode written at the tail's start, ahead of
-    the tail's own commands, so the hold is withdrawn as a direct write
-    withdraws one. A walk that ends in, or a tail that starts
+    (``Carried.settled``). A walk that ends with a Heat Pump write held
+    in a window, carried into a tail standing in Heat Pump, has
+    Heat Pump written at the tail's start, ahead of its own commands,
+    so the hold is withdrawn as a direct write withdraws one (not when
+    an entry of the tail's fires at its start). An element mode held
+    stays held to the walk's window's close, as a direct write of it
+    inside a window would be. A walk that ends in, or a tail that starts
     in, Vacation or Power Off with the other not is carried on afresh
     from the walk's layers and history, as ``simulate`` goes on from
     any (``resume_dropped_*`` in the tail's ``reasons``).
@@ -131,6 +148,13 @@ def carry_on(
     """
     if not walks:
         raise ValueError("no walks to carry on")
+    options: dict[str, Any] = {
+        "recovery": recovery,
+        "tou_windows_in_force": tou_windows_in_force,
+        "withheld_windows": withheld_windows,
+        "inlet_measured": inlet_measured,
+        "start_hold": start_hold,
+    }
     tails: list[SimulationResult] = []
     for walk in walks:
         if walk.until != tail.start:
@@ -150,16 +174,12 @@ def carry_on(
                     }
                 ),
                 params,
-                recovery=recovery,
-                tou_windows_in_force=tou_windows_in_force,
-                withheld_windows=withheld_windows,
-                inlet_measured=inlet_measured,
-                start_hold=start_hold,
+                **options,
             )
         )
     lay = layout(params)
     ends = [_layers(t) for t in tails]
-    running = [_running(t) for t in tails]
+    gone_on = _go_on(tails, tail, params, options)
     first = ends[0]
     first_wh = energy_btu(lay, TankState(first)) / BTU_PER_WH
     return tuple(
@@ -168,9 +188,9 @@ def carry_on(
             tail=t,
             residual_wh=energy_btu(lay, TankState(end)) / BTU_PER_WH - first_wh,
             residual_f=max(abs(a - b) for a, b in zip(end, first, strict=True)),
-            running_alike=on == running[0],
+            heating_alike=_alike(wh, gone_on[0]),
         )
-        for walk, t, end, on in zip(walks, tails, ends, running, strict=True)
+        for walk, t, end, wh in zip(walks, tails, ends, gone_on, strict=True)
     )
 
 
@@ -182,38 +202,107 @@ def _resume(result: SimulationResult) -> Resume | None:
 
 
 def _over_a_hold(walk: SimulationResult, tail: Scenario) -> Commands:
-    """The tail's commands, with its mode written at its start first
-    when the walk ended with a mode write held: a direct write
-    withdraws a held one, and settings that name the mode the held
-    write would land leave it held to its window's close."""
+    """The tail's commands, with Heat Pump written at its start first
+    when the walk ended with a Heat Pump write held in a window and the
+    tail stands in Heat Pump: settings naming the mode already
+    commanded write nothing (``simulate`` goes on from them), so the
+    hold would stand to the walk's window's close, where a direct
+    Heat Pump write takes at once and withdraws it. Not when an entry of the
+    tail's fires at its start, which decides the mode there itself.
+    An element mode held is left held: a direct write of one inside a
+    window is held again."""
     resume = _resume(walk)
     if (
         resume is None
         or resume.controller.mode.held is None
-        or tail.settings.mode in (VACATION, POWER_OFF)
+        or resume.controller.mode.commanded != "heat_pump"
+        or tail.settings.mode != HEAT_PUMP
+        or _entry_at_start(tail)
     ):
         return tail.commands
     return tail.commands.model_copy(
         update={
             "writes": (
-                Write(at=tail.start, mode=tail.settings.mode),
+                Write(at=tail.start, mode=HEAT_PUMP),
                 *tail.commands.writes,
             )
         }
     )
 
 
-def _running(result: SimulationResult) -> tuple[bool, bool]:
-    end = result.end_state
-    assert end is not None
-    resume = _resume(result)
-    pending = resume is not None and resume.controller.compressor.pending
-    # An element's heat still on its way to the water after it stopped.
-    arriving = resume is not None and bool(resume.cooling)
-    return (
-        end.compressor_running or bool(pending),
-        end.element_running or arriving,
+def _entry_at_start(tail: Scenario) -> bool:
+    written = tail.commands.reservations
+    if written is not None:
+        schedule = written
+    elif tail.schedules.reservations_enabled:
+        schedule = tail.schedules.reservations
+    else:
+        return False
+    return any(
+        f.at == tail.start
+        for f in reservation_firings(
+            schedule, ZoneInfo(tail.tz), tail.start, tail.until
+        )
     )
+
+
+def _go_on(
+    tails: Sequence[SimulationResult],
+    tail: Scenario,
+    params: HeaterParams,
+    options: dict[str, Any],
+) -> list[float | None]:
+    """Each tail's electricity walked on from its end with no draw,
+    past every instant still due at any tail's end and ``GO_ON_PAST``
+    more, Wh (None, unpriced)."""
+    until = tail.until
+    due = [t for r in tails for t in _due(r, params)]
+    span = max([until, *due]) - until + GO_ON_PAST
+    out: list[float | None] = []
+    for r in tails:
+        assert r.end_state is not None and r.end_history is not None
+        on = simulate(
+            tail.model_copy(
+                update={
+                    "start": until,
+                    "horizon": span,
+                    "state": r.end_state,
+                    "history": r.end_history,
+                    "loads": Loads(),
+                    "commands": Commands(),
+                }
+            ),
+            params,
+            **options,
+        )
+        out.append(on.input_wh)
+    return out
+
+
+def _due(result: SimulationResult, params: HeaterParams) -> list[datetime]:
+    """The instants still due at ``result``'s end: its compressor
+    start's hold ending, a start pending, the restart lockout
+    releasing, an element's heat reaching the water."""
+    resume = _resume(result)
+    if resume is None:
+        return []
+    out: list[datetime] = []
+    c = resume.controller.compressor
+    if resume.cycle is not None:
+        out.append(resume.cycle.heats_at)
+    if c.pending is not None:
+        out.append(c.pending.at)
+    if c.last_stop is not None:
+        out.append(c.last_stop + params.controller.restart_lockout)
+    if resume.element is not None:
+        out.append(resume.element.live_at)
+    lag = timedelta(minutes=params.element.upper_dead_time_min)
+    out += [e.off_at + lag for e in resume.cooling if e.off_at is not None]
+    return out
+
+
+def _alike(wh: float | None, first: float | None) -> bool:
+    return wh is not None and first is not None and abs(wh - first) <= GO_ON_WH
 
 
 def _layers(result: SimulationResult) -> tuple[float, ...]:

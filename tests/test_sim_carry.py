@@ -202,8 +202,8 @@ class TestCarryOn:
         assert early.tail.end_state is not None
         assert not base.tail.end_state.compressor_running
         assert early.tail.end_state.compressor_running
-        assert base.running_alike
-        assert not early.running_alike
+        assert base.heating_alike
+        assert not early.heating_alike
         assert not early.settled
 
     def test_a_held_mode_does_not_outlast_the_tails_settings(self) -> None:
@@ -286,9 +286,9 @@ class TestCarryOn:
             }
         )
         first, other = sim.carry_on([idle, pending], tail, PARAMS)
-        assert first.running_alike
+        assert first.heating_alike
         assert other.residual_f <= sim.SETTLED_F
-        assert not other.running_alike
+        assert not other.heating_alike
         assert not other.settled
 
     def test_an_elements_heat_still_arriving_is_under_way(self) -> None:
@@ -314,7 +314,103 @@ class TestCarryOn:
         assert walk.end_state is not None
         assert not walk.end_state.element_running
         assert not walk.end_state.compressor_running
-        assert carry._running(walk) == (False, True)
+        assert walk.until < max(carry._due(walk, PARAMS))
+
+    def test_a_lockout_with_no_start_wanted_is_none(self) -> None:
+        # Both compressors off at the tail's end, one stopped a minute
+        # before it: its next start waits out the restart lockout.
+        def walk(stopped: timedelta) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "history": sim.History(
+                            compressor_stopped_at=T0 - stopped
+                        ),
+                    }
+                ),
+                PARAMS,
+            )
+
+        tail = TAIL.model_copy(
+            update={
+                "start": T0 + timedelta(minutes=1),
+                "horizon": timedelta(minutes=1),
+                "loads": sim.Loads(),
+            }
+        )
+        free, locked = walk(timedelta(hours=3)), walk(timedelta(minutes=1))
+        _, other = sim.carry_on([free, locked], tail, PARAMS)
+        # A full tank: no start is wanted in the lockout.
+        assert other.tail.until < max(carry._due(other.tail, PARAMS))
+        assert other.heating_alike
+        assert other.settled
+
+    def test_a_held_mode_is_written_over_only_where_nothing_else_decides(
+        self,
+    ) -> None:
+        from nwp500 import sim_adapters as sa
+
+        def held_walk(mode: int, entry_mode: int) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "start": at(22),
+                        "horizon": timedelta(hours=2),
+                        "loads": sim.Loads(),
+                        "settings": SETTINGS.model_copy(update={"mode": mode}),
+                        "commands": sim.Commands(
+                            reservations=(
+                                sa.reservation_entry(
+                                    days=range(7),
+                                    hour=23,
+                                    minute=30,
+                                    mode=entry_mode,
+                                    temperature=120.0,
+                                ),
+                            )
+                        ),
+                    }
+                ),
+                PARAMS,
+                tou_windows_in_force=[(at(21), at(25))],
+            )
+
+        heat_pump_held = held_walk(2, 1)
+        writes = carry._over_a_hold(heat_pump_held, TAIL).writes
+        assert [(w.at, w.mode) for w in writes] == [(TAIL.start, 1)]
+        # The tail's mode is not the one held: simulate writes it.
+        electric = TAIL.model_copy(
+            update={"settings": SETTINGS.model_copy(update={"mode": 2})}
+        )
+        assert carry._over_a_hold(heat_pump_held, electric).writes == ()
+        # An element mode held: written inside a window, held again.
+        saver_held = held_walk(1, 3)
+        for walk in (heat_pump_held, saver_held):
+            assert walk.end_state is not None and walk.end_state.resume
+            assert '"held": {' in walk.end_state.resume
+        saver = TAIL.model_copy(
+            update={"settings": SETTINGS.model_copy(update={"mode": 3})}
+        )
+        assert carry._over_a_hold(saver_held, saver).writes == ()
+        # An entry firing at the tail's start decides the mode there.
+        midnight = TAIL.model_copy(
+            update={
+                "commands": sim.Commands(
+                    reservations=(
+                        sa.reservation_entry(
+                            days=range(7),
+                            hour=0,
+                            minute=0,
+                            mode=3,
+                            temperature=120.0,
+                        ),
+                    )
+                )
+            }
+        )
+        assert carry._over_a_hold(heat_pump_held, midnight).writes == ()
 
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):
