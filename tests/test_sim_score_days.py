@@ -554,6 +554,10 @@ class TestConcordance:
         assert np.isnan(ss._concordance([1.0, 2.0], [10.0, 10.0]))
         assert ss._concordance([1.0, 2.0, 0.0], [10.0, 10.0, 5.0]) == 1.0
 
+    def test_no_pair_says_nothing(self) -> None:
+        assert np.isnan(ss._concordance_stat([], []).value)
+        assert np.isnan(ss._concordance_stat([1.0, 2.0], [5.0, 5.0]).value)
+
     def test_its_interval_draws_the_pairs_afresh(self) -> None:
         # One day out of order among ten: 9 of 45 pairs.
         metered = [float(k) for k in range(10)]

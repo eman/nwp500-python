@@ -1449,8 +1449,9 @@ def _concordance_stat(
 
 @dataclass(frozen=True)
 class Stat:
-    """A metric over its events: their mean and its 90 % interval from
-    a bootstrap of local days."""
+    """A metric over its events: their mean (``day_energy_concordance``:
+    its share of pairs of days) and its 90 % interval from a bootstrap
+    of local days."""
 
     n: int
     value: float
@@ -1615,10 +1616,12 @@ def score(
         name: _stat(values, tally.days[name])
         for name, values in sorted(tally.values.items())
     }
-    if len(scored) > 1:
-        metrics["day_energy_concordance"] = _concordance_stat(
-            [wh for _, wh in scored], [e.metered_wh for e, _ in scored]
-        )
+    concordance = _concordance_stat(
+        [wh for _, wh in scored], [e.metered_wh for e, _ in scored]
+    )
+    # Left out, as a metric with no events is, when no pair says.
+    if math.isfinite(concordance.value):
+        metrics["day_energy_concordance"] = concordance
         metrics = dict(sorted(metrics.items()))
     return Score(
         events=found.keys(),
