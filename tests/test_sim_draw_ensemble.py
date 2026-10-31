@@ -10,6 +10,7 @@ import pytest
 
 from nwp500.sim import (
     Draw,
+    DrawWindow,
     Environment,
     HeaterState,
     Loads,
@@ -209,6 +210,17 @@ class TestMembers:
             for a, b in m.long_draws
         } == {600.0}
 
+    def test_a_slot_whose_expectation_runs_past_a_day_is_sampled(
+        self,
+    ) -> None:
+        # Rate 5 at a 20,000 s mean: its expected draw would run 100,000 s.
+        slots = [
+            replace(s, long_rate=5.0, long_duration_mean_s=20000.0)
+            for s in issue()
+        ]
+        (m,) = E.members(slots, *DAY, count=1)
+        assert m.long_draws and m.loads.windows
+
     def test_a_span_the_issue_does_not_cover_is_refused(self) -> None:
         late = T0 + timedelta(days=7)
         with pytest.raises(ValueError, match="no_covering_issue"):
@@ -287,6 +299,44 @@ class TestWeigh:
             E.weigh([longer], ensemble, site_example_params())
         shorter = scenario().model_copy(update={"horizon": timedelta(hours=6)})
         E.weigh([shorter], ensemble, site_example_params(), running_hold=5.0)
+
+    def test_a_shorter_walk_meets_only_its_part_of_the_member(self) -> None:
+        start, until = T0 + timedelta(hours=6), T0 + timedelta(hours=12)
+        across = Draw(
+            at=start - timedelta(seconds=90), gallons=6.0, duration_s=300
+        )
+        late = Draw(at=T0 + timedelta(hours=19), gallons=80.0, duration_s=600)
+        member = E.Member(
+            loads=Loads(
+                draws=(across, late),
+                windows=(
+                    DrawWindow(
+                        start=T0 + timedelta(hours=1),
+                        end=T0 + timedelta(hours=2),
+                    ),
+                    DrawWindow(
+                        start=start - timedelta(minutes=10),
+                        end=start + timedelta(minutes=10),
+                        draws_until=start - timedelta(minutes=10),
+                    ),
+                ),
+            ),
+            long_draws=(),
+            start=DAY[0],
+            end=DAY[1],
+        )
+        (cut,) = E._draws_in(member.loads.draws, start, until)
+        assert cut.at == start and cut.duration_s == 210.0
+        assert cut.gallons == pytest.approx(6.0 * 210 / 300)
+        assert cut.per_draw_gal == 6.0
+        (w,) = E._windows_in(member.loads.windows, start, until)
+        assert w.draws_until == start
+        shorter = scenario().model_copy(
+            update={"start": start, "horizon": until - start}
+        )
+        (weighed,) = E.weigh([shorter], [member], site_example_params())
+        (walk,) = weighed.walks
+        assert [x.start for x in walk.walk.windows] == [w.start]
 
     def test_a_long_draw_past_the_walks_end_is_counted_cut_short(self) -> None:
         end = DAY[1]

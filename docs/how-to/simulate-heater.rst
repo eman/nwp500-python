@@ -684,11 +684,13 @@ span cuts, over the part inside it, at its rate for that part). A long draw
 lasts the slot's minimum and a lognormal part matched to its published
 mean and 90th percentile (above a lower floor, where none above the
 minimum reaches that 90th percentile); its volume goes with its duration at the
-slot's mean flow, so the expected volume is the published one; one
-longer than a day is cut to a day, at that flow. A short
+slot's mean flow, so the expected volume is the published one. A draw
+longer than a day is cut to a day at that flow, so a slot whose
+durations reach past a day draws less than it publishes. A short
 draw is its slot's means. A seed gives the same members whatever their
 number. ``weigh`` gives each walk the member's draws and the
-forecast's draw windows, keeping its own circulation and all else; a
+forecast's draw windows inside its span, a draw across an edge cut to
+it at its own flow, keeping its own circulation and all else; a
 scenario reaching outside the members' span is refused, since past it
 the draws are unknown. Its other keyword inputs are ``simulate``'s.
 
@@ -696,7 +698,7 @@ the draws are unknown. Its other keyword inputs are ``simulate``'s.
 delivery fell below the line (``ReadinessParams.line_f``);
 ``MemberWalk.long_min_f`` is each member's lowest, and
 ``MemberWalk.cut_short`` counts the long draws running past the walk's
-end, judged only up to it. Over 50 members a
+start or end, judged only over it. Over 50 members a
 share near 10 % has a standard error of about 4 points. Compare two
 candidates member by member (``saved`` above): both met the same
 households, so their difference is far less noisy than it would be

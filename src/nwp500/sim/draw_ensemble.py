@@ -19,7 +19,9 @@ that 90th percentile, above a lower floor that matches both; with no
 90th percentile above the mean it is the mean. Its volume goes with
 its duration at the slot's mean flow (``volume_mean /
 duration_mean``), so the expected volume is the
-published one. A short draw, whose spread is not published, is its
+published one; a draw longer than a day is cut to a day at that flow
+(``MAX_DRAW_S``), so a slot whose durations reach past a day draws
+less than it publishes. A short draw, whose spread is not published, is its
 slot's means. Each member is seeded on its own (``seed`` and its
 index), so a member is the same whatever the number asked for.
 
@@ -43,7 +45,6 @@ from nwp500.sim.draw_forecast import (
     SLOT,
     ForecastSlot,
     draw_profile,
-    forecast_loads,
 )
 from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.inputs import Draw, DrawWindow, Loads, Scenario
@@ -85,7 +86,18 @@ def members(
     if count < 1:
         raise ValueError("an ensemble has at least one member")
     profile = draw_profile(slots, start, end)
-    windows = forecast_loads(profile, start)[0].windows
+    # The windows as ``forecast_loads`` makes them, without its expected
+    # draws, which a valid slot can make longer than a ``Draw`` runs.
+    windows = tuple(
+        DrawWindow(
+            start=w.start,
+            end=w.end,
+            expected_gal=w.volume_mean_gal,
+            expected_count=w.expected_count,
+            draws_until=max(w.start, start),
+        )
+        for w in profile.windows
+    )
     overlapping = [
         s for s in slots if s.valid_at < end and s.valid_at + SLOT > start
     ]
@@ -248,8 +260,9 @@ def weigh(
     running_starts: bool = False,
 ) -> tuple[Weighed, ...]:
     """Each of ``scenarios`` walked on every member of ``ensemble``:
-    its draws and draw windows the member's, its circulation and all
-    else its own. The keyword inputs are ``simulate``'s, the same for
+    its draws and draw windows the member's inside its span
+    (``_draws_in``, ``_windows_in``), its circulation and all else its
+    own. The keyword inputs are ``simulate``'s, the same for
     every walk. Raises ``ValueError`` for an empty ensemble, or a
     scenario reaching outside a member's span: past it the draws are
     unknown, not none."""
@@ -273,8 +286,16 @@ def weigh(
                     update={
                         "loads": scenario.loads.model_copy(
                             update={
-                                "draws": member.loads.draws,
-                                "windows": member.loads.windows,
+                                "draws": _draws_in(
+                                    member.loads.draws,
+                                    scenario.start,
+                                    scenario.until,
+                                ),
+                                "windows": _windows_in(
+                                    member.loads.windows,
+                                    scenario.start,
+                                    scenario.until,
+                                ),
                             }
                         )
                     }
@@ -291,6 +312,54 @@ def weigh(
             walks.append(_judged(member, walk, params))
         out.append(Weighed(walks=tuple(walks)))
     return tuple(out)
+
+
+def _draws_in(
+    draws: Sequence[Draw], start: datetime, until: datetime
+) -> tuple[Draw, ...]:
+    """The draws drawn in ``[start, until)``, one running across an edge
+    cut to it at its own flow and per-draw volume: a shorter walk meets
+    only its part of the member, and its domain only those draws."""
+    out: list[Draw] = []
+    for d in draws:
+        end = d.at + timedelta(seconds=d.duration_s)
+        if d.duration_s <= 0.0:
+            if start <= d.at < until:
+                out.append(d)
+            continue
+        a, b = max(d.at, start), min(end, until)
+        if b <= a:
+            continue
+        if (a, b) == (d.at, end):
+            out.append(d)
+            continue
+        sec = (b - a).total_seconds()
+        out.append(
+            Draw(
+                at=a,
+                gallons=d.gallons * sec / d.duration_s,
+                per_draw_gal=(
+                    d.per_draw_gal if d.per_draw_gal is not None else d.gallons
+                ),
+                duration_s=sec,
+            )
+        )
+    return tuple(out)
+
+
+def _windows_in(
+    windows: Sequence[DrawWindow], start: datetime, until: datetime
+) -> tuple[DrawWindow, ...]:
+    """The windows overlapping ``[start, until)``, as ``draw_profile``
+    keeps them for its span; one already open at ``start`` expects its
+    draws from there."""
+    return tuple(
+        w
+        if w.draws_until is None or w.draws_until >= start
+        else w.model_copy(update={"draws_until": start})
+        for w in windows
+        if w.end > start and w.start < until
+    )
 
 
 def _judged(
