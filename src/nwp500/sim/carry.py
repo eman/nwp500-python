@@ -106,8 +106,12 @@ def carry_on(
     from the walk's layers and history, as ``simulate`` goes on from
     any (``resume_dropped_*`` in the tail's ``reasons``).
 
-    The keyword inputs are ``simulate``'s, the same for every tail: a
-    walk made with a recovery model is carried on with it.
+    The keyword inputs are ``simulate``'s, the same for every tail.
+    ``recovery``, ``start_hold`` and ``inlet_measured`` go on as the
+    walks had them: a walk made with a recovery model is carried on
+    with it. ``tou_windows_in_force`` and ``withheld_windows`` are the
+    tail's own, over its span: a walk's, before the tail starts, leave
+    it with none.
 
     Raises ``ValueError`` when ``walks`` is empty, or a walk does not
     end where ``tail`` starts or carries no end, and

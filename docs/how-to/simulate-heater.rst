@@ -608,7 +608,9 @@ The comparison is whole only when the tails end alike:
 Lengthen the tail until every walk is settled; one that runs through
 the recovery the heater makes anyway usually is. Walks made with
 ``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``)
-are carried on with the same, passed to ``carry_on``.
+are carried on with the same, passed to ``carry_on``; TOU windows
+given in force (``tou_windows_in_force``) are the tail's, over its
+span.
 
 
 Ask when the tank will be hot

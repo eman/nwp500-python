@@ -338,8 +338,9 @@ Entry points
    and its tail, their electricity by slot, and how far the tail's end
    is from the first walk's (``residual_f``, ``residual_wh``): a tail
    that ends them alike leaves nothing between them unvalued. It takes
-   ``simulate``'s keyword inputs (a ``recovery`` model among them) for
-   every tail.
+   ``simulate``'s keyword inputs for every tail: a ``recovery`` model
+   and ``start_hold`` as the walks had them, any windows over the
+   tail's own span.
 
    An example, walked on 2026-10-31 with ``site_example_params()``: a
    120 °F day with 75 gal drawn (two morning showers, three evening
@@ -347,10 +348,10 @@ Entry points
    to 21:00. Of five boosts, each back to 120 °F at 21:00, 140 °F from
    13:00 is the cheapest over its own day ($0.65, the standing day
    $0.62) and leaves the lower tank at 96.9 °F. Carried through the
-   same day again it is the third of the boosts ($1.40, against $1.35 for 130 °F
-   from 13:40 or 14:00, and $1.28 standing). Tails of 24 h left every walk
-   within 0.81 °F of the standing one's (108 Wh); 12 h, 5.7 °F
-   (201 Wh); 36 h, 0.20 °F.
+   same day again it is the third of the boosts ($1.40, against $1.35
+   for 130 °F from 13:40 or 14:00, and $1.28 standing). Tails of 24 h
+   left every walk within 0.81 °F of the standing one's (108 Wh);
+   12 h, 5.7 °F (201 Wh); 36 h, 0.20 °F.
 
 ``standby`` with ``settings`` also says when the heater would start
 itself on the coast and why; every walk with draws says when a draw
