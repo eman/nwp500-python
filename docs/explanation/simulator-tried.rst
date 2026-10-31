@@ -13,6 +13,32 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The inlet's mixing by the draw's flow (2026-10-31)
+=================================================
+
+**Tried.** Measured, not built: whether a faster draw mixes more of the
+bottom, so the inlet zone should grow with the flow. On the 45 held-out
+metered draws (after 2026-09-18), each walked from the record's replay
+on the defaults from the site's installation, the lower probe's error
+against the draw's flow, its gallons over the minutes the draw
+detector held.
+
+**Found.** The draws ran 0.15-1.45 gal/min, but the 20 of 4 gal or
+more all 0.69-1.31. With the gallons held, each gal/min added 1.1
+degF (standard error 1.0) to the lower probe's error over the hour and
+3.0 (1.6) over the first 20 minutes, where the draw scored at an
+instant may stand in too. The error follows the gallons (its RMS
+correlates 0.88 with them, 0.56 with the flow), both ways on the large
+draws.
+
+**Why dropped.** The record cannot fit a flow term. Draws of the same
+volume at very different flows from a rested tank, such as 10 gal at
+0.5 and at 2.5 gal/min, would.
+
+**Account.** :doc:`simulator-methodology`, "How a draw moves the
+tank".
+
+
 24 layers, refitted (2026-10-30)
 ================================
 
