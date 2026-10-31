@@ -417,13 +417,7 @@ it, and a new change is scored beside the code it changes
   6.6 min long; 46.4 min (25.6-75.3) on the 16 with draws or
   circulation inside them, a mean 20.2 min short. Over 119 recoveries
   each hot gallon drawn inside one added about 4.7 min to it and each
-  minute of circulation about 1.3 min. On the code of 2026-10-31 the
-  16 with draws came out 42.5 min off, a mean 34.1 short, the short
-  ones those starting minutes after a shower or with one inside them:
-  after such a draw, with the compressor running, the walk's lower
-  probe falls far less than the record's, and the heat pump stops on
-  that probe (:doc:`simulator-tried`, "The lower probe allowed
-  higher");
+  minute of circulation about 1.3 min;
 - a recovery's electricity, from the map, against the heater's metered
   energy on the 11 metered recoveries: mean absolute error 5.7 %
   (3.6-8.0), a mean 2.5 % low;
@@ -476,7 +470,12 @@ gives rather than the heat at 114 degF: with the tank refitted so, on
 the same 11 recoveries the duration's mean absolute error went from 6.9
 to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
 5.0 % to 4.5 %, from 0.4 % high to 0.6 % low on average; the 16 with
-draws inside them went from 47.2 to 48.2 min.
+draws inside them went from 47.2 to 48.2 min. On the code of
+2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
+short ones start minutes after a shower or have one inside them; after
+such a draw, with the compressor running, the walk's lower probe falls
+far less than the record's, and the heat pump stops on that probe
+(:doc:`simulator-tried`, "The lower probe allowed higher").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:

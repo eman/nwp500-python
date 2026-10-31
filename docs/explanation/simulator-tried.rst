@@ -32,19 +32,21 @@ the water drawn in the 30 minutes before the start (correlation -0.63
 over 15 of the 16, the one of 2026-09-30 02:51 UTC, 284 min short,
 left out) more than the water drawn inside it (-0.43), and neither the
 start's correction to the probes (at most 1.6 degF, mostly cooling)
-nor the circulation (none on 13 of the 16) nor the mains (within 1.5
-degF of an inlet probe, ``cold_supply.mains_f``) accounts for it.
-After draws of 10-16 gal with the compressor running, the record's
-lower probe fell 13-15 degF over the next 10-35 minutes, where the
-walk's moved under 3 degF; over the 34 held-out draws of 8 gal or more
-with it off, the record's fell a median of 12.2 degF over the hour and
-the walk's 10.0, less on 31 of the 34. So the gap lies in how a walk
-with the compressor running treats a draw's cold: its rise past the
-lower probe, or the condenser's heat in the inlet zone it sits in
-(the condenser 0.16-0.27 of the column, the zone the bottom 0.22).
-The record does not tell those apart. Either way the walk's lower
-probe reaches its target with heat still owed, and the heat pump
-stops on that probe.
+nor the circulation (none on 13 of the 16) nor the mains (a mean 1.5
+degF under an inlet probe, 0.1-3.9 over 25 days,
+``cold_supply.mains_f``) accounts for it. After the three traced
+draws of 10-16 gal at or just before a recovery's start or inside it,
+the record's lower probe fell 13-15 degF over the next 10-35 minutes,
+with the compressor running, where the walk's moved under 3 degF; over
+the 34 held-out draws of 8 gal or more with it off, the record's fell a
+median of 12.2 degF over the hour and the walk's 10.0, less on 31 of
+the 34. So the gap lies in how a walk with the compressor running
+treats a draw's cold: its rise past the lower probe, or the
+condenser's heat where its span overlaps the inlet zone (the condenser
+0.16-0.27 of the column, the zone the bottom 0.22). The record does
+not tell those apart. Either way the walk's lower probe reaches its
+target sooner than the record's, and the heat pump stops on that
+probe.
 
 **Why dropped.** No change: the probe's range was not what held the
 fit. A change to how a running walk treats the draw's cold is what
