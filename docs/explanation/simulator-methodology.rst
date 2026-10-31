@@ -535,7 +535,9 @@ pushes the column up and out of the top as a plug: the tank water a
 draw takes is the delivered gallons' tank share, solved gallon by
 gallon from the water leaving the top. The inflow mixes into the
 bottom ``inlet_mix_gal`` as it comes, so a short draw cools the bottom
-layers without a sharp front. The probes then read the layers where
+layers without a sharp front. The zone is the same at every flow: the
+record's draws of 4 gal or more all ran at 0.7-1.3 gal/min, too narrow
+a span to fit a flow term on (:doc:`simulator-tried`). The probes then read the layers where
 they sit: a draw shows on the lower probe first, and on the upper only
 once the cold has risen to it, so a draw that empties the tank takes
 the top down too. A draw split in two moves the tank as the whole draw

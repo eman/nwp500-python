@@ -662,6 +662,12 @@ Fixed
   ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
   gal: 12.9 over the 65's, where the ratings differ by 5.
 
+- The inlet zone is the same at every flow, and the methodology says
+  why: the record's draws of 4 gal or more all ran at 0.7-1.3 gal/min,
+  and with the gallons held the flow moves the lower probe's error
+  within about two standard errors. The measurement is in
+  :doc:`/explanation/simulator-tried`.
+
 - :doc:`/how-to/calibrate-simulator` says how a change to the
   simulator is scored: the record's pinned span and split, the site's
   installation (in code), and the code before the change scored the
