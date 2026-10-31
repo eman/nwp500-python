@@ -190,6 +190,65 @@ class TestCarryOn:
         assert slow.tail.heating[0].start.at == first
         assert slow.tail.heating[0].end > plain.tail.heating[0].end
 
+    def test_a_run_under_way_in_one_tail_is_not_settled(
+        self, plans: list[sim.SimulationResult]
+    ) -> None:
+        # At 11:00 the next day the base walk's morning recovery is over
+        # and the early boost's still under way.
+        short = TAIL.model_copy(update={"horizon": timedelta(hours=11)})
+        base, _, early = sim.carry_on(plans, short, PARAMS)
+        assert base.tail.end_state is not None
+        assert early.tail.end_state is not None
+        assert not base.tail.end_state.compressor_running
+        assert early.tail.end_state.compressor_running
+        assert base.running_alike
+        assert not early.running_alike
+        assert not early.settled
+
+    def test_a_held_mode_does_not_outlast_the_tails_settings(self) -> None:
+        # Electric in force at 22:00 inside a window open since 21:00,
+        # a Heat Pump entry at 23:30 held to the window's end.
+        from nwp500 import sim_adapters as sa
+
+        held = BASE.model_copy(
+            update={
+                "start": at(22),
+                "horizon": timedelta(hours=2),
+                "loads": sim.Loads(
+                    draws=(sim.Draw(at=at(23.8), gallons=45, duration_s=600),)
+                ),
+                "settings": SETTINGS.model_copy(update={"mode": 2}),
+                "commands": sim.Commands(
+                    reservations=(
+                        sa.reservation_entry(
+                            days=range(7),
+                            hour=23,
+                            minute=30,
+                            mode=1,
+                            temperature=120.0,
+                        ),
+                    )
+                ),
+            }
+        )
+        walk = sim.simulate(
+            held, PARAMS, tou_windows_in_force=[(at(21), at(25))]
+        )
+        window = [(at(24), at(25))]
+        [c] = sim.carry_on([walk], TAIL, PARAMS, tou_windows_in_force=window)
+        written = TAIL.model_copy(
+            update={
+                "commands": sim.Commands(
+                    writes=(sim.Write(at=TAIL.start, mode=1, setpoint_f=120),)
+                )
+            }
+        )
+        [w] = sim.carry_on([walk], written, PARAMS, tou_windows_in_force=window)
+        heats = [h for h in c.tail.heating if h.start.at >= TAIL.start]
+        assert heats[0].source == "compressor"
+        assert heats[0].start.at - TAIL.start < timedelta(minutes=1)
+        assert c.input_wh == pytest.approx(w.input_wh)
+
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):
             sim.carry_on([], TAIL, PARAMS)

@@ -65,7 +65,8 @@ Added
   changes are weighed with the tank each leaves rather than over their
   own span alone. ``sim.Carried`` holds the walk and its tail, their
   electricity by slot, and how far the tail's end is from the first
-  walk's (``residual_f``, ``residual_wh``, ``settled``).
+  walk's (``residual_f``, ``residual_wh``, ``running_alike``,
+  ``settled``).
 - **The scoreboard walks whole days.** ``sim_score.day_events`` takes
   each local day a record observed throughout, and ``sim_score.score``
   walks it from its start as the heater was told over it: the recorded

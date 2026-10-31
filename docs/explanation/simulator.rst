@@ -336,8 +336,10 @@ Entry points
    through one tail, the heater in its standing settings, so changes
    are weighed with the tank each leaves. ``Carried`` holds the walk
    and its tail, their electricity by slot, and how far the tail's end
-   is from the first walk's (``residual_f``, ``residual_wh``): a tail
-   that ends them alike leaves nothing between them unvalued. It takes
+   is from the first walk's (``residual_f``, ``residual_wh``,
+   ``running_alike``): a tail that ends them alike, the same layers
+   with the same heating running, leaves nothing between them
+   unvalued. It takes
    ``simulate``'s keyword inputs for every tail: a ``recovery`` model
    and ``start_hold`` as the walks had them, any windows over the
    tail's own span.

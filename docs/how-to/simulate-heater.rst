@@ -603,7 +603,9 @@ their sum.
 
 The comparison is whole only when the tails end alike:
 ``Carried.settled`` says each layer at the tail's end is within
-``sim.SETTLED_F`` (0.5 °F) of the first walk's tail's, and
+``sim.SETTLED_F`` (0.5 °F) of the first walk's tail's, with the same
+heating running (``running_alike``: a run under way in one tail and
+not another is heat still to pay for), and
 ``residual_wh`` is the heat left over that the tail did not value.
 Lengthen the tail until every walk is settled; one that runs through
 the recovery the heater makes anyway usually is. Walks made with

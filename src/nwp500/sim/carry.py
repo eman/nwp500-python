@@ -10,11 +10,12 @@ walk is carried on until what they left no longer differs.
 ``carry_on`` walks every walk's end through the same ``tail``: the
 heater in its standing settings (written at the tail's start over
 whatever a walk left in force), the same draws, air and schedules.
-Tails that end alike leave nothing between the walks unvalued, so a
-walk's electricity and its tail's, priced at any tariff, are the whole
-of what the change costs. How alike the tails end is given
-(``Carried.residual_f``, ``Carried.residual_wh``): a tail too short to
-settle them leaves that much out.
+Tails that end alike, the same layers with the same heating running,
+leave nothing between the walks unvalued, so a walk's electricity and
+its tail's, priced at any tariff, are the whole of what the change
+costs. How alike the tails end is given (``Carried.residual_f``,
+``Carried.residual_wh``, ``Carried.running_alike``): a tail too short
+to settle them leaves that much out.
 """
 
 from collections.abc import Callable, Sequence
@@ -47,12 +48,16 @@ class Carried:
     #: The largest difference of a layer at the tail's end from the
     #: first walk's tail's, °F.
     residual_f: float
+    #: Whether the tail ends with the compressor and the elements
+    #: running or not as the first walk's tail does: a run under way
+    #: in one and not the other is heat one is still paying for.
+    running_alike: bool = True
 
     @property
     def settled(self) -> bool:
-        """Whether the tail ends as the first walk's tail does, within
-        ``SETTLED_F`` in every layer."""
-        return self.residual_f <= SETTLED_F
+        """Whether the tail ends as the first walk's tail does: within
+        ``SETTLED_F`` in every layer, the same heating running."""
+        return self.residual_f <= SETTLED_F and self.running_alike
 
     @property
     def input_wh(self) -> float | None:
@@ -146,6 +151,7 @@ def carry_on(
         )
     lay = layout(params)
     ends = [_layers(t) for t in tails]
+    running = [_running(t) for t in tails]
     first = ends[0]
     first_wh = energy_btu(lay, TankState(first)) / BTU_PER_WH
     return tuple(
@@ -154,9 +160,16 @@ def carry_on(
             tail=t,
             residual_wh=energy_btu(lay, TankState(end)) / BTU_PER_WH - first_wh,
             residual_f=max(abs(a - b) for a, b in zip(end, first, strict=True)),
+            running_alike=on == running[0],
         )
-        for walk, t, end in zip(walks, tails, ends, strict=True)
+        for walk, t, end, on in zip(walks, tails, ends, running, strict=True)
     )
+
+
+def _running(result: SimulationResult) -> tuple[bool, bool]:
+    end = result.end_state
+    assert end is not None
+    return end.compressor_running, end.element_running
 
 
 def _layers(result: SimulationResult) -> tuple[float, ...]:
