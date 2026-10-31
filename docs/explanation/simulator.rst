@@ -417,7 +417,11 @@ it, and a new change is scored beside the code it changes
   6.6 min long; 46.4 min (25.6-75.3) on the 16 with draws or
   circulation inside them, a mean 20.2 min short. Over 119 recoveries
   each hot gallon drawn inside one added about 4.7 min to it and each
-  minute of circulation about 1.3 min;
+  minute of circulation about 1.3 min. The short ones are those that
+  start minutes after a shower or have one inside them: the walk keeps
+  a draw's cold under the lower probe, which the heat pump stops on
+  (measured 2026-10-31, :doc:`simulator-tried`, "The lower probe
+  allowed higher");
 - a recovery's electricity, from the map, against the heater's metered
   energy on the 11 metered recoveries: mean absolute error 5.7 %
   (3.6-8.0), a mean 2.5 % low;
