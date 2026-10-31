@@ -1,6 +1,7 @@
 """Walks carried on through one tail (``sim.carry_on``)."""
 
 from datetime import datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -598,7 +599,8 @@ class TestCarryOn:
         )
         # A run starting at the end is past it; two either side of it,
         # closer than the run gap, are the one run the tail ran through
-        # its end, kept whole.
+        # its end, kept to it; one under way at the end goes on as given,
+        # and a chain merged on past it is not run.
         m = timedelta(minutes=1)
         runs = sim.Loads(
             circulation=(
@@ -609,8 +611,19 @@ class TestCarryOn:
         )
         kept_runs = carry._drawn_by(runs, end, PARAMS).circulation
         assert kept_runs is not None
-        assert [(r.start, r.end) for r in kept_runs] == [
-            (end - 9 * m, end + 4 * m)
+        assert [(r.start, r.end) for r in kept_runs] == [(end - 9 * m, end)]
+        chain = sim.Loads(
+            circulation=tuple(
+                sim.CirculationRun(
+                    start=end - 2 * m + 15 * k * m, end=end + 3 * m + 15 * k * m
+                )
+                for k in range(8)
+            )
+        )
+        kept_chain = carry._drawn_by(chain, end, PARAMS).circulation
+        assert kept_chain is not None
+        assert [(r.start, r.end) for r in kept_chain] == [
+            (end - 2 * m, end + 3 * m)
         ]
         at_end = sim.Loads(
             circulation=(sim.CirculationRun(start=end, end=end + 5 * m),)
@@ -632,6 +645,67 @@ class TestCarryOn:
         )
         assert cut_tail.input_wh == whole_tail.input_wh
         assert cut_tail.end_state == whole_tail.end_state
+
+    def test_a_tail_and_its_walk_on_run_the_same_circulation(self) -> None:
+        # A recovery model's climb looks past the tail's end at the
+        # circulation to come; the tail is walked on the circulation its
+        # walk-on runs, so the walk-on is the tail up to its end.
+        from nwp500.sim.heat_pump_recovery import ModelDuration
+
+        class Fixed:
+            def duration(self, ctx: Any) -> ModelDuration:
+                h = ctx.start_hold_minutes
+                return ModelDuration(
+                    minutes=120.0 + h, start_hold_minutes=h, confidence=0.9
+                )
+
+        m = timedelta(minutes=1)
+        tail = TAIL.model_copy(
+            update={
+                "horizon": timedelta(minutes=90),
+                "loads": sim.Loads(
+                    circulation=(
+                        sim.CirculationRun(
+                            start=TAIL.start + 91 * m, end=TAIL.start + 490 * m
+                        ),
+                    )
+                ),
+            }
+        )
+
+        def walk() -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "start": TAIL.start - m,
+                        "horizon": m,
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=110, lower_f=100),
+                        # Locked out: the recovery starts in the tail.
+                        "history": sim.History(
+                            compressor_stopped_at=TAIL.start - m
+                        ),
+                    }
+                ),
+                PARAMS,
+            )
+
+        (carried,) = sim.carry_on([walk()], tail, PARAMS, recovery=Fixed())
+        alone = sim.simulate(
+            tail.model_copy(
+                update={
+                    "state": carried.walk.end_state,
+                    "history": carried.walk.end_history,
+                    "loads": carry._drawn_by(tail.loads, tail.until, PARAMS),
+                }
+            ),
+            PARAMS,
+            recovery=Fixed(),
+        )
+        assert carried.walk.heating == []
+        assert carried.tail.heating
+        assert carried.tail.input_wh == alone.input_wh
+        assert carried.tail.end_state == alone.end_state
 
     def test_nothing_past_a_tail_hides_a_start_owed(self) -> None:
         # In a window to 17:30, one tank at 17:03 waits for its close to

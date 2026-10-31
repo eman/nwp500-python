@@ -620,7 +620,9 @@ or held off, in one tail and not another is heat still to pay for),
 and
 ``residual_wh`` is the heat left over that the tail did not value.
 Lengthen the tail until every walk is settled; one that runs through
-the recovery the heater makes anyway usually is. Walks made with
+the recovery the heater makes anyway usually is. Circulation runs
+starting past the tail's end are not run, by the tail or its walk on;
+a run under way at the end goes on as given. Walks made with
 ``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``)
 are carried on with the same, passed to ``carry_on``; TOU windows
 given in force (``tou_windows_in_force``) are the tail's, over its

@@ -155,6 +155,11 @@ def carry_on(
     from the walk's layers and history, as ``simulate`` goes on from
     any (``resume_dropped_*`` in the tail's ``reasons``).
 
+    Each tail runs the circulation given that starts before its end,
+    no more (``_circulated_by``): a recovery model's climb, which looks
+    past the end, sees no run starting after it, as the tail walked on
+    sees none.
+
     The keyword inputs are ``simulate``'s, the same for every tail.
     ``recovery``, ``start_hold`` and ``inlet_measured`` go on as the
     walks had them: a walk made with a recovery model is carried on
@@ -190,6 +195,7 @@ def carry_on(
                 "state": walk.end_state,
                 "history": walk.end_history,
                 "commands": _over_a_hold(walk, tail),
+                "loads": _circulated_by(tail.loads, tail.until, params),
             }
         )
         scenarios.append(scenario)
@@ -316,13 +322,10 @@ def _go_on(
 
 
 def _drawn_by(loads: Loads, until: datetime, params: HeaterParams) -> Loads:
-    """``loads`` with only the water drawn and the circulation started
-    before ``until``. A draw running past it is kept as the pieces the
-    walk took before it, each at its instant with the draw's own
-    per-draw volume. The runs are merged first, as ``simulate`` merges
-    them over the whole input (``CirculationParams.run_gap_min``), and
-    those starting before ``until`` kept: one under way there, runs
-    past it merged in, goes on whole as the tail ran it."""
+    """``loads`` with only the water drawn and the circulation run
+    before ``until`` (``_circulated_by``). A draw running past it is
+    kept as the pieces the walk took before it, each at its instant
+    with the draw's own per-draw volume."""
     draws: list[Draw] = []
     for d in loads.draws:
         pieces = [(at, g) for at, g in d.pieces() if at < until]
@@ -335,22 +338,42 @@ def _drawn_by(loads: Loads, until: datetime, params: HeaterParams) -> Loads:
             for at, g in pieces
             if g > 0.0
         ]
+    return _circulated_by(loads, until, params).model_copy(
+        update={"draws": tuple(draws)}
+    )
+
+
+def _circulated_by(
+    loads: Loads, until: datetime, params: HeaterParams
+) -> Loads:
+    """``loads`` with only the circulation run before ``until``. The
+    runs are merged first, as ``simulate`` merges them over the whole
+    input (``CirculationParams.run_gap_min``), and those starting
+    before ``until`` kept, each to no later than the last end of a run
+    given starting before ``until``, or ``until``: a run under way
+    there goes on as given, runs starting past it are dropped, and the
+    gap merged across ``until`` flows to it as the tail ran it."""
     if loads.circulation is None:
-        return loads.model_copy(update={"draws": tuple(draws)})
+        return loads
     gap = (
         RUN_GAP
         if params.circulation is None
         else timedelta(minutes=params.circulation.run_gap_min)
     )
     known = loads.circulation_known_until
-    merged = Circulation(
-        tuple((r.start, r.end) for r in loads.circulation), known, gap
-    ).runs
+    given = [
+        (r.start, r.end)
+        for r in loads.circulation
+        if known is None or r.start <= known
+    ]
+    own = max([until, *(b for a, b in given if a < until)])
+    merged = Circulation(tuple(given), None, gap).runs
     return loads.model_copy(
         update={
-            "draws": tuple(draws),
             "circulation": tuple(
-                CirculationRun(start=a, end=b) for a, b in merged if a < until
+                CirculationRun(start=a, end=min(b, own))
+                for a, b in merged
+                if a < until
             ),
             "circulation_known_until": until
             if known is None
