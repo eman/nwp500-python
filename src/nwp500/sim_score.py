@@ -61,8 +61,11 @@ import pandas as pd
 
 from nwp500 import sim
 from nwp500.sim import calibration as cal
+from nwp500.sim import observed as obs
+from nwp500.sim import record as rec
 from nwp500.sim import tank_fit as tf
 from nwp500.sim.engine import SimulationError
+from nwp500.sim.inputs import POWER_OFF, VACATION
 from nwp500.sim.params import HeaterParams, params_to_document
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
@@ -99,6 +102,14 @@ LINE_F = 105.0
 #: A predicted probe this far under the coldest air of a coast that
 #: started above it breaks the second law: counted as ``below_air``.
 BELOW_AIR_F = 0.05
+#: A recorded start is placed by a predicted start of its source this
+#: near it, each prediction placing one start at most.
+START_MATCH = timedelta(minutes=30)
+#: The slots a day's energy is laid out on, to read when it was used.
+DAY_SLOT = timedelta(hours=1)
+#: The heater's signals a scored day holds with no gap
+#: (``sim.observed``): what ran, its power, and what it was told.
+DAY_SIGNALS = frozenset({"compressor", "power", "mode", "setpoint", "elements"})
 #: Bootstrap draws for each metric's interval, and its seed.
 N_BOOT = 2000
 SEED = 252
@@ -171,6 +182,36 @@ class Delivery:
 
 
 @dataclass(frozen=True)
+class Day:
+    """A recorded local day: what the heater was told over it, and what
+    it did."""
+
+    start: datetime
+    end: datetime
+    #: The day as the simulator takes it: the probes and what ran at
+    #: its start, the settings and the restart lockout in force then,
+    #: the TOU switch and its changes, the recorded setpoint and mode
+    #: writes, the air and the metered draws. The layers and the
+    #: circulation are the record's replay's, added when it is scored.
+    scenario: sim.Scenario
+    #: The TOU windows the heater marked over the day, its upper start
+    #: threshold raised (``Record.upper_on_edges``).
+    windows: tuple[tuple[datetime, datetime], ...]
+    #: The heater's metered electricity over the day, Wh, and per
+    #: ``DAY_SLOT`` from the day's start.
+    metered_wh: float
+    slots_wh: tuple[float, ...]
+    #: The day's starts by source, one running at its start left out.
+    compressor_starts: tuple[datetime, ...]
+    element_starts: tuple[datetime, ...]
+    #: The upper probe's lowest reading over the day, and both probes
+    #: at its end.
+    min_upper_f: float
+    end_upper_f: float
+    end_lower_f: float
+
+
+@dataclass(frozen=True)
 class Events:
     """The events a history is scored on."""
 
@@ -178,16 +219,22 @@ class Events:
     windows: tuple[Window, ...] = ()
     draws: tuple[DrawEvent, ...] = ()
     deliveries: tuple[Delivery, ...] = ()
+    #: Whole recorded days (``day_events``): none unless asked for.
+    days: tuple[Day, ...] = ()
 
     def keys(self) -> dict[str, list[str]]:
         """Each kind's events by their instants, as a score document
-        carries them."""
-        return {
+        carries them; ``days`` only when there are some, so a score
+        without them reads as one made before they were scored."""
+        out = {
             "recoveries": [_iso(e.start) for e in self.recoveries],
             "windows": [_iso(e.start) for e in self.windows],
             "draws": [_iso(e.at) for e in self.draws],
             "deliveries": [_iso(e.at) for e in self.deliveries],
         }
+        if self.days:
+            out["days"] = [_iso(e.start) for e in self.days]
+        return out
 
 
 def _iso(at: datetime) -> str:
@@ -552,6 +599,244 @@ def events(
     )
 
 
+# ── the days ───────────────────────────────────────────────────────
+
+
+def _at(rows: rec.Rows, at: datetime, heater: rec.Record) -> float | None:
+    got = rec.last(rows, at, heater.setting_lookback)
+    return None if got is None else got[1]
+
+
+def _on_since(rows: rec.Rows, at: datetime) -> datetime | None:
+    """When an on/off series last turned on at or before ``at``, if it
+    is on then."""
+    since = None
+    for t, v in rows:
+        if t > at:
+            break
+        on = v >= 0.5
+        since = (since or t) if on else None
+    return since
+
+
+def _mode(value: float) -> int:
+    """A recorded ``DhwOperationSetting`` as the simulator's mode: the
+    status-only Standby is Power Off, as ``sim_adapters.settings``
+    reads it."""
+    return POWER_OFF if int(value) == 0 else int(value)
+
+
+def _marked(
+    heater: rec.Record, start: datetime, end: datetime
+) -> tuple[tuple[datetime, datetime], ...]:
+    """The windows the heater marked over ``[start, end]``: one open at
+    the start from it, one open at the end to its close within the next
+    day, or the end."""
+    opens, closes = heater.upper_on_edges(start, end)
+    prior = rec.last(
+        heater.hp_upper_on_f,
+        start - timedelta(microseconds=1),
+        heater.setting_lookback,
+    )
+    line = heater.resting_upper_on_f + rec.RAISED_BY_F
+    opened = start if prior is not None and prior[1] > line else None
+    out: list[tuple[datetime, datetime]] = []
+    for t, up in sorted(
+        [(t, True) for t in opens] + [(t, False) for t in closes]
+    ):
+        if up and opened is None:
+            opened = t
+        elif not up and opened is not None:
+            out.append((opened, t))
+            opened = None
+    if opened is not None:
+        _, later = heater.upper_on_edges(end, end + timedelta(days=1))
+        out.append((opened, later[0] if later else end))
+    return tuple(out)
+
+
+def _one_day(
+    heater: rec.Record,
+    record: tf.TankRecord,
+    unobserved: np.ndarray,
+    seconds: np.ndarray,
+    start: datetime,
+    end: datetime,
+    tz: str,
+) -> Day | None:
+    """The day ``[start, end)``, or None when the record cannot say
+    what the heater was told or did over all of it."""
+    if _any_in(unobserved, seconds, start, end):
+        return None
+    if record.minute(start) < 0 or record.minute(end) > len(record):
+        return None
+    seen = obs.observe(heater, start, end, now=end)
+    if any(g.signal in DAY_SIGNALS for g in seen.gaps):
+        return None
+    if any(s.energy_wh is None or s.partial for s in seen.slots):
+        return None
+    upper, lower = (
+        _at(heater.upper_f, start, heater),
+        _at(heater.lower_f, start, heater),
+    )
+    setpoint, mode = (
+        _at(heater.setpoint_f, start, heater),
+        _at(heater.mode, start, heater),
+    )
+    end_upper, end_lower = (
+        _at(heater.upper_f, end, heater),
+        _at(heater.lower_f, end, heater),
+    )
+    if (
+        upper is None
+        or lower is None
+        or setpoint is None
+        or mode is None
+        or end_upper is None
+        or end_lower is None
+    ):
+        return None
+    # No rule for what a write into or out of these does.
+    if _mode(mode) in (VACATION, POWER_OFF):
+        return None
+    writes: list[sim.Write] = []
+    for w in heater.writes(start, end):
+        if w.dropped:
+            continue
+        if w.mode is not None:
+            if _mode(w.mode) in (VACATION, POWER_OFF):
+                return None
+            writes.append(sim.Write(at=w.at, mode=_mode(w.mode)))
+        if w.setpoint_f is not None:
+            writes.append(sim.Write(at=w.at, setpoint_f=w.setpoint_f))
+    starts = heater.starts(start, end)
+    running = {(s.source, s.zone) for s in starts.starts if s.running}
+    stops = [t for t in starts.stops if t < start]
+    compressor = ("compressor", None) in running
+    upper_since = _on_since(heater.upper_element, start)
+    lower_since = _on_since(heater.lower_element, start)
+    element_since = upper_since if upper_since is not None else lower_since
+    element = any(src == "element" for src, _ in running)
+    tou = _at(heater.tou, start, heater)
+    draws = tuple(
+        sim.Draw(at=t, gallons=g)
+        for t, g in record.draws
+        if start <= t < end and g > 0.0
+    )
+    scenario = sim.Scenario(
+        start=start,
+        horizon=end - start,
+        tz=tz,
+        state=sim.HeaterState(
+            upper_f=upper,
+            lower_f=lower,
+            compressor_running=compressor,
+            element_running=element,
+            element_running_since=element_since if element else None,
+        ),
+        settings=sim.Settings(
+            setpoint_f=setpoint,
+            mode=_mode(mode),
+            hp_lower_on_f=_at(heater.hp_lower_on_f, start, heater),
+            hp_lower_off_f=_at(heater.hp_lower_off_f, start, heater),
+            hp_upper_on_f=_at(heater.hp_upper_on_f, start, heater),
+        ),
+        history=sim.History(
+            compressor_stopped_at=None if compressor or not stops else stops[-1]
+        ),
+        schedules=sim.Schedules(
+            tou_enabled=tou is not None and tou >= 0.5,
+            tou_switches=tuple(heater.tou_switches(start, end)),
+        ),
+        environment=sim.Environment(
+            ambient_f=tuple((t, record.air_at(t)) for t in _grid(start, end))
+        ),
+        loads=sim.Loads(draws=draws),
+        commands=sim.Commands(writes=tuple(writes)),
+    )
+    n = math.ceil((end - start) / DAY_SLOT)
+    slots = [0.0] * n
+    for s in seen.slots:
+        slots[int((s.start - start) / DAY_SLOT)] += float(s.energy_wh or 0.0)
+    uppers = [upper, *(v for _, v in rec.between(heater.upper_f, start, end))]
+    return Day(
+        start=start,
+        end=end,
+        scenario=scenario,
+        windows=_marked(heater, start, end),
+        metered_wh=sum(slots),
+        slots_wh=tuple(slots),
+        compressor_starts=tuple(
+            s.at
+            for s in starts.starts
+            if s.source == "compressor" and not s.running
+        ),
+        element_starts=tuple(
+            s.at
+            for s in starts.starts
+            if s.source == "element" and not s.running
+        ),
+        min_upper_f=min(uppers),
+        end_upper_f=end_upper,
+        end_lower_f=end_lower,
+    )
+
+
+def day_events(
+    ready: Prepared,
+    heater: rec.Record,
+    record: tf.TankRecord,
+    *,
+    tz: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> tuple[Day, ...]:
+    """The whole local days in ``tz`` that start in ``[since, until)``
+    and that ``ready``'s history observed throughout: the heater heard
+    and the air read (its frame's ``heater_unobserved`` and
+    ``air_unobserved``), what ran, its power and what it was told
+    recorded in ``heater`` with no gap (``DAY_SIGNALS``), and the
+    tank's ``record`` (``tank_fit.tank_record``) covering it, its
+    metered draws the day's. A day with a write into or out of
+    Vacation or Power Off, or spent in either, is left out: the
+    simulator holds no rule for such a write.
+
+    ``heater`` carries what ``ready``'s frame does not: the mode, the
+    lower probe's start threshold, the upper's (whose rise marks a TOU
+    window in force) and the TOU switch, each read as far back as
+    ``sim.observed`` reads a setting (``STATE_LOOKBACK``): one set once
+    holds until it changes. A day is predicted with the
+    windows the heater marked, not a schedule's: its TOU schedule over
+    the past is not recorded."""
+    zone = ZoneInfo(tz)
+    # A setting is recorded only when it changes, and may hold for
+    # longer than the record's own lookback: read as ``observe`` reads.
+    heater = replace(heater, setting_lookback=obs.STATE_LOOKBACK)
+    frame = ready.frame
+    seconds = _seconds(frame)
+    unobserved = _flag(frame, "heater_unobserved") | _flag(
+        frame, "air_unobserved"
+    )
+    first = record.instant(0)
+    last = record.instant(len(record) - 1) + timedelta(minutes=1)
+    out: list[Day] = []
+    d = first.astimezone(zone).date()
+    while True:
+        start = datetime.combine(d, time(), tzinfo=zone).astimezone(UTC)
+        end = datetime.combine(
+            d + timedelta(days=1), time(), tzinfo=zone
+        ).astimezone(UTC)
+        d += timedelta(days=1)
+        if end > last or (until is not None and start >= until):
+            break
+        if start < first or (since is not None and start < since):
+            continue
+        day = _one_day(heater, record, unobserved, seconds, start, end, tz)
+        if day is not None:
+            out.append(day)
+    return tuple(out)
+
+
 # ── the predictions ────────────────────────────────────────────────
 
 
@@ -855,6 +1140,153 @@ def _delivery_score(
     return True, error > 0.0
 
 
+def _placed(recorded: Sequence[datetime], predicted: Sequence[datetime]) -> int:
+    """How many ``recorded`` starts a ``predicted`` one places, within
+    ``START_MATCH``, each prediction placing the nearest free start."""
+    free = sorted(predicted)
+    placed = 0
+    for t in sorted(recorded):
+        near = [p for p in free if abs(p - t) <= START_MATCH]
+        if near:
+            free.remove(min(near, key=lambda p: abs(p - t)))
+            placed += 1
+    return placed
+
+
+def _day_score(
+    e: Day,
+    params: HeaterParams,
+    inlet_f: float | None,
+    tally: _Tally,
+    day: int,
+    record: tf.TankRecord | None = None,
+    line_f: float = LINE_F,
+) -> float | None:
+    """The day predicted from its start and scored; its predicted
+    electricity, Wh, or None when the simulator could not answer."""
+    s = e.scenario
+    state = _state(
+        params,
+        record,
+        e.start,
+        s.state.upper_f,
+        s.state.lower_f,
+        compressor_running=s.state.compressor_running,
+        element_running=s.state.element_running,
+        element_running_since=s.state.element_running_since,
+    )
+    try:
+        result = sim.simulate(
+            s.model_copy(
+                update={
+                    "state": state,
+                    "environment": s.environment.model_copy(
+                        update={"inlet_f": inlet_f}
+                    ),
+                    "loads": _loads(record, e.start, e.end, s.loads.draws),
+                }
+            ),
+            params,
+            tou_windows_in_force=e.windows,
+        )
+    except SimulationError, ValueError:
+        return None
+    wh = result.input_wh
+    end = result.end_state
+    if wh is None or end is None:
+        return None
+    if e.metered_wh > 0.0:
+        tally.add(
+            "day_energy_abs_pct",
+            100.0 * abs(wh - e.metered_wh) / e.metered_wh,
+            day,
+        )
+        tally.add(
+            "day_energy_bias_pct",
+            100.0 * (wh - e.metered_wh) / e.metered_wh,
+            day,
+        )
+    # When in the day it was used, whatever the day's total: half the
+    # summed difference of each slot's share of its own day's energy.
+    predicted = [0.0] * len(e.slots_wh)
+    for at, slot_wh in result.energy_by_slot(DAY_SLOT):
+        k = int((at - e.start) / DAY_SLOT)
+        if 0 <= k < len(predicted) and slot_wh is not None:
+            predicted[k] += slot_wh
+    if wh > 0.0 and e.metered_wh > 0.0:
+        tally.add(
+            "day_energy_misplaced_share",
+            0.5
+            * sum(
+                abs(p / wh - m / e.metered_wh)
+                for p, m in zip(predicted, e.slots_wh, strict=True)
+            ),
+            day,
+        )
+    starts = {
+        source: [
+            h.start.at
+            for h in result.heating
+            if h.source == source and e.start < h.start.at < e.end
+        ]
+        for source in ("compressor", "element")
+    }
+    got = starts["compressor"]
+    tally.add(
+        "day_compressor_starts_bias",
+        float(len(got) - len(e.compressor_starts)),
+        day,
+    )
+    placed = _placed(e.compressor_starts, got)
+    if e.compressor_starts:
+        tally.add(
+            "day_compressor_starts_placed_share",
+            placed / len(e.compressor_starts),
+            day,
+        )
+    tally.add("day_compressor_starts_false", float(len(got) - placed), day)
+    tally.add(
+        "day_element_starts_bias",
+        float(len(starts["element"]) - len(e.element_starts)),
+        day,
+    )
+    low = min(p.upper_f for p in result.points)
+    tally.add("day_min_upper_abs_f", abs(low - e.min_upper_f), day)
+    tally.add("day_min_upper_bias_f", low - e.min_upper_f, day)
+    tally.add(
+        "day_line_disagree_share",
+        float((low < line_f) != (e.min_upper_f < line_f)),
+        day,
+    )
+    tally.add(
+        "day_end_mean_abs_f",
+        abs(
+            (end.upper_f + end.lower_f) / 2.0
+            - (e.end_upper_f + e.end_lower_f) / 2.0
+        ),
+        day,
+    )
+    return wh
+
+
+def _concordance(
+    predicted: Sequence[float], metered: Sequence[float]
+) -> list[float]:
+    """For each day, the share of the other days the prediction orders
+    against it as the meter does (more electricity or less); a pair the
+    meter ties is left out. None for a day with no such pair."""
+    out: list[float] = []
+    for i, (p, m) in enumerate(zip(predicted, metered, strict=True)):
+        agree = total = 0
+        for j, (q, n) in enumerate(zip(predicted, metered, strict=True)):
+            if i == j or m == n:
+                continue
+            total += 1
+            agree += (p - q) * (m - n) > 0.0
+        out.append(agree / total if total else math.nan)
+    return out
+
+
 # ── the score ──────────────────────────────────────────────────────
 
 
@@ -963,7 +1395,22 @@ def score(
       at a delivery's start against those it delivered before the top
       crossed the line; ``deliverable_short_gal``: for one that never
       crossed, how far the promise fell under what it delivered, and
-      ``deliverable_under_share`` how often it did.
+      ``deliverable_under_share`` how often it did;
+    - with ``days`` (``day_events``), each day walked whole from its
+      start: ``day_energy_abs_pct`` and ``_bias_pct``, its electricity
+      against the meter's; ``day_energy_misplaced_share``, the share of
+      its electricity predicted in another ``DAY_SLOT`` than the meter
+      put it in (0 to 1, whatever the total); ``day_energy_concordance``
+      (higher is better), the share of the other days it is ordered
+      against, more electricity or less, as the meter orders them;
+      ``day_compressor_starts_bias``, the predicted starts less the
+      recorded, ``_placed_share`` the recorded starts a prediction
+      places within ``START_MATCH``, ``_false`` the predicted starts
+      that place none; ``day_element_starts_bias``; ``day_min_upper_abs_f``
+      and ``_bias_f``, the upper probe's lowest over the day;
+      ``day_line_disagree_share``, how often the prediction and the
+      record disagree on whether it fell below the line; and
+      ``day_end_mean_abs_f``, the probes' mean at the day's end.
     """
     zone = ZoneInfo(tz)
     tally = _Tally()
@@ -973,6 +1420,8 @@ def score(
         "draws": [],
         "deliveries": [],
     }
+    if found.days:
+        failed["days"] = []
     breaks = {"below_air": 0}
     over = 0
     for r in found.recoveries:
@@ -995,6 +1444,21 @@ def score(
         if not done:
             failed["deliveries"].append(_iso(c.at))
         over += promised
+    scored: list[tuple[Day, float]] = []
+    for e in found.days:
+        wh = _day_score(e, params, inlet_f, tally, _day(e.start, zone), record)
+        if wh is None:
+            failed["days"].append(_iso(e.start))
+        else:
+            scored.append((e, wh))
+    for (e, _), share in zip(
+        scored,
+        _concordance(
+            [wh for _, wh in scored], [e.metered_wh for e, _ in scored]
+        ),
+        strict=True,
+    ):
+        tally.add("day_energy_concordance", share, _day(e.start, zone))
     metrics = {
         name: _stat(values, tally.days[name])
         for name, values in sorted(tally.values.items())

@@ -242,6 +242,53 @@ the fit the draws before the split, and the score the record
 ``sim_score.compare`` reads two score documents and says, for each
 metric, whether the second's interval clears the first's value.
 
+Whole days
+----------
+
+A scheduler weighs one day's plan against another's, so the score can
+also walk whole local days from their start, as the heater was told
+over them, and set what it predicts beside what the heater did:
+``sim_score.day_events``. It needs what the fits' frame does not carry,
+the heater's record (``sim.record.Record``): the mode, the setpoint,
+the lower probe's start and stop thresholds, the upper's start
+threshold (whose rise marks a TOU window in force), the TOU switch,
+what ran and the heater's power. A day is scored only when all of
+those, the air and the heater were heard throughout it. Each day starts
+from the layers its replay leaves and is walked with the recorded
+setpoint and mode writes, the TOU windows the heater marked, the
+metered draws, the circulation and the air:
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   from nwp500.sim.record import Record
+
+   heater = Record(compressor=..., power_w=..., mode=..., setpoint_f=...,
+                   upper_f=..., lower_f=..., hp_lower_on_f=...,
+                   hp_lower_off_f=..., hp_upper_on_f=..., tou=...)
+   tank = tank_fit.tank_record(ready.frame, draws)
+   days = sim_score.day_events(
+       ready, heater, tank, tz="America/Los_Angeles", since=start
+   )
+   score = sim_score.score(
+       replace(found, days=days), done.calibration.params,
+       tz="America/Los_Angeles", record=tank,
+   )
+
+The day metrics are the day's electricity against the meter's
+(``day_energy_abs_pct``, ``_bias_pct``), how much of it fell in another
+hour than the meter put it in, whatever the total
+(``day_energy_misplaced_share``), how often two days are ordered by
+their electricity as the meter orders them (``day_energy_concordance``),
+the compressor's starts (``day_compressor_starts_bias``, the share of
+recorded starts a prediction places within 30 minutes,
+``_placed_share``, and the predictions that place none, ``_false``), the
+elements' (``day_element_starts_bias``), the upper probe's lowest over
+the day (``day_min_upper_abs_f``, ``_bias_f``) and whether either side
+took it below the line (``day_line_disagree_share``), and the probes'
+mean at the day's end (``day_end_mean_abs_f``).
+
 Score a change to the simulator
 -------------------------------
 

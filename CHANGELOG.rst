@@ -60,6 +60,18 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **The scoreboard walks whole days.** ``sim_score.day_events`` takes
+  each local day a record observed throughout, and ``sim_score.score``
+  walks it from its start as the heater was told over it: the recorded
+  setpoint and mode writes, the TOU windows the heater marked, the
+  metered draws, the circulation and the air. It is scored on what a
+  scheduler compares plans by: the day's electricity and when in the
+  day it fell, the order of days by their electricity, the
+  compressor's and the elements' starts, the upper probe's lowest and
+  the tank at the day's end (``Events.days``, the ``day_*`` metrics).
+  ``sim.record.Record`` carries the lower probe's stop threshold
+  (``hp_lower_off_f``), which ``sim_adapters.record`` reads.
+
 - **A simulation goes on from where another ended.** A scheduler that
   stands the simulator in for a heater calls it once a step, and each
   call began as a mode entry: a running compressor's hold, lockout and

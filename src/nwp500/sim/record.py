@@ -147,6 +147,7 @@ class Record:
     upper_f: Rows = ()
     lower_f: Rows = ()
     hp_lower_on_f: Rows = ()
+    hp_lower_off_f: Rows = ()
     hp_upper_on_f: Rows = ()
     tou: Rows = ()
     #: How far back a setting's value in force (the TOU switch, the

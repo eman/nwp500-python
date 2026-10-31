@@ -437,10 +437,38 @@ to 5.7 min (5.0 to 3.1 min long on average) and the electricity's from
 5.0 % to 4.5 %, from 0.4 % high to 0.6 % low on average; the 16 with
 draws inside them went from 47.2 to 48.2 min.
 
-Not yet measured on the layered tank: recorded starts and daily energy
-from replaying recorded writes, depletions called over the whole
-record, a forecast's draw windows, and the time to ready and an element
-run's energy after a switch into an element mode.
+**Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
+same split and installation, the parameters fitted on that date's code:
+the 29 held-out local days the record observed throughout, each walked
+from midnight with the setpoint and mode writes the heater recorded,
+the TOU windows it marked (16:00 to 21:00, on 10-02 broken from 19:50
+to 20:20), the metered draws, the circulation and the air:
+
+- the day's electricity: mean absolute error 16.5 % (10.8-22.9), a mean
+  12.8 % low; within 12 % on 23 of the 29 days;
+- when in the day it was used: 18 % of the day's electricity predicted
+  in another hour than the meter put it in (11-27 %);
+- two days ordered by their electricity as the meter orders them, 84 %
+  of the time (80-87 %);
+- the compressor's starts: 79 % of the recorded starts placed within 30
+  minutes (68-90 %), 0.31 a day missed (0.14-0.52) and 0.10 a day
+  predicted that the record lacks (0.03-0.21);
+- the upper probe's lowest over the day within 3.8 degF (2.2-5.7), a
+  mean 2.8 degF warm.
+
+The days the walk misses are the ones that matter to a schedule. On
+three, the record starts at or near the window's close (21:00 on
+10-20 and 10-21, 20:41 on 10-18) and the walk does not: its lower probe
+reads warmer by then than the trigger, and the day comes out 41 to
+100 % low. On two, evening draws in the window (69 and 57 gal on 09-29
+and 10-02) took the record's upper probe to 79.5 and 96.1 degF while
+the walk's held at 107.5 and 113.3 degF, though it placed the 09-29
+start within 3 minutes: the only two days on which the record crossed
+the line, and the walk called neither.
+
+Not yet measured on the layered tank: a forecast's draw windows, and
+the time to ready and an element run's energy after a switch into an
+element mode.
 
 
 Limitations
