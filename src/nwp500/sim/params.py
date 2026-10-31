@@ -984,9 +984,10 @@ class CirculationParams:
     meter_share: float = field(
         default=0.0, metadata=_p(MEASURED, "1", INSTALLATION)
     )
-    #: Runs closer than this are one run, minutes: a restart displaces
-    #: water the last run warmed. The return's rest and cooling are
-    #: fitted on runs merged at this gap, so change them together.
+    #: Runs no farther apart than this are one run, minutes: a restart
+    #: displaces water the last run warmed. The return's rest and
+    #: cooling are fitted on runs merged at this gap, so change them
+    #: together.
     run_gap_min: float = field(
         default=10.0, metadata=_p(MEASURED, "min", INSTALLATION)
     )

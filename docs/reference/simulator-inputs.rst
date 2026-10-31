@@ -522,7 +522,7 @@ nothing is charged.
        (default 0, a meter the circulation does not pass). A replay of a
        recorded history takes it off the meter to find the draws.
    * - ``run_gap_min``
-     - Runs closer than this are one run (default 10 minutes), merged
+     - Runs no farther apart than this are one run (default 10 minutes), merged
        once over the whole input. The return's rest and cooling are
        fitted on runs merged at this gap, so change them together.
 
