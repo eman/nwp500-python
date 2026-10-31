@@ -794,38 +794,60 @@ class TestCarryOn:
         assert owing.residual_f <= sim.SETTLED_F
         assert not owing.heating_alike
 
-    def test_a_tail_circulating_only_to_its_end_is_simulates(self) -> None:
+    def test_a_tail_runs_no_circulation_started_past_its_end(self) -> None:
+        # A recovery under way at the end, a window opening after it: its
+        # cap is judged without the run starting past the end, and the
+        # run under way there goes on as given. Given only the runs
+        # starting before its end, the tail is simulate's.
         m = timedelta(minutes=1)
-        end = TAIL.until
+        start = TAIL.start
+        end = start + 60 * m
+        under_way = sim.CirculationRun(start=end - 3 * m, end=end + 30 * m)
+        later = sim.CirculationRun(start=end + 50 * m, end=end + 350 * m)
+        draw = sim.Draw(at=start + 5 * m, gallons=50.0, duration_s=600.0)
         tail = TAIL.model_copy(
             update={
+                "horizon": 60 * m,
                 "loads": sim.Loads(
-                    draws=(sim.Draw(at=end - 50 * m, gallons=50.0),),
-                    circulation=(
-                        sim.CirculationRun(
-                            start=end - 40 * m, end=end - 30 * m
-                        ),
-                        sim.CirculationRun(start=end - 3 * m, end=end + 5 * m),
-                    ),
-                )
+                    draws=(draw,), circulation=(under_way, later)
+                ),
             }
         )
-        window = [(end - 45 * m, end + 300 * m)]
+        window = [(end + 60 * m, end + 300 * m)]
         walk = sim.simulate(
-            BASE.model_copy(update={"horizon": TAIL.start - T0}), PARAMS
+            TAIL.model_copy(
+                update={
+                    "start": start - 10 * m,
+                    "horizon": 10 * m,
+                    "loads": sim.Loads(),
+                    "state": sim.HeaterState(upper_f=120, lower_f=118),
+                }
+            ),
+            PARAMS,
         )
         (carried,) = sim.carry_on(
             [walk], tail, PARAMS, tou_windows_in_force=window
         )
-        alone = sim.simulate(
-            tail.model_copy(
-                update={"state": walk.end_state, "history": walk.end_history}
-            ),
-            PARAMS,
-            tou_windows_in_force=window,
-        )
-        assert carried.tail.input_wh == alone.input_wh
-        assert carried.tail.end_state == alone.end_state
+
+        def alone(runs: tuple[sim.CirculationRun, ...]) -> sim.SimulationResult:
+            return sim.simulate(
+                tail.model_copy(
+                    update={
+                        "state": walk.end_state,
+                        "history": walk.end_history,
+                        "loads": sim.Loads(draws=(draw,), circulation=runs),
+                    }
+                ),
+                PARAMS,
+                tou_windows_in_force=window,
+            )
+
+        before = alone((under_way,))
+        assert carried.tail.input_wh == before.input_wh
+        assert carried.tail.end_state == before.end_state
+        assert carried.tail.end_state != alone((under_way, later)).end_state
+        clipped = sim.CirculationRun(start=under_way.start, end=end)
+        assert carried.tail.end_state != alone((clipped,)).end_state
 
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):

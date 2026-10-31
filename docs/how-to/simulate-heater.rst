@@ -621,12 +621,17 @@ and
 ``residual_wh`` is the heat left over that the tail did not value.
 Lengthen the tail until every walk is settled; one that runs through
 the recovery the heater makes anyway usually is. Circulation runs
-starting past the tail's end are not run, by the tail or its walk on;
-a run under way at the end goes on as given. What looks past the end
-(a recovery model's climb, a TOU cap judged on a recovery under way)
-sees none of them, so a recovery running at the tail's end has its
-stop judged without them: give the tail its circulation up to its end
-and its end is ``simulate``'s. Walks made with
+starting past the tail's end are not run, by the tail or its walk on:
+the runs are merged as ``simulate`` merges them (closer than
+``CirculationParams.run_gap_min``), those starting before the end are
+kept, a run under way there goes on to its given end, and a gap merged
+across the end flows up to it. What looks past the end (a recovery
+model's climb, a TOU cap judged on a recovery under way) sees none of
+the runs dropped, so a recovery running at the tail's end has its stop
+judged without them, and with a ``recovery`` model the tail's own
+heating is paced without them. Give the tail no run starting past its
+end, and none within the run gap after its last, and it is
+``simulate``'s. Walks made with
 ``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``)
 are carried on with the same, passed to ``carry_on``; TOU windows
 given in force (``tou_windows_in_force``) are the tail's, over its
