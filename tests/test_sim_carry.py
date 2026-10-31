@@ -7,6 +7,7 @@ import pytest
 from sim_cases import PARAMS
 
 from nwp500 import sim
+from nwp500.sim import carry
 
 TZ = "America/Los_Angeles"
 T0 = datetime(2026, 10, 6, 0, 0, tzinfo=ZoneInfo(TZ))
@@ -234,8 +235,11 @@ class TestCarryOn:
         walk = sim.simulate(
             held, PARAMS, tou_windows_in_force=[(at(21), at(25))]
         )
-        window = [(at(24), at(25))]
-        [c] = sim.carry_on([walk], TAIL, PARAMS, tou_windows_in_force=window)
+        end = walk.end_state
+        assert end is not None and end.resume is not None
+        assert '"held": {' in end.resume
+        # No window opens at the tail's start to drop the element mode.
+        [c] = sim.carry_on([walk], TAIL, PARAMS)
         written = TAIL.model_copy(
             update={
                 "commands": sim.Commands(
@@ -243,11 +247,74 @@ class TestCarryOn:
                 )
             }
         )
-        [w] = sim.carry_on([walk], written, PARAMS, tou_windows_in_force=window)
+        [w] = sim.carry_on([walk], written, PARAMS)
         heats = [h for h in c.tail.heating if h.start.at >= TAIL.start]
         assert heats[0].source == "compressor"
         assert heats[0].start.at - TAIL.start < timedelta(minutes=1)
         assert c.input_wh == pytest.approx(w.input_wh)
+        electric = TAIL.model_copy(
+            update={"settings": SETTINGS.model_copy(update={"mode": 2})}
+        )
+        [e] = sim.carry_on([walk], electric, PARAMS)
+        assert e.input_wh != pytest.approx(c.input_wh)
+
+    def test_a_start_pending_is_heating_under_way(self) -> None:
+        # One tank just under the lower trigger inside the restart
+        # lockout, its start pending past the tail's end; one just over.
+        def walk(lower_f: float, stopped: timedelta) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=120, lower_f=lower_f),
+                        "history": sim.History(
+                            compressor_stopped_at=T0 - stopped
+                        ),
+                    }
+                ),
+                PARAMS,
+            )
+
+        idle = walk(111.2, timedelta(hours=3))
+        pending = walk(110.8, timedelta(minutes=1))
+        tail = TAIL.model_copy(
+            update={
+                "start": T0 + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+            }
+        )
+        first, other = sim.carry_on([idle, pending], tail, PARAMS)
+        assert first.running_alike
+        assert other.residual_f <= sim.SETTLED_F
+        assert not other.running_alike
+        assert not other.settled
+
+    def test_an_elements_heat_still_arriving_is_under_way(self) -> None:
+        # High Demand: the upper element's late-morning run, the walk
+        # ending 30 s after it stops with nothing running, its heat
+        # reaching the water a dead time (``upper_dead_time_min``,
+        # 1.21 min) after.
+        high = BASE.model_copy(
+            update={
+                "loads": sim.Loads(),
+                "state": sim.HeaterState(upper_f=100, lower_f=95),
+                "settings": SETTINGS.model_copy(update={"mode": 4}),
+            }
+        )
+        probe = sim.simulate(high, PARAMS)
+        stop = next(
+            h.end
+            for h in probe.heating
+            if h.source == "element" and h.start.at > at(6)
+        )
+        span = {"horizon": stop + timedelta(seconds=30) - T0}
+        walk = sim.simulate(high.model_copy(update=span), PARAMS)
+        assert walk.end_state is not None
+        assert not walk.end_state.element_running
+        assert not walk.end_state.compressor_running
+        assert carry._running(walk) == (False, True)
 
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):

@@ -18,13 +18,15 @@ costs. How alike the tails end is given (``Carried.residual_f``,
 to settle them leaves that much out.
 """
 
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from nwp500.sim.api import simulate
+from nwp500.sim.engine import Resume
 from nwp500.sim.extensions import RecoveryModel
-from nwp500.sim.inputs import Scenario
+from nwp500.sim.inputs import POWER_OFF, VACATION, Commands, Scenario, Write
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
 from nwp500.sim.result import SimulationResult
@@ -48,10 +50,12 @@ class Carried:
     #: The largest difference of a layer at the tail's end from the
     #: first walk's tail's, °F.
     residual_f: float
-    #: Whether the tail ends with the compressor and the elements
-    #: running or not as the first walk's tail does: a run under way
-    #: in one and not the other is heat one is still paying for.
-    running_alike: bool = True
+    #: Whether the tail ends with the compressor running or its start
+    #: pending (its lag or lockout), and the elements running or their
+    #: heat still arriving after a stop, or not, as the first walk's
+    #: tail does: heating under way in one and not the other is heat
+    #: one is still to pay for, or still to reach the water.
+    running_alike: bool
 
     @property
     def settled(self) -> bool:
@@ -106,7 +110,10 @@ def carry_on(
     written at its start over what the walk left. Every walk must end
     where ``tail`` starts. A tail long enough to take each tank through
     the recovery the heater makes anyway ends them alike
-    (``Carried.settled``). A walk that ends in, or a tail that starts
+    (``Carried.settled``). A walk that ends with a mode write held in a
+    window has the tail's mode written at the tail's start, ahead of
+    the tail's own commands, so the hold is withdrawn as a direct write
+    withdraws one. A walk that ends in, or a tail that starts
     in, Vacation or Power Off with the other not is carried on afresh
     from the walk's layers and history, as ``simulate`` goes on from
     any (``resume_dropped_*`` in the tail's ``reasons``).
@@ -139,6 +146,7 @@ def carry_on(
                     update={
                         "state": walk.end_state,
                         "history": walk.end_history,
+                        "commands": _over_a_hold(walk, tail),
                     }
                 ),
                 params,
@@ -166,10 +174,46 @@ def carry_on(
     )
 
 
+def _resume(result: SimulationResult) -> Resume | None:
+    end = result.end_state
+    if end is None or end.resume is None:
+        return None
+    return Resume.from_document(json.loads(end.resume))
+
+
+def _over_a_hold(walk: SimulationResult, tail: Scenario) -> Commands:
+    """The tail's commands, with its mode written at its start first
+    when the walk ended with a mode write held: a direct write
+    withdraws a held one, and settings that name the mode the held
+    write would land leave it held to its window's close."""
+    resume = _resume(walk)
+    if (
+        resume is None
+        or resume.controller.mode.held is None
+        or tail.settings.mode in (VACATION, POWER_OFF)
+    ):
+        return tail.commands
+    return tail.commands.model_copy(
+        update={
+            "writes": (
+                Write(at=tail.start, mode=tail.settings.mode),
+                *tail.commands.writes,
+            )
+        }
+    )
+
+
 def _running(result: SimulationResult) -> tuple[bool, bool]:
     end = result.end_state
     assert end is not None
-    return end.compressor_running, end.element_running
+    resume = _resume(result)
+    pending = resume is not None and resume.controller.compressor.pending
+    # An element's heat still on its way to the water after it stopped.
+    arriving = resume is not None and bool(resume.cooling)
+    return (
+        end.compressor_running or bool(pending),
+        end.element_running or arriving,
+    )
 
 
 def _layers(result: SimulationResult) -> tuple[float, ...]:
