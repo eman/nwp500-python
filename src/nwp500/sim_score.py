@@ -811,8 +811,9 @@ def day_events(
     simulator holds no rule for such a write.
 
     ``heater`` carries what ``ready``'s frame does not: the mode, the
-    lower probe's start threshold, the upper's (whose rise marks a TOU
-    window in force) and the TOU switch, each read as far back as
+    lower probe's start and stop thresholds, the upper's start
+    threshold (whose rise marks a TOU window in force) and the TOU
+    switch, each read as far back as
     ``sim.observed`` reads a setting (``STATE_LOOKBACK``): one set once
     holds until it changes. A day is predicted with the
     windows the heater marked, not a schedule's: its TOU schedule over
