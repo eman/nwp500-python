@@ -28,15 +28,15 @@ the 27 recoveries after, on the site's installation.
 0.481 against the base's 0.485, which was already 0.015 under the old
 bound, and every held-out score stayed inside its interval (the 16
 recoveries with water in use 41.6 min off against 42.5, a mean 32.8
-short against 34.1; the 11 without 5.6 against 5.7). The shortfall follows
-the water drawn in the 30 minutes before the start (correlation -0.63
+short against 34.1; the 11 without 5.6 against 5.7). The shortfall
+follows the water drawn in the 30 minutes before the start (correlation -0.63
 over 15 of the 16, the one of 2026-09-30 02:51 UTC, 284 min short,
 left out) more than the water drawn inside it (-0.43), and neither the
 start's correction to the probes (at most 1.6 degF, mostly cooling)
 nor the circulation (none on 13 of the 16) nor the mains (a mean 1.5
 degF under an inlet probe, 0.1-3.9 over 25 days of 2026-09-20..10-28,
 ``cold_supply.mains_f``) accounts for it. After the three traced
-draws of 10-16 gal at or just before a recovery's start or inside it,
+draws of 10-16 gal just before a recovery's start or inside it,
 the record's lower probe fell 13-15 degF over the next 10-35 minutes,
 with the compressor running, where the walk's moved under 3 degF; over
 the 34 held-out draws of 8 gal or more with it off, the record's fell a
