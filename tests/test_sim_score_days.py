@@ -205,6 +205,15 @@ class TestTheDays:
         for name in ("hp_lower_on_f", "hp_lower_off_f", "hp_upper_on_f", "tou"):
             assert _days(walked, replace(walked.record, **{name: ()})) == ()
 
+    def test_an_outage_from_the_next_midnight_is_the_next_days(
+        self, walked: Walked
+    ) -> None:
+        frame = walked.ready.frame.copy()
+        frame["heater_unobserved"] = frame.index >= T0 + DAY
+        dark = replace(walked.ready, frame=frame)
+        got = ss.day_events(dark, walked.record, walked.tank, tz="UTC")
+        assert [d.start for d in got] == [T0]
+
     def test_the_span_asked_for_only(self, walked: Walked) -> None:
         got = ss.day_events(
             walked.ready, walked.record, walked.tank, tz="UTC", since=T0 + DAY
@@ -293,6 +302,12 @@ class TestTheDayScore:
         assert got["day_compressor_starts_placed_share"].value == 1.0
         assert got["day_compressor_starts_missed"].value == 0.0
 
+    def test_a_day_in_a_quarter_hour_zone(self, walked: Walked) -> None:
+        days = ss.day_events(
+            walked.ready, walked.record, walked.tank, tz="Asia/Kathmandu"
+        )
+        assert [d.start.minute for d in days] == [15]
+
     def test_days_are_a_kind_of_their_own(
         self, walked: Walked, site: sim.HeaterParams
     ) -> None:
@@ -308,6 +323,62 @@ class TestTheDayScore:
         # A score without days compares with one with them on the kinds
         # both carry.
         assert ss.compare(a, b).same_events
+
+
+class _Steady:
+    """A walk drawing 12 Wh an hour from ``start``, on the clock's
+    grid as ``SimulationResult.energy_by_slot`` lays it out."""
+
+    def __init__(self, start: datetime, hours: int) -> None:
+        self.start, self.end = start, start + timedelta(hours=hours)
+
+    def energy_by_slot(
+        self, slot: timedelta
+    ) -> list[tuple[datetime, float | None]]:
+        epoch = datetime(1970, 1, 1, tzinfo=UTC)
+        at = epoch + (self.start - epoch) // slot * slot
+        out: list[tuple[datetime, float | None]] = []
+        while at < self.end:
+            on = min(at + slot, self.end) - max(at, self.start)
+            out.append((at, 12.0 * on / timedelta(hours=1)))
+            at += slot
+        return out
+
+
+class TestTheHours:
+    def test_laid_out_from_a_quarter_past_midnight(self) -> None:
+        # Kathmandu's midnight, 18:15 UTC: no slot straddles its hours.
+        start = datetime(2026, 3, 2, 18, 15, tzinfo=UTC)
+        got = ss._hours(_Steady(start, 2), start, 2)
+        assert got == [pytest.approx(12.0), pytest.approx(12.0)]
+
+
+class TestTheHoldLeft:
+    def test_a_start_before_midnight_holds_on_past_it(
+        self, walked: Walked, site: sim.HeaterParams
+    ) -> None:
+        first = _days(walked)[0]
+        held = replace(
+            site,
+            compressor=replace(
+                site.compressor,
+                start_hold_after_min=(),
+                start_hold_min=(12.0,),
+            ),
+        )
+        running = replace(
+            first,
+            scenario=first.scenario.model_copy(
+                update={
+                    "state": first.scenario.state.model_copy(
+                        update={"compressor_running": True}
+                    )
+                }
+            ),
+            compressor_on_since=T0 - timedelta(minutes=5),
+        )
+        assert ss._hold_left(running, held) == pytest.approx(7.0)
+        assert ss._hold_left(first, held) == 0.0
 
 
 class TestPlacing:

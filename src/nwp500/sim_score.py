@@ -105,8 +105,10 @@ BELOW_AIR_F = 0.05
 #: A recorded start is placed by a predicted start of its source this
 #: near it, each prediction placing one start at most.
 START_MATCH = timedelta(minutes=30)
-#: The slots a day's energy is laid out on, to read when it was used.
+#: The slots a day's energy is laid out on, to read when it was used,
+#: and the clock's grid the prediction's is read on first.
 DAY_SLOT = timedelta(hours=1)
+DAY_GRID = timedelta(minutes=5)
 #: The heater's signals a scored day holds with no gap
 #: (``sim.observed``): what ran, its power, and what it was told.
 DAY_SIGNALS = frozenset({"compressor", "power", "mode", "setpoint", "elements"})
@@ -209,6 +211,9 @@ class Day:
     min_upper_f: float
     end_upper_f: float
     end_lower_f: float
+    #: With the compressor running at the day's start: when that run
+    #: began (its hold, by the time off before it, may not be over).
+    compressor_on_since: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -658,15 +663,17 @@ def _marked(
 def _one_day(
     heater: rec.Record,
     record: tf.TankRecord,
+    frame: pd.DataFrame,
     unobserved: np.ndarray,
-    seconds: np.ndarray,
     start: datetime,
     end: datetime,
     tz: str,
 ) -> Day | None:
     """The day ``[start, end)``, or None when the record cannot say
-    what the heater was told or did over all of it."""
-    if _any_in(unobserved, seconds, start, end):
+    what the heater was told or did over all of it. The probes are the
+    frame's, as every event's are: read where the heater was heard."""
+    seconds = _seconds(frame)
+    if _any_in(unobserved, seconds, start, end - timedelta(microseconds=1)):
         return None
     if record.minute(start) < 0 or record.minute(end) > len(record):
         return None
@@ -675,17 +682,19 @@ def _one_day(
         return None
     if any(s.energy_wh is None or s.partial for s in seen.slots):
         return None
+    upper_v = frame["upper_f"].to_numpy(dtype=float)
+    lower_v = frame["lower_f"].to_numpy(dtype=float)
     upper, lower = (
-        _at(heater.upper_f, start, heater),
-        _at(heater.lower_f, start, heater),
+        _asof(upper_v, seconds, start),
+        _asof(lower_v, seconds, start),
     )
     setpoint, mode = (
         _at(heater.setpoint_f, start, heater),
         _at(heater.mode, start, heater),
     )
     end_upper, end_lower = (
-        _at(heater.upper_f, end, heater),
-        _at(heater.lower_f, end, heater),
+        _asof(upper_v, seconds, end),
+        _asof(lower_v, seconds, end),
     )
     if (
         upper is None
@@ -713,6 +722,12 @@ def _one_day(
     running = {(s.source, s.zone) for s in starts.starts if s.running}
     stops = [t for t in starts.stops if t <= start]
     compressor = ("compressor", None) in running
+    on_since = _on_since(heater.compressor, start) if compressor else None
+    off_before = (
+        None
+        if on_since is None
+        else max((t for t in starts.stops if t < on_since), default=None)
+    )
     upper_since = _on_since(heater.upper_element, start)
     lower_since = _on_since(heater.lower_element, start)
     element_since = upper_since if upper_since is not None else lower_since
@@ -749,7 +764,9 @@ def _one_day(
             hp_upper_on_f=upper_on,
         ),
         history=sim.History(
-            compressor_stopped_at=None if compressor or not stops else stops[-1]
+            compressor_stopped_at=off_before
+            if compressor
+            else (stops[-1] if stops else None)
         ),
         schedules=sim.Schedules(
             tou_enabled=tou is not None and tou >= 0.5,
@@ -765,7 +782,10 @@ def _one_day(
     slots = [0.0] * n
     for s in seen.slots:
         slots[int((s.start - start) / DAY_SLOT)] += float(s.energy_wh or 0.0)
-    uppers = [upper, *(v for _, v in rec.between(heater.upper_f, start, end))]
+    a = int(np.searchsorted(seconds, start.timestamp(), side="right"))
+    b = int(np.searchsorted(seconds, end.timestamp(), side="left"))
+    inside = upper_v[a:b]
+    uppers = [upper, *(float(v) for v in inside[np.isfinite(inside)])]
     return Day(
         start=start,
         end=end,
@@ -786,6 +806,7 @@ def _one_day(
         min_upper_f=min(uppers),
         end_upper_f=end_upper,
         end_lower_f=end_lower,
+        compressor_on_since=on_since,
     )
 
 
@@ -823,7 +844,6 @@ def day_events(
     # longer than the record's own lookback: read as ``observe`` reads.
     heater = replace(heater, setting_lookback=obs.STATE_LOOKBACK)
     frame = ready.frame
-    seconds = _seconds(frame)
     unobserved = _flag(frame, "heater_unobserved") | _flag(
         frame, "air_unobserved"
     )
@@ -841,7 +861,7 @@ def day_events(
             break
         if start < first or (since is not None and start < since):
             continue
-        day = _one_day(heater, record, unobserved, seconds, start, end, tz)
+        day = _one_day(heater, record, frame, unobserved, start, end, tz)
         if day is not None:
             out.append(day)
     return tuple(out)
@@ -1167,6 +1187,31 @@ def _placed(recorded: Sequence[datetime], predicted: Sequence[datetime]) -> int:
     return placed
 
 
+def _hours(result: Any, start: datetime, n: int) -> list[float]:
+    """A walk's electricity in each ``DAY_SLOT`` from ``start``, Wh:
+    read on the clock's ``DAY_GRID``, which a local midnight is on in
+    every zone (each is offset by whole quarter hours), and laid out
+    from ``start`` as the meter's slots are."""
+    out = [0.0] * n
+    for at, wh in result.energy_by_slot(DAY_GRID):
+        k = math.floor((at - start) / DAY_SLOT)
+        if 0 <= k < n and wh is not None:
+            out[k] += wh
+    return out
+
+
+def _hold_left(e: Day, params: HeaterParams) -> float:
+    """What is left at the day's start of the hold of a compressor
+    start before it, minutes (``start_hold_min``, by its time off)."""
+    since = e.compressor_on_since
+    if since is None or not e.scenario.state.compressor_running:
+        return 0.0
+    stopped = e.scenario.history.compressor_stopped_at
+    off = None if stopped is None else (since - stopped).total_seconds() / 60.0
+    ran = (e.start - since).total_seconds() / 60.0
+    return max(0.0, start_hold_min(params.compressor, off) - ran)
+
+
 def _day_score(
     e: Day,
     params: HeaterParams,
@@ -1202,6 +1247,7 @@ def _day_score(
             ),
             params,
             tou_windows_in_force=e.windows,
+            running_hold=_hold_left(e, params),
         )
     except SimulationError, ValueError:
         return None
@@ -1222,15 +1268,7 @@ def _day_score(
         )
     # When in the day it was used, whatever the day's total: half the
     # summed difference of each slot's share of its own day's energy.
-    # Read on the clock's 10-minute grid, which a local midnight is on
-    # in every zone offset by whole tens of minutes (within 5 minutes in
-    # the quarter-hour few), and laid out from the day's start as the
-    # meter's slots are.
-    predicted = [0.0] * len(e.slots_wh)
-    for at, slot_wh in result.energy_by_slot(obs.SLOT):
-        k = math.floor((at - e.start) / DAY_SLOT)
-        if 0 <= k < len(predicted) and slot_wh is not None:
-            predicted[k] += slot_wh
+    predicted = _hours(result, e.start, len(e.slots_wh))
     if wh > 0.0 and e.metered_wh > 0.0:
         tally.add(
             "day_energy_misplaced_share",
