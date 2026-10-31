@@ -610,9 +610,10 @@ The comparison is whole only when the tails end alike:
 ``Carried.settled`` says each layer at the tail's end is within
 ``sim.SETTLED_F`` (0.5 °F) of the first walk's tail's, with the same
 tails going on alike (``heating_alike``: each tail walked on as
-itself, its settings, writes and schedules going on, with no draw past
-its end, beyond every hold, pending start, lockout, element heat, held
-mode and TOU window still due at either's end, spends the same
+itself, its settings, writes and schedules going on, with no water
+drawn and no circulation starting past its end, beyond every hold,
+pending start, lockout, element heat and held mode still due at
+either's end and every TOU window open on the way, spends the same
 electricity and ends with the same layers; a run, or a start pending
 or held off, in one tail and not another is heat still to pay for),
 and

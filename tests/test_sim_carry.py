@@ -563,6 +563,123 @@ class TestCarryOn:
         assert not owing.heating_alike
         assert not owing.settled
 
+    def test_no_water_drawn_past_a_tail_is_walked_on(self) -> None:
+        # One draw 30 s past the tail's end, one running across it:
+        # walked on, the tail draws only what it drew before its end,
+        # and no circulation known past it.
+        end = TAIL.until
+        loads = sim.Loads(
+            draws=(
+                sim.Draw(
+                    at=end - timedelta(minutes=2), gallons=6.0, duration_s=360.0
+                ),
+                sim.Draw(at=end + timedelta(seconds=30), gallons=20.0),
+            )
+        )
+        kept = carry._drawn_by(loads, end)
+        assert [
+            (at, round(g, 6)) for d in kept.draws for at, g in d.pieces()
+        ] == [
+            (end - timedelta(minutes=2), 1.0),
+            (end - timedelta(minutes=1), 1.0),
+        ]
+        assert {d.per_draw_gal for d in kept.draws} == {6.0}
+        whole = sim.Loads(
+            draws=(sim.Draw(at=at(12), gallons=6.0, duration_s=60.0),)
+        )
+        assert carry._drawn_by(whole, end) == whole
+
+        assert carry._drawn_by(loads, end).circulation_known_until is None
+        quiet = sim.Loads(circulation=())
+        assert carry._drawn_by(quiet, end).circulation_known_until == end
+
+    def test_nothing_past_a_tail_hides_a_start_owed(self) -> None:
+        # In a window to 17:30, one tank at 17:03 waits for its close to
+        # start, the other is above its trigger. Water drawn or
+        # circulation run past the tail's end would make both start.
+        window = [(at(16), at(17.5))]
+
+        def walk(lower_f: float) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "start": at(17),
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=120, lower_f=lower_f),
+                        "history": sim.History(compressor_stopped_at=at(14)),
+                    }
+                ),
+                PARAMS,
+                tou_windows_in_force=window,
+            )
+
+        walks = [walk(111.2), walk(110.8)]
+        runs = tuple(
+            sim.CirculationRun(
+                start=at(17.1) + timedelta(minutes=10 * k),
+                end=at(17.1) + timedelta(minutes=10 * k + 5),
+            )
+            for k in range(2)
+        )
+        for loads in (
+            sim.Loads(
+                draws=(sim.Draw(at=at(17.25), gallons=30.0, duration_s=600),)
+            ),
+            sim.Loads(circulation=runs),
+        ):
+            tail = TAIL.model_copy(
+                update={
+                    "start": at(17) + timedelta(minutes=1),
+                    "horizon": timedelta(minutes=2),
+                    "loads": loads,
+                }
+            )
+            _, owing = sim.carry_on(
+                walks, tail, PARAMS, tou_windows_in_force=window
+            )
+            assert owing.residual_f <= sim.SETTLED_F
+            assert not owing.heating_alike
+
+    def test_a_window_opening_past_a_tail_is_walked_through(self) -> None:
+        # One tank's lockout ends 90 s past the tail and it would start;
+        # a window opening 10 s past the end holds it to the close.
+        def walk(lower_f: float, stopped: timedelta) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=120, lower_f=lower_f),
+                        "history": sim.History(
+                            compressor_stopped_at=T0 - stopped
+                        ),
+                    }
+                ),
+                PARAMS,
+            )
+
+        tail = TAIL.model_copy(
+            update={
+                "start": T0 + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+            }
+        )
+        end = tail.until
+        window = [(end + timedelta(seconds=10), end + timedelta(minutes=30))]
+        _, owing = sim.carry_on(
+            [
+                walk(111.4, timedelta(minutes=30)),
+                walk(111.02, timedelta(minutes=1)),
+            ],
+            tail,
+            PARAMS,
+            tou_windows_in_force=window,
+        )
+        assert owing.residual_f <= sim.SETTLED_F
+        assert not owing.heating_alike
+
     def test_refuses(self, plans: list[sim.SimulationResult]) -> None:
         with pytest.raises(ValueError, match="no walks"):
             sim.carry_on([], TAIL, PARAMS)

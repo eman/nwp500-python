@@ -28,7 +28,7 @@ from zoneinfo import ZoneInfo
 from nwp500.sim.api import ENGINE_MODE, simulate
 from nwp500.sim.engine import RECOVERY_AHEAD, Resume
 from nwp500.sim.extensions import RecoveryModel
-from nwp500.sim.inputs import HEAT_PUMP, Commands, Scenario, Write
+from nwp500.sim.inputs import HEAT_PUMP, Commands, Draw, Loads, Scenario, Write
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
 from nwp500.sim.result import SimulationResult
@@ -41,7 +41,9 @@ from nwp500.sim.units import BTU_PER_WH
 SETTLED_F = 0.5
 #: How far past the last instant still due at the tails' ends (a
 #: hold's end, a pending start, a lockout's release, an element's heat
-#: reaching the water) each tail is walked on to see it go on.
+#: reaching the water, a held mode landing, a capped stop's window
+#: closing, the close of a TOU window in force or opening on the way)
+#: each tail is walked on to see it go on, up to ``RECOVERY_AHEAD``.
 GO_ON_PAST = timedelta(minutes=1)
 #: How near, Wh, the electricity of a tail walked on must come to the
 #: first walk's tail's for the two to go on alike.
@@ -62,16 +64,17 @@ class Carried:
     #: first walk's tail's, °F.
     residual_f: float
     #: Whether the tail goes on as the first walk's tail does: each
-    #: tail's scenario walked on, with no draw past its end, past every
-    #: instant still due at any tail's end (a start's hold ending, a
-    #: start pending, the restart lockout releasing, an element's heat
-    #: reaching the water, a held mode landing, a TOU window in force
-    #: closing) and ``GO_ON_PAST`` more, spending the same electricity
-    #: past the end, within
-    #: ``GO_ON_WH``, and ending with the same layers, within
-    #: ``SETTLED_F`` (an element's heat still on its way is in the
-    #: water by then). Heating under way in one and not the other is heat
-    #: one is still to pay for; a lockout with no start wanted in it is
+    #: tail's scenario walked on, with no water drawn and no
+    #: circulation starting past its end, past every instant still due
+    #: at any tail's end (a start's hold ending, a start pending, the
+    #: restart lockout releasing, an element's heat reaching the water,
+    #: a held mode landing) and every TOU window open on the way, up to
+    #: ``RECOVERY_AHEAD``, and ``GO_ON_PAST`` more, spending the same
+    #: electricity past the end, within ``GO_ON_WH``, and ending with
+    #: the same layers, within ``SETTLED_F`` (an element's heat still
+    #: on its way is in the water by then). Heating under way, or a
+    #: start a window holds off, in one and not the other is heat one
+    #: is still to pay for; a lockout with no start wanted in it is
     #: none.
     heating_alike: bool
 
@@ -260,18 +263,36 @@ def _go_on(
 ) -> list[tuple[float | None, tuple[float, ...]]]:
     """Each tail walked on past its end: its scenario again, longer by
     ``GO_ON_PAST`` past every instant still due at any tail's end
-    (``_due``) and the close of a TOU window in force there, so its
-    settings, writes and schedules go on as they would, with no draw
-    past the end. The electricity it spends past the end, Wh (None,
-    unpriced), and the layers it ends with."""
+    (``_due``) and the close of every TOU window open on the way, up to
+    ``RECOVERY_AHEAD``, so its settings, writes and schedules go on as
+    they would, with no water drawn and no circulation starting past
+    the end (``_drawn_by``). The electricity it spends past the end, Wh
+    (None, unpriced), and the layers it ends with."""
     until = scenarios[0].until
+    given = options.get("tou_windows_in_force")
     due = [t for r in tails for t in _due(r, params)]
-    closes = _window_close(scenarios[0], options.get("tou_windows_in_force"))
-    span = max([until, *due, *closes]) - until + GO_ON_PAST
+    span = max([until, *due]) - until + GO_ON_PAST
+    while span < RECOVERY_AHEAD:
+        end = until + span
+        closes = [
+            b
+            for a, b in _windows(scenarios[0], given, end)
+            if a < end and b > until
+        ]
+        grown = max([until, *due, *closes]) - until + GO_ON_PAST
+        if grown <= span:
+            break
+        span = grown
+    span = min(span, RECOVERY_AHEAD)
     out: list[tuple[float | None, tuple[float, ...]]] = []
     for scenario, r in zip(scenarios, tails, strict=True):
         on = simulate(
-            scenario.model_copy(update={"horizon": scenario.horizon + span}),
+            scenario.model_copy(
+                update={
+                    "horizon": scenario.horizon + span,
+                    "loads": _drawn_by(scenario.loads, until),
+                }
+            ),
             params,
             **options,
         )
@@ -284,12 +305,47 @@ def _go_on(
     return out
 
 
-def _window_close(
-    tail: Scenario, given: Sequence[tuple[datetime, datetime]] | None
-) -> list[datetime]:
-    """The close of a TOU window in force at ``tail``'s end: the given
-    windows', else its schedule's, as ``simulate`` keeps them."""
-    until = tail.until
+def _drawn_by(loads: Loads, until: datetime) -> Loads:
+    """``loads`` with only the water drawn before ``until``, a draw
+    running past it kept as the pieces the walk took before it, each at
+    its instant with the draw's own per-draw volume; circulation known
+    no further than ``until``, so a run starting past it charges
+    nothing and one under way at it is charged as the tail charged
+    it."""
+    draws: list[Draw] = []
+    for d in loads.draws:
+        pieces = [(at, g) for at, g in d.pieces() if at < until]
+        if len(pieces) == len(d.pieces()):
+            draws.append(d)
+            continue
+        per_draw = d.per_draw_gal if d.per_draw_gal is not None else d.gallons
+        draws += [
+            Draw(at=at, gallons=g, per_draw_gal=per_draw)
+            for at, g in pieces
+            if g > 0.0
+        ]
+    known = loads.circulation_known_until
+    return loads.model_copy(
+        update={
+            "draws": tuple(draws),
+            "circulation_known_until": (
+                None
+                if loads.circulation is None
+                else until
+                if known is None
+                else min(known, until)
+            ),
+        }
+    )
+
+
+def _windows(
+    tail: Scenario,
+    given: Sequence[tuple[datetime, datetime]] | None,
+    end: datetime,
+) -> Sequence[tuple[datetime, datetime]]:
+    """The TOU windows of ``tail`` walked on to ``end``: the given ones,
+    else its schedule's, laid out as ``simulate`` lays them out."""
     if given is None:
         tou_on = (
             tail.commands.tou_enabled
@@ -303,7 +359,7 @@ def _window_close(
                     tail.schedules.tou_periods,
                     ZoneInfo(tail.tz),
                     tail.start,
-                    until + RECOVERY_AHEAD,
+                    end + RECOVERY_AHEAD,
                 ),
                 tou_on,
                 switches,
@@ -311,7 +367,7 @@ def _window_close(
             if tou_on or any(on for _, on in switches)
             else ()
         )
-    return [b for a, b in given if a <= until < b]
+    return given
 
 
 def _due(result: SimulationResult, params: HeaterParams) -> list[datetime]:
