@@ -382,8 +382,9 @@ time; in air of 50-55 degF the runs lasted a median 369 minutes and 2 %
 of them were followed by an off under 15 minutes, against 5-9 % above
 60 degF. The controller runs the heat pump down to 41 degF
 (``ControllerParams.hp_air_range_f``). Below 61 degF the simulator
-carries the map's plane on, and every answer that reads it there says
-``heat_map_out_of_domain``. Measuring it needs a winter with the draw
+carries the map's plane on. An answer says ``heat_map_out_of_domain``
+when a run's mean air is outside the fitted span; a run that dips under
+61 degF with its mean inside it reads the plane there unflagged. Measuring it needs a winter with the draw
 detector running.
 
 
@@ -521,8 +522,8 @@ Limits
 ======
 
 One NWP500-65, at one installation, with the air beside the heater
-between about 54 and 88 degF; the heat pump's heat is measured only
-from 61 degF (above). Deep recoveries were rare: 10 of 283
+between 45.9 and 89.3 degF; the heat pump's heat is measured only from
+61 degF (above). Deep recoveries were rare: 10 of 283
 metered recoveries in a year started with the tank averaging 125 degF
 or less, so the efficiency figures rest mostly on top-offs from a warm
 tank. The Energy Saver comparison is small and confounded by the

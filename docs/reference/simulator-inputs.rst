@@ -798,8 +798,8 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        recoveries
        (:doc:`/explanation/recovery-speed`). Below 61 degF of air
        the record measures no heat (its draw detector began
-       2026-04-16), and the plane is carried on, said
-       ``heat_map_out_of_domain``.
+       2026-04-16), and the plane is carried on: a run whose mean
+       air is under it says ``heat_map_out_of_domain``.
      - First fitted 2026-10-26
    * - ``compressor.power_w`` and its slopes
      - 408.9 W at 65 degF air and 120 degF water; +1.02 per degF of
