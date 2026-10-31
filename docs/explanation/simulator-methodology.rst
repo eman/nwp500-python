@@ -235,9 +235,11 @@ reaches its stop depends on where the layers' edges fall. The
 element's are its own: it heats its layer whole (below).
 
 Moving to 24 layers and refitting was tried (2026-10-30) and dropped.
-Fitted before 2026-09-18 and scored after, both without the site's
-installation (``score_sim`` without ``--site-installation``, so not
-the basis of :doc:`simulator`'s accuracy), it read recoveries 38.2 min
+Fitted before 2026-09-18 and scored after (``sim_score``, as in
+:doc:`/how-to/calibrate-simulator`), both from the defaults'
+installation, without ``site_example_params``'s mixing valve,
+circulation and mains that :doc:`simulator`'s accuracy is measured
+with, it read recoveries 38.2 min
 off against 37.7 at 12, their energy 12.9 % against 12.4, the draws'
 lower probe 3.00 degF RMS against 3.03: no difference outside the
 scores' intervals. Refitted on the whole record, its upper probe

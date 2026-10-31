@@ -965,7 +965,9 @@ with. Heights are shares of the volume from the bottom.
      - 12
      - HPWHsim's layer count. Part of the fitted model, not a
        resolution: the tank's terms are fitted at 12, and with them
-       held other counts move a recovery by up to 7 %. 24 layers,
+       held other counts move the methodology's example recovery
+       between 253 and 281 min on the heat pump and 6.1 and 11.2 on
+       the upper element, not steadily. 24 layers,
        refitted, scored no better on the held-out record
        (:doc:`/explanation/simulator-methodology`, the layer count).
    * - ``tank.upper_probe_height``, ``tank.lower_probe_height``

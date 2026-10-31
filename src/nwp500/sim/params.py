@@ -191,9 +191,11 @@ class TankParams:
     #: The stratified tank's layers (``physics.stratified``), equal in
     #: volume, the bottom first: HPWHsim's twelve. Part of the fitted
     #: model, not a resolution: the tank's terms are fitted at 12, and
-    #: with them held another count moves a recovery by up to 7 %, not
-    #: steadily. 24 layers, refitted, scored no better on the held-out
-    #: record (2026-10-30; the methodology's "The layer count").
+    #: with them held another count moves the methodology's example
+    #: recovery between 253 and 281 minutes on the heat pump and 6.1
+    #: and 11.2 on the upper element, not steadily. 24 layers,
+    #: refitted, scored no better on the held-out record (2026-10-30;
+    #: the methodology's "The layer count").
     layers: int = field(default=12, metadata=_p(DEFAULT, "1"))
     #: Where the upper and the lower probes read, as a share of the
     #: volume from the bottom. Priors, from where the record's draws
