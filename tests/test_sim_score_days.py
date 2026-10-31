@@ -115,7 +115,8 @@ class Walked:
             upper_f=tuple((t, p.upper_f) for t, p in zip(at, points)),
             lower_f=tuple((t, p.lower_f) for t, p in zip(at, points)),
             hp_lower_on_f=((BEFORE, 111.0),),
-            hp_lower_off_f=((BEFORE, 125.0),),
+            # The device's stop threshold follows its setpoint.
+            hp_lower_off_f=tuple(setpoints),
             hp_upper_on_f=((BEFORE, 104.9),),
             tou=((BEFORE, 0.0),),
         )
@@ -275,6 +276,72 @@ class TestTheDays:
         assert second.windows == (
             (T0 + DAY + timedelta(hours=23), T0 + 2 * DAY + timedelta(hours=2)),
         )
+
+    def test_a_window_open_at_midnight_keeps_its_opening(
+        self, walked: Walked
+    ) -> None:
+        marked = replace(
+            walked.record,
+            hp_upper_on_f=(
+                (BEFORE, 104.9),
+                (T0 + DAY - timedelta(hours=2), 124.0),
+                (T0 + DAY + timedelta(hours=1), 104.9),
+            ),
+        )
+        second = _days(walked, marked)[1]
+        assert second.windows == (
+            (T0 + DAY - timedelta(hours=2), T0 + DAY + timedelta(hours=1)),
+        )
+
+    def test_a_write_at_midnight_is_the_days(
+        self, walked: Walked, site: sim.HeaterParams
+    ) -> None:
+        raised = [(BEFORE, 125.0), (T0 + DAY, 130.1)]
+        told = replace(
+            walked.record,
+            setpoint_f=tuple(raised),
+            hp_lower_off_f=tuple(raised),
+        )
+        second = _days(walked, told)[1]
+        assert second.scenario.settings.setpoint_f == 125.0
+        [write] = second.scenario.commands.writes
+        assert write.at == T0 + DAY
+        assert write.setpoint_f == pytest.approx(130.1, abs=0.05)
+        got = ss.score(ss.Events(days=(second,)), site, inlet_f=58.0)
+        assert got.failed["days"] == 0
+
+    def test_a_stop_short_of_the_setpoint_is_not_walked(
+        self, walked: Walked
+    ) -> None:
+        short = replace(
+            walked.record,
+            hp_lower_off_f=(
+                *walked.record.hp_lower_off_f,
+                (T0 + DAY + timedelta(hours=3), 120.2),
+            ),
+        )
+        assert [d.start for d in _days(walked, short)] == [T0]
+
+    def test_a_stop_reported_after_its_setpoint_follows_it(
+        self, walked: Walked
+    ) -> None:
+        late = replace(
+            walked.record,
+            hp_lower_off_f=tuple(
+                (t + timedelta(seconds=2), v)
+                for t, v in walked.record.hp_lower_off_f
+            ),
+        )
+        assert [d.start for d in _days(walked, late)] == [T0, T0 + DAY]
+
+    def test_a_recorder_gap_is_not_observed(self, walked: Walked) -> None:
+        frame = walked.ready.frame.copy()
+        frame["unrecorded"] = (frame.index >= T0 + timedelta(hours=5)) & (
+            frame.index < T0 + timedelta(hours=7)
+        )
+        gap = replace(walked.ready, frame=frame)
+        got = ss.day_events(gap, walked.record, walked.tank, tz="UTC")
+        assert [d.start for d in got] == [T0 + DAY]
 
 
 class TestTheDayScore:

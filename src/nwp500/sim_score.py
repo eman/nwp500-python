@@ -112,6 +112,15 @@ DAY_GRID = timedelta(minutes=5)
 #: The heater's signals a scored day holds with no gap
 #: (``sim.observed``): what ran, its power, and what it was told.
 DAY_SIGNALS = frozenset({"compressor", "power", "mode", "setpoint", "elements"})
+#: How far a day's lower stop threshold may sit from its setpoint (the
+#: device's half-degree Celsius rounding) for the walk, which heats to
+#: the setpoint, to be the heater's.
+STOP_AT_SETPOINT_F = 0.5
+#: How long after the setpoint the stop threshold may be reported, the
+#: two arriving apart: each of the site installation's 105 setpoint
+#: changes from 2026-09-18 to 2026-10-26 met by its stop threshold
+#: within 15.1 s.
+STOP_FOLLOWS = timedelta(minutes=1)
 #: Bootstrap draws for each metric's interval, and its seed.
 N_BOOT = 2000
 SEED = 252
@@ -635,7 +644,9 @@ def _marked(
     heater: rec.Record, start: datetime, end: datetime
 ) -> tuple[tuple[datetime, datetime], ...]:
     """The windows the heater marked over ``[start, end]``: one open at
-    the start from it, one open at the end to its close within the next
+    the start from its opening within the day before (the walk judges
+    an opening where the window opens, not where the day does), else
+    from the start; one open at the end to its close within the next
     day, or the end."""
     opens, closes = heater.upper_on_edges(start, end)
     prior = rec.last(
@@ -644,7 +655,12 @@ def _marked(
         heater.setting_lookback,
     )
     line = heater.resting_upper_on_f + rec.RAISED_BY_F
-    opened = start if prior is not None and prior[1] > line else None
+    opened = None
+    if prior is not None and prior[1] > line:
+        before, _ = heater.upper_on_edges(
+            start - timedelta(days=1), start - timedelta(microseconds=1)
+        )
+        opened = before[-1] if before else start
     out: list[tuple[datetime, datetime]] = []
     for t, up in sorted(
         [(t, True) for t in opens] + [(t, False) for t in closes]
@@ -660,6 +676,28 @@ def _marked(
     return tuple(out)
 
 
+def _stops_at_setpoint(
+    heater: rec.Record, before: datetime, end: datetime
+) -> bool:
+    """Whether the lower stop threshold sat on the setpoint (within
+    ``STOP_AT_SETPOINT_F``) from ``before`` to ``end``: at ``before``
+    and ``STOP_FOLLOWS`` after each change of either, as one reported
+    apart from the other follows it."""
+    changes = [
+        t + STOP_FOLLOWS
+        for series in (heater.hp_lower_off_f, heater.setpoint_f)
+        for t, _ in rec.between(series, before, end)
+    ]
+    for t in [before, *changes]:
+        off = _at(heater.hp_lower_off_f, t, heater)
+        setpoint = _at(heater.setpoint_f, t, heater)
+        if off is None or setpoint is None:
+            return False
+        if abs(off - setpoint) > STOP_AT_SETPOINT_F:
+            return False
+    return True
+
+
 def _one_day(
     heater: rec.Record,
     record: tf.TankRecord,
@@ -673,6 +711,7 @@ def _one_day(
     what the heater was told or did over all of it. The probes are the
     frame's, as every event's are: read where the heater was heard."""
     seconds = _seconds(frame)
+    before = start - timedelta(microseconds=1)
     if _any_in(unobserved, seconds, start, end - timedelta(microseconds=1)):
         return None
     if record.minute(start) < 0 or record.minute(end) > len(record):
@@ -689,8 +728,8 @@ def _one_day(
         _asof(lower_v, seconds, start),
     )
     setpoint, mode = (
-        _at(heater.setpoint_f, start, heater),
-        _at(heater.mode, start, heater),
+        _at(heater.setpoint_f, before, heater),
+        _at(heater.mode, before, heater),
     )
     end_upper, end_lower = (
         _asof(upper_v, seconds, end),
@@ -709,7 +748,9 @@ def _one_day(
     if _mode(mode) in (VACATION, POWER_OFF):
         return None
     writes: list[sim.Write] = []
-    for w in heater.writes(start, end):
+    # A write at the day's first instant is the day's, replayed against
+    # what was in force before it.
+    for w in heater.writes(before, end):
         if w.dropped:
             continue
         if w.mode is not None:
@@ -732,13 +773,17 @@ def _one_day(
     lower_since = _on_since(heater.lower_element, start)
     element_since = upper_since if upper_since is not None else lower_since
     element = any(src == "element" for src, _ in running)
-    tou = _at(heater.tou, start, heater)
-    lower_on = _at(heater.hp_lower_on_f, start, heater)
-    lower_off = _at(heater.hp_lower_off_f, start, heater)
-    upper_on = _at(heater.hp_upper_on_f, start, heater)
+    tou = _at(heater.tou, before, heater)
+    lower_on = _at(heater.hp_lower_on_f, before, heater)
+    lower_off = _at(heater.hp_lower_off_f, before, heater)
+    upper_on = _at(heater.hp_upper_on_f, before, heater)
     # Without them the walk starts no lower-zone recovery, aims at the
     # setpoint, or keeps no TOU window: not the heater's day.
-    if None in (tou, lower_on, lower_off, upper_on):
+    if tou is None or lower_on is None or lower_off is None or upper_on is None:
+        return None
+    # The walk heats a recovery to the setpoint (``simulate`` reads no
+    # stop threshold): a heater told to stop short of it is not walked.
+    if not _stops_at_setpoint(heater, before, end):
         return None
     draws = tuple(
         sim.Draw(at=t, gallons=g)
@@ -769,8 +814,8 @@ def _one_day(
             else (stops[-1] if stops else None)
         ),
         schedules=sim.Schedules(
-            tou_enabled=tou is not None and tou >= 0.5,
-            tou_switches=tuple(heater.tou_switches(start, end)),
+            tou_enabled=tou >= 0.5,
+            tou_switches=tuple(heater.tou_switches(before, end)),
         ),
         environment=sim.Environment(
             ambient_f=tuple((t, record.air_at(t)) for t in _grid(start, end))
@@ -823,15 +868,20 @@ def day_events(
 ) -> tuple[Day, ...]:
     """The whole local days in ``tz`` that start in ``[since, until)``
     and that ``ready``'s history observed throughout: the heater heard
-    and the air read (its frame's ``heater_unobserved`` and
-    ``air_unobserved``), what ran, its power and what it was told
-    recorded in ``heater`` with no gap (``DAY_SIGNALS``), the lower
-    probe's thresholds, the upper's start threshold and the TOU switch
-    known at its start, and the
-    tank's ``record`` (``tank_fit.tank_record``) covering it, its
-    metered draws the day's. A day with a write into or out of
-    Vacation or Power Off, or spent in either, is left out: the
-    simulator holds no rule for such a write.
+    and the air read (its frame's ``heater_unobserved``,
+    ``air_unobserved`` and ``unrecorded``), what ran, its power and
+    what it was told recorded in ``heater`` with no gap
+    (``DAY_SIGNALS``), the lower probe's thresholds, the upper's start
+    threshold and the TOU switch known at its start, and the tank's
+    ``record`` (``tank_fit.tank_record``) covering it, its metered
+    draws the day's. A day with a write into or out of Vacation or
+    Power Off, or spent in either, is left out: the simulator holds no
+    rule for such a write. So is one whose lower stop threshold sits
+    off the setpoint (by more than ``STOP_AT_SETPOINT_F``): the walk
+    heats a recovery to the setpoint. A write at the day's first
+    instant is the day's, replayed against what was in force before
+    it; a TOU window open at midnight keeps the opening the heater
+    marked the day before.
 
     ``heater`` carries what ``ready``'s frame does not: the mode, the
     lower probe's start and stop thresholds, the upper's start
@@ -846,8 +896,12 @@ def day_events(
     # longer than the record's own lookback: read as ``observe`` reads.
     heater = replace(heater, setting_lookback=obs.STATE_LOOKBACK)
     frame = ready.frame
-    unobserved = _flag(frame, "heater_unobserved") | _flag(
-        frame, "air_unobserved"
+    # ``unrecorded``: a recorder's silence (``sim_adapters.add_inputs``),
+    # over which ``observe`` would hold the heater's last values.
+    unobserved = (
+        _flag(frame, "heater_unobserved")
+        | _flag(frame, "air_unobserved")
+        | _flag(frame, "unrecorded")
     )
     first = record.instant(0)
     last = record.instant(len(record) - 1) + timedelta(minutes=1)

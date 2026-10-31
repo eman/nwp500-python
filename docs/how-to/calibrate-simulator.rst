@@ -254,8 +254,10 @@ the lower probe's start and stop thresholds, the upper's start
 threshold (whose rise marks a TOU window in force), the TOU switch,
 what ran and the heater's power. A day is scored only when what ran,
 the power, the mode and the setpoint have no gap over it, the
-thresholds and the TOU switch are known at its start, and the heater
-and the air were heard throughout it. Each day starts
+thresholds and the TOU switch are known at its start, the lower stop
+threshold sits on the setpoint throughout (the walk heats a recovery
+to the setpoint), and the heater, the air and the recorder were heard
+throughout it. Each day starts
 from the layers its replay leaves and is walked with the recorded
 setpoint and mode writes, the TOU windows the heater marked, the
 metered draws, the circulation and the air:
