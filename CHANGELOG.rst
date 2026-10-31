@@ -662,6 +662,12 @@ Fixed
   ratings' 15 gal of first-hour rating. The 80's is unchanged at 65.2
   gal: 12.9 over the 65's, where the ratings differ by 5.
 
+- ``recovery-speed`` says why the heat map stops at 61 °F of air: the
+  winter's 48,000 compressor minutes at 45-60 °F have no draw detector
+  behind them, and the heater's own flag, the only stand-in, reads the
+  heat 14 % high and its rise with the air a third flat on the months
+  the detector covers. The record shows no frost either.
+
 - The methodology's "The air" said a recovery runs in its span's mean
   air; every step reads the air at its start, coast and recovery alike.
   The mean judges only the heat map's domain and is a learned

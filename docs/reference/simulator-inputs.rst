@@ -796,7 +796,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        88.7 degF and the tank 114.8 to 143.3 degF: 236 BTU/hr RMS. The
        air slope is the one ``recovery-speed`` measures on whole
        recoveries
-       (:doc:`/explanation/recovery-speed`).
+       (:doc:`/explanation/recovery-speed`). Below 61 degF of air
+       the record measures no heat (its draw detector began
+       2026-04-16), and the plane is carried on, said
+       ``heat_map_out_of_domain``.
      - First fitted 2026-10-26
    * - ``compressor.power_w`` and its slopes
      - 408.9 W at 65 degF air and 120 degF water; +1.02 per degF of
