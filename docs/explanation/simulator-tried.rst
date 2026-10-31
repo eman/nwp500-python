@@ -82,6 +82,70 @@ air's heat 19-22 % over the map; that was the flag.
 measured".
 
 
+The circulation's return as one volume, or a plug at the bottom (2026-10-29)
+==========================================================================
+
+**Tried.** Two forms of the loop's return before the measured pipe: an
+effective loop of 19.36 gal, its return at the tank's own temperature
+after it, and the measured run's return all entering at the bottom's
+inlet zone, pushing the column up as a draw does.
+
+**Found.** On the measured run of 2026-10-29 the effective loop took
+9,137 BTU from the tank against 4,589 measured, from a volume three
+times the pipe's 6.86 gal; it prices the record's runs better (300 BTU
+a run in cross-validation against 399), but the measured pipe scores
+the held-out recoveries closer (27.2 min against 30.9). The return as
+a plug at the bottom took 4,442 BTU but read the lower probe 7.35 degF
+RMS and the upper 2.73 over the run. The record's summer runs at the
+pump's speed sweeps read the return 6-29 degF under the tank, up to
+29,000 BTU/hr, more than the loop can lose; they were not taken as the
+pipe's loss.
+
+**Why dropped.** The measured pipe, with warmer return rising past the
+inlet zone to where the tank is as warm, is kept.
+
+**Account.** :doc:`standby-loss`, "The return's rest and cooling";
+:doc:`simulator-methodology`, "Circulation".
+
+
+The upper element higher (2026-10-29)
+=====================================
+
+**Tried.** The upper element at 0.79 of the column instead of 0.72, so
+it heats 15.8 gal and the upper probe climbs 2.00 degF/min, near the
+2.01 of the record's 29 clean element runs, against 21.1 gal and 1.59.
+
+**Found.** Replaying the record's 24 element runs from 2026-04-16, most
+with water drawn or the compressor running, the upper probe read 10.2
+degF RMS at 0.79 against 7.9 at 0.72. Splitting the element's heat
+between two layers did not smooth the step between heights.
+
+**Why dropped.** Worse on the runs as they happen. The height acts in
+whole layers; see the 24-layer entry above for the layer count.
+
+**Account.** :doc:`/reference/simulator-inputs`, the elements'
+heights.
+
+
+The heat map fitted on the model's probes (2026-10-29)
+======================================================
+
+**Tried.** The heat map refitted on the walk's own probe error over
+draw-free recoveries, so it balances in the model's frame, instead of
+on the record's mixed climbs.
+
+**Found.** The map on mixed climbs already balances in the model's
+frame within 0.6 % (1.006 times). The refits made the 11 held-out
+draw-free recoveries worse, 6.9 min from the measured duration to 7.6
+to 8.3, on the site's installation.
+
+**Why dropped.** Worse held out. The heat stays fitted on mixed climbs;
+only the power was moved, to the condenser's water on the replay.
+
+**Account.** :doc:`simulator-methodology`, "The map";
+:doc:`simulator`, "Two errors in a heat-pump recovery partly cancel".
+
+
 The probes reading warm while the compressor runs (2026-10-28)
 ==============================================================
 
@@ -122,3 +186,39 @@ cold water under it, and the probe's hold follows from the layers.
 
 **Account.** :doc:`simulator-methodology`, "The start's stir";
 :doc:`/reference/simulator-inputs`, the tank's fitted terms.
+
+
+The condenser's span fitted on recoveries alone (2026-10-27)
+============================================================
+
+**Tried.** The condenser's span fitted on the record's recoveries
+alone, apart from the tank's terms.
+
+**Found.** It came out 0.154-0.419, and through the replayed profile it
+read the quiet windows' lower probe 0.86 degF RMS against 0.52.
+
+**Why dropped.** The span is fitted with the tank's terms, jointly on
+quiet windows, draws and recoveries (``tank_fit.TERMS`` and
+``CONDENSER_TERMS``).
+
+**Account.** :doc:`simulator-methodology`, "Fitting and checking the
+parameters".
+
+
+Events started from the two probes (2026-10-27)
+===============================================
+
+**Tried.** Each scored event, and a scenario's start, from the profile
+the two probes stand for, with no history.
+
+**Found.** Through the simulator, the held-out draw-free recoveries
+came out 15 min from the measured duration against 7.9 started from
+the replay. The replay needs the record's circulation: without it the
+draws' lower probe read 3.3 degF RMS against 2.1.
+
+**Why dropped.** Each event starts from the layers 24 hours of the
+record's replay leave (``HeaterState.layers_f``,
+``sim_score.score(record=)``). :doc:`simulator`'s accuracy gives the
+same events started from the probes for comparison.
+
+**Account.** :doc:`simulator-methodology`, "The replay".

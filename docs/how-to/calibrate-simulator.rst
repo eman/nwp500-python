@@ -242,6 +242,56 @@ the fit the draws before the split, and the score the record
 ``sim_score.compare`` reads two score documents and says, for each
 metric, whether the second's interval clears the first's value.
 
+Score a change to the simulator
+-------------------------------
+
+A change to the simulator's physics or its defaults is scored on one
+NWP500-65's record, the same way each time, so its score can be set
+beside the last:
+
+- the record from 2026-04-16, when its draw detector starts, to
+  2026-10-26 22:00 UTC, pinned so each score has the same events;
+- fitted before 2026-09-18 07:00 UTC and scored on the events after,
+  the fit given the draws before the split and the score the record's
+  replay, as above;
+- from the site's installation: the defaults with its mains, its
+  circulation and a mixing valve at the default delivery.
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   from nwp500.sim import default_params
+   from nwp500.sim.defaults import site_example_params, with_valve
+   from nwp500.sim.physics.draw import (
+       DEFAULT_TMV_DELIVERY_INTERCEPT_F,
+       DEFAULT_TMV_DELIVERY_SLOPE,
+   )
+
+   base = default_params()
+   site = site_example_params()
+   mains = replace(
+       base.draw,
+       inlet_temp_f=site.draw.inlet_temp_f,
+       inlet_from_probe=site.draw.inlet_from_probe,
+       climate_f=site.draw.climate_f,
+   )
+   params = with_valve(
+       replace(base, draw=mains, circulation=site.circulation),
+       (DEFAULT_TMV_DELIVERY_INTERCEPT_F, DEFAULT_TMV_DELIVERY_SLOPE),
+   )
+   done = sim_calibrate.calibrate_changes(..., params=params)
+
+Score the code before the change the same way, and set the two side by
+side: ``sim_score.compare(before, after)`` says which metrics moved
+past their intervals. A figure in these pages was measured on the model
+of its day, so it is not a baseline for a new change. The installation
+matters to the score: with no circulation terms the replay that starts
+each event leaves out the record's pump runs, and the recoveries read
+further from their measured durations, so both sides are scored from
+the same installation. A change tried and not kept goes in
+:doc:`/explanation/simulator-tried`.
+
 
 From Python
 ===========
