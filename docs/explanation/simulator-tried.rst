@@ -18,17 +18,18 @@ A metered draw timed by the draw detector (2026-10-31)
 
 **Tried.** Each metered draw run from its onset for as long as the
 draw detector held, instead of all at the onset, in the replay that
-starts every event, the recoveries' walks and the draw events. The
-detector's span is the one starting no more than 10 min after the
-onset and ending no more than 2 min before it, its dropouts under 3
-min joined, cut short at the next draw's onset; a span over an hour
-times none (17 of the 1791 draws). 1753 were timed, a median 4.7
-min. Fitted before 2026-09-18 and scored on the 27 recoveries after,
+starts every event, the recoveries' walks and the draw events: for
+the length of the last detector span starting no more than 10 min
+after the onset, if it ends no more than 2 min before it, the
+detector's dropouts under 3 min joined, cut short at the next draw's
+onset. A span over an hour times none. Of the 1791 draws 1753 were
+timed, a median 4.7 min; 17 were left at their onset by the hour, 21
+had no span. Fitted before 2026-09-18 and scored on the 27 recoveries after,
 on the site's installation (code 4693d3c, not merged).
 
 **Found.** The inlet zone set by hand from 1 to 45 gal, or the
 condenser's span moved to 0.25-0.37 or 0-0.11, left the walk's lower
-probe within 2 degF of where it was over the first 10 min of the
+probe within 2 degF at 10 min of where it was at the start of the
 recoveries of 2026-09-22 17:14 and 2026-10-13 13:09 UTC, where the
 record's fell 13-15 degF. Those two showers ran on into the recovery.
 The meter put 16.0 gal at 4.8 min before the first start; the heater's
@@ -36,23 +37,27 @@ own flag came on 3.7 min before it and the detector held from 0.9 to
 13.2 min after. The record's lower probe fell from 117.5 degF 4 min
 before the start to 104.7 at it and 90.3 10 min after. The walk, taking
 the draw at the meter's onset, had fallen to 103.1 at the start and
-fell no further. On 10-13 the meter put 10.2 gal at 3.3 min before;
-the detector held from 0.8 min before to 8.3 after; the record fell
-22.5 degF in all. Timed, on the base's terms, the 16 recoveries with
+moved under 1 degF over the next 10 min. On 10-13 the meter put 10.2
+gal at 3.3 min before; the detector held from 0.8 min before to 8.3
+after; the record fell 22.5 degF in all. Timed, on the base's terms, the 16 recoveries with
 water in use came out 34.3 min off against 42.5, a mean 19.4 short
 against 34.1, and the 11 without 6.2 against 5.7. Refitted, the 16
 came out 37.9 min off, a mean 31.5 short; the 11 without 6.9 against
 5.7, a mean 3.2 short against 3.1 long; the lower probe after a draw
 1.65 degF RMSE against 2.01, the upper 0.24 against 0.30; the day's
-energy 17.5 % off against 16.5. Every score stayed inside its
-interval. The recovery of 2026-10-23 22:48, with its 15.4 gal draw 48
-min in, moved under 1 min either way, and the one of 2026-09-30 02:51
-stayed over 260 min short.
+energy 17.5 % off against 16.5. Every score but the draw-free
+recoveries' mean stayed inside the base's interval; that went from
+3.1 min long to 3.2 short, outside it. The refit shortened each of the
+16, by 5.5-18.8 min against the timed walk on the base's terms, about
+12 in the middle. The recovery of 2026-10-23 22:48, with its 15.4 gal
+draw 48 min in, came out 66.5 min short timed against 65.6, and 79.0
+refitted; the one of 2026-09-30 02:51 stayed over 260 min short.
 
 **Why dropped.** Mixed: the draws and the recoveries with water in use
-better, the draw-free recoveries and the day's energy worse, all
-inside their intervals. The refit kept little of the gain on the
-recoveries.
+better, the draw-free recoveries and the day's energy worse, the
+draw-free recoveries' mean outside its interval. The refit kept 4.6 of
+the 8.2 min the timing took off the recoveries' error, and 2.6 of the
+14.7 off their mean shortfall.
 
 **Account.** :doc:`simulator`, "Accuracy"; :doc:`simulator-methodology`,
 "How a draw moves the tank".
@@ -87,7 +92,7 @@ with the compressor running, where the walk's moved under 3 degF; over
 the 34 held-out draws of 8 gal or more with it off, the record's fell a
 median of 12.2 degF over the hour and the walk's 10.0, less on 31 of
 the 34. The walk's lower probe reaches its target sooner than the
-record's, and the heat pump stops on that probe. The next trial, "A
+record's, and the heat pump stops on that probe. The later trial, "A
 metered draw timed by the draw detector", found that two of the three
 traced draws ran on into the recovery, the walk having taken all of
 each at the meter's onset before the start.

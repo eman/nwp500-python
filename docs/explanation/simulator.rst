@@ -475,11 +475,12 @@ water in use (drawn, or the circulation running) inside them or in the
 30 minutes before went from 47.2 to 48.2 min. On the code of
 2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
 five 38 min or more short (38-284) each start within 30 minutes of
-10-31 gal drawn, or have a 15 gal draw inside. In two of them the
-shower ran on into the recovery: the walk takes a metered draw at the
-meter's onset, so its lower probe had fallen before the start and fell
-no further, where the record's fell another 13-15 degF in the first 10
-min, and the walk's probe reaches its target sooner. Timing each draw
+10-31 gal drawn, or have a 15 gal draw inside. In two of the three
+traced the shower ran on into the recovery: the walk takes a metered
+draw at the meter's onset, so its lower probe had fallen before the
+start and moved under 1 degF over the next 10 min, where the record's
+fell another 13-15 degF, and the walk's probe reaches its target
+sooner. Timing each draw
 by the draw detector was tried and dropped (:doc:`simulator-tried`, "A
 metered draw timed by the draw detector").
 
