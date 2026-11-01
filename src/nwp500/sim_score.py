@@ -1121,16 +1121,15 @@ def _recovery_score(
         return False
     # A setpoint lowered and raised back stops the walk's compressor and
     # starts it again once the write's lag and the lockout allow: the
-    # record's run went on through it, so the chain is the run.
-    c = params.controller
-    opens = c.write_start_lag + c.restart_lockout
+    # writes are the recorded run's own, which went on through them, so
+    # the chain is the run, up to a restart after the record's run ended.
     first, last = runs[0], runs[0]
     input_wh = first.input_wh
     for h in runs[1:]:
         if not (
             last.stop == "write"
             and h.start.cause == "write"
-            and h.start.at <= last.end + opens
+            and h.start.at < e.end
         ):
             break
         last = h

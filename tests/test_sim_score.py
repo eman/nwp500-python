@@ -475,6 +475,24 @@ class TestASetpointChangedInsideARecovery:
         assert got["recovery_minutes_bias.all"].value == pytest.approx(
             0.0, abs=15.0
         )
+        # Restored after the lockout has passed: still the same run.
+        held = replace(
+            r, setpoints=((at, 121.0), (at + timedelta(minutes=7), 140.0))
+        )
+        got = ss.score(ss.Events(recoveries=(held,)), site).metrics
+        assert got["recovery_minutes_bias.all"].value == pytest.approx(
+            0.0, abs=15.0
+        )
+        # One just before the recorded end: a restart past it is not the
+        # recorded run's.
+        at = r.end - timedelta(seconds=20)
+        late = replace(
+            r, setpoints=((at, 121.0), (at + timedelta(seconds=5), 140.0))
+        )
+        got = ss.score(ss.Events(recoveries=(late,)), site).metrics
+        assert got["recovery_minutes_bias.all"].value == pytest.approx(
+            0.0, abs=2.0
+        )
 
     def test_only_its_changes_inside_count(self) -> None:
         seconds = np.array([0.0, 60.0, 120.0, 180.0, 240.0, 300.0])
