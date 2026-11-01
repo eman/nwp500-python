@@ -462,6 +462,13 @@ class TestASetpointChangedInsideARecovery:
     def test_lowered_and_raised_back_is_one_run(
         self, history: tuple[Prepared, datetime], site: sim.HeaterParams
     ) -> None:
+        def bias(e: ss.Recovery) -> float:
+            return (
+                ss.score(ss.Events(recoveries=(e,)), site)
+                .metrics["recovery_minutes_bias.all"]
+                .value
+            )
+
         """A setpoint dipped below the upper probe for seconds stops
         the walk's compressor and starts it again: the record's run went
         on through it, and the chain is scored as that run."""
@@ -483,6 +490,15 @@ class TestASetpointChangedInsideARecovery:
         assert got["recovery_minutes_bias.all"].value == pytest.approx(
             0.0, abs=15.0
         )
+        # Raised after the walk reached the setpoint in force (at 106.5
+        # of the record's 179.2 min from 130 degF): the raise's restart
+        # is the same run.
+        low = replace(r, setpoint_f=130.0)
+        assert bias(low) < -60.0
+        later = replace(
+            low, setpoints=((r.start + timedelta(minutes=116.5), 140.0),)
+        )
+        assert bias(later) == pytest.approx(0.0, abs=20.0)
         # One just before the recorded end: a restart past it is not the
         # recorded run's.
         at = r.end - timedelta(seconds=20)

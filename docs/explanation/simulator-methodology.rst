@@ -663,9 +663,10 @@ nothing heating and no water moving, starting 45 minutes after the last
 of either, followed for up to 24 hours. A meter's sized draws, each
 followed for an hour. And recoveries that reached their target, each
 followed from its start through the recorded run to its recorded end.
-(The score walks a recovery instead to where it stops, a change of the
-setpoint inside it a write at its instant.) The tank's fit needs 10
-windows and draws.
+(The score walks a recovery instead to where its run stops, a change
+of the setpoint inside it a write at its instant; a restart a write
+causes before the recorded end continues the run.) The
+tank's fit needs 10 windows and draws.
 
 **The tank** (``sim.tank_fit``). Two probes do not say where the water
 below the lower one is, so each event starts from the layers the record

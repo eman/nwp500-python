@@ -678,7 +678,9 @@ Fixed
 
 - A recorded recovery is walked with each change of the setpoint inside
   it as a write at its instant (``sim_score.Recovery.setpoints``), where
-  it was walked to the setpoint in force at its start. One raised from
+  it was walked to the setpoint in force at its start; a restart a write
+  causes before the recorded end continues the scored run, as the heater
+  ran on through it. One raised from
   110.3 to 141.8 °F 3.5 min in had been scored 284 min short; on the
   site's held-out record, the 16 recoveries with water in use came out
   31.4 min off against 42.5.
