@@ -487,7 +487,7 @@ setpoint in force at its start, 110.3 degF; it was raised to 141.8
 3.5 min in, and the heater ran to it. With each change of the setpoint
 inside a recovery walked as a write, on the same params on 2026-10-31,
 the 16 came out 31.4 min off, a mean 18.2 short, that one 77.3 short
-from a tank whose upper probe had fallen to 81 degF; and one whose
+from a tank at 100.9 degF upper and 78.4 lower; and one whose
 setpoint rose 1.8 degF 32 min in went from 8.6 short to 38.3 long. The
 11 draw-free went from 5.7 to 5.6 min, their electricity from 4.5 % to
 4.2 %.

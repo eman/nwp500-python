@@ -459,6 +459,23 @@ class TestASetpointChangedInsideARecovery:
         assert bias(r) == pytest.approx(0.0, abs=1.0)
         assert bias(raised) > bias(r) + 5.0
 
+    def test_lowered_and_raised_back_is_one_run(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        """A setpoint dipped below the upper probe for seconds stops
+        the walk's compressor and starts it again: the record's run went
+        on through it, and the chain is scored as that run."""
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+        at = r.start + timedelta(minutes=20)
+        dipped = replace(
+            r, setpoints=((at, 121.0), (at + timedelta(seconds=5), 140.0))
+        )
+        got = ss.score(ss.Events(recoveries=(dipped,)), site).metrics
+        assert got["recovery_minutes_bias.all"].value == pytest.approx(
+            0.0, abs=15.0
+        )
+
     def test_only_its_changes_inside_count(self) -> None:
         seconds = np.array([0.0, 60.0, 120.0, 180.0, 240.0, 300.0])
         values = np.array([140.0, 140.0, np.nan, 145.0, 145.0, 150.0])
