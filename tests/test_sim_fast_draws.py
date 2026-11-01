@@ -48,6 +48,10 @@ def test_the_threshold_is_a_positive_flow() -> None:
     assert SITE.draw.undiluted_gpm == sim.SITE_UNDILUTED_GPM == 2.0
     assert SITE.draw.undiluted(2.0)
     assert not SITE.draw.undiluted(1.9)
+    # A piece's flow, recomputed from its gallons and span, is the
+    # draw's to the last bits.
+    assert SITE.draw.undiluted(2.0 * (1.0 - 1e-12))
+    assert not SITE.draw.undiluted(2.0 * (1.0 - 1e-6))
     assert not SITE.draw.undiluted(None)
     assert not VALVED.draw.undiluted(9.0)
     for bad in (0.0, -1.0, float("nan")):

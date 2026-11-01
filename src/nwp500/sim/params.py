@@ -505,11 +505,12 @@ class DrawParams:
 
     def undiluted(self, gpm: float | None) -> bool:
         """Whether a draw at ``gpm`` (None: not known) takes the tank's
-        water whole (``undiluted_gpm``)."""
+        water whole (``undiluted_gpm``). Within a part in 10⁹ of it is
+        at it: a draw cut into pieces recomputes its flow from them."""
         return (
             gpm is not None
             and self.undiluted_gpm is not None
-            and gpm >= self.undiluted_gpm
+            and gpm >= self.undiluted_gpm * (1.0 - 1e-9)
         )
 
     def out_of_domain(self, upper_f: float, volume_gal: float) -> bool:

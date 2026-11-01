@@ -477,6 +477,19 @@ class TestAFastDraw:
         assert (rest.at, rest.duration_s) == (at, 420.0)
         assert rest.gallons == pytest.approx(17.5)
         assert rest.flow_gpm == pytest.approx(2.5)
+        # At the threshold exactly, the rest stays as fast as the draw
+        # though its flow is recomputed from its pieces.
+        edge = replace(
+            record,
+            draws=((T0, 2.0 * 777.7 / 60.0),),
+            draw_seconds={T0: 777.7},
+        )
+        for k in range(1, 12):
+            start = T0 + timedelta(seconds=k * 61.3)
+            (piece,) = ss._loads(
+                edge, start, start + timedelta(hours=1), (), site
+            ).draws  # pyright: ignore[reportPrivateUsage]
+            assert site.draw.undiluted(piece.flow_gpm)
         # Under way from inside the start's own minute: the replay,
         # which moves that minute's draws before it, still takes only
         # what ran by the start.
