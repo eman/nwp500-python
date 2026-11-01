@@ -475,12 +475,14 @@ water in use (drawn, or the circulation running) inside them or in the
 30 minutes before went from 47.2 to 48.2 min. On the code of
 2026-10-31 the same 16 came out 42.5 min off, a mean 34.1 short. The
 five 38 min or more short (38-284) each start within 30 minutes of
-10-31 gal drawn, or have a 15 gal draw inside; in the three of these
-traced, after draws of 10-16 gal just before the start or inside it,
-the record's lower probe fell 13-15 degF with the compressor running
-and the walk's far less, so the walk's probe reaches its target
-sooner, and the heat pump stops on that probe (:doc:`simulator-tried`, "The lower probe allowed
-higher").
+10-31 gal drawn, or have a 15 gal draw inside. In two of the three
+traced the shower ran on into the recovery: the walk takes a metered
+draw at the meter's onset, so its lower probe had fallen before the
+start and moved under 1 degF over the next 10 min, where the record's
+fell another 13-15 degF, and the walk's probe reaches its target
+sooner. Timing each draw
+by the draw detector was tried and dropped (:doc:`simulator-tried`, "A
+metered draw timed by the draw detector").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
