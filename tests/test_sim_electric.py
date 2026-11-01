@@ -108,7 +108,7 @@ def _walk(**over: Any) -> dict[str, Any]:
         "physics": TankPhysics(
             PARAMS, air, 55.0, draws_on=True, low_confidence_floor=0.6
         ),
-        "draws": [(T0 + timedelta(minutes=10), 6.0)],
+        "draws": [(T0 + timedelta(minutes=10), 6.0, False)],
         "stopped_at": T0 - timedelta(hours=3),
     }
     return walk | over
@@ -203,7 +203,9 @@ def test_a_draw_from_a_full_tank_starts_the_elements_at_once() -> None:
     start on the tank it leaves, at its instant, not at the coast's
     next reading."""
     draw = T0 + timedelta(minutes=10)
-    got = simulate(**_walk(upper_f=130.2, lower_f=130.1, draws=[(draw, 15.0)]))
+    got = simulate(
+        **_walk(upper_f=130.2, lower_f=130.1, draws=[(draw, 15.0, False)])
+    )
     first = got.heating[0]
     assert (first.start.at, first.zone) == (draw, "lower")
 

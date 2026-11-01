@@ -116,7 +116,7 @@ def _by_hand(params: HeaterParams, s: Scenario) -> Any:
         setpoint_f=s.settings.setpoint_f,
         heater=Heater(hp_lower_on_f=105.0, element=params.element),
         physics=physics,
-        draws=[(d.at, d.gallons) for d in s.loads.draws],
+        draws=[(d.at, d.gallons, False) for d in s.loads.draws],
         marks=[x for w in s.loads.windows for x in (w.start, w.end)],
         stopped_at=s.history.compressor_stopped_at,
         start_hold=lambda off: start_hold_min(params.compressor, off),
@@ -178,7 +178,7 @@ class TestTheDeliveryInASimulation:
                 hp_lower_on_f=104.9, mode="energy_saver", element=params.element
             ),
             physics=physics,
-            draws=[(at(1.0), 5.0), (second, 1.0)],
+            draws=[(at(1.0), 5.0, False), (second, 1.0, False)],
             stopped_at=stop,
             controller=params.controller,
         )
@@ -228,7 +228,7 @@ class TestTheDeliveryInASimulation:
                 hp_lower_on_f=104.9, mode="energy_saver", element=params.element
             ),
             physics=physics,
-            draws=[(draw, 1.0)],
+            draws=[(draw, 1.0, False)],
             stopped_at=stop,
             controller=params.controller,
         )

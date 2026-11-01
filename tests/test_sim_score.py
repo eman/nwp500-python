@@ -426,6 +426,33 @@ class TestADrawJustBeforeARecovery:
         assert [t for t, _ in moved.draws] == [edge - timedelta(microseconds=1)]
 
 
+class TestAFastDraw:
+    """The score walks a draw the detector times at the valve's
+    ``undiluted_gpm`` or faster over its span; every other at its
+    onset."""
+
+    def test_is_walked_over_its_span(self, site: sim.HeaterParams) -> None:
+        record = tank_fit.TankRecord(
+            start=T0,
+            upper_f=np.full(60, 130.0),
+            lower_f=np.full(60, 130.0),
+            air_f=np.full(60, 65.0),
+            compressor=(),
+            element=(),
+            circulating=(),
+            draws=((T0, 30.0), (T0 + timedelta(minutes=30), 10.0)),
+            draw_seconds={T0: 720.0, T0 + timedelta(minutes=30): 600.0},
+        )
+        draws = tuple(sim.Draw(at=t, gallons=g) for t, g in record.draws)
+        timed = ss._timed(draws, record, site)  # pyright: ignore[reportPrivateUsage]
+        # 2.5 gal/min over its 12 min; the other's 1 gal/min at once.
+        assert [d.duration_s for d in timed] == [720.0, 0.0]
+        valved = replace(site, draw=replace(site.draw, undiluted_gpm=None))
+        assert ss._timed(draws, record, valved) == draws  # pyright: ignore[reportPrivateUsage]
+        untimed = replace(record, draw_seconds={})
+        assert ss._timed(draws, untimed, site) == draws  # pyright: ignore[reportPrivateUsage]
+
+
 class TestASetpointChangedInsideARecovery:
     def test_is_read_from_the_history(
         self, history: tuple[Prepared, datetime]

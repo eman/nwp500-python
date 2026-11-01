@@ -549,7 +549,7 @@ def simulate(
         _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
-    draws = [p for d in s.loads.draws for p in d.pieces()]
+    draws = _pieces(s.loads.draws, params)
     tank, estimated = _tank(physics, s.state)
     reasons += estimated
     sim = walk(
@@ -776,6 +776,19 @@ def _refusal(served: Recovered) -> SimulationError:
     )
 
 
+def _pieces(
+    draws: Sequence[Draw], params: HeaterParams
+) -> list[tuple[datetime, float, bool]]:
+    """``draws`` as the walk takes them (``Draw.pieces``), each piece
+    with whether its draw takes the tank's water whole
+    (``DrawParams.undiluted``)."""
+    return [
+        (at, g, params.draw.undiluted(d.flow_gpm))
+        for d in draws
+        for at, g in d.pieces()
+    ]
+
+
 def _drawn_in(d: Draw, start: datetime, until: datetime) -> bool:
     """Some of ``d`` is drawn in ``[start, until)``."""
     return any(start <= at < until for at, _ in d.pieces())
@@ -898,7 +911,7 @@ def standby(
         circulation=circulation,
     )
     within = [d for d in loads.draws if _drawn_in(d, start, until)]
-    draws = [p for d in within for p in d.pieces() if start <= p[0] < until]
+    draws = [p for p in _pieces(within, params) if start <= p[0] < until]
     first, reasons = _tank(physics, state)
     coast = physics.advance(start, first, until, draws)
     out_of_domain_at: datetime | None = None
@@ -1431,7 +1444,10 @@ def _to_start(
                 to_start.points[-1].lower_f,
             )
     at_start = sorted(
-        sum(g for at, g in d.pieces() if at >= start)
+        (
+            sum(g for at, g in d.pieces() if at >= start),
+            params.draw.undiluted(d.flow_gpm),
+        )
         for d in s.loads.draws
         if d.at == start
         or d.at < start < d.at + timedelta(seconds=d.duration_s)
@@ -1447,9 +1463,11 @@ def _to_start(
             defaults=[],
             circulation=_circulation(s.loads, params),
         )
-        for g in at_start:
+        for g, undiluted in at_start:
             upper, lower = physics.observe(
-                physics.draw(start, physics.estimate(upper, lower), g)
+                physics.draw(
+                    start, physics.estimate(upper, lower), g, undiluted
+                )
             )
     return upper, lower
 

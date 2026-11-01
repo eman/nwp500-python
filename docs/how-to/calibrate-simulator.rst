@@ -215,7 +215,13 @@ From Python, ``nwp500.sim_score`` scores any history the fits read
 (``sim_calibrate.prepare`` or ``prepare_changes``), and takes a hot
 water meter's draws for the draw and deliverable-gallon metrics. Give
 the fit the draws before the split, and the score the record
-(``tank_fit.tank_record``) to start each event from its replay:
+(``tank_fit.tank_record``) to start each event from its replay. The
+record times each draw by the history's draw detector
+(``TankRecord.draw_seconds``). The score walks one the detector times
+at the parameters' ``DrawParams.undiluted_gpm`` or faster over that
+time, the tank's water whole. It walks every other draw at its onset,
+where the meter sizes it: timing them all scored worse
+(:doc:`../explanation/simulator-tried`).
 
 .. code-block:: python
 

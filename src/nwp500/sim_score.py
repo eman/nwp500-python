@@ -1046,12 +1046,15 @@ def _loads(
     start: datetime,
     end: datetime,
     draws: tuple[sim.Draw, ...] = (),
+    params: HeaterParams | None = None,
 ) -> sim.Loads:
-    """An event's loads: its ``draws``, and with a ``record``, the
-    circulation runs it recorded from ``start`` to ``end`` (an event
-    with none is known to have had none)."""
+    """An event's loads: its ``draws`` (``_timed``), and with a
+    ``record``, the circulation runs it recorded from ``start`` to
+    ``end`` (an event with none is known to have had none)."""
     if record is None:
         return sim.Loads(draws=draws)
+    if params is not None:
+        draws = _timed(draws, record, params)
     i, j = record.minute(start), record.minute(end) + 1
     runs = tuple(
         sim.CirculationRun(start=record.instant(a), end=record.instant(b))
@@ -1059,6 +1062,27 @@ def _loads(
         if a < j and b > i
     )
     return sim.Loads(draws=draws, circulation=runs, circulation_known_until=end)
+
+
+def _timed(
+    draws: tuple[sim.Draw, ...], record: tf.TankRecord, params: HeaterParams
+) -> tuple[sim.Draw, ...]:
+    """``draws`` as the score walks them: one the record's draw detector
+    times (``TankRecord.draw_seconds``) at ``params.draw.undiluted_gpm``
+    or faster over its span, which it takes the tank's water whole
+    through; every other all at its onset, where the meter sizes it
+    (timing them all scored worse: ``simulator-tried``)."""
+    out: list[sim.Draw] = []
+    for d in draws:
+        seconds = record.draw_seconds.get(d.at, 0.0)
+        if (
+            d.duration_s == 0.0
+            and seconds > 0.0
+            and params.draw.undiluted(d.gallons / (seconds / 60.0))
+        ):
+            d = d.model_copy(update={"duration_s": seconds})
+        out.append(d)
+    return tuple(out)
 
 
 def _recovery_score(
@@ -1100,7 +1124,7 @@ def _recovery_score(
                 ),
                 history=sim.History(compressor_stopped_at=e.stopped_at),
                 environment=_environment(e.air, e.humidity, inlet_f),
-                loads=_loads(record, e.start, e.start + horizon, draws),
+                loads=_loads(record, e.start, e.start + horizon, draws, params),
                 commands=sim.Commands(
                     writes=tuple(
                         sim.Write(at=t, setpoint_f=v) for t, v in e.setpoints
@@ -1244,6 +1268,7 @@ def _draw_score(
                 e.at,
                 e.at + DRAW_FOLLOW,
                 (sim.Draw(at=e.at, gallons=e.gallons),),
+                params,
             ),
             params,
             start=e.at,
@@ -1362,7 +1387,9 @@ def _day_score(
                     "environment": s.environment.model_copy(
                         update={"inlet_f": inlet_f}
                     ),
-                    "loads": _loads(record, e.start, e.end, s.loads.draws),
+                    "loads": _loads(
+                        record, e.start, e.end, s.loads.draws, params
+                    ),
                 }
             ),
             params,

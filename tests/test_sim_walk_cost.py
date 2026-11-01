@@ -120,7 +120,7 @@ def _circulating(
             circulation=Circulation((run,), known_until=known_until),
             circulation_terms=SITE_CIRCULATION,
         ),
-        "draws": [] if known_until else [(T5 + timedelta(hours=3), gal)],
+        "draws": [] if known_until else [(T5 + timedelta(hours=3), gal, False)],
     }
 
 

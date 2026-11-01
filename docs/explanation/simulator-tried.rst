@@ -13,6 +13,33 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+A larger inlet zone for a fast draw (2026-10-31)
+================================================
+
+**Tried.** Measured, not built: whether the record's fast draws (2.1-2.7
+gal/min, :doc:`simulator-methodology`, "A fast draw") mix more of the
+tank, rather than take more of it. Each of the 24 draws of 20 gal or
+more replayed for 40 min from the record's state 2 min before it, the
+heat off, on the parameters fitted before 2026-09-18, with
+``inlet_mix_gal`` at 13.8 (fitted), 25, 40 and 63.2 gal (the tank).
+
+**Found.** No zone reproduced them. On 09-29 19:42 (30.8 gal at 2.35
+gal/min) the record's upper probe reached 80.8 degF. The walk's
+reached 97.2 at the fitted zone, 87.5 at 40 gal, and 104.9 with the
+whole tank mixed: mixing keeps the tank's heat, and the record's tank
+lost more. The same on 09-30 20:33 (81.5 against 101.1 at best) and 10-02
+20:01 (97.3 against 96.8 at 40 gal but 103.1 at the whole tank). The
+slower draws, at 13.8 gal, came within a few degF, and at 40 gal or
+more their upper probe 6-23 degF under the record's (04-28's, already
+35 under at the fitted zone, further).
+
+**Why dropped.** Mixing cannot remove heat. The tank water each fast
+draw took, about 1.3 times the valve's share, is what moved it, and is
+what was kept.
+
+**Account.** :doc:`simulator-methodology`, "A fast draw".
+
+
 A metered draw timed by the draw detector (2026-10-31)
 ======================================================
 
@@ -59,6 +86,11 @@ better, the draw-free recoveries and the day's energy worse, the
 draw-free recoveries' mean outside its interval. The refit kept 4.5 of
 the 8.2 min the timing took off the recoveries' error, and 2.6 of the
 14.7 off their mean shortfall.
+
+Kept since for a draw at ``DrawParams.undiluted_gpm`` or faster only:
+the score walks it over its detector span, and a 54 gal draw at 2.7
+gal/min taken at its onset started the element 19 min early on
+2026-10-02 (:doc:`simulator-methodology`, "A fast draw").
 
 **Account.** :doc:`simulator`, "Accuracy"; :doc:`simulator-methodology`,
 "How a draw moves the tank".

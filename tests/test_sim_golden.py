@@ -107,7 +107,7 @@ def _entry(sid: str, h: float, setpoint: float, mode: str) -> Entry:
 
 def _shower(h: float, gal: float = 1.6, n: int = 8) -> list[Any]:
     """A shower's gallons a minute apart, from ``h`` hours."""
-    return [(at(h) + timedelta(minutes=i), gal) for i in range(n)]
+    return [(at(h) + timedelta(minutes=i), gal, False) for i in range(n)]
 
 
 def _start_hold(deficit_f: float | None) -> float:
@@ -190,7 +190,7 @@ CASES: dict[str, dict[str, Any]] = {
         lower_f=117.0,
         running=False,
         stopped_at=at(-3.0),
-        draws=[(at(1.0), 20.0), (at(9.0), 26.0)],
+        draws=[(at(1.0), 20.0, False), (at(9.0), 26.0, False)],
         withheld_windows=[(at(1.0), at(1.5)), (at(9.0), at(9.75))],
         start_hold=_start_hold,
     ),
@@ -400,8 +400,14 @@ class _SealedPhysics:
         )
         return dataclasses.replace(got, points=self._seal(got.points))
 
-    def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
-        return _Sealed(self.inner.draw(at, self._open(state), gal))
+    def draw(
+        self,
+        at: datetime,
+        state: TankState,
+        gal: float,
+        undiluted: bool = False,
+    ) -> TankState:
+        return _Sealed(self.inner.draw(at, self._open(state), gal, undiluted))
 
 
 @pytest.mark.parametrize("case", sorted(CASES))

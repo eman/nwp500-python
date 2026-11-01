@@ -62,9 +62,10 @@ from nwp500.sim.physics.heat_pump import (
     heat_water_outside,
 )
 
-#: A delivered draw at the inlet: its onset, and the gallons the meter
-#: counts.
-Delivered = tuple[datetime, float]
+#: A delivered draw at the inlet: its onset, the gallons the meter
+#: counts, and whether it takes the tank's water whole
+#: (``DrawParams.undiluted``) rather than through the valve.
+Delivered = tuple[datetime, float, bool]
 #: The tank as a ``Physics`` carries it: opaque to the engine, which
 #: reads it only through ``Physics.observe``.
 TankState = object
@@ -240,8 +241,15 @@ class Physics(Protocol):
         ``stop`` ends it at the first instant it holds."""
         ...
 
-    def draw(self, at: datetime, state: TankState, gal: float) -> TankState:
-        """The tank just after a delivered draw of ``gal`` at ``at``."""
+    def draw(
+        self,
+        at: datetime,
+        state: TankState,
+        gal: float,
+        undiluted: bool = False,
+    ) -> TankState:
+        """The tank just after a delivered draw of ``gal`` at ``at``,
+        through the valve or, ``undiluted``, its water whole."""
         ...
 
 
@@ -480,8 +488,10 @@ class TankPhysics:
             heating=self._heating(running),
             flowing=self._flows(start, end),
             draws=[
-                st.Delivered(at=t, gal=g, inflow_f=self.inlet_at(t))
-                for t, g in taken
+                st.Delivered(
+                    at=t, gal=g, inflow_f=self.inlet_at(t), undiluted=u
+                )
+                for t, g, u in taken
             ],
             valve=self.valve,
             stop=None
@@ -541,7 +551,9 @@ class TankPhysics:
             points,
             stopped=walked.stopped,
             impulses=impulses,
-            draw_volume_gal=sum(g for t, g in taken if start <= t < walked.end),
+            draw_volume_gal=sum(
+                g for t, g, _ in taken if start <= t < walked.end
+            ),
             draw_heat_btu=books.drawn_btu,
             flowing_heat_btu=books.flowing_btu,
             ambient_mean_f=mean,
@@ -562,13 +574,18 @@ class TankPhysics:
             return (HEAT_MAP_OUT_OF_DOMAIN,)
         return ()
 
-    def draw(self, at: datetime, state: TankState, gal: float) -> st.TankState:
+    def draw(
+        self,
+        at: datetime,
+        state: TankState,
+        gal: float,
+        undiluted: bool = False,
+    ) -> st.TankState:
         layers = _layers(state)
         if not self.draws_on:
             return layers
-        return st.draw(
-            self.layout, layers, gal, self.inlet_at(at), self.valve
-        ).state
+        valve = st.NO_VALVE if undiluted else self.valve
+        return st.draw(self.layout, layers, gal, self.inlet_at(at), valve).state
 
     def inlet_at(self, at: datetime) -> float:
         """The water replacing a draw at ``at``: that day's, or the one

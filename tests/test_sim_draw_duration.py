@@ -3,6 +3,7 @@ heating meets it between its minutes, as a meter's per-minute draws."""
 
 import json
 import math
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -14,7 +15,10 @@ from nwp500.sim import Draw, Loads, codec
 from nwp500.sim.inputs import DRAW_STEP
 from nwp500.sim.physics.stratified import ACTIVE_STEP
 
-PARAMS = sim.site_example_params()
+SITE = sim.site_example_params()
+#: Every draw through the valve: the meter's minutes below carry no
+#: flow (``DrawParams.undiluted_gpm``), the shower's 2 gal/min would.
+PARAMS = replace(SITE, draw=replace(SITE.draw, undiluted_gpm=None))
 SHOWER = Draw(at=T0 + timedelta(minutes=10), gallons=60.0, duration_s=1800.0)
 #: The same shower as a meter counts it, 2 gal each minute.
 METERED = tuple(

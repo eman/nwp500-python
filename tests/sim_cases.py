@@ -79,12 +79,12 @@ def walk_case(seed: int, spans: tuple[int, ...] = (8, 24)) -> dict[str, Any]:
         for d in range(hours // 24 + 2):
             a = day + timedelta(days=d, hours=rng.choice((14, 15, 16, 23)))
             tou.append((a, a + timedelta(hours=rng.choice((1, 3, 5)))))
-    draws: list[tuple[datetime, float]] = []
+    draws: list[tuple[datetime, float, bool]] = []
     for _ in range(rng.randrange(hours * 3 + 1)):
         at = t0 + timedelta(minutes=rng.randrange(hours * 60))
         gal = rng.choice((0.5, 1.5, 3.0, 10.0))
         draws += [
-            (at + timedelta(minutes=i), gal)
+            (at + timedelta(minutes=i), gal, False)
             for i in range(rng.choice((1, 3, 8)))
         ]
     entries = [
