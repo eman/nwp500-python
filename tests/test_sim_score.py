@@ -477,6 +477,25 @@ class TestAFastDraw:
         assert (rest.at, rest.duration_s) == (at, 420.0)
         assert rest.gallons == pytest.approx(17.5)
         assert rest.flow_gpm == pytest.approx(2.5)
+        # Under way from inside the start's own minute: the replay,
+        # which moves that minute's draws before it, still takes only
+        # what ran by the start.
+        inside = T0 + timedelta(minutes=5, seconds=40)
+        late = replace(
+            record,
+            draws=((T0 + timedelta(minutes=5, seconds=10), 25.0),),
+            draw_seconds={T0 + timedelta(minutes=5, seconds=10): 600.0},
+        )
+        layers = []
+        for gal in (1.25, 25.0):
+            cut = replace(
+                late, draws=((late.draws[0][0], gal),), draw_seconds={}
+            )
+            layers.append(
+                ss._state(site, cut, inside, 130.0, 130.0).layers_f  # pyright: ignore[reportPrivateUsage]
+            )
+        got = ss._state(site, late, inside, 130.0, 130.0, split=True)  # pyright: ignore[reportPrivateUsage]
+        assert got.layers_f == layers[0] != layers[1]
         valved = replace(site, draw=replace(site.draw, undiluted_gpm=None))
         assert ss._ran_by(record, record, valved, at) == record  # pyright: ignore[reportPrivateUsage]
         assert not ss._loads(

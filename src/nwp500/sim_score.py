@@ -1004,9 +1004,9 @@ def _state(
     layers = None
     if record is not None:
         lay = st.layout(params)
-        part = _replayable(record, at)
-        if split:
-            part = _ran_by(part, record, params, at)
+        # Cut before the start minute's draws move, by their onsets.
+        whole = _ran_by(record, record, params, at) if split else record
+        part = _replayable(whole, at)
         layers = tf.start_state(
             lay, params, part, at, upper_f, lower_f
         ).layers_f
