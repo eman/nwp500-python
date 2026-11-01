@@ -39,9 +39,10 @@ before the start to 104.7 at it and 90.3 10 min after. The walk, taking
 the draw at the meter's onset, had fallen to 103.1 at the start and
 moved under 1 degF over the next 10 min. On 10-13 the meter put 10.2
 gal at 3.3 min before; the detector held from 0.8 min before to 8.3
-after; the record fell 22.5 degF in all. Timed, on the base's terms, the 16 recoveries with
-water in use came out 34.3 min off against 42.5, a mean 19.4 short
-against 34.1, and the 11 without 6.2 against 5.7. Refitted, the 16
+after; the record fell 22.5 degF in all. Timed, on the base's terms,
+the 16 recoveries with water in use came out 34.3 min off against
+42.5, a mean 19.4 short against 34.1, and the 11 without 6.2 against
+5.7. Refitted, the 16
 came out 37.9 min off, a mean 31.5 short; the 11 without 6.9 against
 5.7, a mean 3.2 short against 3.1 long; the lower probe after a draw
 1.65 degF RMSE against 2.01, the upper 0.24 against 0.30; the day's
