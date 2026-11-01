@@ -200,7 +200,9 @@ parameters is scored on the same events, each started from the layers
 the record's replay leaves at its start (given the air; without it,
 from the probes). Each recovery that reached its
 target with no water in use is walked from its recorded start (one with
-a draw needs a meter's draws, from Python below): ``recovery_minutes_abs`` is
+a draw needs a meter's draws, from Python below), each change of the
+setpoint inside it walked as a write at its instant, as the heater
+was told it: ``recovery_minutes_abs`` is
 how far its predicted run is from the recorded one, and
 ``recovery_energy_abs_pct`` how far its electricity is from the
 meter's. Each quiet window is coasted from its start:

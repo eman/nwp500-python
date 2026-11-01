@@ -151,6 +151,9 @@ class Recovery:
     stopped_at: datetime | None
     #: The metered draws inside it, ``(instant, delivered gallons)``.
     draws: tuple[tuple[datetime, float], ...] = ()
+    #: The setpoint's changes inside it, ``(instant, °F)``: the walk
+    #: takes each as a write, as the heater did.
+    setpoints: tuple[tuple[datetime, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -295,6 +298,23 @@ def _asof(
             return v
         k -= 1
     return None
+
+
+def _changes(
+    values: np.ndarray, seconds: np.ndarray, start: datetime, end: datetime
+) -> tuple[tuple[datetime, float], ...]:
+    """Each finite value after ``start`` and before ``end`` that differs
+    from the last before it (the one in force at ``start`` first)."""
+    lo = int(np.searchsorted(seconds, start.timestamp(), side="right"))
+    hi = int(np.searchsorted(seconds, end.timestamp(), side="left"))
+    last = _asof(values, seconds, start)
+    out: list[tuple[datetime, float]] = []
+    for k in range(lo, hi):
+        v = float(values[k])
+        if math.isfinite(v) and v != last:
+            out.append((datetime.fromtimestamp(float(seconds[k]), UTC), v))
+            last = v
+    return tuple(out)
 
 
 def _grid(start: datetime, end: datetime) -> list[datetime]:
@@ -453,6 +473,7 @@ def _recoveries(
                 metered_wh=wh if math.isfinite(wh) else None,
                 stopped_at=before[-1] if before else None,
                 draws=tuple((t, g) for t, g in draws if start <= t < end),
+                setpoints=_changes(setpoint_v, seconds, start, end),
             )
         )
     return out
@@ -1080,6 +1101,11 @@ def _recovery_score(
                 history=sim.History(compressor_stopped_at=e.stopped_at),
                 environment=_environment(e.air, e.humidity, inlet_f),
                 loads=_loads(record, e.start, e.start + horizon, draws),
+                commands=sim.Commands(
+                    writes=tuple(
+                        sim.Write(at=t, setpoint_f=v) for t, v in e.setpoints
+                    )
+                ),
             ),
             params,
             running_hold=hold,
@@ -1087,25 +1113,50 @@ def _recovery_score(
         )
     except SimulationError, ValueError:
         return False
-    first = next((h for h in result.heating if h.source == "compressor"), None)
-    # Still running at the horizon: its end, and so its error, unknown.
-    if first is None or first.stop == "horizon":
+    runs = sorted(
+        (h for h in result.heating if h.source == "compressor"),
+        key=lambda h: h.start.at,
+    )
+    if not runs:
         return False
-    minutes = (first.end - first.start.at).total_seconds() / 60.0
+    # A setpoint lowered and raised back stops the walk's compressor and
+    # starts it again once the write's lag and the lockout allow, and a
+    # raise after the walk reached the setpoint in force starts it
+    # again: the writes are the recorded run's own, which went on through
+    # them, so the chain is the run, up to a restart after it ended.
+    first, last = runs[0], runs[0]
+    input_wh = first.input_wh
+    for h in runs[1:]:
+        if not (
+            last.stop in ("write", "target")
+            and h.start.cause == "write"
+            and h.start.at < e.end
+        ):
+            break
+        last = h
+        input_wh = (
+            None
+            if input_wh is None or h.input_wh is None
+            else input_wh + h.input_wh
+        )
+    # Still running at the horizon: its end, and so its error, unknown.
+    if last.stop == "horizon":
+        return False
+    minutes = (last.end - first.start.at).total_seconds() / 60.0
     actual = (e.end - e.start).total_seconds() / 60.0
     kind = "draw_free" if e.draw_free else "with_draws"
     for which in ("all", kind):
         tally.add(f"recovery_minutes_abs.{which}", abs(minutes - actual), day)
         tally.add(f"recovery_minutes_bias.{which}", minutes - actual, day)
-    if e.draw_free and e.metered_wh and first.input_wh is not None:
+    if e.draw_free and e.metered_wh and input_wh is not None:
         tally.add(
             "recovery_energy_abs_pct",
-            100.0 * abs(first.input_wh - e.metered_wh) / e.metered_wh,
+            100.0 * abs(input_wh - e.metered_wh) / e.metered_wh,
             day,
         )
         tally.add(
             "recovery_energy_bias_pct",
-            100.0 * (first.input_wh - e.metered_wh) / e.metered_wh,
+            100.0 * (input_wh - e.metered_wh) / e.metered_wh,
             day,
         )
     return True

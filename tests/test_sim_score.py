@@ -426,6 +426,120 @@ class TestADrawJustBeforeARecovery:
         assert [t for t, _ in moved.draws] == [edge - timedelta(microseconds=1)]
 
 
+class TestASetpointChangedInsideARecovery:
+    def test_is_read_from_the_history(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, start = history
+        frame = ready.frame.copy()
+        at = start + timedelta(minutes=20)
+        frame.loc[frame.index >= at, "setpoint_f"] = 145.0
+        (r,) = ss.events(replace(ready, frame=frame)).recoveries
+        assert r.setpoint_f == 140.0
+        assert r.setpoints == ((at, 145.0),)
+        (unchanged,) = ss.events(ready).recoveries
+        assert unchanged.setpoints == ()
+
+    def test_is_walked_as_a_write(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+
+        def bias(e: ss.Recovery) -> float:
+            return (
+                ss.score(ss.Events(recoveries=(e,)), site)
+                .metrics["recovery_minutes_bias.all"]
+                .value
+            )
+
+        raised = replace(
+            r, setpoints=((r.start + timedelta(minutes=20), 145.0),)
+        )
+        assert bias(r) == pytest.approx(0.0, abs=1.0)
+        assert bias(raised) > bias(r) + 5.0
+
+    def test_lowered_and_raised_back_is_one_run(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        """A setpoint dipped below the upper probe for seconds stops
+        the walk's compressor and starts it again: the record's run went
+        on through it, and the chain is scored as that run."""
+
+        def bias(e: ss.Recovery) -> float:
+            return (
+                ss.score(ss.Events(recoveries=(e,)), site)
+                .metrics["recovery_minutes_bias.all"]
+                .value
+            )
+
+        def energy(e: ss.Recovery) -> tuple[float, float]:
+            got = ss.score(ss.Events(recoveries=(e,)), site).metrics
+            return (
+                got["recovery_energy_bias_pct"].value,
+                got["recovery_energy_abs_pct"].value,
+            )
+
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+        at = r.start + timedelta(minutes=20)
+        dipped = replace(
+            r, setpoints=((at, 121.0), (at + timedelta(seconds=5), 140.0))
+        )
+        got = ss.score(ss.Events(recoveries=(dipped,)), site).metrics
+        assert got["recovery_minutes_bias.all"].value == pytest.approx(
+            0.0, abs=15.0
+        )
+        # Restored after the lockout has passed: still the same run.
+        held = replace(
+            r, setpoints=((at, 121.0), (at + timedelta(minutes=7), 140.0))
+        )
+        got = ss.score(ss.Events(recoveries=(held,)), site).metrics
+        assert got["recovery_minutes_bias.all"].value == pytest.approx(
+            0.0, abs=15.0
+        )
+        # Raised after the walk reached the setpoint in force (at 106.5
+        # of the record's 179.2 min from 130 degF): the raise's restart
+        # is the same run, scored +19.4 min against -72.7 without it.
+        low = replace(r, setpoint_f=130.0)
+        assert bias(low) < -60.0
+        later = replace(
+            low, setpoints=((r.start + timedelta(minutes=116.5), 140.0),)
+        )
+        assert abs(bias(later)) < abs(bias(low)) - 40.0
+        # Its electricity is both runs': +5.0 % against the meter's whole
+        # run, -42.7 % with the first alone.
+        first, _ = energy(low)
+        both, both_abs = energy(later)
+        assert first < -40.0
+        assert both == pytest.approx(5.0, abs=3.0)
+        assert both_abs == pytest.approx(abs(both))
+        # One just before the recorded end: a restart past it is not the
+        # recorded run's.
+        at = r.end - timedelta(seconds=20)
+        late = replace(
+            r, setpoints=((at, 121.0), (at + timedelta(seconds=5), 140.0))
+        )
+        got = ss.score(ss.Events(recoveries=(late,)), site).metrics
+        assert got["recovery_minutes_bias.all"].value == pytest.approx(
+            0.0, abs=2.0
+        )
+        # Nor its electricity: -0.2 % against the meter, where the
+        # restart's would add 7 %.
+        late_bias, late_abs = energy(late)
+        assert late_bias == pytest.approx(0.0, abs=1.0)
+        assert late_abs == pytest.approx(abs(late_bias))
+
+    def test_only_its_changes_inside_count(self) -> None:
+        seconds = np.array([0.0, 60.0, 120.0, 180.0, 240.0, 300.0])
+        values = np.array([140.0, 140.0, np.nan, 145.0, 145.0, 150.0])
+        at = datetime.fromtimestamp(0.0, UTC)
+        got = ss._changes(  # pyright: ignore[reportPrivateUsage]
+            values, seconds, at, at + timedelta(seconds=300)
+        )
+        assert got == ((at + timedelta(seconds=180), 145.0),)
+
+
 class TestTheInterval:
     def test_one_day_has_no_spread(self) -> None:
         s = ss._stat([1.0, 3.0], [5, 5])  # pyright: ignore[reportPrivateUsage]
