@@ -3,6 +3,7 @@ read from a frame, events started from the layers its history leaves,
 and the terms of a tank that wrote a history found again from it."""
 
 import math
+import pickle
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -185,6 +186,73 @@ class TestTheRecord:
         frame, draws, _ = history
         r = tf.tank_record(frame, [*draws, (_at(1.0), 0.0)])
         assert r.draws == tuple(draws)
+
+    def test_the_detector_times_a_draw(self, history) -> None:
+        """A meter's draw ran for as long as the detector's span that
+        starts within 10 min after its onset held, its dropouts under 3
+        min joined; the record keeps the draw at its onset and its time
+        apart."""
+        frame, _, _ = history
+        timed = frame.copy()
+        on = [False] * len(timed)
+        start = 600
+        for k in (*range(start + 3, start + 8), *range(start + 9, start + 15)):
+            on[k] = True
+        timed["drawing"] = on
+        onset = timed.index[start].to_pydatetime()
+        (got,) = tf.draw_durations(timed, [(onset, 12.0)])
+        assert got == (onset, 12.0, 12 * 60.0)
+        r = tf.tank_record(timed, [(onset, 12.0)])
+        assert r.draws == ((onset, 12.0),)
+        assert r.draw_seconds == {onset: 12 * 60.0}
+        # A worker process takes it.
+        assert pickle.loads(pickle.dumps(r)).draw_seconds == r.draw_seconds  # noqa: S301
+
+    def test_a_draw_the_detector_cannot_time_is_untimed(self, history) -> None:
+        frame, _, _ = history
+        timed = frame.copy()
+        onset = timed.index[600].to_pydatetime()
+        # No span; one starting 11 min after the onset; one longer than
+        # an hour; and a span cut short at the next draw's onset.
+        timed["drawing"] = False
+        assert tf.draw_durations(timed, [(onset, 5.0)]) == ((onset, 5.0, 0.0),)
+        assert tf.tank_record(timed, [(onset, 5.0)]).draw_seconds == {}
+        late = [False] * len(timed)
+        for k in range(611, 620):
+            late[k] = True
+        timed["drawing"] = late
+        assert tf.draw_durations(timed, [(onset, 5.0)])[0][2] == 0.0
+        long = [False] * len(timed)
+        for k in range(600, 662):
+            long[k] = True
+        timed["drawing"] = long
+        assert tf.draw_durations(timed, [(onset, 5.0)])[0][2] == 0.0
+        short = [False] * len(timed)
+        for k in range(600, 620):
+            short[k] = True
+        timed["drawing"] = short
+        nxt = onset + timedelta(minutes=5)
+        got = tf.draw_durations(timed, [(onset, 5.0), (nxt, 1.0)])
+        assert got[0][2] == 5 * 60.0
+        # Its own span, and the next draw's starting after that draw's
+        # onset: the later one is not its.
+        two = [False] * len(timed)
+        for k in (*range(602, 607), *range(610, 611)):
+            two[k] = True
+        timed["drawing"] = two
+        later = onset + timedelta(minutes=8)
+        got = tf.draw_durations(timed, [(onset, 8.0), (later, 0.5)])
+        assert [s for *_, s in got] == [5 * 60.0, 60.0]
+        # A dropout, then on to the frame's end: the draw is unfinished,
+        # and its span before the dropout times nothing.
+        unfinished = [False] * len(timed)
+        for k in (*range(600, 610), *range(611, len(timed))):
+            unfinished[k] = True
+        timed["drawing"] = unfinished
+        assert tf.draw_durations(timed, [(onset, 24.0)])[0][2] == 0.0
+        assert tf.draw_durations(
+            frame.drop(columns="drawing", errors="ignore"), [(onset, 5.0)]
+        ) == ((onset, 5.0, 0.0),)
 
     def test_an_events_part_replays_as_the_whole(self, history, record) -> None:
         _, _, path = history

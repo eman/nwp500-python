@@ -453,6 +453,17 @@ class DrawParams:
     draw_gpm: float = field(
         default=0.3, metadata=_p(DEFAULT, "gal/min", INSTALLATION)
     )
+    #: A draw at this flow or faster, gal/min (its own volume over
+    #: ``Draw.duration_s``), takes as much of the tank's water as it
+    #: delivers, as if the valve passed it whole: on the site's record
+    #: the draws of 20 gal or more at 2.1-2.7 gal/min took about that
+    #: (the probes' fall and the recovery after), those at 0.8-1.7 the
+    #: valve's share; whether the valve or the meter does it at that
+    #: flow, the record does not say. None: every draw through the
+    #: valve.
+    undiluted_gpm: float | None = field(
+        default=None, metadata=_p(MEASURED, "gal/min", INSTALLATION)
+    )
     #: The installation's climate, which places the mains by the day
     #: (``cold_supply.mains_f``): the year's mean outdoor air and its
     #: warmest monthly mean less its coldest, °F
@@ -469,6 +480,10 @@ class DrawParams:
             if v is not None:
                 low, high = v
                 object.__setattr__(self, name, (float(low), float(high)))
+        if self.undiluted_gpm is not None and not (
+            math.isfinite(self.undiluted_gpm) and self.undiluted_gpm > 0.0
+        ):
+            raise ValueError("undiluted_gpm is not a positive flow")
         if self.climate_f is not None:
             mean, swing = self.climate_f
             if not (math.isfinite(mean) and math.isfinite(swing)):
@@ -487,6 +502,16 @@ class DrawParams:
         if self.climate_f is None:
             return self.inlet_temp_f
         return mains_f(*self.climate_f, day)
+
+    def undiluted(self, gpm: float | None) -> bool:
+        """Whether a draw at ``gpm`` (None: not known) takes the tank's
+        water whole (``undiluted_gpm``). Within a part in 10⁹ of it is
+        at it: a draw cut into pieces recomputes its flow from them."""
+        return (
+            gpm is not None
+            and self.undiluted_gpm is not None
+            and gpm >= self.undiluted_gpm * (1.0 - 1e-9)
+        )
 
     def out_of_domain(self, upper_f: float, volume_gal: float) -> bool:
         """Whether a draw of ``volume_gal`` (its own volume, never a

@@ -121,7 +121,9 @@ class TestDraws:
         physics = _physics()
         state = physics.estimate(130.0, 110.0)
         at = T0 + timedelta(minutes=17)
-        got = physics.advance(T0, state, T0 + timedelta(hours=1), [(at, 8.0)])
+        got = physics.advance(
+            T0, state, T0 + timedelta(hours=1), [(at, 8.0, False)]
+        )
         assert got.draw_volume_gal == 8.0
         assert got.draw_heat_btu > 0.0
         assert [i.at for i in got.impulses] == [at]

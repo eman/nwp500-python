@@ -334,17 +334,26 @@ def _drawn_by(loads: Loads, until: datetime, params: HeaterParams) -> Loads:
     """``loads`` with only the water drawn and the circulation run
     before ``until`` (``_circulated_by``). A draw running past it is
     kept as the pieces the walk took before it, each at its instant
-    with the draw's own per-draw volume."""
+    over its own span (the draw's flow) with the draw's own per-draw
+    volume."""
     draws: list[Draw] = []
     for d in loads.draws:
-        pieces = [(at, g) for at, g in d.pieces() if at < until]
-        if len(pieces) == len(d.pieces()):
+        every = d.pieces()
+        pieces = [(at, g) for at, g in every if at < until]
+        if len(pieces) == len(every):
             draws.append(d)
             continue
         per_draw = d.per_draw_gal if d.per_draw_gal is not None else d.gallons
+        end = d.at + timedelta(seconds=d.duration_s)
+        ends = [at for at, _ in every[1:]] + [end]
         draws += [
-            Draw(at=at, gallons=g, per_draw_gal=per_draw)
-            for at, g in pieces
+            Draw(
+                at=at,
+                gallons=g,
+                per_draw_gal=per_draw,
+                duration_s=(b - at).total_seconds(),
+            )
+            for (at, g), b in zip(pieces, ends, strict=False)
             if g > 0.0
         ]
     return _circulated_by(loads, until, params).model_copy(

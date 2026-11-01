@@ -60,6 +60,22 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **A fast draw takes the tank's water whole.** A draw at
+  ``DrawParams.undiluted_gpm`` or faster (its gallons over its
+  ``duration_s``, ``Draw.flow_gpm``) takes as much of the tank's water
+  as it delivers, as with no valve. ``site_example_params`` sets 2.0
+  gal/min (``SITE_UNDILUTED_GPM``); the default, None, takes every draw
+  through the valve. On the site's record the four draws of 20 gal or
+  more at 2.1-2.7 gal/min took about 1.3 times the valve's share. The
+  record times each draw by the history's draw detector
+  (``TankRecord.draw_seconds``, ``tank_fit.draw_durations``,
+  ``draw_spans``), and ``sim_score`` walks one at that flow or faster
+  over its time, one under way at an event's start replayed as far as
+  it ran and walked on for the rest. On the 29 held-out days the two
+  the tank ran out on are called, where neither was. The upper probe's
+  lowest is 2.9 degF off against 3.8, and the electricity 16.0 % off
+  against 16.5. The 16 held-out recoveries with water in use are 25.0
+  min off against 31.4.
 - **Candidates weighed over many households.** ``sim.draw_ensemble``
   samples members from a weekly draw forecast (Poisson counts at each
   slot's rate, long draws' durations lognormal on the published mean

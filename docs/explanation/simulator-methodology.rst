@@ -536,13 +536,38 @@ draw takes is the delivered gallons' tank share, solved gallon by
 gallon from the water leaving the top. The inflow mixes into the
 bottom ``inlet_mix_gal`` as it comes, so a short draw cools the bottom
 layers without a sharp front. The zone is the same at every flow: the
-record's draws of 4 gal or more all ran at 0.7-1.3 gal/min, too narrow
-a span to fit a flow term on (:doc:`simulator-tried`). The probes then read the layers where
+record's quiet draws (``sim_score``'s draw events) of 4 gal or more all
+ran at 0.7-1.3 gal/min, too narrow a span to fit a flow term on
+(:doc:`simulator-tried`). The probes then read the layers where
 they sit: a draw shows on the lower probe first, and on the upper only
 once the cold has risen to it, so a draw that empties the tank takes
 the top down too. A draw split in two moves the tank as the whole draw
 does, to about a degree at the probes. :doc:`draws` has the record's
 draws.
+
+**A fast draw.** A draw at ``DrawParams.undiluted_gpm`` or faster, its
+gallons over its ``Draw.duration_s``, takes as much of the tank's water
+as it delivers, as with no valve; one at an instant has no flow to
+judge and goes through the valve. On the site's record (2026-04-16 to
+10-26, measured 2026-10-31) the draw detector timed 24 draws of 20 gal
+or more. Twenty ran at 0.8-1.7 gal/min. Replayed from the record's
+state just before each, the walk through the valve put the upper probe
+within a few degF of the record's on 21 of them. Four ran at 2.1-2.7
+gal/min (05-04, 09-29, 09-30, 10-02). On the three of 30 gal or more
+the record's upper probe fell 45-55 degF and the walk's 24-30, and on
+05-04 the record's lower probe reached 81.7 degF against the walk's
+112.6. These draws took about 1.3 times the tank water the valve's
+share gives, as with no valve. The probes' fall says so, and so does
+the recovery after: on 09-29 and 10-02 the walk through the valve
+finished 66 and 51 min before the record did, and at 1.3 times 36 min
+before and 14 min after. A larger inlet zone does not reproduce it
+(:doc:`simulator-tried`): mixing keeps the heat, and the record's tank
+lost more. Whether the valve passes more at that flow or the meter
+reads less, the record does not say. ``site_example_params`` sets 2.0
+gal/min (``SITE_UNDILUTED_GPM``); the default, None, takes every draw
+through the valve. The tank's fit takes its draws at their onsets
+through the valve, as before. A forecast's expected draw carries its
+per-draw time (``sim.draw_forecast``), so its flow is judged too.
 
 **The fitted range.** The record's draws span a range of upper probe
 temperatures and draw volumes (``DrawParams.domain_upper_f``,

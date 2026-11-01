@@ -67,6 +67,11 @@ _IN3_PER_GAL = 231.0
 SITE_VALVE = (53.56, 0.485)
 #: No mixing valve: the tap gets the tank's own water.
 NO_VALVE = (0.0, 1.0)
+#: The flow from which that installation's draws took the tank's water
+#: whole, gal/min (``DrawParams.undiluted_gpm``): its draws of 20 gal or
+#: more ran at 0.8-1.7 gal/min through the valve's share and at
+#: 2.1-2.7 without it, 2026-04-16..10-26.
+SITE_UNDILUTED_GPM = 2.0
 
 #: The mains of the federal rating test for water heaters (10 CFR 430,
 #: Subpart B, Appendix E), °F: colder than most of the year's mains
@@ -354,7 +359,8 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
 
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
-    (``SITE_VALVE``) and circulation (``SITE_CIRCULATION``) included: a
+    (``SITE_VALVE``, ``SITE_UNDILUTED_GPM``) and circulation
+    (``SITE_CIRCULATION``) included: a
     snapshot of its fit of 2026-10-11, the heat pump's performance map
     fitted on 2026-10-26 and the layered tank's terms on 2026-10-27.
     Several of its values move with every refit there (the
@@ -365,7 +371,12 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     if volume_code not in dict(RATED_GAL):
         raise ValueError(f"unknown volume_code {volume_code!r}")
     site = _nwp500_65()
-    base = replace(with_valve(site, SITE_VALVE), circulation=SITE_CIRCULATION)
+    valved = with_valve(site, SITE_VALVE)
+    base = replace(
+        valved,
+        draw=replace(valved.draw, undiluted_gpm=SITE_UNDILUTED_GPM),
+        circulation=SITE_CIRCULATION,
+    )
     if volume_code == VOLUME_65:
         return base
     return sized(base, volume_code)

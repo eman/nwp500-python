@@ -23,7 +23,7 @@ Nothing here reads a file, the network or the clock.
 
 import math
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -55,6 +55,18 @@ Step = tuple[datetime, datetime, st.Books]
 MINUTE = timedelta(minutes=1)
 #: How often ``replay`` corrects the layers to the probes.
 ASSIMILATE_EVERY = timedelta(minutes=10)
+#: The draw detector's spans closer than this are one draw's: it drops
+#: out for moments while a shower runs.
+DRAW_SPAN_JOIN = timedelta(minutes=3)
+#: How far a meter's onset may fall after the end of the detector's
+#: span that times it, and before its start; on the site's record the
+#: detector came on 2-6 min after the meter's onset.
+DRAW_SPAN_LATE = timedelta(minutes=2)
+DRAW_SPAN_EARLY = timedelta(minutes=10)
+#: A span longer than this times no draw: the detector's silence is
+#: held as drawing. On the site's record 99 % of the draws of 4 gal or
+#: more ran 30 min or less, and 10 of 1791 spans ran past an hour.
+DRAW_SPAN_MAX = timedelta(minutes=60)
 #: How far before a record's part its element runs are kept: an
 #: element's heat lags it by its dead time, under this.
 _LAG_REACH = timedelta(hours=1)
@@ -92,7 +104,9 @@ class TankRecord:
     each minute (NaN unknown), the air (known throughout:
     ``tank_record`` holds it through its gaps), the runs of the
     compressor, the elements and the circulation, and the draws,
-    ``(onset, delivered gallons)``. Its arrays are read-only."""
+    ``(onset, delivered gallons)``, with how long the draw detector
+    held each, s, by onset (``draw_durations``; one it does not time is
+    not in it). Its arrays are read-only."""
 
     start: datetime
     upper_f: np.ndarray = field(repr=False)
@@ -102,8 +116,13 @@ class TankRecord:
     element: tuple[Run, ...] = field(repr=False)
     circulating: tuple[Run, ...] = field(repr=False)
     draws: tuple[tuple[datetime, float], ...] = field(repr=False)
+    draw_seconds: Mapping[datetime, float] = field(
+        default_factory=dict[datetime, float], repr=False
+    )
 
     def __post_init__(self) -> None:
+        # Its own copy, which a worker process can take.
+        object.__setattr__(self, "draw_seconds", dict(self.draw_seconds))
         if self.start.tzinfo is None:
             raise ValueError("the record's start is aware")
         n = len(self.upper_f)
@@ -185,9 +204,11 @@ def tank_record(
     ``upper_f``, ``lower_f``, ``air_f`` (held through its gaps),
     ``compressor_on``, ``element_on`` and ``circulating`` as of each
     minute, and the ``draws`` from a meter, ``(onset, delivered
-    gallons)``."""
+    gallons)``, each timed by the frame's draw detector
+    (``draw_durations``)."""
     if frame.empty:
         raise ValueError("the frame is empty")
+    metered = [(t, float(g)) for t, g in draws if g > 0.0]
     for name in ("upper_f", "lower_f", "air_f"):
         if name not in frame.columns:
             raise ValueError(f"the frame has no {name}")
@@ -217,8 +238,72 @@ def tank_record(
         compressor=_runs(held("compressor_on")),
         element=_runs(held("element_on")),
         circulating=_runs(held("circulating")),
-        draws=tuple(sorted((t, float(g)) for t, g in draws if g > 0.0)),
+        draws=tuple(sorted(metered)),
+        draw_seconds={t: s for t, _, s in draw_durations(frame, metered) if s},
     )
+
+
+def draw_spans(frame: pd.DataFrame) -> tuple[tuple[datetime, datetime], ...]:
+    """The draw detector's spans in a history frame (its ``drawing``,
+    on until the next sample), those less than ``DRAW_SPAN_JOIN``
+    apart joined; none without the column, and none still on at the
+    frame's end."""
+    if "drawing" not in frame.columns or frame.empty:
+        return ()
+    rows = frame[~frame.index.duplicated(keep="last")].sort_index()
+    on = cast(pd.Series, rows["drawing"]).astype("boolean").fillna(False)
+    at = [
+        cast(datetime, pd.Timestamp(t).to_pydatetime()).astimezone(UTC)
+        for t in rows.index
+    ]
+    out: list[tuple[datetime, datetime]] = []
+    start: datetime | None = None
+    for t, v in zip(at, on.astype(bool).to_numpy(), strict=True):
+        if v and start is None:
+            start = t
+        elif not v and start is not None:
+            if out and start - out[-1][1] < DRAW_SPAN_JOIN:
+                out[-1] = (out[-1][0], t)
+            else:
+                out.append((start, t))
+            start = None
+    if start is not None and out and start - out[-1][1] < DRAW_SPAN_JOIN:
+        # The draw runs on past the frame: the span before its dropout
+        # is the unfinished draw's, which times none.
+        out.pop()
+    return tuple(out)
+
+
+def draw_durations(
+    frame: pd.DataFrame, draws: Iterable[tuple[datetime, float]]
+) -> tuple[tuple[datetime, float, float], ...]:
+    """A meter's ``draws``, ``(onset, delivered gallons)``, sorted, each
+    with how long it ran, s: the meter sizes a draw at its onset, and the
+    draw detector (``draw_spans``) times it, by the span starting no
+    more than ``DRAW_SPAN_EARLY`` after the onset, and before the next
+    draw's (a span starting later is that draw's), and ending no more
+    than ``DRAW_SPAN_LATE`` before it, the last such, cut short at the
+    next draw's onset: the draw ran at least that fast. 0 for a draw
+    with no span or one longer than ``DRAW_SPAN_MAX``."""
+    spans = draw_spans(frame)
+    starts = [a for a, _ in spans]
+    ordered = sorted((t, float(g)) for t, g in draws if g > 0.0)
+    out: list[tuple[datetime, float, float]] = []
+    for k, (t, g) in enumerate(ordered):
+        i = bisect_right(starts, t + DRAW_SPAN_EARLY) - 1
+        if k + 1 < len(ordered):
+            i = min(i, bisect_left(starts, ordered[k + 1][0]) - 1)
+        seconds = 0.0
+        if (
+            i >= 0
+            and spans[i][1] >= t - DRAW_SPAN_LATE
+            and spans[i][1] - spans[i][0] <= DRAW_SPAN_MAX
+        ):
+            seconds = (spans[i][1] - spans[i][0]).total_seconds()
+            if k + 1 < len(ordered):
+                seconds = min(seconds, (ordered[k + 1][0] - t).total_seconds())
+        out.append((t, g, seconds))
+    return tuple(out)
 
 
 # ── the replay ──

@@ -98,8 +98,9 @@ from nwp500.sim.tank_physics import (
 )
 from nwp500.sim.tou_triggers import Window
 
-#: A draw the engine walks: delivered at the inlet, its onset and its
-#: delivered gallons (the core's ``Draw(at, gallons)``).
+#: A draw the engine walks: delivered at the inlet, its onset, its
+#: delivered gallons and whether it takes the tank's water whole (the
+#: core's ``Draw``, ``DrawParams.undiluted``).
 Draw = Delivered
 
 #: The heater's setpoint range as the model knows it: the NWP500's
@@ -1270,8 +1271,12 @@ class _Engine:
             cycle = self.cycle
             now = self._take_draws(self.t, self.t + _INSTANT)
             if now:
-                for _, gal in now:
-                    self._set(self.physics.draw(self.t, self.tank_state, gal))
+                for _, gal, undiluted in now:
+                    self._set(
+                        self.physics.draw(
+                            self.t, self.tank_state, gal, undiluted
+                        )
+                    )
                 self._step_point()
                 # A draw can take the lower zone out of the heat pump's
                 # range, which stops it.
@@ -1734,8 +1739,10 @@ class _Engine:
     def _coast_draw(self) -> None:
         """The draws at this instant, taken here: the path has the tank
         before and after."""
-        for _, gal in self._take_draws(self.t, self.t + _INSTANT):
-            self._set(self.physics.draw(self.t, self.tank_state, gal))
+        for _, gal, undiluted in self._take_draws(self.t, self.t + _INSTANT):
+            self._set(
+                self.physics.draw(self.t, self.tank_state, gal, undiluted)
+            )
         self.path.append(
             PathPoint(
                 self.t,

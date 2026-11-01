@@ -990,11 +990,13 @@ def _kept(f: Flowing, top_f: float) -> float:
 
 @dataclass(frozen=True, kw_only=True)
 class Delivered:
-    """A delivered draw at ``at`` (``draw``)."""
+    """A delivered draw at ``at`` (``draw``): through the walk's valve
+    or, ``undiluted``, the tank's water whole (``NO_VALVE``)."""
 
     at: datetime
     gal: float
     inflow_f: float
+    undiluted: bool = False
 
 
 @dataclass(frozen=True)
@@ -1173,7 +1175,13 @@ class _Walk:
         """The draws at ``t`` taken, in order of size."""
         books = Books()
         for d in self.at.get(t, ()):
-            out = draw(self.lay, state, d.gal, d.inflow_f, self.valve)
+            out = draw(
+                self.lay,
+                state,
+                d.gal,
+                d.inflow_f,
+                NO_VALVE if d.undiluted else self.valve,
+            )
             state = out.state
             books += Books(
                 drawn_btu=out.heat_btu, withdrawn_gal=out.withdrawn_gal

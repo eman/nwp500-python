@@ -358,7 +358,9 @@ class TestSimulateIsTheEngine:
             for i in range(8)
         )
         s = _scenario(loads=Loads(draws=showers))
-        want = _by_hand(params, s, draws=[(d.at, d.gallons) for d in showers])
+        want = _by_hand(
+            params, s, draws=[(d.at, d.gallons, False) for d in showers]
+        )
         assert simulate(s, params).simulation == want
 
     def test_vacation_starts_no_heating(self, params: HeaterParams) -> None:
@@ -423,7 +425,7 @@ class TestAModelsInputs:
             params,
             s,
             model=_Model(),
-            draws=[(d.at, d.gallons) for d in s.loads.draws],
+            draws=[(d.at, d.gallons, False) for d in s.loads.draws],
             **kw,
         )
         return got, want, model
@@ -803,7 +805,7 @@ class TestADrawOnACoastsEdge:
         """High Demand, its lower trigger unknown: the draw takes the
         upper zone past the element's start, which answers the tank the
         draw leaves."""
-        draw = (at(32 / 60), gal)
+        draw = (at(32 / 60), gal, False)
         sim = walk(
             start=T0,
             upper_f=118.5,
@@ -830,7 +832,7 @@ class TestADrawOnACoastsEdge:
         ends the coast there: the walk goes on from the tank it left."""
         cold = replace(params, draw=replace(params.draw, inlet_temp_f=40.0))
         physics = self._physics(cold)
-        draw = (at(1.0), 30.0)
+        draw = (at(1.0), 30.0, False)
         sim = walk(
             start=T0,
             upper_f=60.0,

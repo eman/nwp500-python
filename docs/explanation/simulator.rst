@@ -490,7 +490,13 @@ the 16 came out 31.4 min off, a mean 18.2 short, that one 77.3 short
 from a tank at 100.9 degF upper and 78.4 lower; and one whose
 setpoint rose 1.8 degF 32 min in went from 8.6 short to 38.3 long. The
 11 draw-free went from 5.7 to 5.6 min, their electricity from 4.5 % to
-4.2 %.
+4.2 %. With a draw at 2 gal/min or faster under way at a recovery's
+start replayed only as far as it ran by then, and walked on from the
+start for the rest of its time with the tank's water whole
+(``DrawParams.undiluted_gpm``, :doc:`simulator-methodology`, "A fast
+draw"), on the same params, the 16 came out 25.0 min off (18.8-31.5),
+a mean 11.8 short, and all 27 17.1 min off against 20.9; the draw-free
+and the electricity did not move.
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
@@ -499,30 +505,43 @@ from midnight with the setpoint and mode writes the heater recorded,
 the TOU windows it marked (16:00 to 21:00, on 10-02 broken from 19:50
 to 20:20), the metered draws, the circulation and the air:
 
-- the day's electricity: mean absolute error 16.5 % (10.8-22.9), a mean
-  12.8 % low; within 12 % on 18 of the 29 days. The meter's figure
+- the day's electricity: mean absolute error 16.0 % (10.4-22.3), a mean
+  12.1 % low; within 12 % on 19 of the 29 days. The meter's figure
   holds the heater's idle draw, about 1 Wh an hour, which the walk
   does not: about 1 % of a day's;
-- when in the day it was used: 18 % of the day's electricity predicted
+- when in the day it was used: 19 % of the day's electricity predicted
   in another hour than the meter put it in (11-27 %);
 - two days ordered by their electricity as the meter orders them, 84 %
   of the time (76-91 %);
-- the compressor's starts: on a day with any, 79 % of its recorded
-  starts placed by a prediction within 30 minutes (68-90 %); 0.41 a
-  day placed by none (0.21-0.66), and 0.10 a day predicted that placed
-  none (0.03-0.21);
-- the upper probe's lowest over the day within 3.8 degF (2.2-5.7), a
-  mean 2.8 degF warm.
+- the compressor's starts: on a day with any, 78 % of its recorded
+  starts placed by a prediction within 30 minutes (66-89 %); 0.45 a
+  day placed by none (0.21-0.69), and 0.14 a day predicted that placed
+  none (0.03-0.24);
+- the upper probe's lowest over the day within 2.9 degF (1.8-4.1), a
+  mean 1.8 degF warm; below the line on the same days as the record's.
+
+These are with a draw at 2 gal/min or faster taking the tank's water
+whole over the time the detector held it (``DrawParams.undiluted_gpm``,
+:doc:`simulator-methodology`, "A fast draw"), on the same params on
+2026-10-31. Before it: electricity 16.5 % off (10.8-22.9), 12.8 % low,
+within 12 % on 18 days; starts 79 % placed, 0.41 missed and 0.10
+false a day; the lowest upper probe 3.8 degF off (2.2-5.7), 2.8 warm,
+the end state 5.4 degF off (3.8-7.3) against 4.8 (3.2-6.6).
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on
 10-20 and 10-21, 20:41 on 10-18) and the walk does not: its lower probe
 reads warmer by then than the trigger, and the day comes out 41 to
 100 % low. On two, evening draws in the window (69 and 57 gal on 09-29
-and 10-02) took the record's upper probe to 79.5 and 96.1 degF while
-the walk's held at 107.5 and 113.3 degF, though it placed the 09-29
-start within 3 minutes: the only two days on which the record crossed
-the line, and the walk called neither.
+and 10-02) took the record's upper probe to 79.5 and 96.1 degF, the
+only two days on which the record crossed the line. Each held one
+draw of 31 or 54 gal at 2.4 or 2.7 gal/min. Through the valve the
+walk's upper probe held at 107.5 and 113.3 degF and called neither.
+Taking that draw's water whole over its time, it fell to 96.2 and
+94.8 degF and called both. 10-02's electricity went from 2.6 % high to
+7.7 % high, and 09-29's from 5.0 % to 3.3 %. On 09-28 a 19 gal draw at
+2.2 gal/min moved a start, one more missed and one more false, and
+the day's electricity went from 27 % low to 9 % low.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an

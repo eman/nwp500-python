@@ -426,6 +426,96 @@ class TestADrawJustBeforeARecovery:
         assert [t for t, _ in moved.draws] == [edge - timedelta(microseconds=1)]
 
 
+class TestAFastDraw:
+    """The score walks a draw the detector times at the valve's
+    ``undiluted_gpm`` or faster over its span; every other at its
+    onset."""
+
+    def test_is_walked_over_its_span(self, site: sim.HeaterParams) -> None:
+        record = tank_fit.TankRecord(
+            start=T0,
+            upper_f=np.full(60, 130.0),
+            lower_f=np.full(60, 130.0),
+            air_f=np.full(60, 65.0),
+            compressor=(),
+            element=(),
+            circulating=(),
+            draws=((T0, 30.0), (T0 + timedelta(minutes=30), 10.0)),
+            draw_seconds={T0: 720.0, T0 + timedelta(minutes=30): 600.0},
+        )
+        draws = tuple(sim.Draw(at=t, gallons=g) for t, g in record.draws)
+        timed = ss._timed(draws, record, site)  # pyright: ignore[reportPrivateUsage]
+        # 2.5 gal/min over its 12 min; the other's 1 gal/min at once.
+        assert [d.duration_s for d in timed] == [720.0, 0.0]
+        valved = replace(site, draw=replace(site.draw, undiluted_gpm=None))
+        assert ss._timed(draws, record, valved) == draws  # pyright: ignore[reportPrivateUsage]
+        untimed = replace(record, draw_seconds={})
+        assert ss._timed(draws, untimed, site) == draws  # pyright: ignore[reportPrivateUsage]
+
+    def test_under_way_at_a_start_is_split_there(
+        self, site: sim.HeaterParams
+    ) -> None:
+        """A fast draw running when an event starts: the replay takes
+        what it delivered by then, the event's walk the rest from its
+        start, at the draw's flow; a slow one is all the replay's."""
+        record = tank_fit.TankRecord(
+            start=T0,
+            upper_f=np.full(60, 130.0),
+            lower_f=np.full(60, 130.0),
+            air_f=np.full(60, 65.0),
+            compressor=(),
+            element=(),
+            circulating=(),
+            draws=((T0, 30.0), (T0 + timedelta(minutes=1), 10.0)),
+            draw_seconds={T0: 720.0, T0 + timedelta(minutes=1): 600.0},
+        )
+        at = T0 + timedelta(minutes=5)
+        part = ss._ran_by(record, record, site, at)  # pyright: ignore[reportPrivateUsage]
+        assert part.draws == ((T0, 12.5), (T0 + timedelta(minutes=1), 10.0))
+        loads = ss._loads(record, at, at + timedelta(minutes=30), (), site)  # pyright: ignore[reportPrivateUsage]
+        (rest,) = loads.draws
+        assert (rest.at, rest.duration_s) == (at, 420.0)
+        assert rest.gallons == pytest.approx(17.5)
+        assert rest.flow_gpm == pytest.approx(2.5)
+        # At the threshold exactly, the rest stays as fast as the draw
+        # though its flow is recomputed from its pieces.
+        edge = replace(
+            record,
+            draws=((T0, 2.0 * 777.7 / 60.0),),
+            draw_seconds={T0: 777.7},
+        )
+        for k in range(1, 12):
+            start = T0 + timedelta(seconds=k * 61.3)
+            (piece,) = ss._loads(
+                edge, start, start + timedelta(hours=1), (), site
+            ).draws  # pyright: ignore[reportPrivateUsage]
+            assert site.draw.undiluted(piece.flow_gpm)
+        # Under way from inside the start's own minute: the replay,
+        # which moves that minute's draws before it, still takes only
+        # what ran by the start.
+        inside = T0 + timedelta(minutes=5, seconds=40)
+        late = replace(
+            record,
+            draws=((T0 + timedelta(minutes=5, seconds=10), 25.0),),
+            draw_seconds={T0 + timedelta(minutes=5, seconds=10): 600.0},
+        )
+        layers = []
+        for gal in (1.25, 25.0):
+            cut = replace(
+                late, draws=((late.draws[0][0], gal),), draw_seconds={}
+            )
+            layers.append(
+                ss._state(site, cut, inside, 130.0, 130.0).layers_f  # pyright: ignore[reportPrivateUsage]
+            )
+        got = ss._state(site, late, inside, 130.0, 130.0, split=True)  # pyright: ignore[reportPrivateUsage]
+        assert got.layers_f == layers[0] != layers[1]
+        valved = replace(site, draw=replace(site.draw, undiluted_gpm=None))
+        assert ss._ran_by(record, record, valved, at) == record  # pyright: ignore[reportPrivateUsage]
+        assert not ss._loads(
+            record, at, at + timedelta(minutes=30), (), valved
+        ).draws  # pyright: ignore[reportPrivateUsage]
+
+
 class TestASetpointChangedInsideARecovery:
     def test_is_read_from_the_history(
         self, history: tuple[Prepared, datetime]

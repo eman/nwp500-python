@@ -247,6 +247,15 @@ class Draw(_Value):
         float, Field(ge=0.0, le=86400.0, allow_inf_nan=False)
     ] = 0.0
 
+    @property
+    def flow_gpm(self) -> float | None:
+        """Its flow, gal/min: ``gallons`` over ``duration_s`` (an
+        expected draw's rate cancels: its per-draw volume over its
+        per-draw time). None for a draw all at ``at``."""
+        if self.duration_s <= 0.0:
+            return None
+        return self.gallons / (self.duration_s / 60.0)
+
     def pieces(self) -> tuple[tuple[datetime, float], ...]:
         """The draw as the walk takes it, ``(instant, gallons)``: at
         ``at`` and at each whole minute of the clock before its end
