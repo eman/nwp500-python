@@ -49,14 +49,14 @@ came out 37.9 min off, a mean 31.5 short; the 11 without 6.9 against
 energy 17.5 % off against 16.5. Every score but the draw-free
 recoveries' mean stayed inside the base's interval; that went from
 3.1 min long to 3.2 short, outside it. The refit shortened each of the
-16, by 5.5-18.8 min against the timed walk on the base's terms, about
+16, by 5.5-18.7 min against the timed walk on the base's terms, about
 12 in the middle. The recovery of 2026-10-23 22:48, with its 15.4 gal
 draw 48 min in, came out 66.5 min short timed against 65.6, and 79.0
 refitted; the one of 2026-09-30 02:51 stayed over 260 min short.
 
 **Why dropped.** Mixed: the draws and the recoveries with water in use
 better, the draw-free recoveries and the day's energy worse, the
-draw-free recoveries' mean outside its interval. The refit kept 4.6 of
+draw-free recoveries' mean outside its interval. The refit kept 4.5 of
 the 8.2 min the timing took off the recoveries' error, and 2.6 of the
 14.7 off their mean shortfall.
 
