@@ -8,6 +8,7 @@ setpoint. Each answer says so (``electric_later_starts_unverified``).
 """
 
 import json
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 
@@ -45,8 +46,14 @@ def test_two_days_in_electric_keep_the_upper_zone_in_its_band(
 ) -> None:
     """Two days in Electric: the elements heat again and again, the
     upper zone kept between where the upper element starts and the
-    setpoint, the lower zone no lower than the heater's threshold."""
-    got = sim.simulate(_electric(draws=draws), sim.site_example_params())
+    setpoint, the lower zone no lower than the heater's threshold. The
+    draws at the valve's share: the lower zone's floor is the
+    controller's, which a draw taking more of the tank steps under at
+    the draw, before the elements answer, and the lower element takes
+    a while to bring back."""
+    site = sim.site_example_params()
+    params = replace(site, draw=replace(site.draw, undiluted_share=0.0))
+    got = sim.simulate(_electric(draws=draws), params)
     later = [
         h for h in got.heating if h.start.trigger == "electric_upper_short"
     ]

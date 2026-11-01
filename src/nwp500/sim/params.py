@@ -464,6 +464,19 @@ class DrawParams:
     undiluted_gpm: float | None = field(
         default=None, metadata=_p(MEASURED, "gal/min", INSTALLATION)
     )
+    #: The share of a slower draw's cold side, the gallons the valve
+    #: tempers its tank water with, that the tank gives as well, 0-1:
+    #: each delivered gallon takes ``s + undiluted_share · (1 − s)`` of
+    #: the tank's water, ``s`` the valve's share. On the site's record
+    #: the lower probe fell further after a draw of 8 gal or more than
+    #: the valve's share lets it (137 draws, the compressor off): 0.25
+    #: came within 7.13 °F RMS of it, as 0.2 did, against 7.40 at 0 and
+    #: 9.62 at 1, the tank's water whole, which overshot it. Whether
+    #: the meter, the valve or the cold's path through the tank does
+    #: it, the record does not say. 0: the valve's share.
+    undiluted_share: float = field(
+        default=0.0, metadata=_p(MEASURED, "1", INSTALLATION)
+    )
     #: The installation's climate, which places the mains by the day
     #: (``cold_supply.mains_f``): the year's mean outdoor air and its
     #: warmest monthly mean less its coldest, °F
@@ -484,6 +497,8 @@ class DrawParams:
             math.isfinite(self.undiluted_gpm) and self.undiluted_gpm > 0.0
         ):
             raise ValueError("undiluted_gpm is not a positive flow")
+        if not 0.0 <= self.undiluted_share <= 1.0:
+            raise ValueError("undiluted_share is not a share")
         if self.climate_f is not None:
             mean, swing = self.climate_f
             if not (math.isfinite(mean) and math.isfinite(swing)):

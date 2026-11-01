@@ -569,6 +569,29 @@ through the valve. The tank's fit takes its draws at their onsets
 through the valve, as before. A forecast's expected draw carries its
 per-draw time (``sim.draw_forecast``), so its flow is judged too.
 
+**A slower draw.** Through the valve, a delivered gallon takes the
+valve's share :math:`s` of the tank's water and the rest from the
+mains. A slower draw takes :math:`s + k\,(1 - s)`, ``k`` the share of
+that cold side the tank gives as well (``DrawParams.undiluted_share``,
+0 to 1, 0 by default). On the site's record the lower probe fell
+further after a draw than the valve's share lets it. Measured on
+2026-11-01 over the draws of 8 gal or more with the compressor off for
+the hour after, each walked from the record's state at its onset on
+the parameters fitted before 2026-09-18: on the 137 before then, the
+record's probe fell a mean 13.7 degF and the walk's 10.8, less on 97.
+With :math:`k` of 0.25 the walk's fell 12.6, within 7.13 degF RMS of
+the record's against 7.40 (0.2 within 7.13 and 0.3 within 7.14; its
+mean fall reaches the record's near 0.4, at 7.27), and with 1, all of
+the tank's water, 18.1, 9.62 RMS. On the 32 held out after it, 10.7
+degF against the record's 14.9 at 0, 12.1 at 0.25, RMS 6.25 to 5.19.
+``site_example_params`` sets 0.25 (``SITE_UNDILUTED_SHARE``). The same
+share is taken where a gallon delivered is reckoned from the tank's:
+the deliverable gallons (``sim.delivery``) and a history's metered tank
+gallons (``history.drawn_gal``). Whether the meter reads less at the
+slower flows, the valve passes more than its line or the cold reaches
+further up, the record does not say: the valve's line is the tap's
+measured temperature and is kept.
+
 **The fitted range.** The record's draws span a range of upper probe
 temperatures and draw volumes (``DrawParams.domain_upper_f``,
 ``domain_volume_gal``). A walk with draws says ``draw_out_of_domain``

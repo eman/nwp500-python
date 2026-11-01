@@ -496,7 +496,16 @@ start for the rest of its time with the tank's water whole
 (``DrawParams.undiluted_gpm``, :doc:`simulator-methodology`, "A fast
 draw"), on the same params, the 16 came out 25.0 min off (18.8-31.5),
 a mean 11.8 short, and all 27 17.1 min off against 20.9; the draw-free
-and the electricity did not move.
+and the electricity did not move. With a slower draw taking a quarter
+of its cold side's share from the tank as well
+(``DrawParams.undiluted_share``, :doc:`simulator-methodology`, "A
+slower draw"), on the same params on 2026-11-01, the 16 came out 21.2
+min off (14.6-28.6), a mean 13.1 short; the 11 draw-free 4.8 min off
+(2.7-7.3) against 5.6, their electricity 4.0 % off (2.5-5.7) against
+4.2; all 27 14.5 min off. The lower probe over the hour after the 46
+metered draws came within 1.74 degF RMS (1.17-2.41) against 2.01, the
+upper within 0.30 as before, and the deliveries came out 3 %
+under-promised, by 1.35 gal on average (0-3.92) against 1.24.
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
@@ -526,13 +535,30 @@ whole over the time the detector held it (``DrawParams.undiluted_gpm``,
 2026-10-31. Before it: electricity 16.5 % off (10.8-22.9), 12.8 % low,
 within 12 % on 18 days; starts 79 % placed, 0.41 missed and 0.10
 false a day; the lowest upper probe 3.8 degF off (2.2-5.7), 2.8 warm,
-the end state 5.4 degF off (3.8-7.3) against 4.8 (3.2-6.6).
+the end state 5.4 degF off (3.8-7.3) against 4.8 (3.2-6.6). With a
+slower draw's share as well (``DrawParams.undiluted_share``), on the
+same params on 2026-11-01: electricity 14.3 % off (8.8-20.6), a mean
+9.8 % low, within 12 % on 20 days; two days ordered as the meter
+orders them 86 % of the time (79-92 %); starts 78 % placed, 0.45 a day
+missed and 0.17 false (0.07-0.28); the lowest upper probe 2.6 degF off
+(1.6-3.8), 1.3 warm; the end state 4.0 degF off (2.5-5.8).
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on
 10-20 and 10-21, 20:41 on 10-18) and the walk does not: its lower probe
 reads warmer by then than the trigger, and the day comes out 41 to
-100 % low. On two, evening draws in the window (69 and 57 gal on 09-29
+100 % low. The record's lower probe sat within 0.5 degF of its 104.9
+degF trigger (104.7 at 07:35 on 10-20, 104.4 at 21:00 on 10-21), and
+the walk's 11 to 12 degF above it; its running power matched the
+record's, about 400 W, and it ran 2 to 3 h a day less. The window
+shows the shortfall, it does not make it: the slower draws cooled the
+walk's lower probe less than the record's, over the 32 held-out draws
+of 8 gal or more with the compressor off 10.7 degF against 14.9, walked
+from the record's own state before each. At 20:41 on 10-18 the
+record's upper probe was 14.2 degF short of the setpoint, at the
+window's 14.4 degF start, the walk's 12.3. With a slower draw's share
+as well, those draws cooled it 12.1 degF, and 10-21 starts at 21:00
+and comes out 4.5 % low; 10-18 and 10-20 still do not start. On two, evening draws in the window (69 and 57 gal on 09-29
 and 10-02) took the record's upper probe to 79.5 and 96.1 degF, the
 only two days on which the record crossed the line. Each held one
 draw of 31 or 54 gal at 2.4 or 2.7 gal/min. Through the valve the

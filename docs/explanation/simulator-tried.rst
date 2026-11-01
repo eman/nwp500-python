@@ -13,6 +13,30 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+Every draw taking the tank's water whole (2026-11-01)
+=====================================================
+
+**Tried.** Measured, not built: whether the meter counts the tank's
+inflow rather than the tap's, so that every draw takes as much of the
+tank's water as it delivers, as a fast draw does
+(:doc:`simulator-methodology`, "A fast draw"). The 34 held-out draws of
+8 gal or more with the compressor off for the hour after, each walked
+from the record's state 2 min before it on the parameters fitted
+before 2026-09-18, with no valve.
+
+**Found.** The walk's lower probe fell a mean 17.7 degF against the
+record's 14.9, within 5.7 degF RMS against the valve's 5.6, and less
+than the record's on 7 of the 34 against the valve's 30: it overshot as
+far as the valve fell short. On the 137 before 2026-09-18 it overshot
+further: 18.1 against 13.7, 9.62 RMS against the valve's 7.40.
+
+**Why dropped.** The record sits between the two. A quarter of the cold
+side's share from the tank as well came within 7.13 degF RMS of it,
+and is what was kept.
+
+**Account.** :doc:`simulator-methodology`, "A slower draw".
+
+
 A larger inlet zone for a fast draw (2026-10-31)
 ================================================
 

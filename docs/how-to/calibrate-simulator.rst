@@ -222,7 +222,10 @@ at the parameters' ``DrawParams.undiluted_gpm`` or faster over that
 time, the tank's water whole; one under way at an event's start is
 replayed as far as it ran by then and walked on for the rest. It walks
 every other draw at its onset, where the meter sizes it: timing them
-all scored worse (:doc:`../explanation/simulator-tried`).
+all scored worse (:doc:`../explanation/simulator-tried`). The fits set
+neither that flow nor the share of a slower draw's cold side the tank
+gives as well (``DrawParams.undiluted_share``): set both on the fitted
+parameters, as ``site_example_params`` does.
 
 .. code-block:: python
 

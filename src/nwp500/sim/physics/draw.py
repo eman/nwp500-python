@@ -88,6 +88,7 @@ def hot_fraction(
     t_upper_f: float,
     t_delivery_f: float,
     t_cold_f: float,
+    undiluted_share: float = 0.0,
 ) -> float:
     """Share of a delivered gallon that came out of the tank.
 
@@ -96,6 +97,8 @@ def hot_fraction(
     through. Never above 1.0 and never below 0.0: a tank at or under
     the inlet temperature delivers nothing, and the degenerate
     ``T_upper <= T_cold`` case is guarded rather than dividing.
+    ``undiluted_share`` of the valve's cold side comes from the tank as
+    well (``DrawParams.undiluted_share``): none by default.
     """
     if t_upper_f <= t_cold_f:
         return 0.0
@@ -107,7 +110,10 @@ def hot_fraction(
         heat_f(t_delivery_f),
         heat_f(t_cold_f),
     )
-    return min(1.0, max(0.0, (delivered - cold) / (hot - cold)))
+    share = min(1.0, max(0.0, (delivered - cold) / (hot - cold)))
+    if share <= 0.0:
+        return 0.0
+    return share + undiluted_share * (1.0 - share)
 
 
 def withdrawn_gal(
@@ -115,6 +121,7 @@ def withdrawn_gal(
     t_upper_f: float,
     t_delivery_f: float,
     t_cold_f: float,
+    undiluted_share: float = 0.0,
 ) -> float:
     """Hot water taken from the tank, in gallons.
 
@@ -124,5 +131,5 @@ def withdrawn_gal(
     if volume_delivered_gal <= 0.0:
         return 0.0
     return volume_delivered_gal * hot_fraction(
-        t_upper_f, t_delivery_f, t_cold_f
+        t_upper_f, t_delivery_f, t_cold_f, undiluted_share
     )

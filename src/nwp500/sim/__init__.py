@@ -38,6 +38,7 @@ from nwp500.sim.carry import SETTLED_F, Carried, carry_on
 from nwp500.sim.defaults import (
     NO_VALVE,
     SITE_UNDILUTED_GPM,
+    SITE_UNDILUTED_SHARE,
     SITE_VALVE,
     default_params,
     site_example_params,
@@ -87,6 +88,7 @@ __all__ = (
     "CirculationRun",
     "NO_VALVE",
     "SITE_UNDILUTED_GPM",
+    "SITE_UNDILUTED_SHARE",
     "SITE_VALVE",
     "SETTLED_F",
     "BathReady",
