@@ -246,7 +246,8 @@ def tank_record(
 def draw_spans(frame: pd.DataFrame) -> tuple[tuple[datetime, datetime], ...]:
     """The draw detector's spans in a history frame (its ``drawing``,
     on until the next sample), those less than ``DRAW_SPAN_JOIN``
-    apart joined; none without the column."""
+    apart joined; none without the column, and none still on at the
+    frame's end."""
     if "drawing" not in frame.columns or frame.empty:
         return ()
     rows = frame[~frame.index.duplicated(keep="last")].sort_index()
@@ -266,6 +267,10 @@ def draw_spans(frame: pd.DataFrame) -> tuple[tuple[datetime, datetime], ...]:
             else:
                 out.append((start, t))
             start = None
+    if start is not None and out and start - out[-1][1] < DRAW_SPAN_JOIN:
+        # The draw runs on past the frame: the span before its dropout
+        # is the unfinished draw's, which times none.
+        out.pop()
     return tuple(out)
 
 
