@@ -480,9 +480,17 @@ traced the shower ran on into the recovery: the walk takes a metered
 draw at the meter's onset, so its lower probe had fallen before the
 start and moved under 1 degF over the next 10 min, where the record's
 fell another 13-15 degF, and the walk's probe reaches its target
-sooner. Timing each draw
-by the draw detector was tried and dropped (:doc:`simulator-tried`, "A
-metered draw timed by the draw detector").
+sooner. Timing each draw by the draw detector was tried and dropped
+(:doc:`simulator-tried`, "A metered draw timed by the draw detector").
+The one 284 min short (2026-09-30 02:51 UTC) had been walked to the
+setpoint in force at its start, 110.3 degF; it was raised to 141.8
+3.5 min in, and the heater ran to it. With each change of the setpoint
+inside a recovery walked as a write, on the same params on 2026-10-31,
+the 16 came out 31.4 min off, a mean 18.2 short, that one 77.3 short
+from a tank whose upper probe had fallen to 81 degF; and one whose
+setpoint rose 1.8 degF 32 min in went from 8.6 short to 38.3 long. The
+11 draw-free went from 5.7 to 5.6 min, their electricity from 4.5 % to
+4.2 %.
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:

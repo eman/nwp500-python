@@ -151,6 +151,9 @@ class Recovery:
     stopped_at: datetime | None
     #: The metered draws inside it, ``(instant, delivered gallons)``.
     draws: tuple[tuple[datetime, float], ...] = ()
+    #: The setpoint's changes inside it, ``(instant, °F)``: the walk
+    #: takes each as a write, as the heater did.
+    setpoints: tuple[tuple[datetime, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -295,6 +298,23 @@ def _asof(
             return v
         k -= 1
     return None
+
+
+def _changes(
+    values: np.ndarray, seconds: np.ndarray, start: datetime, end: datetime
+) -> tuple[tuple[datetime, float], ...]:
+    """Each finite value after ``start`` and before ``end`` that differs
+    from the last before it (the one in force at ``start`` first)."""
+    lo = int(np.searchsorted(seconds, start.timestamp(), side="right"))
+    hi = int(np.searchsorted(seconds, end.timestamp(), side="left"))
+    last = _asof(values, seconds, start)
+    out: list[tuple[datetime, float]] = []
+    for k in range(lo, hi):
+        v = float(values[k])
+        if math.isfinite(v) and v != last:
+            out.append((datetime.fromtimestamp(float(seconds[k]), UTC), v))
+            last = v
+    return tuple(out)
 
 
 def _grid(start: datetime, end: datetime) -> list[datetime]:
@@ -453,6 +473,7 @@ def _recoveries(
                 metered_wh=wh if math.isfinite(wh) else None,
                 stopped_at=before[-1] if before else None,
                 draws=tuple((t, g) for t, g in draws if start <= t < end),
+                setpoints=_changes(setpoint_v, seconds, start, end),
             )
         )
     return out
@@ -1080,6 +1101,11 @@ def _recovery_score(
                 history=sim.History(compressor_stopped_at=e.stopped_at),
                 environment=_environment(e.air, e.humidity, inlet_f),
                 loads=_loads(record, e.start, e.start + horizon, draws),
+                commands=sim.Commands(
+                    writes=tuple(
+                        sim.Write(at=t, setpoint_f=v) for t, v in e.setpoints
+                    )
+                ),
             ),
             params,
             running_hold=hold,

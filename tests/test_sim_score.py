@@ -426,6 +426,49 @@ class TestADrawJustBeforeARecovery:
         assert [t for t, _ in moved.draws] == [edge - timedelta(microseconds=1)]
 
 
+class TestASetpointChangedInsideARecovery:
+    def test_is_read_from_the_history(
+        self, history: tuple[Prepared, datetime]
+    ) -> None:
+        ready, start = history
+        frame = ready.frame.copy()
+        at = start + timedelta(minutes=20)
+        frame.loc[frame.index >= at, "setpoint_f"] = 145.0
+        (r,) = ss.events(replace(ready, frame=frame)).recoveries
+        assert r.setpoint_f == 140.0
+        assert r.setpoints == ((at, 145.0),)
+        (unchanged,) = ss.events(ready).recoveries
+        assert unchanged.setpoints == ()
+
+    def test_is_walked_as_a_write(
+        self, history: tuple[Prepared, datetime], site: sim.HeaterParams
+    ) -> None:
+        ready, _ = history
+        (r,) = ss.events(ready).recoveries
+
+        def bias(e: ss.Recovery) -> float:
+            return (
+                ss.score(ss.Events(recoveries=(e,)), site)
+                .metrics["recovery_minutes_bias.all"]
+                .value
+            )
+
+        raised = replace(
+            r, setpoints=((r.start + timedelta(minutes=20), 145.0),)
+        )
+        assert bias(r) == pytest.approx(0.0, abs=1.0)
+        assert bias(raised) > bias(r) + 5.0
+
+    def test_only_its_changes_inside_count(self) -> None:
+        seconds = np.array([0.0, 60.0, 120.0, 180.0, 240.0, 300.0])
+        values = np.array([140.0, 140.0, np.nan, 145.0, 145.0, 150.0])
+        at = datetime.fromtimestamp(0.0, UTC)
+        got = ss._changes(  # pyright: ignore[reportPrivateUsage]
+            values, seconds, at, at + timedelta(seconds=300)
+        )
+        assert got == ((at + timedelta(seconds=180), 145.0),)
+
+
 class TestTheInterval:
     def test_one_day_has_no_spread(self) -> None:
         s = ss._stat([1.0, 3.0], [5, 5])  # pyright: ignore[reportPrivateUsage]
