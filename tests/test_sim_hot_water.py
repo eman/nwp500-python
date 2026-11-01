@@ -158,8 +158,14 @@ class TestTheDeliveryInASimulation:
         second = at(1.0) + timedelta(minutes=1)
 
         class SecondLeavesItWarm(TankPhysics):
-            def draw(self, at: datetime, state: TankState, gal: float) -> Any:
-                got = super().draw(at, state, gal)
+            def draw(
+                self,
+                at: datetime,
+                state: TankState,
+                gal: float,
+                undiluted: bool = False,
+            ) -> Any:
+                got = super().draw(at, state, gal, undiluted)
                 if at != second:
                     return got
                 return self.estimate(self.observe(got)[0], 106.0)
@@ -197,8 +203,14 @@ class TestTheDeliveryInASimulation:
         run = (at(1.0), at(1.0) + timedelta(minutes=2))
 
         class DrawLeavesItWarm(TankPhysics):
-            def draw(self, at: datetime, state: TankState, gal: float) -> Any:
-                got = super().draw(at, state, gal)
+            def draw(
+                self,
+                at: datetime,
+                state: TankState,
+                gal: float,
+                undiluted: bool = False,
+            ) -> Any:
+                got = super().draw(at, state, gal, undiluted)
                 return self.estimate(self.observe(got)[0], 106.0)
 
         stamps = pd.date_range(at(-2), at(30), freq="1h")

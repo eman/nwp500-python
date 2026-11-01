@@ -452,6 +452,37 @@ class TestAFastDraw:
         untimed = replace(record, draw_seconds={})
         assert ss._timed(draws, untimed, site) == draws  # pyright: ignore[reportPrivateUsage]
 
+    def test_under_way_at_a_start_is_split_there(
+        self, site: sim.HeaterParams
+    ) -> None:
+        """A fast draw running when an event starts: the replay takes
+        what it delivered by then, the event's walk the rest from its
+        start, at the draw's flow; a slow one is all the replay's."""
+        record = tank_fit.TankRecord(
+            start=T0,
+            upper_f=np.full(60, 130.0),
+            lower_f=np.full(60, 130.0),
+            air_f=np.full(60, 65.0),
+            compressor=(),
+            element=(),
+            circulating=(),
+            draws=((T0, 30.0), (T0 + timedelta(minutes=1), 10.0)),
+            draw_seconds={T0: 720.0, T0 + timedelta(minutes=1): 600.0},
+        )
+        at = T0 + timedelta(minutes=5)
+        part = ss._ran_by(record, record, site, at)  # pyright: ignore[reportPrivateUsage]
+        assert part.draws == ((T0, 12.5), (T0 + timedelta(minutes=1), 10.0))
+        loads = ss._loads(record, at, at + timedelta(minutes=30), (), site)  # pyright: ignore[reportPrivateUsage]
+        (rest,) = loads.draws
+        assert (rest.at, rest.duration_s) == (at, 420.0)
+        assert rest.gallons == pytest.approx(17.5)
+        assert rest.flow_gpm == pytest.approx(2.5)
+        valved = replace(site, draw=replace(site.draw, undiluted_gpm=None))
+        assert ss._ran_by(record, record, valved, at) == record  # pyright: ignore[reportPrivateUsage]
+        assert not ss._loads(
+            record, at, at + timedelta(minutes=30), (), valved
+        ).draws  # pyright: ignore[reportPrivateUsage]
+
 
 class TestASetpointChangedInsideARecovery:
     def test_is_read_from_the_history(

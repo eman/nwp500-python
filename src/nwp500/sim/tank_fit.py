@@ -275,16 +275,19 @@ def draw_durations(
     """A meter's ``draws``, ``(onset, delivered gallons)``, sorted, each
     with how long it ran, s: the meter sizes a draw at its onset, and the
     draw detector (``draw_spans``) times it, by the span starting no
-    more than ``DRAW_SPAN_EARLY`` after the onset and ending no more
+    more than ``DRAW_SPAN_EARLY`` after the onset, and before the next
+    draw's (a span starting later is that draw's), and ending no more
     than ``DRAW_SPAN_LATE`` before it, the last such, cut short at the
-    next draw's onset. 0 for a draw with no span or one longer than
-    ``DRAW_SPAN_MAX``."""
+    next draw's onset: the draw ran at least that fast. 0 for a draw
+    with no span or one longer than ``DRAW_SPAN_MAX``."""
     spans = draw_spans(frame)
     starts = [a for a, _ in spans]
     ordered = sorted((t, float(g)) for t, g in draws if g > 0.0)
     out: list[tuple[datetime, float, float]] = []
     for k, (t, g) in enumerate(ordered):
         i = bisect_right(starts, t + DRAW_SPAN_EARLY) - 1
+        if k + 1 < len(ordered):
+            i = min(i, bisect_left(starts, ordered[k + 1][0]) - 1)
         seconds = 0.0
         if (
             i >= 0

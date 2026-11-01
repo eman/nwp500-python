@@ -234,6 +234,15 @@ class TestTheRecord:
         nxt = onset + timedelta(minutes=5)
         got = tf.draw_durations(timed, [(onset, 5.0), (nxt, 1.0)])
         assert got[0][2] == 5 * 60.0
+        # Its own span, and the next draw's starting after that draw's
+        # onset: the later one is not its.
+        two = [False] * len(timed)
+        for k in (*range(602, 607), *range(610, 611)):
+            two[k] = True
+        timed["drawing"] = two
+        later = onset + timedelta(minutes=8)
+        got = tf.draw_durations(timed, [(onset, 8.0), (later, 0.5)])
+        assert [s for *_, s in got] == [5 * 60.0, 60.0]
         assert tf.draw_durations(
             frame.drop(columns="drawing", errors="ignore"), [(onset, 5.0)]
         ) == ((onset, 5.0, 0.0),)

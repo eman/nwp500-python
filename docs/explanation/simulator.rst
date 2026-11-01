@@ -490,7 +490,13 @@ the 16 came out 31.4 min off, a mean 18.2 short, that one 77.3 short
 from a tank at 100.9 degF upper and 78.4 lower; and one whose
 setpoint rose 1.8 degF 32 min in went from 8.6 short to 38.3 long. The
 11 draw-free went from 5.7 to 5.6 min, their electricity from 4.5 % to
-4.2 %.
+4.2 %. With a draw at 2 gal/min or faster under way at a recovery's
+start replayed only as far as it ran by then, and walked on from the
+start for the rest of its time with the tank's water whole
+(``DrawParams.undiluted_gpm``, :doc:`simulator-methodology`, "A fast
+draw"), on the same params, the 16 came out 25.0 min off (18.8-31.5),
+a mean 11.8 short, and all 27 17.1 min off against 20.9; the draw-free
+and the electricity did not move.
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:

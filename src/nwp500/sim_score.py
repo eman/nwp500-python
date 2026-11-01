@@ -993,15 +993,22 @@ def _state(
     at: datetime,
     upper_f: float,
     lower_f: float,
+    *,
+    split: bool = False,
     **kw: Any,
 ) -> sim.HeaterState:
     """The heater at an event's start: its probes, and with a
-    ``record``, the layers its replay leaves (``tank_fit.start_state``)."""
+    ``record``, the layers its replay leaves (``tank_fit.start_state``).
+    ``split``: a timed fast draw under way at ``at`` replayed only as far
+    as it ran by then, its rest the event's (``_loads``)."""
     layers = None
     if record is not None:
         lay = st.layout(params)
+        part = _replayable(record, at)
+        if split:
+            part = _ran_by(part, record, params, at)
         layers = tf.start_state(
-            lay, params, _replayable(record, at), at, upper_f, lower_f
+            lay, params, part, at, upper_f, lower_f
         ).layers_f
     return sim.HeaterState(
         upper_f=upper_f, lower_f=lower_f, layers_f=layers, **kw
@@ -1041,6 +1048,40 @@ def _replayable(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
     return replace(part, draws=part.draws[:lo] + moved + part.draws[hi:])
 
 
+def _under_way(
+    record: tf.TankRecord, params: HeaterParams, at: datetime
+) -> list[tuple[datetime, float, float]]:
+    """The record's draws under way at ``at`` the score times
+    (``_timed``): ``(onset, gallons, seconds)``, started before ``at``
+    and running past it at ``params.draw.undiluted_gpm`` or faster."""
+    out: list[tuple[datetime, float, float]] = []
+    for onset, seconds in record.draw_seconds.items():
+        if not onset < at < onset + timedelta(seconds=seconds):
+            continue
+        gal = dict(record.draws).get(onset)
+        if gal is not None and params.draw.undiluted(gal / (seconds / 60.0)):
+            out.append((onset, gal, seconds))
+    return out
+
+
+def _ran_by(
+    part: tf.TankRecord,
+    record: tf.TankRecord,
+    params: HeaterParams,
+    at: datetime,
+) -> tf.TankRecord:
+    """``part``, the record replayed to ``at``, with each draw under way
+    there (``_under_way``) only the gallons it delivered by ``at``, at
+    its even flow."""
+    ran = {
+        onset: gal * (at - onset).total_seconds() / seconds
+        for onset, gal, seconds in _under_way(record, params, at)
+    }
+    if not ran:
+        return part
+    return replace(part, draws=tuple((t, ran.get(t, g)) for t, g in part.draws))
+
+
 def _loads(
     record: tf.TankRecord | None,
     start: datetime,
@@ -1048,13 +1089,25 @@ def _loads(
     draws: tuple[sim.Draw, ...] = (),
     params: HeaterParams | None = None,
 ) -> sim.Loads:
-    """An event's loads: its ``draws`` (``_timed``), and with a
-    ``record``, the circulation runs it recorded from ``start`` to
-    ``end`` (an event with none is known to have had none)."""
+    """An event's loads: its ``draws`` (``_timed``), with ``params``
+    the rest of each timed fast draw under way at ``start`` from there
+    (``_under_way``; its start replayed with ``_state``'s ``split``),
+    and with a ``record``, the circulation runs it recorded from
+    ``start`` to ``end`` (an event with none is known to have had
+    none)."""
     if record is None:
         return sim.Loads(draws=draws)
     if params is not None:
-        draws = _timed(draws, record, params)
+        rest = tuple(
+            sim.Draw(
+                at=start,
+                gallons=gal * left / seconds,
+                duration_s=left,
+            )
+            for onset, gal, seconds in _under_way(record, params, start)
+            if (left := seconds - (start - onset).total_seconds()) > 0.0
+        )
+        draws = rest + _timed(draws, record, params)
     i, j = record.minute(start), record.minute(end) + 1
     runs = tuple(
         sim.CirculationRun(start=record.instant(a), end=record.instant(b))
@@ -1117,6 +1170,7 @@ def _recovery_score(
                     e.start,
                     e.upper_f,
                     e.lower_f,
+                    split=True,
                     compressor_running=True,
                 ),
                 settings=sim.Settings(
@@ -1375,6 +1429,7 @@ def _day_score(
         e.start,
         s.state.upper_f,
         s.state.lower_f,
+        split=True,
         compressor_running=s.state.compressor_running,
         element_running=s.state.element_running,
         element_running_since=s.state.element_running_since,

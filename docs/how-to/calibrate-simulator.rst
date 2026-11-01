@@ -219,9 +219,10 @@ the fit the draws before the split, and the score the record
 record times each draw by the history's draw detector
 (``TankRecord.draw_seconds``). The score walks one the detector times
 at the parameters' ``DrawParams.undiluted_gpm`` or faster over that
-time, the tank's water whole. It walks every other draw at its onset,
-where the meter sizes it: timing them all scored worse
-(:doc:`../explanation/simulator-tried`).
+time, the tank's water whole; one under way at an event's start is
+replayed as far as it ran by then and walked on for the rest. It walks
+every other draw at its onset, where the meter sizes it: timing them
+all scored worse (:doc:`../explanation/simulator-tried`).
 
 .. code-block:: python
 

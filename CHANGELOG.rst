@@ -70,9 +70,12 @@ Added
   record times each draw by the history's draw detector
   (``TankRecord.draw_seconds``, ``tank_fit.draw_durations``,
   ``draw_spans``), and ``sim_score`` walks one at that flow or faster
-  over its time. On the 29 held-out days the two the tank ran out on
-  are called, where neither was. The upper probe's lowest is 2.9 degF
-  off against 3.8, and the electricity 16.0 % off against 16.5.
+  over its time, one under way at an event's start replayed as far as
+  it ran and walked on for the rest. On the 29 held-out days the two
+  the tank ran out on are called, where neither was. The upper probe's
+  lowest is 2.9 degF off against 3.8, and the electricity 16.0 % off
+  against 16.5. The 16 held-out recoveries with water in use are 25.0
+  min off against 31.4.
 - **Candidates weighed over many households.** ``sim.draw_ensemble``
   samples members from a weekly draw forecast (Poisson counts at each
   slot's rate, long draws' durations lognormal on the published mean
