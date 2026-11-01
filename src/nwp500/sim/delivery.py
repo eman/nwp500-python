@@ -90,7 +90,12 @@ def deliverable(
     lay, tank = _tank(params, upper_f, lower_f, layers_f)
     inflow = params.draw.inlet_temp_f if inlet_f is None else inlet_f
     gal = st.deliverable_gal(
-        lay, tank, params.readiness.line_f, inflow, _valve(params)
+        lay,
+        tank,
+        params.readiness.line_f,
+        inflow,
+        _valve(params),
+        params.draw.undiluted_share,
     )
     return Deliverable(
         gal=round(gal, 1) if math.isfinite(gal) else gal,
@@ -118,7 +123,9 @@ def within_resolution(
     line, valve = params.readiness.line_f, _valve(params)
 
     def enough(state: st.TankState) -> bool:
-        got = st.deliverable_gal(lay, state, line, inflow, valve)
+        got = st.deliverable_gal(
+            lay, state, line, inflow, valve, params.draw.undiluted_share
+        )
         return round(got, 1) >= gal
 
     ready = enough(tank)

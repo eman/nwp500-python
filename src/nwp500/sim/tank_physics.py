@@ -392,6 +392,7 @@ class TankPhysics:
             params.draw.delivery_intercept_f,
             params.draw.delivery_slope,
         )
+        self.undiluted_share = params.draw.undiluted_share
         self.circulation = circulation
         self.circulation_terms = (
             params.circulation
@@ -494,6 +495,7 @@ class TankPhysics:
                 for t, g, u in taken
             ],
             valve=self.valve,
+            undiluted_share=self.undiluted_share,
             stop=None
             if stop is None
             else (lambda s: stop(*st.observe(lay, s))),
@@ -585,7 +587,14 @@ class TankPhysics:
         if not self.draws_on:
             return layers
         valve = st.NO_VALVE if undiluted else self.valve
-        return st.draw(self.layout, layers, gal, self.inlet_at(at), valve).state
+        return st.draw(
+            self.layout,
+            layers,
+            gal,
+            self.inlet_at(at),
+            valve,
+            self.undiluted_share,
+        ).state
 
     def inlet_at(self, at: datetime) -> float:
         """The water replacing a draw at ``at``: that day's, or the one
@@ -630,6 +639,7 @@ class TankPhysics:
             ),
             flowing=self._flows(start, end),
             valve=self.valve,
+            undiluted_share=self.undiluted_share,
             stop=lambda s: st.observe(lay, s)[1] >= target_f,
         )
 

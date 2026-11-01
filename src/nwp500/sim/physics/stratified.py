@@ -756,15 +756,20 @@ def flow(
 
 
 def _tank_share(
-    temp_f: float, inflow_f: float, valve: tuple[float, float]
+    temp_f: float,
+    inflow_f: float,
+    valve: tuple[float, float],
+    undiluted_share: float = 0.0,
 ) -> float:
     """The share of a delivered gallon the tank gives with ``temp_f``
-    leaving its top (``physics.draw.hot_fraction``): all of it when it
-    is no warmer than the cold side, which the valve then has nothing
-    to temper."""
+    leaving its top (``physics.draw.hot_fraction``, ``undiluted_share``
+    of the cold side's as well): all of it when it is no warmer than
+    the cold side, which the valve then has nothing to temper."""
     if temp_f <= inflow_f:
         return 1.0
-    return hot_fraction(temp_f, delivery_temp_f(temp_f, *valve), inflow_f)
+    return hot_fraction(
+        temp_f, delivery_temp_f(temp_f, *valve), inflow_f, undiluted_share
+    )
 
 
 @dataclass(frozen=True)
@@ -785,9 +790,12 @@ def draw(
     delivered_gal: float,
     inflow_f: float,
     valve: tuple[float, float] = NO_VALVE,
+    undiluted_share: float = 0.0,
 ) -> Drawn:
     """``delivered_gal`` gallons at the tap through the mixing valve
     ``valve`` (intercept, slope: ``physics.draw.delivery_temp_f``), the
+    tank giving ``undiluted_share`` of its cold side's share as well
+    (``DrawParams.undiluted_share``), the
     mains at ``inflow_f`` on its cold side and refilling the tank. The
     tank water it takes is solved from the water leaving the top in
     turn, each gallon of it delivering ``1 / hot_fraction`` at the tap;
@@ -799,7 +807,7 @@ def draw(
     remaining, withdrawn, last = delivered_gal, 0.0, layers[-1]
     for gal, heat in col.leaving():
         last = temp_f(heat)
-        share = _tank_share(last, inflow_f, valve)
+        share = _tank_share(last, inflow_f, valve, undiluted_share)
         if share <= 0.0:
             # The valve takes nothing from the tank: the cold side
             # delivers the rest.
@@ -819,10 +827,13 @@ def deliverable_gal(
     line_f: float,
     inflow_f: float,
     valve: tuple[float, float] = NO_VALVE,
+    undiluted_share: float = 0.0,
 ) -> float:
     """The gallons the tap gets at ``line_f`` or warmer before it runs
     under, the mains at ``inflow_f``: the delivered water is the tank's
-    tempered by the valve, never warmer than the tank's. Summed over the
+    tempered by the valve, never warmer than the tank's, each gallon
+    taking ``undiluted_share`` of its cold side's share from the tank
+    as well (``draw``). Summed over the
     water leaving the top in turn, to the first that delivers under the
     line; the inlet zone's passes to where its temperature reaches the
     line's (``line_f``, or the tank temperature the valve delivers it
@@ -841,7 +852,9 @@ def deliverable_gal(
     for gal, heat in col.plug():
         if heat < line:
             return total
-        total += gal / _tank_share(temp_f(heat), inflow_f, valve)
+        total += gal / _tank_share(
+            temp_f(heat), inflow_f, valve, undiluted_share
+        )
     m, start = col.mix_gal, col.mix_start_f
     if m > 0.0 and start < line:
         # The inlet zone's water passes up under the line first.
@@ -859,7 +872,7 @@ def deliverable_gal(
     dx = span / pieces
     for k in range(pieces):
         temp = temp_f(col.mix_f((k + 0.5) * dx))
-        total += dx / _tank_share(temp, inflow_f, valve)
+        total += dx / _tank_share(temp, inflow_f, valve, undiluted_share)
     return total
 
 
@@ -1094,6 +1107,7 @@ class _Walk:
     flowing: tuple[Flowing, ...]
     draws: tuple[Delivered, ...]
     valve: tuple[float, float]
+    undiluted_share: float = 0.0
     #: The draws at each instant some are, in order of size.
     at: dict[datetime, tuple[Delivered, ...]] = field(
         init=False, repr=False, compare=False
@@ -1181,6 +1195,7 @@ class _Walk:
                 d.gal,
                 d.inflow_f,
                 NO_VALVE if d.undiluted else self.valve,
+                self.undiluted_share,
             )
             state = out.state
             books += Books(
@@ -1280,13 +1295,15 @@ def walk(
     flowing: Sequence[Flowing] = (),
     draws: Sequence[Delivered] = (),
     valve: tuple[float, float] = NO_VALVE,
+    undiluted_share: float = 0.0,
     stop: Callable[[TankState], bool] | None = None,
     idle_step: timedelta = IDLE_STEP,
     active_step: timedelta = ACTIVE_STEP,
 ) -> Walked:
     """The tank from ``start`` to ``end`` under ``heating``, the
     ``flowing`` draws and the delivered ``draws`` (those in ``[start,
-    end)``, through ``valve``), the air ``air_f`` reads.
+    end)``, through ``valve``, ``undiluted_share`` of a gallon's cold
+    side from the tank as well: ``draw``), the air ``air_f`` reads.
 
     Steps end on the clock's grid, every ``idle_step`` with nothing
     heating or flowing and every ``active_step`` while something is, and
@@ -1312,6 +1329,7 @@ def walk(
         tuple(flowing),
         tuple(d for d in draws if start <= d.at < end),
         valve,
+        undiluted_share,
     )
     instants = w.instants(start, end)
     books = Books()

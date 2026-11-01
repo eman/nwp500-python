@@ -448,6 +448,7 @@ def _span(
             for t, g in record.draws[lo:hi]
         ],
         valve=(d.delivery_intercept_f, d.delivery_slope),
+        undiluted_share=d.undiluted_share,
     )
     if steps is not None:
         times = [t for t, _ in walked.path]
@@ -670,6 +671,7 @@ def errors(
             for t, g in coast.draws
         ],
         valve=(d.delivery_intercept_f, d.delivery_slope),
+        undiluted_share=d.undiluted_share,
     )
     read = [(t, st.observe(lay, s)) for t, s in walked.path]
     upper = [(t, u) for t, (u, _) in read]

@@ -60,6 +60,18 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **A slower draw takes more of the tank than the valve's share.**
+  Each delivered gallon takes ``s + undiluted_share · (1 − s)`` of the
+  tank's water, ``s`` the valve's share
+  (``DrawParams.undiluted_share``, 0-1, 0 by default), in the walk, the
+  deliverable gallons and a history's metered tank gallons;
+  ``physics.draw.hot_fraction`` and ``withdrawn_gal`` take it.
+  ``site_example_params`` sets 0.25 (``SITE_UNDILUTED_SHARE``), the
+  share that fitted the lower probe's fall after the site's 137 draws
+  of 8 gal or more before 2026-09-18. On the 29 held-out days the
+  electricity came out 14.3 % off against 16.0, the recoveries 14.5 min
+  against 17.1, and one day whose start at the TOU window's close was
+  missed is now called.
 - **A fast draw takes the tank's water whole.** A draw at
   ``DrawParams.undiluted_gpm`` or faster (its gallons over its
   ``duration_s``, ``Draw.flow_gpm``) takes as much of the tank's water
