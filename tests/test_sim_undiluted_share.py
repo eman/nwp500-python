@@ -6,11 +6,13 @@ share."""
 from dataclasses import replace
 from datetime import timedelta
 
+import numpy as np
 import pytest
 from sim_cases import T0
 
 from nwp500 import sim
 from nwp500.sim import Draw, Loads, delivery
+from nwp500.sim import tank_fit as tf
 from nwp500.sim.history import Step, drawn_gal
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.draw import hot_fraction, withdrawn_gal
@@ -105,3 +107,96 @@ def test_a_tank_gallon_delivers_less() -> None:
         at=T0,
     )
     assert drawn_gal(step, SITE) < drawn_gal(step, VALVED)
+
+
+def test_an_instant_draw_in_the_engine_takes_more() -> None:
+    """A draw at an instant while the compressor runs, taken through
+    ``TankPhysics.draw``: the valve's share and a quarter of the cold
+    side's."""
+
+    def low(params: sim.HeaterParams) -> float:
+        s = sim.Scenario(
+            start=T0,
+            horizon=timedelta(hours=1),
+            tz="UTC",
+            state=sim.HeaterState(upper_f=132.0, lower_f=105.0),
+            settings=sim.Settings(setpoint_f=132.0, hp_lower_on_f=111.0),
+            history=sim.History(compressor_stopped_at=T0 - timedelta(hours=3)),
+            environment=sim.Environment(ambient_f=65.0, inlet_f=60.0),
+            loads=Loads(
+                draws=(Draw(at=T0 + timedelta(minutes=10), gallons=12.0),)
+            ),
+        )
+        got = sim.simulate(s, params)
+        assert got.heating[0].start.at == T0
+        at = T0 + timedelta(minutes=10)
+        return [p.lower_f for p in got.points if p.at == at][-1]
+
+    assert low(SITE) < low(VALVED)
+
+
+def test_the_resolution_judges_the_same_gallons() -> None:
+    """26 gal from 118 and 100 degF: short of what the valve's share
+    delivers, out of a probe's reach of what the site's does."""
+    site = delivery.deliverable(SITE, 118.0, 100.0, inlet_f=60.0).gal
+    valved = delivery.deliverable(VALVED, 118.0, 100.0, inlet_f=60.0).gal
+    assert site < 26.0 < valved
+    assert not delivery.within_resolution(
+        SITE, 118.0, 100.0, None, 26.0, inlet_f=60.0
+    )
+    assert delivery.within_resolution(
+        VALVED, 118.0, 100.0, None, 26.0, inlet_f=60.0
+    )
+
+
+def test_the_tank_fit_walks_it() -> None:
+    """The coasts the fit scores and the replay it starts them from both
+    take the share."""
+    coast = tf.Coast(
+        start=T0,
+        end=T0 + timedelta(hours=1),
+        upper_f=132.0,
+        lower_f=131.0,
+        air=((T0, 65.0),),
+        observed=((T0 + timedelta(hours=1), 130.0, 120.0),),
+        draws=((T0 + timedelta(minutes=10), 12.0),),
+    )
+    (_,), (site,) = tf.errors(SITE, None, coast)
+    (_,), (valved,) = tf.errors(VALVED, None, coast)
+    assert site < valved
+    n = 600
+    record = tf.TankRecord(
+        start=T0,
+        upper_f=np.full(n, 132.0),
+        lower_f=np.full(n, 131.0),
+        air_f=np.full(n, 65.0),
+        compressor=(),
+        element=(),
+        circulating=(),
+        draws=((T0 + timedelta(minutes=300), 12.0),),
+    )
+    at = T0 + timedelta(minutes=330)
+    lows = []
+    for p in (SITE, VALVED):
+        lay = st.layout(p)
+        state = tf.replay(lay, p, record, at, gain=0.0)
+        assert state is not None
+        lows.append(st.observe(lay, state)[1])
+    assert lows[0] < lows[1]
+
+
+def test_all_of_the_cold_side_is_the_tank_water_whole() -> None:
+    """With the whole cold side from the tank, the gallons the tap gets
+    are the tank's own down to the tank water the valve delivers the
+    line from: through the plug and the inlet zone alike."""
+    lay = st.layout(SITE)
+    a, b = SITE.draw.delivery_intercept_f, SITE.draw.delivery_slope
+    line = 105.0
+    for upper, lower in ((140.0, 139.0), (132.0, 118.0), (125.0, 104.0)):
+        state = st.mix(st.estimate(lay, upper, lower))
+        whole = st.deliverable_gal(lay, state, line, 60.0, (a, b), 1.0)
+        own = st.deliverable_gal(
+            lay, state, max(line, (line - a) / b), 60.0, st.NO_VALVE
+        )
+        assert whole == pytest.approx(own)
+        assert whole < st.deliverable_gal(lay, state, line, 60.0, (a, b), 0.25)

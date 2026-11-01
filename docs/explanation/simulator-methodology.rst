@@ -579,9 +579,10 @@ further after a draw than the valve's share lets it. Measured on
 the hour after, each walked from the record's state at its onset on
 the parameters fitted before 2026-09-18: on the 137 before then, the
 record's probe fell a mean 13.7 degF and the walk's 10.8, less on 97.
-With :math:`k` of 0.25 the walk's fell 12.2, within 7.13 degF RMS of
-the record's against 7.40 (0.2 and 0.3 within 7.14), and with 1, all
-of the tank's water, 18.1, 9.62 RMS. On the 32 held out after it, 10.7
+With :math:`k` of 0.25 the walk's fell 12.6, within 7.13 degF RMS of
+the record's against 7.40 (0.2 within 7.13 and 0.3 within 7.14; its
+mean fall reaches the record's near 0.4, at 7.27), and with 1, all of
+the tank's water, 18.1, 9.62 RMS. On the 32 held out after it, 10.7
 degF against the record's 14.9 at 0, 12.1 at 0.25, RMS 6.25 to 5.19.
 ``site_example_params`` sets 0.25 (``SITE_UNDILUTED_SHARE``). The same
 share is taken where a gallon delivered is reckoned from the tank's:

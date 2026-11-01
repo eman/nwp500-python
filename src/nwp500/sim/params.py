@@ -469,8 +469,9 @@ class DrawParams:
     #: each delivered gallon takes ``s + undiluted_share · (1 − s)`` of
     #: the tank's water, ``s`` the valve's share. On the site's record
     #: the lower probe fell further after a draw of 8 gal or more than
-    #: the valve's share lets it; 0.25 fitted it best (137 draws, the
-    #: compressor off), 1 overshot it as far as 0 fell short. Whether
+    #: the valve's share lets it (137 draws, the compressor off): 0.25
+    #: came within 7.13 °F RMS of it, as 0.2 did, against 7.40 at 0 and
+    #: 9.62 at 1, the tank's water whole, which overshot it. Whether
     #: the meter, the valve or the cold's path through the tank does
     #: it, the record does not say. 0: the valve's share.
     undiluted_share: float = field(

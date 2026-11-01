@@ -27,11 +27,12 @@ before 2026-09-18, with no valve.
 **Found.** The walk's lower probe fell a mean 17.7 degF against the
 record's 14.9, within 5.7 degF RMS against the valve's 5.6, and less
 than the record's on 7 of the 34 against the valve's 30: it overshot as
-far as the valve fell short. On the 137 before 2026-09-18 the same:
-18.1 against 13.7, 9.62 RMS against 7.40.
+far as the valve fell short. On the 137 before 2026-09-18 it overshot
+further: 18.1 against 13.7, 9.62 RMS against the valve's 7.40.
 
 **Why dropped.** The record sits between the two. A quarter of the cold
-side's share from the tank as well fitted it, and is what was kept.
+side's share from the tank as well came within 7.13 degF RMS of it,
+and is what was kept.
 
 **Account.** :doc:`simulator-methodology`, "A slower draw".
 

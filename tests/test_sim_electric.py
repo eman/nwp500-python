@@ -47,8 +47,9 @@ def test_two_days_in_electric_keep_the_upper_zone_in_its_band(
     """Two days in Electric: the elements heat again and again, the
     upper zone kept between where the upper element starts and the
     setpoint, the lower zone no lower than the heater's threshold. The
-    draws at the valve's share: the band is the controller's, which a
-    draw taking more of the tank dips under before the element answers."""
+    draws at the valve's share: the lower zone's floor is the
+    controller's, which a draw taking more of the tank dips under while
+    the lower element waits on the upper (``electric_lower_after_upper``)."""
     site = sim.site_example_params()
     params = replace(site, draw=replace(site.draw, undiluted_share=0.0))
     got = sim.simulate(_electric(draws=draws), params)
