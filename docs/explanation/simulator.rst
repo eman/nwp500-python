@@ -588,20 +588,24 @@ record's 130.6. That draw took the record's to 97.3 by 19:00 and the
 walk's to 113.8, which left the walk 8 degF above the trigger at 21:00,
 when the window closed and the record started. Over the 169 draws of 8
 gal or more with the compressor off for the hour after, the walk's fall
-in that hour misses the record's by 1.2 degF too far on average before
-2026-09-18 and 2.2 too short after it, with a spread of 4.1 degF about
-those means (one standard deviation, the draws on both sides together).
-The error follows the tank's temperature at the draw weakly (a
-correlation of -0.25 with the upper probe, 6 % of its variance, the walk
-falling further from a hotter tank), and none of the other inputs the
-walk is given, the draw's gallons or flow, the time since the last
-heating, the hour or the air, follows it with a correlation over 0.22. A
-scheduler sees only the walk's margin to a trigger, and after a draw of
-8 gal or more that margin is uncertain by about 4 degF a draw, and by
-more where several draws and the heating they move stack up, as on
-10-20, where the walk stood 8 degF above its trigger at 21:00 and the
-record started. A start the walk calls or misses by less than that after
-such draws should be read as uncertain.
+in that hour is 1.2 degF too far on average before 2026-09-18 and 2.2
+too short after it, with a spread of 4.1 degF about those means (one
+standard deviation, the draws on both sides together). The error follows
+the tank's temperature at the draw weakly (a correlation of -0.25 with
+the upper probe, 6 % of its variance, the walk falling further from a
+hotter tank), and none of the other inputs the walk is given, the draw's
+gallons or flow, the time since the last heating, the hour or the air,
+follows it with a correlation over 0.22. A scheduler sees only the
+walk's margin to a trigger. For the lower probe's, the measurement
+above, each draw walked from the record's state over the hour after it,
+puts the walk's error at about 4 degF a draw (4.2 degF RMS before
+2026-09-18) and about 5 on the draws since (4.9), the walk standing
+about 2 degF high. A day's walk, which carries its own state from draw
+to draw, can be further off, as on 10-20, where at 21:00 the walk stood
+8 degF above its trigger and the record 7 below it. The upper probe's
+margin, which set 10-18's start, was not measured so; on that day the
+walk ran 2 degF warm. A start the walk calls or misses by less than
+these after such draws should be read as uncertain.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
