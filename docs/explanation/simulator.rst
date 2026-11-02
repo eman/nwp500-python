@@ -599,13 +599,15 @@ follows it with a correlation over 0.22. A scheduler sees only the
 walk's margin to a trigger. For the lower probe's, the measurement
 above, each draw walked from the record's state over the hour after it,
 puts the walk's error at about 4 degF a draw (4.2 degF RMS before
-2026-09-18) and about 5 on the draws since (4.9), the walk standing
-about 2 degF high. A day's walk, which carries its own state from draw
-to draw, can be further off, as on 10-20, where at 21:00 the walk stood
-8 degF above its trigger and the record 7 below it. The upper probe's
-margin, which set 10-18's start, was not measured so; on that day the
-walk ran 2 degF warm. A start the walk calls or misses by less than
-these after such draws should be read as uncertain.
+2026-09-18) and about 5 on the draws since (4.9, the walk standing about
+2 degF high). A day's walk, which carries its own state from draw to
+draw, can be further off, as on 10-20, where at 21:00 the walk stood 8
+degF above its trigger and the record 7 below it. For the upper probe's,
+which set 10-18's start, the same measurement on the clean draws puts
+the error at about 0.5 degF a draw (0.51 RMS) before 2026-09-18 and
+about 1 (0.97) since, yet on 10-18 the walk's upper probe ran 2 degF
+warm by 20:41. A start the walk calls or misses by less than these after
+such draws should be read as uncertain.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
