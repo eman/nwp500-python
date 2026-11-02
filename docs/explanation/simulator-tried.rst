@@ -13,6 +13,34 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The mains colder, for the lower probe's error after a draw (2026-11-02)
+=======================================================================
+
+**Tried.** Measured, not adopted: the mains (``DrawParams.climate_f``'s
+annual mean, moving ``cold_supply.mains_f`` with it) 5 degF colder and 5
+degF warmer, in the walk and in the replay that starts it, over the 32
+draws of 8 gal or more from 2026-09-18 with the compressor off for the
+hour after, on the parameters in use (fitted before 2026-09-18, the
+share at 0.25). The walk's lower probe fell too short over the hour
+after those draws, a mean 2.2 degF, where from 05-01 to 09-17 it fell
+too far; the mains are the input the walk is given that moves most with
+the season.
+
+**Found.** The mains 4.9 degF colder moved the mean error from +2.21 to
++1.50 degF and 4.8 warmer to +2.92: 0.15 degF a degF. Taking the error
+out would need the mains some 15 degF colder than the model from
+2026-09-18 (19 for October's draws), where an inlet probe at the heater
+read them a mean 1.5 degF warmer than the model over 25 days of
+2026-09-20..10-28.
+
+**Why dropped.** The mains move the error too little, and the probe puts
+the model's error on the other side. No change.
+
+**Account.** :doc:`simulator`, "Accuracy". The draws, the quiet hours
+and the scripts are kept with the site's scores
+(``lower-probe-bias-2026-11-02``).
+
+
 The slower draw's share at 0.1 (2026-11-02)
 ===========================================
 
