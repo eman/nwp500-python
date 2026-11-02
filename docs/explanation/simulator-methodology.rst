@@ -586,14 +586,16 @@ the walk's 12.7 at 0 (4.07), 13.6 at 0.1 (3.90), 14.9 at 0.25 (4.16) and
 21.5 at 1 (9.91). Scored held out on those parameters, 0.25 came out
 ahead of 0.1 and 0: the day's electricity 14.3 % off against 15.9 and
 16.0, the recoveries 14.5 min against 16.5 and 17.1, the lower probe
-after the 46 draws 1.74 degF RMS against 1.89 and 2.01.
-``site_example_params`` sets 0.25 (``SITE_UNDILUTED_SHARE``). The same
-share is taken where a gallon delivered is reckoned from the tank's: the
-deliverable gallons (``sim.delivery``) and a history's metered tank
-gallons (``history.drawn_gal``). Whether the meter reads less at the
-slower flows, the valve passes more than its line or the cold reaches
-further up, the record does not say: the valve's line is the tap's
-measured temperature and is kept.
+after the 46 draws 1.74 degF RMS against 1.89 and 2.01. The share is
+chosen on the held-out draws and days, so they no longer check it apart
+from that choice. ``site_example_params`` sets 0.25
+(``SITE_UNDILUTED_SHARE``). The same share is taken where a gallon
+delivered is reckoned from the tank's: the deliverable gallons
+(``sim.delivery``) and a history's metered tank gallons
+(``history.drawn_gal``). Whether the meter reads less at the slower
+flows, the valve passes more than its line or the cold reaches further
+up, the record does not say: the valve's line is the tap's measured
+temperature and is kept.
 
 **The fitted range.** The record's draws span a range of upper probe
 temperatures and draw volumes (``DrawParams.domain_upper_f``,
