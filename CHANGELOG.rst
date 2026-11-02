@@ -102,7 +102,10 @@ Added
   own span alone. ``sim.Carried`` holds the walk and its tail, their
   electricity by slot, and how far the tail's end is from the first
   walk's (``residual_f``, ``residual_wh``, ``heating_alike``,
-  ``settled``).
+  ``settled``). Whether the tails go on alike is walked past every
+  instant still due and every TOU window's close, up to 8 days
+  (``sim.carry.GO_ON_MAX``); tails owing one past that are not counted
+  alike.
 - **The scoreboard walks whole days.** ``sim_score.day_events`` takes
   each local day a record observed throughout, and ``sim_score.score``
   walks it from its start as the heater was told over it: the recorded

@@ -349,8 +349,9 @@ Entry points
    started past its end (the tail itself runs none started at or after
    it),
    past every start, hold and lockout still due and every TOU window
-   opening on the way (up to 16 h), the same electricity and layers,
-   leaves nothing between them unvalued. It takes
+   opening on the way (up to 8 days; tails owing one past that are not
+   counted alike), the same electricity and layers, leaves nothing
+   between them unvalued. It takes
    ``simulate``'s keyword inputs for every tail: a ``recovery`` model
    and ``start_hold`` as the walks had them, any windows over the
    tail's own span.
