@@ -13,6 +13,35 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The slower draw's share at 0.1 (2026-11-02)
+===========================================
+
+**Tried.** Measured, not adopted: ``DrawParams.undiluted_share`` at 0.1
+on the parameters in use (fitted before 2026-09-18), against the 0.25
+``site_example_params`` sets. The share was first measured with each
+draw of 8 gal or more walked alone over the hour after it, while the
+record's probes over that hour held the draws after it as well: 27 of
+the 137 before 2026-09-18 and 4 of the 32 after had another of a gallon
+or more. Walked with the record's draws over the hour, the 137 put the
+share near 0.1, not 0.25. The numbers in :doc:`simulator-methodology`,
+"A slower draw", and in the entries below are now those walks'.
+
+**Found.** On the 137 the walk's lower probe fell 13.6 degF against the
+record's 13.7 at 0.1, within 3.90 degF RMS, against 14.9 and 4.16 at
+0.25; on the 32 held out 11.7 against 14.9, 5.46 RMS, against 12.6 and
+4.86. Scored held out, 0.1 came out behind 0.25: the day's electricity
+15.9 % off (10.2-22.4) against 14.3, the recoveries 16.5 min (11.8-21.6)
+against 14.5, the lower probe after the 46 draws 1.89 degF RMS against
+1.74, and 10-21's start at 21:00 lost again (45.6 % low against 4.5);
+the deliveries 1.28 gal under-promised against 1.35.
+
+**Why dropped.** The record before the split favours 0.1 and the draws
+after it 0.25 or more; held out, the days, the recoveries and the draws
+came out behind. 0.25 is kept.
+
+**Account.** :doc:`simulator-methodology`, "A slower draw".
+
+
 The tank refitted with the large draws weighed more (2026-11-02)
 ================================================================
 
@@ -28,9 +57,10 @@ windows, which the two entries below name, is what they measured.
 **Found.** The fit raised the bottom's loss to 2.61 BTU/h·degF, from
 0.60 in use and 0.37 in the refit below, and shrank the inlet zone to
 8.9 gal. Held out, against the parameters in use: the 32 draws of 8 gal
-or more cooled the lower probe 10.6 degF in the walk against 14.9 in the
-record, 12.1 in use and 11.2 in the refit below, at 6.39 degF RMS
-against 5.19 and 5.50; the lower probe after the 46 draws 2.03 degF RMS
+or more cooled the lower probe 11.0 degF in the walk against 14.9 in the
+record, 12.6 in use and 11.7 in the refit below, at 6.08 degF RMS
+against 4.86 and 5.18 (each walked with the record's draws over the hour
+after it, 2026-11-02); the lower probe after the 46 draws 2.03 degF RMS
 against 1.74, the quiet windows' upper probe 0.299 against 0.205 and
 their lower 0.443 against 0.484. The day's electricity 13.9 % off
 (8.3-20.3) against 14.3, 14 % of it in another hour than the meter's
@@ -110,9 +140,11 @@ again: that day 41.2 % low against 4.5.
 **Why dropped.** Worse on the days, the recoveries, the draws and the
 quiet windows' upper probe, all inside their intervals, and 10-21's
 start lost; better on the quiet windows' lower probe, the deliveries and
-the false starts. Fitted apart on the draws' own fall, the share came to
-0.25. The fit weighed the draws as much as the quiet windows already,
-208 of each; the large draws weighed more were tried after (above).
+the false starts. Measured apart on the draws' own fall, the record
+before 2026-09-18 puts the share near 0.1 and the held-out draws above
+0.25; held out, 0.25 scored ahead of 0.1 (above). The fit weighed the
+draws as much as the quiet windows already, 208 of each; the large draws
+weighed more were tried after (above).
 
 **Account.** :doc:`simulator-methodology`, "A slower draw".
 
@@ -131,12 +163,13 @@ before 2026-09-18, with no valve.
 **Found.** The walk's lower probe fell a mean 17.7 degF against the
 record's 14.9, within 5.7 degF RMS against the valve's 5.6, and less
 than the record's on 7 of the 34 against the valve's 30: it overshot as
-far as the valve fell short. On the 137 before 2026-09-18 it overshot
-further: 18.1 against 13.7, 9.62 RMS against the valve's 7.40.
+far as the valve fell short. On the 137 before 2026-09-18, each walked
+with the record's draws over the hour after it (2026-11-02), it overshot
+further: 21.5 against 13.7, 9.91 RMS against the valve's 4.07.
 
 **Why dropped.** The record sits between the two. A quarter of the cold
-side's share from the tank as well came within 7.13 degF RMS of it,
-and is what was kept.
+side's share from the tank as well came within 4.86 degF RMS of the 32
+held out after 2026-09-18, and is what was kept.
 
 **Account.** :doc:`simulator-methodology`, "A slower draw".
 

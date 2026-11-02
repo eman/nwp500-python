@@ -544,30 +544,30 @@ missed and 0.17 false (0.07-0.28); the lowest upper probe 2.6 degF off
 (1.6-3.8), 1.3 warm; the end state 4.0 degF off (2.5-5.8).
 
 The days the walk misses are the ones that matter to a schedule. On
-three, the record starts at or near the window's close (21:00 on
-10-20 and 10-21, 20:41 on 10-18) and the walk does not: its lower probe
-reads warmer by then than the trigger, and the day comes out 41 to
-100 % low. The record's lower probe sat within 0.5 degF of its 104.9
-degF trigger (104.7 at 07:35 on 10-20, 104.4 at 21:00 on 10-21), and
-the walk's 11 to 12 degF above it; its running power matched the
-record's, about 400 W, and it ran 2 to 3 h a day less. The window
-shows the shortfall, it does not make it: the slower draws cooled the
-walk's lower probe less than the record's, over the 32 held-out draws
-of 8 gal or more with the compressor off 10.7 degF against 14.9, walked
-from the record's own state before each. At 20:41 on 10-18 the
+three, the record starts at or near the window's close (21:00 on 10-20
+and 10-21, 20:41 on 10-18) and the walk does not: its lower probe reads
+warmer by then than the trigger, and the day comes out 41 to 100 % low.
+The record's lower probe sat within 0.5 degF of its 104.9 degF trigger
+(104.7 at 07:35 on 10-20, 104.4 at 21:00 on 10-21), and the walk's 11 to
+12 degF above it; its running power matched the record's, about 400 W,
+and it ran 2 to 3 h a day less. The window shows the shortfall, it does
+not make it: the slower draws cooled the walk's lower probe less than
+the record's, over the 32 held-out draws of 8 gal or more with the
+compressor off 11.1 degF against 14.9, walked from the record's own
+state before each with its draws over the hour. At 20:41 on 10-18 the
 record's upper probe was 14.2 degF short of the setpoint, at the
-window's 14.4 degF start, the walk's 12.3. With a slower draw's share
-as well, those draws cooled it 12.1 degF, and 10-21 starts at 21:00
-and comes out 4.5 % low; 10-18 and 10-20 still do not start. On two, evening draws in the window (69 and 57 gal on 09-29
-and 10-02) took the record's upper probe to 79.5 and 96.1 degF, the
-only two days on which the record crossed the line. Each held one
-draw of 31 or 54 gal at 2.4 or 2.7 gal/min. Through the valve the
-walk's upper probe held at 107.5 and 113.3 degF and called neither.
-Taking that draw's water whole over its time, it fell to 96.2 and
-94.8 degF and called both. 10-02's electricity went from 2.6 % high to
-7.7 % high, and 09-29's from 5.0 % to 3.3 %. On 09-28 a 19 gal draw at
-2.2 gal/min moved a start, one more missed and one more false, and
-the day's electricity went from 27 % low to 9 % low.
+window's 14.4 degF start, the walk's 12.3. With a slower draw's share as
+well, those draws cooled it 12.6 degF, and 10-21 starts at 21:00 and
+comes out 4.5 % low; 10-18 and 10-20 still do not start. On two, evening
+draws in the window (69 and 57 gal on 09-29 and 10-02) took the record's
+upper probe to 79.5 and 96.1 degF, the only two days on which the record
+crossed the line. Each held one draw of 31 or 54 gal at 2.4 or 2.7
+gal/min. Through the valve the walk's upper probe held at 107.5 and
+113.3 degF and called neither. Taking that draw's water whole over its
+time, it fell to 96.2 and 94.8 degF and called both. 10-02's electricity
+went from 2.6 % high to 7.7 % high, and 09-29's from 5.0 % to 3.3 %. On
+09-28 a 19 gal draw at 2.2 gal/min moved a start, one more missed and
+one more false, and the day's electricity went from 27 % low to 9 % low.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
