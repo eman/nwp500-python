@@ -13,6 +13,41 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The tank refitted with the large draws weighed more (2026-11-02)
+================================================================
+
+**Tried.** Built as a scratch patch, not merged: the site's tank
+refitted as in the entry below, the share held at 0.25, on the code of
+2026-11-02 (3adaad0), with each draw of 8 gal or more weighed 3.36
+times, the 62 of them together as much as the 208 quiet windows; the 146
+smaller draws and the 90 recoveries weighed as before. The fit weighs
+each event alike, and the record before 2026-09-18 holds as many draws
+as quiet windows, 208 of each: the draws weighed as much as the quiet
+windows, which the two entries below name, is what they measured.
+
+**Found.** The fit raised the bottom's loss to 2.61 BTU/h·degF, from
+0.60 in use and 0.37 in the refit below, and shrank the inlet zone to
+8.9 gal. Held out, against the parameters in use: the 32 draws of 8 gal
+or more cooled the lower probe 10.6 degF in the walk against 14.9 in the
+record, 12.1 in use and 11.2 in the refit below, at 6.39 degF RMS
+against 5.19 and 5.50; the lower probe after the 46 draws 2.03 degF RMS
+against 1.74, and the quiet windows' upper probe 0.299 against 0.205.
+The day's electricity 13.9 % off (8.3-20.3) against 14.3, 14 % of it in
+another hour than the meter's against 19, 0.10 false starts a day
+against 0.17, and 10-24's start called (7.6 % low against 41.8); the
+starts on 10-18 and 10-20 stayed missed and 10-21's was lost (41.4 % low
+against 4.5). The recoveries 18.7 min off (13.9-23.6) against 14.5, the
+draw-free 9.1 min (4.8-14.2) against 4.8.
+
+**Why dropped.** Weighed more, the large draws' fall came out further
+from the record's, not nearer, and the quiet windows' upper probe, the
+draws and the recoveries worse. The parameters in use are kept. What
+would make it worth another try: a change to how a draw cools the tank,
+which no fit of these terms has found.
+
+**Account.** :doc:`simulator-methodology`, "A slower draw".
+
+
 The tank refitted with the slower draw's share fixed (2026-11-02)
 =================================================================
 
@@ -39,9 +74,9 @@ against 0.484 and their upper 0.235 against 0.205.
 **Why dropped.** The refit takes back most of what the share gave the
 draws, the lower probe's fall after them as far off as before it, and
 the draw-free recoveries came out twice as far off, outside the interval
-of the parameters in use. The parameters in use are kept. What would
-make it worth another try: a fit that weighs the draws as much as the
-quiet windows, scored against this one.
+of the parameters in use. The parameters in use are kept. The fit
+already weighs the draws as much as the quiet windows, 208 of each; the
+large draws weighed more were tried after (above).
 
 **Account.** :doc:`simulator-methodology`, "A slower draw".
 
@@ -73,8 +108,8 @@ again: that day 41.2 % low against 4.5.
 quiet windows' upper probe, all inside their intervals, and 10-21's
 start lost; better on the quiet windows' lower probe, the deliveries and
 the false starts. Fitted apart on the draws' own fall, the share came to
-0.25. What would make it worth another try: a fit weighing the draws as
-much as the quiet windows.
+0.25. The fit weighed the draws as much as the quiet windows already,
+208 of each; the large draws weighed more were tried after (above).
 
 **Account.** :doc:`simulator-methodology`, "A slower draw".
 
