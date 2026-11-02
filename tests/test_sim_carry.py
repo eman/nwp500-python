@@ -867,9 +867,12 @@ class TestCarryOn:
         assert not carried.heating_alike
         assert not carried.settled
 
-    def test_a_tail_is_walked_on_to_go_on_max_and_no_farther(self) -> None:
+    def test_a_tail_is_walked_on_to_go_on_max_and_no_farther(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # A window closing so the walk on needs GO_ON_MAX exactly is
-        # walked through; one closing a second later is not.
+        # walked through; one closing a second later is not walked on
+        # at all: the tail is its one walk.
         tail = TAIL.model_copy(
             update={
                 "start": at(17) + timedelta(minutes=1),
@@ -895,10 +898,21 @@ class TestCarryOn:
                 PARAMS,
                 tou_windows_in_force=window,
             )
+            horizons: list[timedelta] = []
+            walked = carry.simulate
+
+            def counted(scenario: sim.Scenario, *a: Any, **k: Any) -> Any:
+                horizons.append(scenario.horizon)
+                return walked(scenario, *a, **k)
+
+            monkeypatch.setattr(carry, "simulate", counted)
             (carried,) = sim.carry_on(
                 [walk], tail, PARAMS, tou_windows_in_force=window
             )
+            monkeypatch.undo()
             assert carried.heating_alike is shown
+            on = [tail.horizon + carry.GO_ON_MAX] if shown else []
+            assert horizons == [tail.horizon, *on]
 
     def test_a_tail_runs_no_circulation_started_past_its_end(self) -> None:
         # A recovery under way at the end, a window opening after it: the
