@@ -569,6 +569,26 @@ went from 2.6 % high to 7.7 % high, and 09-29's from 5.0 % to 3.3 %. On
 09-28 a 19 gal draw at 2.2 gal/min moved a start, one more missed and
 one more false, and the day's electricity went from 27 % low to 9 % low.
 
+Of the two still missed (measured 2026-11-02 on the parameters fitted
+before 2026-09-18, the share at 0.25), neither shows a fault a term
+would mend. On 10-18 the walk's upper probe matched the record's to
+11:00 and was 2 degF warmer by 20:41: the day's draws and the evening's
+coast each took it a little less, where over the 28 clean held-out draws
+of 8 gal or more it fell as far as the record's in the hour after (1.40
+against 1.39 degF, a standard error of 0.18); the record's start came
+within 0.2 degF of the line. On 10-20 the draws of 06:03 and 07:12 (11.4
+and 6.3 gal) took the record's lower probe from 131.9 to 104.4 degF, its
+compressor on at 07:35, and the walk's to 113.3; the walk started at
+11:58 instead. Over the 169 draws of 8 gal or more with the compressor
+off for the hour after, the walk's lower probe's fall in that hour
+differs from the record's by 4.3 degF (one standard deviation), and
+nothing the walk is given, the draw's gallons or flow, the time since
+the last heating, the hour, the air or the layers it starts from,
+follows that error with a correlation over 0.22. A start the record
+makes within a few degF of a trigger after a draw is one the walk cannot
+call either way: a scheduler should read a start called or missed that
+close as uncertain.
+
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
 element mode.
