@@ -16,14 +16,14 @@ named there. When a change is tried and dropped, add it here.
 The circulation priced at the runs' own flow (2026-11-02)
 =========================================================
 
-**Tried.** Measured, not adopted: ``CirculationParams.flow_gpm`` at half
-the 1.40 in use, against the record's recoveries with circulation inside
-them, and at 1.05 gal/min, about the own flow of the runs overlapping
-07-28 16:45 UTC's recovery (1.0 to 1.2), on that recovery alone, on the
-parameters in use (fitted before 2026-09-18, the share at 0.25). The six
-recoveries from 2026-07-08 to 08-04, each with 22 to 28 minutes of
-circulation, had come out 38 to 217 min long, and walked without the
-runs 22 to 91 min short.
+**Tried.** Measured, not adopted, on the parameters in use (fitted
+before 2026-09-18, the share at 0.25): ``CirculationParams.flow_gpm`` at
+half the 1.40 in use, against the record's recoveries with circulation
+inside them, and at 1.05 gal/min, about the own flow of the runs
+overlapping 07-28 16:45 UTC's recovery (1.0 to 1.2), on that recovery
+alone. The six recoveries from 2026-07-08 to 08-04, each with 22 to 28
+minutes of circulation, had come out 38 to 217 min long, and walked
+without the runs 22 to 91 min short.
 
 **Found.** At half the flow the 16 recoveries with circulation before
 2026-09-14 came out a mean 25 min long (43 absolute) against 45 (58),
@@ -34,7 +34,8 @@ stopped at 354 min against 364 at 1.40, where the record's stopped at
 255. At 1.40 the summer's runs' heat was already priced about as the
 return line measured it, at 1.01 to 1.16 times the walk's price at 1.40
 over July and August, the compressor running or off; 07-28's seven runs
-overlapping the recovery, whole, at 0.80 (10,177 BTU against 12,744).
+overlapping the recovery, counted whole, at 0.80 (10,177 BTU against
+12,744).
 
 **Why dropped.** The price was not what ran long: the walk takes the
 runs' heat where its lower probe sees it, about twice the record's fall
