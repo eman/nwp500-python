@@ -30,16 +30,19 @@ the six still 14 to 165 min long (07-28 16:45 UTC 105 against 152), and
 the five from 09-14 7 min short (18 absolute) against 3 long (11). At
 1.05 gal/min, walked without its setpoint write, 07-28's compressor
 stopped at 354 min against 364 at 1.40, where the record's stopped at
-255. The runs' heat was already priced as the return line measured it,
-at 1.02 to 1.17 times the walk's price at each run's own flow over July
-and August, the compressor running or off.
+255. At 1.40 the summer's runs' heat was already priced about as the
+return line measured it, at 1.01 to 1.16 times the walk's price at 1.40
+over July and August, the compressor running or off; 07-28's seven runs
+inside the recovery at 0.80 (10,177 BTU against 12,744).
 
 **Why dropped.** The price was not what ran long: the walk takes the
 runs' heat where its lower probe sees it, about twice the record's fall
 over a summer run, and the heat pump stops on that probe. Half the flow
-undercharges the runs' heat (0.70 gal/min against their 1.0 to 1.2) and
-still leaves 07-28 at 105 min long; at 1.05, about their own flow,
-07-28's walk still stopped 99 min after the record's. No change.
+undercharges the summer's runs' heat (measured 1.51 to 1.63 times its
+price over July and August) and prices 07-28's about as measured (1.04),
+yet leaves 07-28 at 105 min long, against 152 at 1.40. Walked without
+its setpoint write, 07-28 stopped 99 min after the record's at 1.05,
+against 109 at 1.40. No change.
 
 **Account.** :doc:`simulator`, "Accuracy". The recoveries, the runs and
 the scripts are kept with the site's scores
