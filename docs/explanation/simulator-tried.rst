@@ -25,18 +25,20 @@ installation's 49 metered days, 2026-09-12 to 11-01, the members spread
 wider than the days over the whole day and the days' counts of draws of
 4 gal or more missed the members' mean by a mean square 0.49 of their
 variance. The share was fitted as that ratio on one half and scored on
-the other: 0.55 on the 25 days to 10-07, 0.36 on the 24 from 10-09; 500
-members, two seeds, against the prototype with independent counts.
+the other: 0.55 on the 25 days to 10-07, 0.36 on the 24 from 10-09 (300
+members); scored with 500 members and two seeds against the prototype
+with independent counts.
 
 **Found.** Scored on the second half with 0.55, the day's continuous
 ranked probability score came out worse in both seeds, 5.46 gal against
 5.17 and 6.04 against 5.90, the evening's 4.93 against 4.80 and 4.91
-against 4.83, though the whole day's squared miss rose from 0.26 to 0.41
-of the members' variance, toward 1. Scored on the first half with 0.36,
-the day's came out worse in both, 9.40 against 9.12 and 9.67 against
-9.34, and the spread turned from too wide to too narrow (the squared
-miss 1.44 and 1.41 times the variance against 0.78 and 0.70); the
-evening's 8.64 against 8.78 and 8.69 against 8.54.
+against 4.83, though the whole day's squared miss rose from 0.26 and
+0.30 to 0.41 and 0.45 of the members' variance, toward 1. Scored on the
+first half with 0.36, the day's came out worse in both, 9.40 against
+9.12 and 9.67 against 9.34, and the spread turned from too wide to too
+narrow (the squared miss 1.44 and 1.41 times the variance against 0.78
+and 0.70); the evening's was mixed, 8.64 against 8.78 and 8.69 against
+8.54.
 
 **Why dropped.** The halves asked for different spreads, and one fitted
 on either made the other's days score worse. Worth another try over a

@@ -715,14 +715,16 @@ mean over their variance, below, is 1 for a right spread:
   34 %) against the 20 % a right spread gives. The recorded evenings
   averaged 13.0 gallons against the members' 10.2, the gap nearly all in
   the first half: 15.5 against 10.5 over the 25 days to 10-07, 10.4
-  against 9.9 over the 24 from 10-09. The spread moved with it, the
-  squared miss 2.05 times the members' variance over the first half and
-  0.51 over the second.
+  against 9.9 over the 24 from 10-09, though at about 1.6 standard
+  errors over the 49 and over the first half neither gap is clear of the
+  days' noise. The spread moved with it, the squared miss 1.91 times the
+  members' variance over the first half and 0.51 over the second.
 - **The whole day**: 4 of the 49, 8 % (3 to 18 %): the members spread
-  wider than the days did, the squared miss 0.78 and 0.29 of their
+  wider than the days did, the squared miss 0.80 and 0.29 of their
   variance over the two halves. The means agree over the 49 (28.9
-  gallons recorded against 29.6), not within either half (34.5 against
-  31.3, then 23.1 against 27.9).
+  gallons recorded against 29.6) and within the first half's noise (34.5
+  against 31.3), not over the second (23.1 against 27.9, 2.8 standard
+  errors).
 - **Why the day is narrower**: the days' counts of draws of 4 gal or
   more missed the members' mean by a mean square 0.49 of the members'
   variance, the household steadier from day to day than independent
