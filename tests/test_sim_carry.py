@@ -867,6 +867,39 @@ class TestCarryOn:
         assert not carried.heating_alike
         assert not carried.settled
 
+    def test_a_tail_is_walked_on_to_go_on_max_and_no_farther(self) -> None:
+        # A window closing so the walk on needs GO_ON_MAX exactly is
+        # walked through; one closing a second later is not.
+        tail = TAIL.model_copy(
+            update={
+                "start": at(17) + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+            }
+        )
+        reach = tail.until + carry.GO_ON_MAX - carry.GO_ON_PAST
+        for close, shown in (
+            (reach, True),
+            (reach + timedelta(seconds=1), False),
+        ):
+            window = [(at(16), close)]
+            walk = sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "start": at(17),
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "history": sim.History(compressor_stopped_at=at(14)),
+                    }
+                ),
+                PARAMS,
+                tou_windows_in_force=window,
+            )
+            (carried,) = sim.carry_on(
+                [walk], tail, PARAMS, tou_windows_in_force=window
+            )
+            assert carried.heating_alike is shown
+
     def test_a_tail_runs_no_circulation_started_past_its_end(self) -> None:
         # A recovery under way at the end, a window opening after it: the
         # tail keeps the run under way at the end, to its given end, and

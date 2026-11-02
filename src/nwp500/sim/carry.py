@@ -300,7 +300,9 @@ def _go_on(
     would, with no water drawn and no circulation starting past the end
     (``_drawn_by``). The electricity each spends past the end, Wh
     (None, unpriced), and the layers it ends with; and whether that
-    reached past every instant and close, within ``GO_ON_MAX``."""
+    reached past every instant and close, within ``GO_ON_MAX``. Walked
+    on no farther, none is walked on: each is given as its tail
+    ended, unpriced."""
     until = scenarios[0].until
     given = options.get("tou_windows_in_force")
     due = [t for r in tails for t in _due(r, params)]
@@ -316,8 +318,8 @@ def _go_on(
         if grown <= span:
             break
         span = grown
-    shown = span <= GO_ON_MAX
-    span = min(span, GO_ON_MAX)
+    if span > GO_ON_MAX:
+        return [(None, _layers(r)) for r in tails], False
     out: list[tuple[float | None, tuple[float, ...]]] = []
     for scenario, r in zip(scenarios, tails, strict=True):
         on = simulate(
@@ -336,7 +338,7 @@ def _go_on(
             else on.input_wh - r.input_wh
         )
         out.append((wh, _layers(on)))
-    return out, shown
+    return out, True
 
 
 def _drawn_by(loads: Loads, until: datetime, params: HeaterParams) -> Loads:
