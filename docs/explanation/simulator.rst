@@ -585,19 +585,23 @@ line. On 10-20 the record started twice. The draws of 06:03 and 07:12
 started at 11:58 instead and heated until about 16:00, so it met the
 draw of 18:31 (15.8 gal) with its lower probe at 140.4 degF against the
 record's 130.6. That draw took the record's to 97.3 by 19:00 and the
-walk's to 113.8, which left the walk 9 degF above the trigger at 21:00.
-Over the 169 draws of 8 gal or more with the compressor off for the hour
-after, the walk's fall in that hour misses the record's with a spread of
-4.3 degF (one standard deviation, the draws on both sides of 2026-09-18
-together), about a mean of 1.2 degF too far before 2026-09-18 and 2.2
-too short after it. The error follows the tank's temperature at the draw
-weakly (a correlation of -0.25 with the upper probe, 6 % of its
-variance, the walk falling further from a hotter tank), and none of the
-other inputs the walk is given, the draw's gallons or flow, the time
-since the last heating, the hour or the air, with a correlation over
-0.22. A start the record makes within a few degF of a trigger after a
-draw is one the walk cannot call either way: a scheduler should read a
-start called or missed that close as uncertain.
+walk's to 113.8, which left the walk 8 degF above the trigger at 21:00,
+when the window closed and the record started. Over the 169 draws of 8
+gal or more with the compressor off for the hour after, the walk's fall
+in that hour misses the record's by 1.2 degF too far on average before
+2026-09-18 and 2.2 too short after it, with a spread of 4.1 degF about
+those means (one standard deviation, the draws on both sides together).
+The error follows the tank's temperature at the draw weakly (a
+correlation of -0.25 with the upper probe, 6 % of its variance, the walk
+falling further from a hotter tank), and none of the other inputs the
+walk is given, the draw's gallons or flow, the time since the last
+heating, the hour or the air, follows it with a correlation over 0.22. A
+scheduler sees only the walk's margin to a trigger, and after a draw of
+8 gal or more that margin is uncertain by about 4 degF a draw, and by
+more where several draws and the heating they move stack up, as on
+10-20, where the walk stood 8 degF above its trigger at 21:00 and the
+record started. A start the walk calls or misses by less than that after
+such draws should be read as uncertain.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
