@@ -13,6 +13,35 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The slower draw's share fitted with the tank (2026-11-01)
+=========================================================
+
+**Tried.** Built as a scratch patch, not merged:
+``DrawParams.undiluted_share`` added to the tank fit's terms
+(``tank_fit.TERMS``, 0 to 1, from 0.25) and the site's tank refitted
+with the others on the record before 2026-09-18, the code of
+2026-11-01 (9e8dfc8).
+
+**Found.** The fit put the share at 0.08 and moved the other terms
+little (the lower probe's height 0.485 to 0.490, the inlet zone 13.8
+to 13.1 gal). The fit weighs each event alike, the quiet windows with
+the draws. Held out, against the merged code (the earlier parameters,
+the share at 0.25): the day's electricity 15.9 % off (10.3-22.2)
+against 14.3, the recoveries 17.3 min (12.6-22.4) against 14.5, the
+draw-free 6.3 against 4.8, the lower probe after the 46 draws 2.00
+degF RMS against 1.74; the quiet windows' lower probe 0.456 against
+0.484, and 0.14 false starts a day against 0.17. The starts missed on
+10-18 and 10-20 stayed missed.
+
+**Why dropped.** Worse on the days, the recoveries and the draws, all
+inside their intervals; better only on the quiet windows. Fitted
+apart on the draws' own fall, the share stays at 0.25. What would
+make it worth another try: a fit weighing the draws as much as the
+quiet windows.
+
+**Account.** :doc:`simulator-methodology`, "A slower draw".
+
+
 Every draw taking the tank's water whole (2026-11-01)
 =====================================================
 
