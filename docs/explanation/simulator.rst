@@ -672,15 +672,15 @@ two hours measured 5,840 BTU. Where the walk takes that heat from
 differs. Over the hours of July and August holding a run and no draw or
 heating (53), the walk's lower probe fell 10.0 degF against the record's
 5.3 and its upper 1.7 against 1.2, where over September and October (16)
-the two came within 0.6 degF. The heat pump stops on the lower probe, so
-a walk whose lower probe the runs keep cool runs on. Why the summer's
-runs reached the record's lower probe less is not known; priced at 1.05
-gal/min, about 07-28's runs' own flow, against the 1.40 the walk prices
-them at, 07-28's walk without its setpoint write stopped 10 minutes
-sooner, of the 109 it was long (:doc:`simulator-tried`, "The circulation
-priced at the runs' own flow"). On this record a walk's recovery with
-circulation inside it reads long by up to hours in July and August and
-as the record's from mid-September.
+the two came within about 0.6 degF. The heat pump stops on the lower
+probe, so a walk whose lower probe the runs keep cool runs on. Why the
+summer's runs reached the record's lower probe less is not known; priced
+at 1.05 gal/min, about 07-28's runs' own flow, against the 1.40 the walk
+prices them at, 07-28's walk without its setpoint write stopped 10
+minutes sooner, of the 109 it was long (:doc:`simulator-tried`, "The
+circulation priced at the runs' own flow"). On this record a walk's
+recovery with circulation inside it reads long by up to hours in July
+and August and as the record's from mid-September.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
