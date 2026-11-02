@@ -638,13 +638,14 @@ degF of the record's (0.03 for 95 % of the draws), and its upper within
 mean 73.3 and 71.8 degF), the gallons and flow and the water drawn since
 the last heating do not separate the two sets. The time since the last
 heating (a mean 462 and 338 minutes) and the minutes of water in use
-after the draw (3.0 and 1.0) do, but the first would move the error the
-other way, as it follows it from 05-01 to 09-17 (a correlation of
-+0.30), and the second barely follows it in either. None of these
-follows the error inside either set more strongly than the tank's
-temperature at the draw (-0.33). Moving the mains 5 degF either way
-moves the error from 09-18 by 0.7 degF, so it would take them some 15
-degF colder than the model, where an inlet probe read them 1.5 degF
+after the draw (3.0 and 1.0) differ in their means (not by rank), but
+the first would move the error the other way, as it follows it from
+05-01 to 09-17 (a correlation of +0.30), and the second barely follows
+it in either. None of these follows the error inside either set more
+strongly than the tank's temperature at the draw does from 05-01 to
+09-17 (-0.33; -0.02 in the other days). Moving the mains 5 degF either
+way moves the error from 09-18 by 0.7 degF, so it would take them some
+15 degF colder than the model, where an inlet probe read them 1.5 degF
 warmer over 09-20..10-28 (:doc:`simulator-tried`, "The mains colder, for
 the lower probe's error after a draw"). On these draws, 2026-04-17 to
 10-25, a scheduler reading the lower probe's margin after a large draw
