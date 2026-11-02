@@ -13,6 +13,39 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The tank refitted with the slower draw's share fixed (2026-11-02)
+=================================================================
+
+**Tried.** Measured, not adopted: the site's tank refitted on the
+record before 2026-09-18 on the code of 2026-11-02 (bd86a7c), its
+terms as before and ``DrawParams.undiluted_share`` held at 0.25. The
+parameters in use were fitted on the code before the share (f7e7f48).
+
+**Found.** The refit moved the tank's terms more than the share's own
+fit did: the lower probe's height 0.485 to 0.472 and its spread 2.31 to
+3.10 gal, the inlet zone 13.8 to 10.7 gal, the bottom's loss 0.60 to
+0.37 BTU/h·degF; the heat pump's heat and power within 0.6 %, their
+slopes by air and water within 3.6 %. Held out, against the parameters
+in use with the share at 0.25: the day's electricity 13.7 % off
+(8.3-20.0) against 14.3, 15 % of it in another hour than the meter's
+against 19, 0.10 false starts a day against 0.17, and 10-24's start
+called (10.1 % low against 41.8); 10-21's start at 21:00 was lost again
+(40.8 % low against 4.5). The recoveries 18.4 min off (13.4-23.1)
+against 14.5, the draw-free 9.3 min (5.1-14.0) against 4.8 and their
+electricity 6.7 % (4.6-9.1) against 4.0; the lower probe after the 46
+draws 1.99 degF RMS against 1.74, the quiet windows' lower probe 0.423
+against 0.484 and their upper 0.235 against 0.205.
+
+**Why dropped.** The refit takes back most of what the share gave the
+draws, the lower probe's fall after them as far off as before it, and
+the draw-free recoveries came out twice as far off, outside the interval
+of the parameters in use. The parameters in use are kept. What would
+make it worth another try: a fit that weighs the draws as much as the
+quiet windows, scored against this one.
+
+**Account.** :doc:`simulator-methodology`, "A slower draw".
+
+
 The slower draw's share fitted with the tank (2026-11-01)
 =========================================================
 
