@@ -23,21 +23,23 @@ with the others on the record before 2026-09-18, the code of
 2026-11-01 (9e8dfc8).
 
 **Found.** The fit put the share at 0.08 and moved the other terms
-little (the lower probe's height 0.485 to 0.490, the inlet zone 13.8
-to 13.1 gal). The fit weighs each event alike, the quiet windows with
+little (the lower probe's height 0.485 to 0.490 and its spread 2.31 to
+2.64 gal, the inlet zone 13.8 to 13.1 gal). The fit weighs each event alike, the quiet windows with
 the draws. Held out, against the merged code (the earlier parameters,
 the share at 0.25): the day's electricity 15.9 % off (10.3-22.2)
 against 14.3, the recoveries 17.3 min (12.6-22.4) against 14.5, the
 draw-free 6.3 against 4.8, the lower probe after the 46 draws 2.00
 degF RMS against 1.74, the quiet windows' upper probe 0.221 against
-0.205; their lower probe 0.456 against 0.484, and 0.14 false starts a
-day against 0.17. The starts missed on 10-18, 10-20 and 10-24 stayed
+0.205; their lower probe 0.456 against 0.484, the deliveries 1.25 gal
+under-promised against 1.35, and 0.14 false starts a day against
+0.17. The starts missed on 10-18, 10-20 and 10-24 stayed
 missed, and the one at 21:00 on 10-21 the merged code calls was missed
 again: that day 41.2 % low against 4.5.
 
-**Why dropped.** Worse on the days, the recoveries and the draws, all
-inside their intervals, and 10-21's start lost; better only on the
-quiet windows' lower probe and the false starts. Fitted apart on the
+**Why dropped.** Worse on the days, the recoveries, the draws and the
+quiet windows' upper probe, all inside their intervals, and 10-21's
+start lost; better on the quiet windows' lower probe, the deliveries
+and the false starts. Fitted apart on the
 draws' own fall, the share came to 0.25. What would
 make it worth another try: a fit weighing the draws as much as the
 quiet windows.
