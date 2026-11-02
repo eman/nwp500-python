@@ -609,8 +609,8 @@ about 0.5 degF a draw (0.51 RMS) before 2026-09-18 and about 1 (0.97)
 since, yet on 10-18 the walk's upper probe ran 2 degF warm by 20:41. A
 start the walk calls or misses by less than a probe's error a draw
 should be read as uncertain, and after a day of draws a wider margin can
-be too, as on 10-20, where at 21:00 the walk stood 15 degF above the
-record.
+be too, as on 10-20, where at 21:00 the walk's lower probe stood 15 degF
+above the record's.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
