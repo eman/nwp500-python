@@ -704,20 +704,38 @@ candidates member by member (``saved`` above): both met the same
 households, so their difference is far less noisy than it would be
 between two ensembles drawn apart.
 
-How well the spread matches a household's (measured 2026-10-31 on one
-installation's 47 metered days, 2026-09-12 to 10-30, each against the
-newest issue before it, 500 members):
+How well the spread matches a household's (measured 2026-11-02 on one
+installation's 49 metered days, 2026-09-12 to 11-01, each against the
+newest issue before it, 500 members; 10-01 and 10-08 left out, the draw
+detector dark over 30 minutes of each). The squared miss of the members'
+mean over their variance, below, is 1 for a right spread:
 
-- **The evening, 16:00 to 21:00**: 11 of the 47 days drew a volume
-  below the members' 10th percentile or above their 90th, 23 % (90 %
-  CI 14 to 36 %) against the 20 % a right spread gives. The recorded
-  evenings averaged 13.5 gallons against the forecast's 10.4, so its
-  evening rates run low; the single expected trace drew less than the
-  evening did on 25 of the 47, and under two-thirds of it on 17.
-- **The whole day**: 4 of the 47, 9 % (90 % CI 3 to 18 %): the members
-  spread wider than the days did, as independent counts would for a
-  household steadier from day to day. The means agree, 29.2 gallons
-  recorded against 30.8 expected.
+- **The evening, 16:00 to 21:00**: 11 of the 49 days drew a volume below
+  the members' 10th percentile or above their 90th, 22 % (90 % CI 13 to
+  34 %) against the 20 % a right spread gives. The recorded evenings
+  averaged 13.0 gallons against the members' 10.2, the gap nearly all in
+  the first half: 15.5 against 10.5 over the 25 days to 10-07, 10.4
+  against 9.9 over the 24 from 10-09. The spread moved with it, the
+  squared miss 2.05 times the members' variance over the first half and
+  0.51 over the second.
+- **The whole day**: 4 of the 49, 8 % (3 to 18 %): the members spread
+  wider than the days did, the squared miss 0.78 and 0.29 of their
+  variance over the two halves. The means agree over the 49 (28.9
+  gallons recorded against 29.6), not within either half (34.5 against
+  31.3, then 23.1 against 27.9).
+- **Why the day is narrower**: the days' counts of draws of 4 gal or
+  more missed the members' mean by a mean square 0.49 of the members'
+  variance, the household steadier from day to day than independent
+  counts, and a day's evening and the rest of it missed in opposite
+  directions (a correlation of -0.30, where independent slots give
+  none). Members counting their long draws by the day, less spread than
+  independent counts, were tried and dropped
+  (:doc:`/explanation/simulator-tried`, "Long draws counted by the
+  day"): the spread the two halves asked for differed too far for one
+  fitted on either to carry to the other.
+
+The members carry the issue's means as it publishes them: the evening's
+gap is the forecast's.
 
 Ask when the tank will be hot
 =============================
