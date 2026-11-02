@@ -616,16 +616,17 @@ The lower probe's error after a large draw falls into two sets of days,
 not the fit's split (measured 2026-11-02 on the same 169 draws, walked
 as above, grouped by the site's local dates). From 05-01 to 09-17 the
 walk's fall over the hour is too far by a mean 1.5 degF (121 draws, a
-standard error of 0.3), with no trend from month to month inside (a
+standard error of 0.3), with no difference from month to month inside (a
 one-way analysis of variance over its four months and 09-01..09-17, p =
-0.78). Over 04-17..04-30 and from 09-18 it is too short, by 1.6 (16,
-1.2) and 2.2 degF (32, 0.8), the two alike (p = 0.68). Inside the fit
-period alone April's error is 3.1 degF the higher, the walk the shorter
-(p = 0.026), so no constant term fitted there takes the shift out. The
-two sets part after the draw has run. From 05-01 to 09-17 the walk's
-fall is 1.6 degF the further by 15 minutes and stays so, over all the
-draws. In the other days the two agree to 15 minutes, after which the
-record's lower probe goes on falling: over the clean draws, 1.7 degF
+0.78) nor a trend over its days (p = 0.35). Over 04-17..04-30 and from
+09-18 it is too short, by 1.6 (16, 1.2) and 2.2 degF (32, 0.8), the two
+alike (p = 0.68). Inside the fit period alone April's error is 3.1 degF
+the higher, the walk the shorter (p = 0.026), so no constant term fitted
+there takes the shift out. The two sets part after the draw has run.
+From 05-01 to 09-17 the walk's fall is 1.6 degF the further by 15
+minutes and stays so, over all the draws. In the other days the two
+agree to 15 minutes, after which the record's lower probe goes on
+falling: over the clean draws timed to end within 15 minutes, 1.7 degF
 from 15 to 60 minutes after the draw (31) against the walk's 0.8, where
 from 05-01 to 09-17 it falls 1.3 (74) against 0.8. Nothing the walk is
 given follows the shift. In quiet hours, with no draw, heating or
@@ -634,17 +635,20 @@ drifts as the record's to within 0.13 degF an hour in every half-month
 (25 hours each). At each draw the replay's lower probe sits within 0.17
 degF of the record's (0.03 for 95 % of the draws), and its upper within
 0.28 (0.06), before the correction to them. The air by the heater (a
-mean 73.3 and 71.8 degF), the gallons and flow, the water drawn and the
-time since the last heating, and the minutes of water in use after the
-draw (3.0 and 1.0) do not separate the two sets, and none follows the
-error inside either with a correlation over 0.33, the largest the tank's
-temperature at the draw. Moving the mains 5 degF either way moves the
-error from 09-18 by 0.7 degF, so it would take them some 15 degF colder
-than the model, where an inlet probe read them 1.5 degF warmer over
-09-20..10-28 (:doc:`simulator-tried`, "The mains colder, for the lower
-probe's error after a draw"). On these draws, 2026-04-17 to 10-25, a
-scheduler reading the lower probe's margin after a large draw should
-take the walk as falling about 1.5 degF too far from May to
+mean 73.3 and 71.8 degF), the gallons and flow and the water drawn since
+the last heating do not separate the two sets. The time since the last
+heating (a mean 462 and 338 minutes) and the minutes of water in use
+after the draw (3.0 and 1.0) do, but the first would move the error the
+other way, as it follows it from 05-01 to 09-17 (a correlation of
++0.30), and the second barely follows it in either. None of these
+follows the error inside either set more strongly than the tank's
+temperature at the draw (-0.33). Moving the mains 5 degF either way
+moves the error from 09-18 by 0.7 degF, so it would take them some 15
+degF colder than the model, where an inlet probe read them 1.5 degF
+warmer over 09-20..10-28 (:doc:`simulator-tried`, "The mains colder, for
+the lower probe's error after a draw"). On these draws, 2026-04-17 to
+10-25, a scheduler reading the lower probe's margin after a large draw
+should take the walk as falling about 1.5 degF too far from May to
 mid-September and about 2 too short in late April and from
 mid-September, beside the spread of about 4 degF a draw. Which set a day
 outside them falls in is not known.
