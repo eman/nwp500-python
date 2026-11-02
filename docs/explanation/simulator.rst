@@ -574,7 +574,7 @@ the parameters fitted before 2026-09-18, the share at 0.25), neither
 shows a fault that a term was seen to mend. On 10-18 the walk's upper
 probe matched the record's to 11:00 and was 2 degF warmer by 20:41: the
 day's draws and the evening's coast each took it a little less. Over the
-clean draws of 8 gal or more (no other draw of a gallon or more in the
+clean draws of 8 gal or more (less than a gallon of other draws in the
 hour after) the upper probe's fall in the hour after came out 0.11 degF
 too small before 2026-09-18 (110 draws, a standard error of 0.05) and as
 the record's after it (28, 1.40 against 1.39 degF, a standard error of
@@ -607,8 +607,9 @@ record 7 below it. For the upper probe's, which set 10-18's start, the
 same walk, read at the hour's end on those draws, puts the error at
 about 0.5 degF a draw (0.51 RMS) before 2026-09-18 and about 1 (0.97)
 since, yet on 10-18 the walk's upper probe ran 2 degF warm by 20:41. A
-start the walk calls or misses by less than a probe's error a draw, or
-after a day of draws by more, should be read as uncertain.
+start the walk calls or misses by less than a probe's error a draw
+should be read as uncertain, and after a day of draws a wider margin can
+be too, as on 10-20, where the two stood 15 degF apart at 21:00.
 
 Not yet measured on the layered tank: a forecast's draw windows, and
 the time to ready and an element run's energy after a switch into an
