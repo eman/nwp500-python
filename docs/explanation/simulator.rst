@@ -546,6 +546,19 @@ April it may be either. A slower draw's share at 0.1 instead of 0.25 did
 not take it out (:doc:`simulator-tried`, "The share at 0.1 on the score
 that splits a slower draw").
 
+A walk's ``draw_out_of_domain`` says how far to trust it (measured
+2026-11-02 on the same params). Of the 16 held-out recoveries with water
+in use, the 10 whose walks said it came out 21.6 min off, a mean 8.9
+short (61.4 short to 30.7 long); the 6 that did not, 13.0 off, a mean
+10.2 long. The largest, 2026-10-23 22:48 UTC, started from 117.1 degF at
+the upper probe, under the 122.2 the valve's line was fitted from, and
+came out 61.4 min short. Its 15.4 gal draw at 1.1 gal/min, 48 min in,
+took 42 degF a gallon from the walk's tank, and the walk drew
+electricity at the record's pace (2.18 kWh to its end, the record 2.08
+to the same minute), yet reached the target on what the record took 2.54
+to: from the same probes, the record's tank needed about a sixth more
+heat, where they do not show.
+
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
 the 29 held-out local days the record observed throughout, each walked
