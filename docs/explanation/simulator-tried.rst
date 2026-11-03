@@ -13,8 +13,8 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
-A member's draws at the record's flows (2026-11-02)
-===================================================
+A member's flows spread as the record's (2026-11-02)
+====================================================
 
 **Tried.** Measured, not adopted: each ``draw_ensemble`` member's long
 draws run at a flow drawn from the installation's own long draws before
@@ -32,8 +32,10 @@ the rest. The record had 4 long draws of 335 at 2 gal/min or more before
 2026-09-18, 1 of its 19 of 20 gal or more (2.28 gal/min, 05-04).
 
 **Why dropped.** It changes nothing on the record it is drawn from: this
-household's fast draws are too rare before the split to put one in a
-member on the evenings that ran out.
+household's fast draws are too rare before the split. Spread over all
+long draws it put no fast draw in a member on either evening that ran
+out; spread over the large ones, one on 09-29, 25.5 gal at 2.30 gal/min
+in a member that already ran cold, and none on 10-02.
 
 **Account.** :doc:`/how-to/simulate-heater` (``cold_share``);
 ``reference/sim-score/ensemble-cold-share-2026-11-02/`` in the checkout
