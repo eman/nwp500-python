@@ -35,9 +35,9 @@ the 79 with water in use from 27.7 (25.2 long) to 56.3 and 56.5, a mean
 min short to 112.7 and 114.5.
 
 **Why dropped.** Far short in every group. By construction none of the
-heat reaches the water below the condenser's top layer, under both
-probes, which stop the walk; the walks' layers were not kept. The excess
-barely mattered.
+condenser's heat goes in below its top layer, under both probes (only
+the layers' conduction carries any down), and the lower probe stops the
+walk; the walks' layers were not kept. The excess barely mattered.
 
 **Account.** :doc:`simulator`, "Accuracy". The scores and the patch are
 kept with the site's scores (``mixed-cold-recovery-2026-11-02``).
