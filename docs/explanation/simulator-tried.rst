@@ -30,10 +30,9 @@ the 16 came out 21.0 min off against 18.3 and the lower probe after the
 46 draws 1.89 against 1.74; the draw-free 5.1 against 4.8.
 
 **Why dropped.** Held out it is worse on the recoveries and the draws,
-and it leaves most of the fit period's long recoveries: the walk cools
-the tank too far at a draw with the compressor running on the same days
-as with it off (:doc:`simulator`, *Accuracy*), which no share fitted on
-one set of days takes out.
+and it leaves most of the fit period's long recoveries, where the walk
+cools the tank too far at a draw with the compressor running
+(:doc:`simulator`, *Accuracy*).
 
 **Account.** ``reference/sim-score/slow-draw-under-way-2026-11-02/`` in
 the checkout (``*-share-0.1.json``, ``perdraw.*``, ``rate.*``; not in

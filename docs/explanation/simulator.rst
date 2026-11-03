@@ -527,20 +527,24 @@ midnight of the record falls inside a timed draw.
 Most of the walk's extra cooling over those recoveries comes at the
 later draws inside them (measured 2026-11-02 on the same params). Over
 the 46 recoveries started inside a timed draw, from 15 minutes in, the
-walk's mean probe fell away from the record's by 2.9 degF an hour from 5
-minutes before to 10 after each later draw of 0.5 gal or more, against
-0.2 an hour in the spans with none: 80.6 of the 118.8 degF it fell away
-in all, summed over 5-minute spans. Over the 75 draws of 1 gal or more
-alone in their 12 minutes inside a recovery with water in use (a mean
-6.1 gal), from 3 minutes before to 12 after, the upper probe fell 2.83
-degF in the walk against 1.77 in the record, the lower 0.67 against
-0.01. The walk's mean probe fell 0.169 degF a gallon further than the
-record's from 05-01 to 09-17 (56 draws) and 0.057 on the other days
-(19); on the 13 held out, 0.022 less. These are the two sets of days the
-lower probe's error after a draw falls into with the compressor off
-(below), with the compressor on. A slower draw's share at 0.1 instead of
-0.25 did not take it out (:doc:`simulator-tried`, "The share at 0.1 on
-the score that splits a slower draw").
+walk's mean probe fell away from the record's by 2.9 degF an hour over
+the 20 minutes from 10-15 before each later draw of 0.5 gal or more to
+5-10 after, against 0.2 an hour in the spans with none: 80.6 of the
+118.8 degF it fell away in all, summed over 5-minute spans. Over the 75
+draws of 1 gal or more alone in their 12 minutes inside a recovery with
+water in use, from 10 minutes in to 12 before its end (a mean 6.1 gal),
+from 3 minutes before to 12 after, the upper probe fell 2.83 degF in the
+walk against 1.77 in the record, the lower 0.67 against 0.01. Before
+2026-09-18 the walk's mean probe fell 0.177 degF a gallon further than
+the record's (62 draws: 0.169 from 05-01 to 09-17, 56, and 0.273 in
+April, 6), its lower probe 0.93 degF further; on the 13 held out, 0.022
+a gallon less, the lower probe 0.69 less. That is the fit's split,
+before 2026-09-18 against after, not the two sets of days the lower
+probe's error after a draw falls into with the compressor off (below),
+which put April with the days from 09-18; with only 6 draws in April it
+may be either. A slower draw's share at 0.1 instead of 0.25 did not take
+it out (:doc:`simulator-tried`, "The share at 0.1 on the score that
+splits a slower draw").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
