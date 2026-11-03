@@ -15,8 +15,10 @@ after its draws (``Coast``), each event weighted alike. A fit walks
 every event at every trial, so it takes ``map_`` to spread them: the
 builtin ``map`` by default, an executor's ``map`` to use more cores.
 
-The record carries no word on which element heats; its element runs
-are taken as the upper's, where the heater runs its elements first.
+Where a frame says which element heats (``lower_element_on``), the
+lower element's minutes are heated in its layer; the rest of an element
+run, and every run of a frame that does not say, are the upper's, where
+the heater runs its elements first.
 
 Nothing here reads a file, the network or the clock.
 """

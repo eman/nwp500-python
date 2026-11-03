@@ -71,12 +71,12 @@ class Step:
     inlet_f: float
     #: Circulation running, and its own flow, gal/min.
     circulating: bool = False
-    #: Of ``element_on``, the lower element: it heats the bottom, not
-    #: the top.
-    lower_element_on: bool = False
     circulation_gpm: float = 0.0
     #: Whether ``inlet_f`` was measured (an inlet probe).
     inlet_measured: bool = False
+    #: Of ``element_on``, the lower element: it heats the bottom, not
+    #: the top.
+    lower_element_on: bool = False
     #: Circulation's flow over the span ``flow_gpm`` was read over, 0
     #: where it was off: a meter's figure over a trailing window still
     #: holds a run for a while after it stops. None: ``circulation_gpm``
