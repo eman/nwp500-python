@@ -13,6 +13,33 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The share at 0.1 on the score that splits a slower draw (2026-11-02)
+====================================================================
+
+**Tried.** Measured, not adopted, on the parameters fitted before
+2026-09-18 (the site's installation): ``DrawParams.undiluted_share`` at
+0.1 instead of 0.25, scored once ``sim_score`` split a slower draw under
+way at a recovery's start, which made the recoveries with water in use
+before 2026-09-18 a mean 25.2 min long. At 0.1 the fit period's draws
+had favoured it (below, "The slower draw's share at 0.1").
+
+**Found.** Before 2026-09-18 the 79 recoveries with water in use came
+out 26.2 min off against 27.7, a mean 23.6 long against 25.2, and the
+lower probe after the 207 draws 1.57 degF RMS against 1.78. Held out,
+the 16 came out 21.0 min off against 18.3 and the lower probe after the
+46 draws 1.89 against 1.74; the draw-free 5.1 against 4.8.
+
+**Why dropped.** Held out it is worse on the recoveries and the draws,
+and it leaves most of the fit period's long recoveries: the walk cools
+the tank too far at a draw with the compressor running on the same days
+as with it off (:doc:`simulator`, *Accuracy*), which no share fitted on
+one set of days takes out.
+
+**Account.** ``reference/sim-score/slow-draw-under-way-2026-11-02/`` in
+the checkout (``*-share-0.1.json``, ``perdraw.*``, ``rate.*``; not in
+the repository).
+
+
 A slower draw's rest at a start walked over its time (2026-11-02)
 =================================================================
 
