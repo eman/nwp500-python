@@ -36,7 +36,7 @@ with water in use from 27.7 (25.2 long) to 20.7 (17.0 long), 57.2 and
 47.6, 1.0 and 11.1 short.
 
 **Why dropped.** The span helps most of the recoveries with water in use
-before 2026-09-18 (64 of 73), not those held out (8 of 16), and makes
+before 2026-09-18 (66 of 79), not those held out (8 of 16), and makes
 most that start with the probes together worse (11 of 15), the mixed
 cold start further short; the scale lengthens nearly every recovery;
 both together are worse than either where it helped. None was refitted
