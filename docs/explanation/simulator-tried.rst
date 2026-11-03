@@ -33,10 +33,10 @@ at 5 to 8 gallons 0.98 in April (2 runs), 0.93 in July (46), 0.88 over
 08-01 to 08-14 (61), 0.86 from 08-15 to the step (4), 0.84 from the step
 to 09-30 (17) and 0.76 in October (24); at 8 to 12, 0.94 from 08-15 to
 the step (25) and 0.87 from it to 09-30 (4). So few runs on one side of
-the step do not fix its size. Only April's runs and those of the week of
-07-06 come within 3 % of the pump here. The showers (draws of 5 min or
-more at 0.6 gal/min or more) read a median 1.12 gal/min before the step
-(288) and 0.96 after (86), the months pooled.
+the step do not fix its size. Only the medians of April and of the week
+of 07-06 come within 3 % of the pump here. The showers (draws of 5 min
+or more at 0.6 gal/min or more) read a median 1.12 gal/min before the
+step (288) and 0.96 after (86), the months pooled.
 
 **Found.** The lower probe's fall to its lowest in the hour after the
 same 117 draws of 8 gal or more from 05-01 local to the step, the
@@ -50,14 +50,15 @@ step went from 25.8 min long (28.4 off) to 20.3 (23.5) and 18.8 (22.7),
 and the 10 draw-free, through the state the replay gives them, from 11.1
 off (0.3 short) to 11.6 (0.2 long) and 11.8 (0.4 long).
 
-**Why dropped.** The step's size the record does not fix, and the meter
-drifted besides. Over 0.90 to 0.81 the draws from 05-01 to the step go
-from 0.9 to 3.1 degF short, against 2.2 for those held out; April's go
-further from them; at 0.87 about four fifths of the recoveries' long run
-stays. Which of the meter's readings is right the record does not say,
-and the pump's figure is its own estimate, not a measure. The draws are
-kept as metered. A volume measured at a tap on today's meter would say
-which; a refit on draws in one meter's gallons would follow.
+**Why dropped.** The step's size the record does not fix, and at 5 to 8
+gallons the meter drifted besides. Over 0.90 to 0.81 the draws from
+05-01 to the step go from 0.9 to 3.1 degF short, against 2.2 for those
+held out; April's go further from them; at 0.87 about four fifths of the
+recoveries' long run stays. Which of the meter's readings is right the
+record does not say, and the pump's figure is its own estimate, not a
+measure. The draws are kept as metered. A volume measured at a tap on
+today's meter would say which; a refit on draws in one meter's gallons
+would follow.
 
 **Account.** :doc:`simulator`, "Accuracy". The scores and scripts are
 kept with the site's scores (``meter-step-2026-11-03``).
