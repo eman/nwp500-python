@@ -564,6 +564,44 @@ heat a kWh than the map; the record does not say which, though the 11
 draw-free recoveries held out came out 0.9 % under the meter's
 electricity on average (4.0 % off each).
 
+A recovery from a mixed cold tank runs short in the walk (measured
+2026-11-02 on the same params). On 2026-08-12 03:32 UTC, after four days
+in ``VACATION``, the probes read 84.6 and 85.3 degF, and the walk
+reached the 140.9 target 38.3 min early (340 against 378 min), on 7.3 %
+less electricity than the meter's. Over each 5 degF of the probes' mean
+from 90 to 140, the record's climb times the tank's mass, with its loss,
+came to 4,190-5,880 BTU/h, 0.96-1.08 of the map's heat, but the walk's
+probes climbed 1.11-1.15 times as fast as its own map's heat would warm
+the whole tank: its bottom layer, under the condenser, went from 82.8 to
+94.8 degF while the probes climbed 56, so the walk reached the target
+with some 7 of the 63.2 gal still cold. The heat is fitted as the whole
+tank's mass times the record's climb, so a walk climbs faster by the
+share of the tank it leaves unheated, whatever the real tank's bottom
+does. It does so in the mixed part of nearly every long draw-free
+recovery: over 20-minute stretches with the probes within 3 degF, the
+walk's climb came to 1.08-1.12 of its map's heat (a median 1.10) in each
+of the 11 draw-free recoveries from a lower probe under 120 degF with
+five such stretches or more, the record's to 0.98-1.07 (1.01; the map is
+fitted on such stretches). Before the probes come together the walk is
+slow instead: in the 11 of the 12 from a lower probe under 120 degF that
+started with the probes more than 3 degF apart, from 20 minutes in to
+the record's first minute with them within 3 degF (32-103 min long), the
+walk's probes' mean climbed a median 0.89 times as fast as the record's,
+and its lower probe 0.93, slower in 10 of the 11. In those, the two
+partly cancel; one from a mixed tank has only the fast part. The 11
+recoveries since 2026-04-17 that started with the upper probe under 125
+degF came out a mean 2.8 % of the record's minutes short, 8 of them
+short, against 10 % long for the other 105. Stirring the water below the
+condenser into its pool through a run, not only at its start, took that
+one to 2.7 min long and those of 2026-09-30 02:51 and 10-23 22:48 to 5.2
+and 4.4 min short, but lengthened nearly every recovery by about as
+much, and so did the condenser's span taken down to the bottom
+(:doc:`simulator-tried`, "The water below the condenser stirred through
+a run", "The condenser's span reaching the bottom"). Moving the
+condenser's span higher or scaling the heat down, against the two
+errors, did not take them out together (:doc:`simulator-tried`, "The
+condenser's span higher, or the heat scaled down").
+
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
 the 29 held-out local days the record observed throughout, each walked

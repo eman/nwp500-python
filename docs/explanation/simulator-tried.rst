@@ -13,6 +13,101 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The condenser's span higher, or the heat scaled down (2026-11-02)
+=================================================================
+
+**Tried.** On the parameters in use, no refit, over the 116 scored
+recoveries from 2026-04-17, against the two errors of :doc:`simulator`'s
+"Accuracy" (the walk slow before its probes come together, about a tenth
+fast once they have): the condenser's span to 0.40 at its top instead of
+the fitted 0.272, so its heat reaches the lower probe sooner; the heat
+map scaled by 0.91 (its heat and its slopes), so a mixed climb comes at
+the record's pace; and both.
+
+**Found.** Per recovery, minutes off (mean bias), for the span, the
+scale and both: the 11 held-out draw-free from 4.8 (2.2 long) to 4.0
+(0.6 long), 19.5 (18.9 long) and 17.5 (16.9 long), their electricity
+from 4.0 % to 3.8 %, 10.9 % and 12.0 % off; the 16 held out with water
+in use from 18.3 (1.7 short) to 19.6 (8.9 short), 42.4 and 32.9; before
+2026-09-18 the 10 draw-free from 11.1 to 18.1, 14.6 and 19.6, their
+electricity from 20.1 % to 39.0 %, 28.1 % and 46.1 % off, and the 79
+with water in use from 27.7 (25.2 long) to 20.7 (17.0 long), 57.2 and
+47.5. The recovery of 2026-08-12 03:32 UTC went from 38.3 min short to
+47.6, 1.0 and 11.1 short.
+
+**Why dropped.** The span helps most of the recoveries with water in use
+before 2026-09-18 (66 of 79), not those held out (8 of 16), and makes
+most that start with the probes together worse (11 of 15), the mixed
+cold start further short; the scale lengthens nearly every recovery;
+both together are worse than either where it helped. None was refitted
+with the tank's other terms, which were fitted together with the span
+and the map as they are.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores are kept with the
+site's scores (``mixed-cold-recovery-2026-11-02``).
+
+
+The condenser's span reaching the bottom (2026-11-02)
+=====================================================
+
+**Tried.** The condenser's span from 0.08 or 0 instead of the fitted
+0.159 (``TankParams.condenser_span``, to 0.272 as fitted), the other
+parameters as in use, no refit, over the 116 scored recoveries from
+2026-04-17: the bottom taking the condenser's heat itself, rather than
+by the stir of the entry below.
+
+**Found.** Per recovery, minutes off (mean bias), at 0.08 and at 0: the
+11 held-out draw-free went from 4.8 (2.2 long) to 26.0 (22.9 long) and
+44.6 (38.3 long), their electricity from 4.0 % to 15.7 % and 27.6 % off;
+the 16 held out with water in use from 18.3 (1.7 short) to 45.6 and
+64.7; before 2026-09-18 the 10 draw-free from 11.1 to 14.0 and 22.7, the
+79 with water in use from 27.7 to 57.9 and 80.0. At 0 the three that ran
+furthest short came right as with the stir: 2026-08-12 03:32 UTC 3.1 min
+long, 09-30 02:51 4.8 short, 10-23 22:48 4.1 short.
+
+**Why dropped.** As the stir: a bottom that takes heat lengthens nearly
+every recovery, so, on the parameters fitted with the span at 0.159, the
+walk's balance on the others rests on a bottom that stays cold, and the
+record's probes do not show which recoveries' bottoms take heat.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores are kept with the
+site's scores (``mixed-cold-recovery-2026-11-02``).
+
+
+The water below the condenser stirred through a run (2026-11-02)
+================================================================
+
+**Tried.** The start's stir (``stratified.stir``: the water the
+condenser wraps and the water below it pooled to their mean) on every
+step while the compressor heats, not only at its start, in the walk and
+in the replay that starts it, on the parameters in use (fitted before
+2026-09-18, the share at 0.25), over the 116 scored recoveries from
+2026-04-17. A recovery from a mixed cold tank had climbed 1.11-1.15
+times as fast as the map's heat warms the whole tank, its bottom left
+cold (:doc:`simulator`, "Accuracy").
+
+**Found.** Per recovery, minutes off (mean bias): the 11 held-out
+draw-free went from 4.8 (2.2 long) to 44.4 (38.2 long), their
+electricity from 4.0 % to 27.4 % off; the 16 held out with water in use
+from 18.3 (1.7 short) to 64.5 (63.3 long); before 2026-09-18 the 10
+draw-free from 11.1 to 22.5 and the 79 with water in use from 27.7 to
+79.8. It lengthened 106 of the 116, by a median 53.9 min. Three of the
+11 that started with the upper probe under 125 degF came right, the
+three that had run furthest short: 2026-08-12 03:32 UTC, from a mixed
+tank, from 38.3 min short to 2.7 long, 09-30 02:51 from 46.1 to 5.2
+short, 10-23 22:48 from 61.4 to 4.4 short; the other 8 ended 34.4-87.7
+min long.
+
+**Why dropped.** Far worse everywhere else. The lengthening was about as
+large whatever the start, so the three came right only because they had
+started about as far short; the trial does not single out what a mixed
+start lacks.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores, the band table
+and the patch are kept with the site's scores
+(``mixed-cold-recovery-2026-11-02``).
+
+
 A fast draw walked over its time in the replay (2026-11-02)
 ===========================================================
 
