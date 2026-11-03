@@ -30,7 +30,7 @@ draw-free went from 4.8 (2.2 long) to 44.4 (38.2 long), their
 electricity from 4.0 % to 27.4 % off; the 16 held out with water in use
 from 18.3 (1.7 short) to 64.5 (63.3 long); before 2026-09-18 the 10
 draw-free from 11.1 to 22.5 and the 79 with water in use from 27.7 to
-79.8. It lengthened 106 of the 116, by a median 53.0 min. Three of the
+79.8. It lengthened 106 of the 116, by a median 53.9 min. Three of the
 11 that started with the upper probe under 125 degF came right, the
 three that had run furthest short: 2026-08-12 03:32 UTC, from a mixed
 tank, from 38.3 min short to 2.7 long, 09-30 02:51 from 46.1 to 5.2
