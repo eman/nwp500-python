@@ -748,7 +748,15 @@ the lower probe's error after a draw"). On these draws, 2026-04-17 to
 should take the walk as falling about 1.5 degF too far from May to
 mid-September and about 2 too short in late April and from
 mid-September, beside the spread of about 4 degF a draw. Which set a day
-outside them falls in is not known.
+outside them falls in is not known. Left to place the split themselves
+(measured 2026-11-03), the 154 draws from 05-01 put it between
+2026-09-12 17:02 and 09-13 19:06 UTC, a mean 1.69 degF too far before
+(118) and 2.30 too short after (36), and a step there fits them better
+than a line over the days (a squared error of 2,201 against 2,378, of
+2,642 about the mean); the record's 36 after it cannot tell a step from
+the season turning. The recoveries with water in use part about two
+weeks earlier, between 08-29 16:52 and 08-30 16:56 UTC: 11.5 % of the
+record's minutes long on average before (67) and 1.9 % after (28).
 
 Circulation running through a summer recovery slows the walk's more than
 the record's (measured 2026-11-02 on the parameters in use, the share at
