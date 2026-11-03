@@ -724,57 +724,67 @@ minutes and stays so, over all the draws. In the other days the two
 agree to 15 minutes, after which the record's lower probe goes on
 falling: over the clean draws timed to end within 15 minutes, 1.7 degF
 from 15 to 60 minutes after the draw (31) against the walk's 0.8, where
-from 05-01 to 09-17 it falls 1.3 (74) against 0.8. Nothing the walk is
-given follows the shift. In quiet hours, with no draw, heating or
-circulation in the hour or the 30 minutes before, the walk's lower probe
-drifts as the record's to within 0.13 degF an hour in every half-month
-(25 hours each). At each draw the replay's lower probe sits within 0.17
-degF of the record's (0.03 for 95 % of the draws), and its upper within
-0.28 (0.06), before the correction to them. The air by the heater (a
-mean 73.3 and 71.8 degF), the gallons and flow and the water drawn since
-the last heating do not separate the two sets. The time since the last
-heating (a mean 462 and 338 minutes) and the minutes of water in use
-after the draw (3.0 and 1.0) differ in their means (not by rank), but
-the first would move the error the other way, as it follows it from
-05-01 to 09-17 (a correlation of +0.30), and the second barely follows
-it in either. None of these follows the error inside either set more
-strongly than the tank's temperature at the draw does from 05-01 to
-09-17 (-0.33; -0.02 in the other days). Moving the mains 5 degF either
-way moves the error from 09-18 by 0.7 degF, so it would take them some
-15 degF colder than the model, where an inlet probe read them 1.5 degF
-warmer over 09-20..10-28 (:doc:`simulator-tried`, "The mains colder, for
-the lower probe's error after a draw"). On these draws, 2026-04-17 to
-10-25, a scheduler reading the lower probe's margin after a large draw
-should take the walk as falling about 1.5 degF too far from May to
-mid-September and about 2 too short in late April and from
-mid-September, beside the spread of about 4 degF a draw. Which set a day
-outside them falls in is not known. Left to place the split themselves
-(measured 2026-11-03), the 153 draws from 05-01 put it between
-2026-09-12 17:02 and 09-13 19:06 UTC, a mean 1.67 degF too far before
-(117) and 2.30 too short after (36), no split of them shuffled as good
-in 2,000, and a step there fits them better than a line over the days (a
-squared error of 2,195 against 2,376, of 2,630 about the mean); the
-record's 36 after it cannot tell a step from the season turning. The
-recoveries with water in use have their best split about two weeks
-earlier, between 08-29 16:52 and 08-30 16:56 UTC, 11.5 % of the record's
-minutes long on average before (67) and 1.9 % after (28), but as good a
-split came of them shuffled in 6 % of 2,000. The lower probe's split
-holds a step in the house meter, whose gallons size the draws: at
-2026-09-12 19:51 UTC the meter (a Droplet) began reading the circulation
-pump's runs lower (:doc:`standby-loss`, "What the pump's flow says").
-Its reading of the pump's runs of 5 to 8 gallons also fell through the
-record, from 0.98 in April to 0.76 in October (at 8 to 12 it held at
-about 0.94 from July to the step), and the runs either side of the step
-are too few to fix the step's size. With each draw before then taken as
-0.90, 0.87 or 0.81 of its metered gallons, in the replay and the walk,
-the same 117 draws come out 0.92, 1.66 and 3.09 degF too short (standard
-errors about 0.3), against 2.2 (0.8) for those held out, whose draws it
-does not scale (measured 2026-11-03, :doc:`simulator-tried`, "The draws
-before the meter's step scaled down"). April's do not follow: its 16
-draws go from 1.6 to 4.9, 5.9 and 7.7 degF short. Which of the meter's
-readings is right the record does not say. On these parameters, fitted
-on the earlier gallons, a walk on today's meter falls about 2 degF short
-after a large draw, as at the held-out draws.
+from 05-01 to 09-17 it falls 1.3 (74) against 0.8. Water the house's
+draw detector did not count does not account for it (measured
+2026-11-03, the draws of 8 gal or more with the compressor off, no
+circulation in the hour and no draw counted from 15 to 60 minutes
+after). After the house meter's step at 2026-09-12 19:51 UTC, after 9 of
+21 such draws the meter read 0.3 to 1.2 gal over those 45 minutes while
+the detector showed no demand, where none of 753 quiet 45-minute windows
+after the step read 0.3 gal (8 % before it); but the record's lower
+probe fell 0.80 degF further than the walk's over them in those 9 and
+0.85 in the 4 that read less (one, 10-02 00:50 UTC, set aside: 9.0 degF
+the other way). Where the detector still showed a draw's tail or demand
+it fell 3.69 further (7). Nothing the walk is given follows the shift.
+In quiet hours, with no draw, heating or circulation in the hour or the
+30 minutes before, the walk's lower probe drifts as the record's to
+within 0.13 degF an hour in every half-month (25 hours each). At each
+draw the replay's lower probe sits within 0.17 degF of the record's
+(0.03 for 95 % of the draws), and its upper within 0.28 (0.06), before
+the correction to them. The air by the heater (a mean 73.3 and 71.8
+degF), the gallons and flow and the water drawn since the last heating
+do not separate the two sets. The time since the last heating (a mean
+462 and 338 minutes) and the minutes of water in use after the draw (3.0
+and 1.0) differ in their means (not by rank), but the first would move
+the error the other way, as it follows it from 05-01 to 09-17 (a
+correlation of +0.30), and the second barely follows it in either. None
+of these follows the error inside either set more strongly than the
+tank's temperature at the draw does from 05-01 to 09-17 (-0.33; -0.02 in
+the other days). Moving the mains 5 degF either way moves the error from
+09-18 by 0.7 degF, so it would take them some 15 degF colder than the
+model, where an inlet probe read them 1.5 degF warmer over 09-20..10-28
+(:doc:`simulator-tried`, "The mains colder, for the lower probe's error
+after a draw"). On these draws, 2026-04-17 to 10-25, a scheduler reading
+the lower probe's margin after a large draw should take the walk as
+falling about 1.5 degF too far from May to mid-September and about 2 too
+short in late April and from mid-September, beside the spread of about 4
+degF a draw. Which set a day outside them falls in is not known. Left to
+place the split themselves (measured 2026-11-03), the 153 draws from
+05-01 put it between 2026-09-12 17:02 and 09-13 19:06 UTC, a mean 1.67
+degF too far before (117) and 2.30 too short after (36), no split of
+them shuffled as good in 2,000, and a step there fits them better than a
+line over the days (a squared error of 2,195 against 2,376, of 2,630
+about the mean); the record's 36 after it cannot tell a step from the
+season turning. The recoveries with water in use have their best split
+about two weeks earlier, between 08-29 16:52 and 08-30 16:56 UTC, 11.5 %
+of the record's minutes long on average before (67) and 1.9 % after
+(28), but as good a split came of them shuffled in 6 % of 2,000. The
+lower probe's split holds a step in the house meter, whose gallons size
+the draws: at 2026-09-12 19:51 UTC the meter (a Droplet) began reading
+the circulation pump's runs lower (:doc:`standby-loss`, "What the pump's
+flow says"). Its reading of the pump's runs of 5 to 8 gallons also fell
+through the record, from 0.98 in April to 0.76 in October (at 8 to 12 it
+held at about 0.94 from July to the step), and the runs either side of
+the step are too few to fix the step's size. With each draw before then
+taken as 0.90, 0.87 or 0.81 of its metered gallons, in the replay and
+the walk, the same 117 draws come out 0.92, 1.66 and 3.09 degF too short
+(standard errors about 0.3), against 2.2 (0.8) for those held out, whose
+draws it does not scale (measured 2026-11-03, :doc:`simulator-tried`,
+"The draws before the meter's step scaled down"). April's do not follow:
+its 16 draws go from 1.6 to 4.9, 5.9 and 7.7 degF short. Which of the
+meter's readings is right the record does not say. On these parameters,
+fitted on the earlier gallons, a walk on today's meter falls about 2
+degF short after a large draw, as at the held-out draws.
 
 Circulation running through a summer recovery slows the walk's more than
 the record's (measured 2026-11-02 on the parameters in use, the share at
