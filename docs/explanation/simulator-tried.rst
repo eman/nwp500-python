@@ -13,6 +13,44 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The draws before the meter's step scaled down (2026-11-03)
+==========================================================
+
+**Tried.** Every draw before 2026-09-12 19:51 UTC, when the house meter
+(a Droplet) whose gallons size the draws began reading the circulation
+pump's runs lower, taken as 0.81 of its metered gallons, in the replay
+and the walk, on the parameters in use, no refit: against the lower
+probe's error after a large draw parting there and the recoveries with
+water in use running long before 2026-09-18 (:doc:`simulator`,
+"Accuracy").
+
+**Found.** The lower probe's fall to its lowest in the hour after the
+same 117 draws of 8 gal or more from 05-01 local to the step, the
+compressor off, went from a mean 1.67 degF too far to 3.09 too short;
+the 4 after the step before 2026-09-18 stayed at 3.03 (the held-out
+draws, which it does not scale, were not rerun). Before the step, the 76
+recoveries with water in use went from 25.8 min long (28.4 off) to 18.8
+(22.7), and the 10 draw-free, through the state the replay gives them,
+from 11.1 off (0.3 short) to 11.8 (0.4 long). Over the pump's runs of 2
+min or more with no draw within 5 minutes, the meter's gallons over the
+pump's, weekly medians over the weeks with two runs or more, were 0.98
+in April and early July (none in May and June), 0.87 to 0.96 from late
+July to the step, 0.85 the week after and 0.73 to 0.79 in October. The
+showers (draws of 5 min or more at 0.6 gal/min or more) read a median
+1.12 gal/min before the step (288) and 0.96 after (86).
+
+**Why dropped.** It takes the two sets of draws alike, but leaves both
+short and three quarters of the recoveries' long run. Which of the
+meter's readings is right the record does not say: its ratio to the pump
+drifted as well as stepped, and the pump's figure is its own estimate,
+not a measure. The draws are kept as metered. A volume measured at a tap
+on today's meter would say which; a refit on draws in one meter's
+gallons would follow.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores and scripts are
+kept with the site's scores (``meter-step-2026-11-03``).
+
+
 The condenser's heat rising as a plume (2026-11-03)
 ===================================================
 

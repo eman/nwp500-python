@@ -758,7 +758,19 @@ record's 36 after it cannot tell a step from the season turning. The
 recoveries with water in use have their best split about two weeks
 earlier, between 08-29 16:52 and 08-30 16:56 UTC, 11.5 % of the record's
 minutes long on average before (67) and 1.9 % after (28), but as good a
-split came of them shuffled in 6 % of 2,000.
+split came of them shuffled in 6 % of 2,000. The lower probe's split
+falls on the house meter's, whose gallons size the draws: at 2026-09-12
+19:51 UTC the meter (a Droplet) began reading the circulation pump's
+runs lower (:doc:`standby-loss`, "What the pump's flow says"). With each
+draw before then taken as 0.81 of its metered gallons, in the replay and
+the walk, the same 117 draws come out a mean 3.09 degF too short, where
+the 4 after it in the fit period stay at 3.03 and those held out, whose
+draws it does not scale, at 2.2 as measured: the two sets alike
+(measured 2026-11-03, :doc:`simulator-tried`, "The draws before the
+meter's step scaled down"). Which of the meter's readings is right the
+record does not say. On these parameters, fitted on the earlier gallons,
+a walk on today's meter falls about 2 degF short after a large draw, as
+at the held-out draws.
 
 Circulation running through a summer recovery slows the walk's more than
 the record's (measured 2026-11-02 on the parameters in use, the share at
