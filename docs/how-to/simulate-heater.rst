@@ -738,6 +738,27 @@ mean over their variance, below, is 1 for a right spread:
   (:doc:`/explanation/simulator-tried`, "Long draws counted by the
   day"): the spread the two halves asked for differed too far for one
   fitted on either to carry to the other.
+- **Running cold**: on the 29 held-out days of the day backtest
+  (2026-09-18 to 10-25), each walked as the heater was told over it on
+  50 members from the issue before it, on the installation's parameters
+  (a draw at 2 gal/min or faster taking the tank's water whole,
+  ``DrawParams.undiluted_gpm``), ``cold_share`` was 0.08 and 0.02 on the
+  two days the tank ran out (the evenings of 09-29 and 10-02, local) and
+  a mean 0.04 on the other 27, up to 0.18 (10-14): no better, as a
+  forecast of a day running cold, than the base rate of 2 in 29 (a Brier
+  score of 0.065 against 0.064). Both days ran out on one draw faster
+  than 2 gal/min: 30.8 gal at 2.35 and 53.8 at 2.69. A member's draw
+  runs at its slot's mean flow, which no slot puts at 2 gal/min: none of
+  the members' 2969 draws of 4 gal or more over the 29 days reached it
+  (1.73 the fastest). Spreading the members' flows as the installation's
+  long draws before 2026-09-18 spread (each the slot's flow times a
+  record draw's over the median), and, apart, the members' draws of 20
+  gal or more as the record's 19 such, moved no day's share
+  (:doc:`/explanation/simulator-tried`, "A member's flows spread as the
+  record's"): 4 of the installation's 335 long draws, and 1 of those 19,
+  ran that fast. Read ``cold_share`` as how often members drawing at
+  their slots' mean flows run cold, not as a forecast of this tank
+  running cold.
 
 The members carry the issue's means as it publishes them: the evening's
 gap is the forecast's.
