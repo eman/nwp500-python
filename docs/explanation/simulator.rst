@@ -583,8 +583,9 @@ short, 8 of them short, against 10 % long for the other 105. Stirring
 the water below the condenser into its pool through a run, not only at
 its start, took that one to 2.7 min long and those of 2026-09-30 02:51
 and 10-23 22:48 to 5.2 and 4.4 min short, but lengthened nearly every
-recovery by about as much (:doc:`simulator-tried`, "The water below the
-condenser stirred through a run").
+recovery by about as much, and so did the condenser's span taken down to
+the bottom (:doc:`simulator-tried`, "The water below the condenser
+stirred through a run", "The condenser's span reaching the bottom").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:

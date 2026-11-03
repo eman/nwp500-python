@@ -13,6 +13,33 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The condenser's span reaching the bottom (2026-11-02)
+=====================================================
+
+**Tried.** The condenser's span from 0.08 or 0 instead of the fitted
+0.159 (``TankParams.condenser_span``, to 0.272 as fitted), the other
+parameters as in use, no refit, over the 116 scored recoveries from
+2026-04-17: the bottom taking the condenser's heat itself, rather than
+by the stir of the entry below.
+
+**Found.** Per recovery, minutes off (mean bias), at 0.08 and at 0: the
+11 held-out draw-free went from 4.8 (2.2 long) to 26.0 (22.9 long) and
+44.6 (38.3 long), their electricity from 4.0 % to 15.7 % and 27.6 % off;
+the 16 held out with water in use from 18.3 (1.7 short) to 45.6 and
+64.7; before 2026-09-18 the 10 draw-free from 11.1 to 14.0 and 22.7, the
+79 with water in use from 27.7 to 57.9 and 80.0. At 0 the three that ran
+furthest short came right as with the stir: 2026-08-12 03:32 UTC 3.1 min
+long, 09-30 02:51 4.8 short, 10-23 22:48 4.1 short.
+
+**Why dropped.** As the stir: a bottom that takes heat lengthens nearly
+every recovery, so the walk's balance on the others rests on a bottom
+that stays cold, and the record's probes do not show which recoveries'
+bottoms take heat.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores are kept with the
+site's scores (``mixed-cold-recovery-2026-11-02``).
+
+
 The water below the condenser stirred through a run (2026-11-02)
 ================================================================
 
