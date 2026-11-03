@@ -13,6 +13,49 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The tank refitted with the earlier draws on today's meter (2026-11-03)
+======================================================================
+
+**Tried.** The site's tank refitted on the record before 2026-09-18 on
+the code of 2026-11-03 (21fffe0), every draw before the house meter's
+step (2026-09-12 19:51 UTC) taken as 0.90 of its metered gallons, so
+that the draws the fit reads are in today's meter's gallons ("The draws
+before the meter's step scaled down", below), beside the same refit on
+the draws as metered; both started from the code's own parameters (the
+tank fitted on the whole record to 10-26), as "The tank refitted with
+the slower draw's share fixed" (below) was. At 0.90 the refit was also
+started from the parameters in use (fitted before 2026-09-18, f7e7f48).
+Held out from 2026-09-18 and scored against the parameters in use on the
+same code.
+
+**Found.** On the draws as metered the refit left the code's tank for
+the place the share's refit had found (the inlet zone 25 % smaller, the
+bottom's loss 38 % less, the lower probe's spread 40 % wider), and
+scored as that one did: the recoveries 20.0 min off (14.5-25.3) against
+12.8 (8.7-17.7), the draw-free 9.5 against 4.8, those with water in use
+27.3 against 18.3, the lower probe after the 46 draws 1.99 degF RMS
+against 1.74; the quiet windows' lower probe 0.42 against 0.48 and the
+day's electricity 13.7 % off against 14.3. At 0.90 it kept the code's
+tank and losses as they were, refitting only the heat pump's maps (its
+heat 0.5 % less, its power's slope by the air 8.4 % more): the
+recoveries 12.2 (8.3-16.7), the draw-free 4.8, with water in use 17.3,
+the lower probe 1.71, the quiet windows' upper probe 0.193 against
+0.205, the day's electricity 14.1 %, all inside the intervals of the
+parameters in use. Started from the parameters in use, at 0.90 it moved
+no term by more than 0.1 % and scored as they do.
+
+**Why dropped.** At 0.90 the fit stays where it starts, from either, so
+it adds no parameters of its own; the scores of the code's tank sit with
+those in use. What it shows is the earlier refit's fault: the draws as
+metered pull a fit off the code's tank to a worse place, and on today's
+meter's scale they do not. The scale itself is not measured ("The draws
+before the meter's step scaled down"); the parameters in use are kept.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores, drivers and
+parameters are kept with the site's scores
+(``onemeter-refit-2026-11-03``).
+
+
 A refit on today's meter alone (2026-11-03)
 ===========================================
 
