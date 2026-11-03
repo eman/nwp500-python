@@ -455,9 +455,10 @@ class TestAFastDraw:
     def test_under_way_at_a_start_is_split_there(
         self, site: sim.HeaterParams
     ) -> None:
-        """A fast draw running when an event starts: the replay takes
-        what it delivered by then, the event's walk the rest from its
-        start, at the draw's flow; a slow one is all the replay's."""
+        """A draw running when an event starts: the replay takes what
+        it delivered by then, the event's walk the rest from its start,
+        a fast one's at the draw's flow, a slow one's all at the start,
+        as the score walks a slow draw at its onset."""
         record = tank_fit.TankRecord(
             start=T0,
             upper_f=np.full(60, 130.0),
@@ -470,13 +471,15 @@ class TestAFastDraw:
             draw_seconds={T0: 720.0, T0 + timedelta(minutes=1): 600.0},
         )
         at = T0 + timedelta(minutes=5)
-        part = ss._ran_by(record, record, site, at)  # pyright: ignore[reportPrivateUsage]
-        assert part.draws == ((T0, 12.5), (T0 + timedelta(minutes=1), 10.0))
+        part = ss._ran_by(record, record, at)  # pyright: ignore[reportPrivateUsage]
+        assert part.draws == ((T0, 12.5), (T0 + timedelta(minutes=1), 4.0))
         loads = ss._loads(record, at, at + timedelta(minutes=30), (), site)  # pyright: ignore[reportPrivateUsage]
-        (rest,) = loads.draws
+        rest, slow = loads.draws
         assert (rest.at, rest.duration_s) == (at, 420.0)
         assert rest.gallons == pytest.approx(17.5)
         assert rest.flow_gpm == pytest.approx(2.5)
+        assert (slow.at, slow.duration_s) == (at, 0.0)
+        assert slow.gallons == pytest.approx(6.0)
         # At the threshold exactly, the rest stays as fast as the draw
         # though its flow is recomputed from its pieces.
         edge = replace(
@@ -509,10 +512,19 @@ class TestAFastDraw:
             )
         got = ss._state(site, late, inside, 130.0, 130.0, split=True)  # pyright: ignore[reportPrivateUsage]
         assert got.layers_f == layers[0] != layers[1]
+        # With no undiluted flow, every draw is slow: each rest is all
+        # at the start.
         valved = replace(site, draw=replace(site.draw, undiluted_gpm=None))
-        assert ss._ran_by(record, record, valved, at) == record  # pyright: ignore[reportPrivateUsage]
-        assert not ss._loads(
+        rests = ss._loads(
             record, at, at + timedelta(minutes=30), (), valved
+        ).draws  # pyright: ignore[reportPrivateUsage]
+        assert [(d.at, d.duration_s) for d in rests] == [(at, 0.0)] * 2
+        assert [d.gallons for d in rests] == pytest.approx([17.5, 6.0])
+        # Untimed, a draw is the replay's whole.
+        untimed = replace(record, draw_seconds={})
+        assert ss._ran_by(record, untimed, at) == record  # pyright: ignore[reportPrivateUsage]
+        assert not ss._loads(
+            untimed, at, at + timedelta(minutes=30), (), site
         ).draws  # pyright: ignore[reportPrivateUsage]
 
 
