@@ -597,44 +597,47 @@ its standing settings, so every change is weighed with what it left:
 Each tail starts from its walk's end (``end_state``, ``end_history``),
 with the tail's settings written at its start over whatever the walk
 left in force: a boost left at 140 °F is returned to the standing
-setpoint, as the heater would be. A Heat Pump write a walk left held
-in a TOU window is withdrawn at a Heat Pump tail's start, as a direct
-write withdraws one. An element mode held, carried into a tail
-standing in that mode, stays held to the window's close, as one
-written inside a window would be; a tail standing in another mode
-writes it over the hold. ``Carried.energy_by_slot`` holds the
-walk's electricity and its tail's, for any tariff; ``input_wh`` is
+setpoint, as the heater would be. A Heat Pump write a walk left held in
+a TOU window is withdrawn at a Heat Pump tail's start, as a direct write
+withdraws one. An element mode held, carried into a tail standing in
+that mode, stays held to the window's close, as one written inside a
+window would be: the heater was measured holding a direct write of one
+there and landing it at the close (:doc:`schedule-operation`), so
+writing it again changes nothing, and the tail is walked on past the
+landing before it counts alike. The same unit's history also has two
+switches into an element mode that took inside a window: a heater that
+takes one so heats sooner than its tail is walked. A tail standing in
+another mode writes it over the hold. ``Carried.energy_by_slot`` holds
+the walk's electricity and its tail's, for any tariff; ``input_wh`` is
 their sum.
 
 The comparison is whole only when the tails end alike:
 ``Carried.settled`` says each layer at the tail's end is within
 ``sim.SETTLED_F`` (0.5 °F) of the first walk's tail's, with the same
-tails going on alike (``heating_alike``: each tail walked on as
-itself, its settings, writes and schedules going on, with no water
-drawn and no circulation starting past its end, beyond every hold,
-pending start, lockout, element heat and held mode still due at
-either's end and every TOU window open on the way, up to 16 h
-(``engine.RECOVERY_AHEAD``), spends the same
-electricity and ends with the same layers; a run, or a start pending
-or held off, in one tail and not another is heat still to pay for),
-and
-``residual_wh`` is the heat left over that the tail did not value.
-Lengthen the tail until every walk is settled; one that runs through
-the recovery the heater makes anyway usually is. Circulation runs
-starting past the tail's end are not run, by the tail or its walk on:
-the runs are merged as ``simulate`` merges them (no farther apart
-than ``CirculationParams.run_gap_min``), those starting before the end are
-kept, a run under way there goes on to its given end, and a gap merged
-across the end flows up to it. What looks past the end (a recovery
-model's climb, a TOU cap judged on a recovery under way) sees none of
-the runs dropped, so a recovery running at the tail's end has its stop
-judged without them, and with a ``recovery`` model the tail's own
-heating is paced without them. Give the tail no run starting at or
-after its end and it is ``simulate``'s. Walks made with
-``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``)
-are carried on with the same, passed to ``carry_on``; TOU windows
-given in force (``tou_windows_in_force``) are the tail's, over its
-span.
+tails going on alike (``heating_alike``: each tail walked on as itself,
+its settings, writes and schedules going on, with no water drawn and no
+circulation starting past its end, beyond every hold, pending start,
+lockout, element heat and held mode still due at either's end and every
+TOU window open on the way, spends the same electricity and ends with
+the same layers; a run, or a start pending or held off, in one tail and
+not another is heat still to pay for; walked on no farther than 8 days,
+``sim.carry.GO_ON_MAX``, so a tail owing an instant or a window's close
+past that is not counted alike), and ``residual_wh`` is the heat left
+over that the tail did not value. Lengthen the tail until every walk is
+settled; one that runs through the recovery the heater makes anyway
+usually is. Circulation runs starting past the tail's end are not run,
+by the tail or its walk on: the runs are merged as ``simulate`` merges
+them (no farther apart than ``CirculationParams.run_gap_min``), those
+starting before the end are kept, a run under way there goes on to its
+given end, and a gap merged across the end flows up to it. What looks
+past the end (a recovery model's climb, a TOU cap judged on a recovery
+under way) sees none of the runs dropped, so a recovery running at the
+tail's end has its stop judged without them, and with a ``recovery``
+model the tail's own heating is paced without them. Give the tail no run
+starting at or after its end and it is ``simulate``'s. Walks made with
+``simulate``'s keyword inputs (a ``recovery`` model, ``start_hold``) are
+carried on with the same, passed to ``carry_on``; TOU windows given in
+force (``tou_windows_in_force``) are the tail's, over its span.
 
 
 Weigh candidates over many households

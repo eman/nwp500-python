@@ -52,8 +52,14 @@ SETTLED_F = 0.5
 #: hold's end, a pending start, a lockout's release, an element's heat
 #: reaching the water, a held mode landing, a capped stop's window
 #: closing, the close of a TOU window in force or opening on the way)
-#: each tail is walked on to see it go on, up to ``RECOVERY_AHEAD``.
+#: each tail is walked on to see it go on, up to ``GO_ON_MAX``.
 GO_ON_PAST = timedelta(minutes=1)
+#: The farthest past their end the tails are walked on to see them go
+#: on: a week and a day, so a window a weekly schedule lays out closes
+#: within it unless the schedule leaves no minute of the week outside
+#: one. Tails still owing an instant or a window's close past it are
+#: not shown going on alike (``Carried.heating_alike``).
+GO_ON_MAX = timedelta(days=8)
 #: How near, Wh, the electricity of a tail walked on must come to the
 #: first walk's tail's for the two to go on alike.
 GO_ON_WH = 1.0
@@ -78,14 +84,15 @@ class Carried:
     #: at any tail's end (a start's hold ending, a start pending, the
     #: restart lockout releasing, an element's heat reaching the water,
     #: a held mode landing, a capped stop's window closing) and every
-    #: TOU window open on the way, up to
-    #: ``RECOVERY_AHEAD``, and ``GO_ON_PAST`` more, spending the same
-    #: electricity past the end, within ``GO_ON_WH``, and ending with
-    #: the same layers, within ``SETTLED_F`` (an element's heat still
-    #: on its way is in the water by then). Heating under way, or a
-    #: start a window holds off, in one and not the other is heat one
-    #: is still to pay for; a lockout with no start wanted in it is
-    #: none.
+    #: TOU window open on the way, and ``GO_ON_PAST`` more, spending
+    #: the same electricity past the end, within ``GO_ON_WH``, and
+    #: ending with the same layers, within ``SETTLED_F`` (an element's
+    #: heat still on its way is in the water by then). Heating under
+    #: way, or a start a window holds off, in one and not the other is
+    #: heat one is still to pay for; a lockout with no start wanted in
+    #: it is none. False for every walk, the first included, when that
+    #: is more than ``GO_ON_MAX`` past the end: walked on no farther,
+    #: the tails are not shown going on alike.
     heating_alike: bool
 
     @property
@@ -211,7 +218,7 @@ def carry_on(
         tails.append(simulate(scenario, params, **options))
     lay = layout(params)
     ends = [_layers(t) for t in tails]
-    gone_on = _go_on(scenarios, tails, params, options)
+    gone_on, shown = _go_on(scenarios, tails, params, options)
     first = ends[0]
     first_wh = energy_btu(lay, TankState(first)) / BTU_PER_WH
     return tuple(
@@ -220,7 +227,7 @@ def carry_on(
             tail=t,
             residual_wh=energy_btu(lay, TankState(end)) / BTU_PER_WH - first_wh,
             residual_f=max(abs(a - b) for a, b in zip(end, first, strict=True)),
-            heating_alike=_alike(gone, gone_on[0]),
+            heating_alike=shown and _alike(gone, gone_on[0]),
         )
         for walk, t, end, gone in zip(walks, tails, ends, gone_on, strict=True)
     )
@@ -285,19 +292,22 @@ def _go_on(
     tails: Sequence[SimulationResult],
     params: HeaterParams,
     options: dict[str, Any],
-) -> list[tuple[float | None, tuple[float, ...]]]:
+) -> tuple[list[tuple[float | None, tuple[float, ...]]], bool]:
     """Each tail walked on past its end: its scenario again, longer by
     ``GO_ON_PAST`` past every instant still due at any tail's end
     (``_due``) and the close of every TOU window open on the way, up to
-    ``RECOVERY_AHEAD``, so its settings, writes and schedules go on as
-    they would, with no water drawn and no circulation starting past
-    the end (``_drawn_by``). The electricity it spends past the end, Wh
-    (None, unpriced), and the layers it ends with."""
+    ``GO_ON_MAX``, so its settings, writes and schedules go on as they
+    would, with no water drawn and no circulation starting past the end
+    (``_drawn_by``). The electricity each spends past the end, Wh
+    (None, unpriced), and the layers it ends with; and whether that
+    reached past every instant and close, within ``GO_ON_MAX``. Walked
+    on no farther, none is walked on: each is given as its tail
+    ended, unpriced."""
     until = scenarios[0].until
     given = options.get("tou_windows_in_force")
     due = [t for r in tails for t in _due(r, params)]
     span = max([until, *due]) - until + GO_ON_PAST
-    while span < RECOVERY_AHEAD:
+    while span <= GO_ON_MAX:
         end = until + span
         closes = [
             b
@@ -308,7 +318,8 @@ def _go_on(
         if grown <= span:
             break
         span = grown
-    span = min(span, RECOVERY_AHEAD)
+    if span > GO_ON_MAX:
+        return [(None, _layers(r)) for r in tails], False
     out: list[tuple[float | None, tuple[float, ...]]] = []
     for scenario, r in zip(scenarios, tails, strict=True):
         on = simulate(
@@ -327,7 +338,7 @@ def _go_on(
             else on.input_wh - r.input_wh
         )
         out.append((wh, _layers(on)))
-    return out
+    return out, True
 
 
 def _drawn_by(loads: Loads, until: datetime, params: HeaterParams) -> Loads:

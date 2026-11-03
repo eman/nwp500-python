@@ -794,6 +794,126 @@ class TestCarryOn:
         assert owing.residual_f <= sim.SETTLED_F
         assert not owing.heating_alike
 
+    def test_a_window_longer_than_16_h_is_walked_through(self) -> None:
+        # In a window closing 20 h past the tail, one tank has cooled
+        # past its trigger (99 degF) by the close and starts there, the
+        # other has not. Walked on only 16 h, both are still held and
+        # would read alike.
+        window = [(at(16), at(37))]
+        settings = SETTINGS.model_copy(update={"hp_lower_on_f": 99.0})
+
+        def walk(lower_f: float) -> sim.SimulationResult:
+            return sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "settings": settings,
+                        "start": at(17),
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "state": sim.HeaterState(upper_f=120, lower_f=lower_f),
+                        "history": sim.History(compressor_stopped_at=at(14)),
+                    }
+                ),
+                PARAMS,
+                tou_windows_in_force=window,
+            )
+
+        tail = TAIL.model_copy(
+            update={
+                "settings": settings,
+                "start": at(17) + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+            }
+        )
+        same, owing = sim.carry_on(
+            [walk(111.2), walk(110.8)],
+            tail,
+            PARAMS,
+            tou_windows_in_force=window,
+        )
+        assert same.heating_alike
+        assert owing.residual_f <= sim.SETTLED_F
+        assert not owing.heating_alike
+
+    def test_a_tail_never_shown_going_on_is_not_alike(self) -> None:
+        # A window past every length walked on: whether the tails go on
+        # alike cannot be seen, so none is counted alike, the first
+        # included.
+        tail = TAIL.model_copy(
+            update={
+                "start": at(17) + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+            }
+        )
+        window = [(at(16), tail.until + carry.GO_ON_MAX + DAY)]
+        walk = sim.simulate(
+            BASE.model_copy(
+                update={
+                    "start": at(17),
+                    "horizon": timedelta(minutes=1),
+                    "loads": sim.Loads(),
+                    "history": sim.History(compressor_stopped_at=at(14)),
+                }
+            ),
+            PARAMS,
+            tou_windows_in_force=window,
+        )
+        (carried,) = sim.carry_on(
+            [walk], tail, PARAMS, tou_windows_in_force=window
+        )
+        assert carried.residual_f == 0.0
+        assert not carried.heating_alike
+        assert not carried.settled
+
+    def test_a_tail_is_walked_on_to_go_on_max_and_no_farther(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A window closing so the walk on needs GO_ON_MAX exactly is
+        # walked through; one closing a second later is not walked on
+        # at all: the tail is its one walk.
+        tail = TAIL.model_copy(
+            update={
+                "start": at(17) + timedelta(minutes=1),
+                "horizon": timedelta(minutes=2),
+                "loads": sim.Loads(),
+            }
+        )
+        reach = tail.until + carry.GO_ON_MAX - carry.GO_ON_PAST
+        for close, shown in (
+            (reach, True),
+            (reach + timedelta(seconds=1), False),
+        ):
+            window = [(at(16), close)]
+            walk = sim.simulate(
+                BASE.model_copy(
+                    update={
+                        "start": at(17),
+                        "horizon": timedelta(minutes=1),
+                        "loads": sim.Loads(),
+                        "history": sim.History(compressor_stopped_at=at(14)),
+                    }
+                ),
+                PARAMS,
+                tou_windows_in_force=window,
+            )
+            horizons: list[timedelta] = []
+            walked = carry.simulate
+
+            def counted(scenario: sim.Scenario, *a: Any, **k: Any) -> Any:
+                horizons.append(scenario.horizon)
+                return walked(scenario, *a, **k)
+
+            monkeypatch.setattr(carry, "simulate", counted)
+            (carried,) = sim.carry_on(
+                [walk], tail, PARAMS, tou_windows_in_force=window
+            )
+            monkeypatch.undo()
+            assert carried.heating_alike is shown
+            on = [tail.horizon + carry.GO_ON_MAX] if shown else []
+            assert horizons == [tail.horizon, *on]
+
     def test_a_tail_runs_no_circulation_started_past_its_end(self) -> None:
         # A recovery under way at the end, a window opening after it: the
         # tail keeps the run under way at the end, to its given end, and
