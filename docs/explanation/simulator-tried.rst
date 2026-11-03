@@ -47,13 +47,14 @@ on the record to 10-26. Started from the parameters in use, at 0.90 it
 moved no term by more than 0.2 % and scored as they do.
 
 **Why dropped.** At 0.90 the tank's fit found no step that lowered its
-cost from either start, so it adds no tank of its own; whether the scale
-or the cost's roughness under its finite differences held it there, the
-run does not show. Nor does it show the meter's step moving the refit
-off: the code's tank was fitted on the draws as metered too, over the
-record to 10-26, so the refit's move may come of its shorter record as
-much as of the gallons. The scale itself is not measured ("The draws
-before the meter's step scaled down"); the parameters in use are kept.
+cost from the code's tank, and moved no term over 0.2 % from the
+parameters in use, so it adds no tank of its own; whether the scale or
+the cost's roughness under its finite differences held it there, the run
+does not show. Nor does it show the meter's step moving the refit off:
+the code's tank was fitted on the draws as metered too, over the record
+to 10-26, so the refit's move may come of its shorter record as much as
+of the gallons. The scale itself is not measured ("The draws before the
+meter's step scaled down"); the parameters in use are kept.
 
 **Account.** :doc:`simulator`, "Accuracy". The scores, drivers and
 parameters are kept with the site's scores
