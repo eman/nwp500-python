@@ -755,11 +755,25 @@ the parameters in use (fitted before 2026-09-18, the share at 0.25):
   run beside the element, came to 8.15 against 8.19 kWh, a mean 0.034
   off. The six largest misses are switches to Energy Saver, where it
   does: on 05-05 04:45 UTC the element ran 7.6 min in the record and
-  12.3 in the walk. These are with a draw under way at the switch split
-  there (``sim_score``, above). Before, the switch at 04-28 13:40, 6 s
-  into a 29.7 gal draw at 1.7 gal/min, was walked without the draw: the
-  element ran 11.2 min against the record's 22.6 (21.9 with it), and the
-  19 came to 19.68 kWh, 2.9 % low, a mean 0.150 off.
+  12.3 in the walk. In Energy Saver the element stops when the upper
+  probe comes within
+  ``ElementParams.energy_saver_upper_off_below_setpoint_f`` of the
+  setpoint, so the walk's slower climb under the upper element runs it
+  on: at its height, 0.72 of the column, the walk's upper probe climbs
+  about 1.6 degF a minute where the record's clean element runs climbed
+  2.0 (:doc:`simulator-tried`, "The upper element higher"). Over the
+  first upper-element run after each of the 5 switches to Energy Saver
+  with no draw in it, the record's lasted 5.7 min and the walk's 7.8
+  (measured 2026-11-02). In Electric the walk's upper element ran on as
+  well, 12.4 min against 10.5 over the 4 such switches, but there the
+  two elements heat the tank between them, so its energy came out alike;
+  in Energy Saver the compressor heats the rest, and each minute the
+  element runs on is billed at the element's rate. These are with a draw
+  under way at the switch split there (``sim_score``, above). Before,
+  the switch at 04-28 13:40, 6 s into a 29.7 gal draw at 1.7 gal/min,
+  was walked without the draw: the element ran 11.2 min against the
+  record's 22.6 (21.9 with it), and the 19 came to 19.68 kWh, 2.9 % low,
+  a mean 0.150 off.
 - **The time to ready after a switch** is scored only where the tank
   could not already deliver the bath at it: by the record's probes, 3 of
   the 46 at the default 28.7 gal (one 1.5 s after a TOU window's close,
