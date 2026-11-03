@@ -725,20 +725,20 @@ agree to 15 minutes, after which the record's lower probe goes on
 falling: over the clean draws timed to end within 15 minutes, 1.7 degF
 from 15 to 60 minutes after the draw (31) against the walk's 0.8, where
 from 05-01 to 09-17 it falls 1.3 (74) against 0.8. Water the house's
-draw detector did not count does not account for it (measured
-2026-11-03, the draws of 8 gal or more with the compressor off, no
-circulation in the hour and no draw counted from 15 to 60 minutes
-after). After the house meter's step at 2026-09-12 19:51 UTC, after 9 of
-21 such draws the meter read 0.3 to 1.2 gal over those 45 minutes while
-the detector showed no demand, where none of 753 quiet 45-minute windows
-after the step read 0.3 gal (8 % before it); but the record's lower
-probe fell 0.80 degF further than the walk's over them in those 9 and
-0.85 in the 4 that read less (one, 10-02 00:50 UTC, set aside: 9.0 degF
-the other way). Where the detector still showed a draw's tail or demand
-it fell 3.69 further (7). Nothing the walk is given follows the shift.
-In quiet hours, with no draw, heating or circulation in the hour or the
-30 minutes before, the walk's lower probe drifts as the record's to
-within 0.13 degF an hour in every half-month (25 hours each). At each
+draw detector did not count is not seen to account for that further fall
+in the other days (measured 2026-11-03 on the clean draws among them
+from 09-18, 14 with the compressor off, no circulation in the hour and
+no draw counted from 15 to 60 minutes after). After 8 of them the house
+meter read 0.34 to 1.16 gal over those 45 minutes while the detector
+showed no demand, where none of 753 quiet 45-minute windows after the
+meter's step (2026-09-12 19:51 UTC, described below) read 0.3 gal (8 %
+before it); but the record's lower probe fell 0.70 degF further than the
+walk's over those 8 (a standard error of 0.24) and 0.85 (0.38) over the
+4 that read less, with no rise in the further fall with the water inside
+the 8 (a correlation of -0.27). Nothing the walk is given follows the
+shift. In quiet hours, with no draw, heating or circulation in the hour
+or the 30 minutes before, the walk's lower probe drifts as the record's
+to within 0.13 degF an hour in every half-month (25 hours each). At each
 draw the replay's lower probe sits within 0.17 degF of the record's
 (0.03 for 95 % of the draws), and its upper within 0.28 (0.06), before
 the correction to them. The air by the heater (a mean 73.3 and 71.8
