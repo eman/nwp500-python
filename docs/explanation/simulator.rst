@@ -537,14 +537,14 @@ from 3 minutes before to 12 after, the upper probe fell 2.83 degF in the
 walk against 1.77 in the record, the lower 0.67 against 0.01. Before
 2026-09-18 the walk's mean probe fell 0.177 degF a gallon further than
 the record's (62 draws: 0.169 from 05-01 to 09-17, 56, and 0.273 in
-April, 6), its lower probe 0.93 degF further; on the 13 held out, 0.022
-a gallon less, the lower probe 0.69 less. That is the fit's split,
-before 2026-09-18 against after, not the two sets of days the lower
-probe's error after a draw falls into with the compressor off (below),
-which put April with the days from 09-18; with only 6 draws in April it
-may be either. A slower draw's share at 0.1 instead of 0.25 did not take
-it out (:doc:`simulator-tried`, "The share at 0.1 on the score that
-splits a slower draw").
+April, 6), its lower probe 0.93 degF a draw further; on the 13 held out,
+0.022 a gallon less, the lower probe 0.69 degF a draw less. That is the
+fit's split, before 2026-09-18 against after, not the two sets of days
+the lower probe's error after a draw falls into with the compressor off
+(below), which put April with the days from 09-18; with only 6 draws in
+April it may be either. A slower draw's share at 0.1 instead of 0.25 did
+not take it out (:doc:`simulator-tried`, "The share at 0.1 on the score
+that splits a slower draw").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
