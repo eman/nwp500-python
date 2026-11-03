@@ -765,19 +765,21 @@ the parameters in use (fitted before 2026-09-18, the share at 0.25):
   probe (in Energy Saver 1.62 degF short of the setpoint,
   ``ElementParams.energy_saver_upper_off_below_setpoint_f``), and the
   walk's probe climbs slower under it: at its height, 0.72 of the
-  column, about 1.6 degF a minute where the record's clean runs climbed
-  2.0 (:doc:`simulator-tried`, "The upper element higher"). Over the
-  first upper-element run after the 4 draw-free switches to Energy Saver
-  where the record's ran 2 min or more and the walk's ran with it, the
+  column, about 1.6 degF a minute over the record's 29 clean element
+  runs, where the record climbed 2.0 (:doc:`simulator-tried`, "The upper
+  element higher"). Over these switches' own runs, the first
+  upper-element run after the 4 draw-free switches to Energy Saver where
+  the record's ran 2 min or more and the walk's ran with it, the
   record's upper probe climbed 1.60 degF a minute and the walk's 1.19,
   over 6.5 min against 8.9 (measured 2026-11-02); after the 4 such to
-  Electric, 1.88 against 1.37, over 10.5 min against 12.4. In Electric
+  Electric, 1.88 against 1.37, over 10.5 min against 12.8. In Electric
   the lower element heats what the upper leaves, so the elements' whole
   running time came out alike (05-01, 20.4 min in both); in Energy Saver
-  the compressor heats the rest, and over 05-05 and 10-03 it did not
-  make up the element's extra. The other four are not this: on 04-30 the
-  element's energy matched and the miss is the compressor's, over a 499
-  min hold; on 09-21, 04-21 and 04-28 the walk's element ran less.
+  the compressor heats the rest, and over 05-05 and 10-03 it did not run
+  less to offset the element's extra. The other four are not this: on
+  04-30 the element's energy matched and the miss is the compressor's,
+  over a 500 min hold; on 09-21, 04-21 and 04-28 the walk's element ran
+  less.
 - **The time to ready after a switch** is scored only where the tank
   could not already deliver the bath at it: by the record's probes, 3 of
   the 46 at the default 28.7 gal (one 1.5 s after a TOU window's close,
