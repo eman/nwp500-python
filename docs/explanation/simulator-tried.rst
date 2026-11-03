@@ -13,6 +13,39 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The water below the condenser stirred through a run (2026-11-02)
+================================================================
+
+**Tried.** The start's stir (``stratified.stir``: the water the
+condenser wraps and the water below it pooled to their mean) on every
+step while the compressor heats, not only at its start, in the walk and
+in the replay that starts it, on the parameters in use (fitted before
+2026-09-18, the share at 0.25), over the 116 scored recoveries from
+2026-04-17. A recovery from a mixed cold tank had climbed 1.11-1.15
+times as fast as the map's heat warms the whole tank, its bottom left
+cold (:doc:`simulator`, "Accuracy").
+
+**Found.** Per recovery, minutes off (mean bias): the 11 held-out
+draw-free went from 4.8 (2.2 long) to 44.4 (38.2 long), their
+electricity from 4.0 % to 27.4 % off; the 16 held out with water in use
+from 18.3 (1.7 short) to 64.5 (63.3 long); before 2026-09-18 the 10
+draw-free from 11.1 to 22.5 and the 79 with water in use from 27.7 to
+79.8. The mixed cold starts came right: 2026-08-12 03:32 UTC from 38.3
+min short to 2.7 long, 09-30 02:51 from 46.1 to 5.2 short, 10-23 22:48
+from 61.4 to 4.4 short.
+
+**Why dropped.** Far worse everywhere else. Pooled at every step, the
+condenser's heat warms the cold bottom before it rises past the lower
+probe, so less of it rises past the lower probe while that bottom is
+cold, and a recovery that starts with a cold bottom under warmer water
+runs long. What the mixed start needs is the bottom taking heat as the
+tank warms, not the probe held under the pool.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores, the band table
+and the patch are kept with the site's scores
+(``mixed-cold-recovery-2026-11-02``).
+
+
 A fast draw walked over its time in the replay (2026-11-02)
 ===========================================================
 
