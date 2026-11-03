@@ -30,14 +30,14 @@ record to 2026-10-26.
 **Found.** The record's 24 element runs, each replayed from the layers
 at its start through it and 30 minutes on: the upper probe 3.9 degF RMS
 against 4.4 (the mean of the runs' own), held out (5 runs) 2.8 against
-5.2, nearly all on 2026-10-03 02:51 UTC, the run before the 53.8 gal
-draw at 2.69 gal/min. Held out, the recoveries with water in use came
-out 18.8 min off against 18.3, more than all of it the one starting
-2026-10-01 03:42 (three others came 1.4 min closer between them), 9 min
+5.2, all of it on 2026-10-03 02:51 UTC, the run before the 53.8 gal draw
+at 2.69 gal/min. Held out, the recoveries with water in use came out
+18.8 min off against 18.3, more than all of it the one starting
+2026-10-01 03:42 (three others came 1.3 min closer between them), 8 min
 into a 31.1 gal draw at 2.10 gal/min: 18.4 min short against 9.0, its
-replayed bottom 5 degF warmer before the start's probes corrected it.
-Before 2026-09-18 every score moved under 0.05; the 29 held-out days'
-energy came 14.33 % off against 14.31, only 10-03 moving.
+start's bottom 5 degF warmer, which the probes' correction left in
+place. Before 2026-09-18 every score moved under 0.05; the 29 held-out
+days' energy came 14.33 % off against 14.31, only 10-03 moving.
 
 **Why dropped.** The replay's element runs better, no score a decision
 reads: the recoveries with water in use held out a little worse, the
