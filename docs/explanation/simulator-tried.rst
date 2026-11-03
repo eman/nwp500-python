@@ -13,6 +13,57 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The draws before the meter's step scaled down (2026-11-03)
+==========================================================
+
+**Tried.** Every draw before 2026-09-12 19:51 UTC, when the house meter
+(a Droplet) whose gallons size the draws began reading the circulation
+pump's runs lower, taken as a fraction of its metered gallons, in the
+replay and the walk, on the parameters in use, no refit: against the
+lower probe's error after a large draw changing near then and the
+recoveries with water in use running long before 2026-09-18
+(:doc:`simulator`, "Accuracy"). The fractions: 0.90, 0.87 and 0.81 (the
+house's draw detector's ratio of meter to pump after the step).
+
+**The meter.** Over the pump's runs with no draw within 5 minutes, the
+meter's volume over the pump's reads lower the shorter the run (before
+the step 0.86 at under 5 of the pump's gallons, 45 runs; 0.91 at 5 to 8,
+113; 0.94 at 8 to 12, 60) and falls through the record at like length:
+at 5 to 8 gallons 0.98 in April (2 runs), 0.93 in July (46), 0.88 over
+08-01 to 08-14 (61), 0.86 from 08-15 to the step (4), 0.84 from the step
+to 09-30 (17) and 0.76 in October (24); at 8 to 12, 0.94 from 08-15 to
+the step (25) and 0.87 from it to 09-30 (4). So few runs on one side of
+the step do not fix its size. Only the medians of April and of the week
+of 07-06 come within 3 % of the pump here. The showers (draws of 5 min
+or more at 0.6 gal/min or more) read a median 1.12 gal/min before the
+step (288) and 0.96 after (86), the months pooled.
+
+**Found.** The lower probe's fall to its lowest in the hour after the
+same 117 draws of 8 gal or more from 05-01 local to the step, the
+compressor off, went from a mean 1.67 degF too far to 0.92, 1.66 and
+3.09 too short at 0.90, 0.87 and 0.81 (a standard error of about 0.3);
+the 4 after the step before 2026-09-18 stayed at 3.03 (the held-out
+draws, which it does not scale, were not rerun; measured, 2.2 short, a
+standard error of 0.8). April's 16 went from 1.6 short to 4.9, 5.9 and
+7.7. At 0.87 and 0.81, the 76 recoveries with water in use before the
+step went from 25.8 min long (28.4 off) to 20.3 (23.5) and 18.8 (22.7),
+and the 10 draw-free, through the state the replay gives them, from 11.1
+off (0.3 short) to 11.6 (0.2 long) and 11.8 (0.4 long).
+
+**Why dropped.** The step's size the record does not fix, and at 5 to 8
+gallons the meter drifted besides. Over 0.90 to 0.81 the draws from
+05-01 to the step go from 0.9 to 3.1 degF short, against 2.2 for those
+held out; April's go further from them; at 0.87 about four fifths of the
+recoveries' long run stays. Which of the meter's readings is right the
+record does not say, and the pump's figure is its own estimate, not a
+measure. The draws are kept as metered. A volume measured at a tap on
+today's meter would say which; a refit on draws in one meter's gallons
+would follow.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores and scripts are
+kept with the site's scores (``meter-step-2026-11-03``).
+
+
 The condenser's heat rising as a plume (2026-11-03)
 ===================================================
 
