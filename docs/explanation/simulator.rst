@@ -577,7 +577,7 @@ the whole tank: its bottom layer, under the condenser, went from 82.8 to
 with some 7 of the 63.2 gal still cold. The heat is fitted as the whole
 tank's mass times the record's climb, so a walk climbs faster by the
 share of the tank it leaves unheated, whatever the real tank's bottom
-does. Of the 11 recoveries since 2026-04-17 that started with the upper
+does. The 11 recoveries since 2026-04-17 that started with the upper
 probe under 125 degF came out a mean 2.8 % of the record's minutes
 short, 8 of them short, against 10 % long for the other 105. Stirring
 the water below the condenser into its pool through a run, not only at
