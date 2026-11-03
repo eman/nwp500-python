@@ -15,8 +15,10 @@ after its draws (``Coast``), each event weighted alike. A fit walks
 every event at every trial, so it takes ``map_`` to spread them: the
 builtin ``map`` by default, an executor's ``map`` to use more cores.
 
-The record carries no word on which element heats; its element runs
-are taken as the upper's, where the heater runs its elements first.
+Where a frame says which element heats (``lower_element_on``), the
+lower element's minutes are heated in its layer; the rest of an element
+run, and every run of a frame that does not say, are the upper's, where
+the heater runs its elements first.
 
 Nothing here reads a file, the network or the clock.
 """
@@ -103,7 +105,9 @@ class TankRecord:
     """A history on a one-minute grid from ``start``: the probes as of
     each minute (NaN unknown), the air (known throughout:
     ``tank_record`` holds it through its gaps), the runs of the
-    compressor, the elements and the circulation, and the draws,
+    compressor, the elements (either; ``lower_element`` the minutes of
+    those the lower one ran, the rest the upper's) and the circulation,
+    and the draws,
     ``(onset, delivered gallons)``, with how long the draw detector
     held each, s, by onset (``draw_durations``; one it does not time is
     not in it). Its arrays are read-only."""
@@ -119,6 +123,7 @@ class TankRecord:
     draw_seconds: Mapping[datetime, float] = field(
         default_factory=dict[datetime, float], repr=False
     )
+    lower_element: tuple[Run, ...] = field(default=(), repr=False)
 
     def __post_init__(self) -> None:
         # Its own copy, which a worker process can take.
@@ -165,7 +170,11 @@ class TankRecord:
         j = min(len(self), max(i, self.minute(at) + 1))
         reach = i - _LAG_REACH // MINUTE
         first = i
-        for of, frm in ((self.element, reach), (self.circulating, i)):
+        for of, frm in (
+            (self.element, reach),
+            (self.lower_element, reach),
+            (self.circulating, i),
+        ):
             for k in _overlapping(of, frm, j):
                 first = min(first, of[k][0])
         first = max(0, first)
@@ -187,6 +196,7 @@ class TankRecord:
             element=runs(self.element, reach, False),
             circulating=runs(self.circulating, i, True),
             draws=self.draws[lo:hi],
+            lower_element=runs(self.lower_element, reach, False),
         )
 
 
@@ -202,7 +212,8 @@ def tank_record(
 ) -> TankRecord:
     """The record of a history frame (``sim_calibrate.prepare``): its
     ``upper_f``, ``lower_f``, ``air_f`` (held through its gaps),
-    ``compressor_on``, ``element_on`` and ``circulating`` as of each
+    ``compressor_on``, ``element_on`` (either element; with
+    ``lower_element_on``, which), and ``circulating`` as of each
     minute, and the ``draws`` from a meter, ``(onset, delivered
     gallons)``, each timed by the frame's draw detector
     (``draw_durations``)."""
@@ -240,6 +251,7 @@ def tank_record(
         circulating=_runs(held("circulating")),
         draws=tuple(sorted(metered)),
         draw_seconds={t: s for t, _, s in draw_durations(frame, metered) if s},
+        lower_element=_runs(held("lower_element_on")),
     )
 
 
@@ -318,6 +330,28 @@ def _overlapping(runs: Sequence[Run], i: int, j: int) -> range:
     while m < len(runs) and runs[m][0] < j:
         m += 1
     return range(k, m)
+
+
+def _zoned(
+    record: TankRecord, i: int, j: int
+) -> list[tuple[st.Zone, int, int]]:
+    """The element runs overlapping minutes ``[i, j)``, each split into
+    the lower element's minutes (``TankRecord.lower_element``) and the
+    upper's, the rest of it, in order."""
+    out: list[tuple[st.Zone, int, int]] = []
+    lower = record.lower_element
+    for k in _overlapping(record.element, i, j):
+        a, b = record.element[k]
+        at = a
+        for m in _overlapping(lower, a, b):
+            la, lb = max(a, lower[m][0]), min(b, lower[m][1])
+            if la > at:
+                out.append(("upper", at, la))
+            out.append(("lower", la, lb))
+            at = lb
+        if b > at:
+            out.append(("upper", at, b))
+    return out
 
 
 def _compressor(
@@ -423,13 +457,13 @@ def _span(
     reach = math.ceil(lag / MINUTE)
     elements = tuple(
         st.Element(
-            zone="upper",
+            zone=zone,
             watts=params.element.element_w,
-            on_at=record.instant(record.element[k][0]),
-            off_at=record.instant(record.element[k][1]),
-            lag=lag,
+            on_at=record.instant(a),
+            off_at=record.instant(b),
+            lag=lag if zone == "upper" else timedelta(0),
         )
-        for k in _overlapping(record.element, i - reach, j)
+        for zone, a, b in _zoned(record, i - reach, j)
     )
     start, end = record.instant(i), record.instant(j)
     lo = bisect_left(record.draws, (start, -math.inf))

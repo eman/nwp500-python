@@ -605,6 +605,7 @@ _COLUMNS = (
     ("lower_f", "d"),
     ("compressor_on", "b"),
     ("element_on", "b"),
+    ("lower_element_on", "b"),
     ("dhw_in_use", "b"),
     ("target_f", "d"),
     ("excluded", "b"),
@@ -626,6 +627,7 @@ def _row(s: DeviceStatus) -> tuple[float | bool, ...]:
         or bool(s.heat_lower_use)
         or s.current_heat_use
         in (HeatSource.HEATELEMENT, HeatSource.HEATPUMP_HEATELEMENT),
+        bool(s.heat_lower_use),
         bool(s.dhw_use),
         _from_device(HalfCelsius(s.hp_lower_off_temp_setting_raw)),
         _hybrid(s)
@@ -1007,6 +1009,7 @@ def change_history(
             source,
             [int(HeatSource.HEATELEMENT), int(HeatSource.HEATPUMP_HEATELEMENT)],
         ),
+        "lower_element_on": _held_at(rows.lower_element_on, at, False, bool),
         "dhw_in_use": _held_at(rows.dhw_in_use, at, False, bool),
         "target_f": optional(rows.target_f),
         "excluded": np.isin(
@@ -1827,6 +1830,7 @@ def _steps_on(
                 flow_gpm=m,
                 compressor_on=bool(comp[i]),
                 element_on=bool(up_el[i]) or bool(lo_el[i]),
+                lower_element_on=bool(lo_el[i]),
                 ambient_f=a_f if a_f is not None else AMBIENT_DEFAULT_F,
                 inlet_f=in_f if in_f is not None else p.draw.mains_on(grid[i]),
                 circulating=on,
@@ -2222,6 +2226,9 @@ def draw_frame(
                     of(lambda s: float(bool(s.heat_lower_use))),
                     strict=True,
                 )
+            ],
+            "lower_element_on": [
+                bool(v) for v in of(lambda s: float(bool(s.heat_lower_use)))
             ],
         },
         index=pd.DatetimeIndex(grid),

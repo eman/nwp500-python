@@ -74,6 +74,21 @@ class TestTheRecord:
         assert len(rec.draws) == 15
         assert rec.draws[0][0] == T0 + timedelta(hours=1)
 
+    def test_the_lower_elements_minutes_are_its_own(self) -> None:
+        steps = [
+            replace(
+                s,
+                element_on=60 <= k < 120,
+                lower_element_on=90 <= k < 150,
+            )
+            for k, s in enumerate(_steps(1.0))
+        ]
+        rec = hist.record(steps, P)
+        # 10 s steps: the element over minutes 10-20, the lower element
+        # over the second half of it; its flag outside the run is not.
+        assert rec.element == ((10, 20),)
+        assert rec.lower_element == ((15, 20),)
+
     def test_a_step_off_the_minute_starts_the_next(self) -> None:
         steps = _steps(1.0)
         late = [replace(s, at=_at(s) + timedelta(seconds=25)) for s in steps]

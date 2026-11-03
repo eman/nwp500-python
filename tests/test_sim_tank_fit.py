@@ -280,13 +280,18 @@ class TestTheRecord:
                 out.append((a, a + int(rng.integers(2, longest))))
             return tuple(out)
 
+        element = runs(8, 15)
         record = tf.TankRecord(
             start=T0,
             upper_f=upper,
             lower_f=lower,
             air_f=np.full(n, AIR),
             compressor=runs(4, 120),
-            element=runs(8, 15),
+            element=element,
+            # The lower element over the back half of every other run.
+            lower_element=tuple(
+                ((a + b) // 2, b) for a, b in element[::2] if b - a > 1
+            ),
             circulating=runs(20, 25),
             draws=tuple(
                 (T0 + timedelta(minutes=float(m)), 3.0)
@@ -300,6 +305,81 @@ class TestTheRecord:
             part = tf.replay(lay, TRUE, record.before(at), at)
             assert whole is not None and part is not None
             assert part.layers_f == whole.layers_f
+
+    def test_the_lower_element_is_read_from_its_column(self) -> None:
+        grid = pd.date_range(T0, periods=30, freq="1min")
+        on = [5 <= k < 20 for k in range(30)]
+        lower = [12 <= k < 20 for k in range(30)]
+        frame = pd.DataFrame(
+            {
+                "upper_f": 120.0,
+                "lower_f": 110.0,
+                "air_f": AIR,
+                "element_on": on,
+                "lower_element_on": lower,
+            },
+            index=grid,
+        )
+        record = tf.tank_record(frame)
+        assert record.element == ((5, 20),)
+        assert record.lower_element == ((12, 20),)
+        assert (
+            tf.tank_record(frame.drop(columns="lower_element_on")).lower_element
+            == ()
+        )
+
+    def test_an_element_run_is_split_by_the_lower_elements_minutes(
+        self,
+    ) -> None:
+        n = 60
+        record = tf.TankRecord(
+            start=T0,
+            upper_f=np.full(n, 120.0),
+            lower_f=np.full(n, 110.0),
+            air_f=np.full(n, AIR),
+            compressor=(),
+            element=((5, 20), (30, 40)),
+            lower_element=((12, 20), (32, 35)),
+            circulating=(),
+            draws=(),
+        )
+        assert tf._zoned(record, 0, n) == [
+            ("upper", 5, 12),
+            ("lower", 12, 20),
+            ("upper", 30, 32),
+            ("lower", 32, 35),
+            ("upper", 35, 40),
+        ]
+        assert tf._zoned(replace(record, lower_element=()), 0, n) == [
+            ("upper", 5, 20),
+            ("upper", 30, 40),
+        ]
+
+    def test_the_lower_elements_minutes_heat_the_bottom(self) -> None:
+        n = 40
+        base = tf.TankRecord(
+            start=T0,
+            upper_f=np.full(n, 120.0),
+            lower_f=np.full(n, 120.0),
+            air_f=np.full(n, AIR),
+            compressor=(),
+            element=((5, 25),),
+            circulating=(),
+            draws=(),
+        )
+        lay = S.layout(TRUE)
+        mixed = S.TankState.uniform(lay.layers, 120.0)
+        up = S.observe(lay, tf._span(lay, TRUE, base, mixed, 0, 30))
+        down = S.observe(
+            lay,
+            tf._span(
+                lay, TRUE, replace(base, lower_element=((5, 25),)), mixed, 0, 30
+            ),
+        )
+        # The same heat: the upper element lifts the top, the lower
+        # turns the whole tank over from the bottom.
+        assert up[0] > down[0] + 5.0
+        assert down[1] > up[1]
 
     def test_unknown_air_is_refused(self, record) -> None:
         air = np.array(record.air_f)

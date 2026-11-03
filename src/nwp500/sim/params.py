@@ -229,8 +229,9 @@ class TankParams:
     #: gal (2.00). The clean runs' rise is the higher layer's, but the
     #: record's 24 element runs from 2026-04-16, most with water drawn
     #: or the compressor running, each from its replayed layers, read
-    #: the upper probe to 7.9 °F RMS from the lower against 10.2, and
-    #: the lower is kept.
+    #: the upper probe to 4.4 °F RMS from the lower against 4.7
+    #: (2026-11-02, the installation's fitted parameters, the lower
+    #: element's minutes replayed in its layer), and the lower is kept.
     upper_element_height: float = field(
         default=0.72, metadata=_p(DEFAULT, "fraction")
     )

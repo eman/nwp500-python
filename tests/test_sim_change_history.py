@@ -118,11 +118,18 @@ class TestTheFrame:
                 "tankUpperTemperature": s.tank_upper_temperature_raw,
                 "tankLowerTemperature": s.tank_lower_temperature_raw,
             }
+            # The lower element on for a while inside it.
+            if 70 <= i < 80:
+                raw |= {"heatLowerUse": 2}
             readings[i] = (t, DeviceStatus.model_validate(raw))
         from_statuses = sa.history(readings)
         from_changes = sa.change_history(
             changes_of(readings), (t for t, _ in readings)
         )
+        lower = from_statuses["lower_element_on"].to_numpy()
+        assert lower[70:80].all() and not lower[:70].any()
+        assert not lower[80:].any()
+        assert from_statuses["element_on"].to_numpy()[70:80].all()
         assert list(from_changes.columns) == list(from_statuses.columns)
         assert from_changes.index.equals(from_statuses.index)
         for column in from_statuses.columns:

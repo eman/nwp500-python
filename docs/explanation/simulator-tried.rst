@@ -13,6 +13,36 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+An element's heat by the volume above it (2026-11-02)
+=====================================================
+
+**Tried.** The upper element's heat put into each layer by its share of
+the volume above the element's height, 17.7 gal at 0.72, instead of all
+into the layer at it, which turns over into the three above, 21.1 gal.
+Two layers at the height sharing it heat the same 21.1 gal once they
+turn over ("The upper element higher", below); this does not, so the
+height no longer acts in whole layers. From a mixed 120 degF tank, on
+the installation's fitted parameters, the upper probe climbs 1.89
+degF/min against 1.64 (1.59 on the defaults, the figure the entries
+below give), where the record's clean runs climbed 2.01.
+
+**Found.** The record's 24 element runs from 2026-04-16, each replayed
+from the layers at its start through it and 30 minutes on, the lower
+element's minutes in its own layer, on the installation's fitted
+parameters: the upper probe 6.0 degF RMS against 4.4 (the mean of the
+runs' own), the fit period (19 runs) 6.1 against 4.2, held out (5) 5.6
+against 5.2. The Energy Saver runs read closer (05-05 3.9 against 7.7,
+04-30 3.1 against 5.5); the long Electric runs overshoot (05-03 13.2
+against 2.7).
+
+**Why dropped.** Worse on the runs as they happen, the fit period and
+held out alike.
+
+**Account.** :doc:`/reference/simulator-inputs`, the elements' heights;
+``reference/sim-score/replay-lower-element-2026-11-02/`` in the checkout
+(not in the repository).
+
+
 A member's flows spread as the record's (2026-11-02)
 ====================================================
 
@@ -618,6 +648,11 @@ it heats 15.8 gal and the upper probe climbs 2.00 degF/min, near the
 with water drawn or the compressor running, the upper probe read 10.2
 degF RMS at 0.79 against 7.9 at 0.72. Splitting the element's heat
 between two layers did not smooth the step between heights.
+
+Measured again 2026-11-02, the replay heating the lower element's
+minutes in its own layer (it had put every element minute in the
+upper's), on the installation's fitted parameters: 4.7 at 0.79 against
+4.4 at 0.72, held out (5 runs) 5.3 against 5.2.
 
 **Why dropped.** Worse on the runs as they happen. The height acts in
 whole layers; see the 24-layer entry above for the layer count.

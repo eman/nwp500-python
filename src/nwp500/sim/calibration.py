@@ -15,6 +15,9 @@ Its columns, °F where a temperature:
 - ``upper_f``, ``lower_f``: the probes;
 - ``compressor_on``, ``element_on``: what is heating (an element by
   either element's flag or the reported heat source);
+- ``lower_element_on``: of those, the lower element by its own flag
+  (optional; without it the record's replay heats every element minute
+  in the upper element's layer);
 - ``dhw_in_use``: the heater's own "hot water in use" flag, the quiet
   test without a meter (it fires on circulation, too);
 - ``target_f``: the lower probe's compressor stop threshold

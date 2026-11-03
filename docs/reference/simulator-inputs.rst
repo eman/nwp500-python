@@ -982,8 +982,10 @@ with. Heights are shares of the volume from the bottom.
        21.1 gal and the upper probe climbs 1.59 degF/min; 0.75-0.833
        heats 15.8 gal, 2.00 degF/min. The record's 24 element runs from
        2026-04-16, most with water drawn or the compressor running,
-       read the upper probe to 7.9 degF RMS at 0.72 against 10.2 at
-       0.79, so 0.72 is kept.
+       read the upper probe to 4.4 degF RMS at 0.72 against 4.7 at
+       0.79 (2026-11-02, the installation's fitted parameters, the
+       lower element's minutes replayed in its layer), so 0.72 is
+       kept.
    * - ``tank.condenser_span``
      - 0-0.45
      - The coil wraps the lower stratum: recoveries heat 0.44-0.48 of
