@@ -13,6 +13,40 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+A refit on today's meter alone (2026-11-03)
+===========================================
+
+**Tried.** The parameters refitted on the record from 2026-09-12 20:00
+UTC, after the house meter's step, to 10-11 local, so that the draws the
+fit reads and those a scheduler reads today are in one meter's gallons,
+and scored on 10-11 to 10-26 against the parameters in use (fitted
+before 2026-09-18), score-only on the same record (:doc:`simulator`,
+"Accuracy", the lower probe's error after a large draw; "The draws
+before the meter's step scaled down" below).
+
+**Found.** The four weeks hold too few draw-free climbs to fit the heat
+map, which the fit left as it was; it refitted the power, the losses and
+the tank (``ua_bottom`` 0.60 to 1.78 BTU/h per degF, ``inlet_mix_gal``
+13.8 to 16.6, the probes' spreads narrower). Over the 12 held-out days,
+the parameters in use against the refit: the recoveries 13.2 min off
+(11) against 19.4, the draw-free 4.3 (5) against 8.0, those with water
+in use 20.7 (6) against 28.9; the lower probe after the 16 draws 2.01
+degF RMS against 2.11; the upper probe in standby 0.210 degF RMS against
+0.256 (25 windows, its interval 0.22 to 0.30 clear of the first); the
+day's electricity 24.7 % off against 23.8, a starts placed share of 0.65
+against 0.55.
+
+**Why dropped.** Worse or no better on every score but the day's
+electricity, inside its interval, on held-out days too few to set it
+apart. A refit in one meter's gallons over a longer record, or with the
+earlier draws on a measured scale, would be the next try.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores, the driver and
+the parameters are kept with the site's scores
+(``poststep-refit-2026-11-03``,
+``params-site-fit-poststep-4ee2fd2.json``).
+
+
 The draws before the meter's step scaled down (2026-11-03)
 ==========================================================
 
