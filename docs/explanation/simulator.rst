@@ -764,12 +764,12 @@ the parameters in use (fitted before 2026-09-18, the share at 0.25):
   walk), are the walk's upper element running on. It stops on the upper
   probe (in Energy Saver 1.62 degF short of the setpoint,
   ``ElementParams.energy_saver_upper_off_below_setpoint_f``), and the
-  walk's probe climbs slower under it: at its height, 0.72 of the
-  column, about 1.6 degF a minute over the record's 29 clean element
-  runs, where the record climbed 2.0 (:doc:`simulator-tried`, "The upper
-  element higher"). Over these switches' own runs, the first
-  upper-element run after the 4 draw-free switches to Energy Saver where
-  the record's ran 2 min or more and the walk's ran with it, the
+  walk's probe climbs slower under it: at its height, 0.72 of the column
+  (21.1 gal from there up), the model's climb from a mixed tank is about
+  1.6 degF a minute, where the record's 29 clean element runs climbed
+  2.0 (:doc:`simulator-tried`, "The upper element higher"). Over the
+  first upper-element run after the 4 draw-free switches to Energy Saver
+  where the record's ran 2 min or more and the walk's ran with it, the
   record's upper probe climbed 1.60 degF a minute and the walk's 1.19,
   over 6.5 min against 8.9 (measured 2026-11-02); after the 4 such to
   Electric, 1.88 against 1.37, over 10.5 min against 12.8. In Electric
