@@ -13,6 +13,36 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The condenser's heat rising as a plume (2026-11-03)
+===================================================
+
+**Tried.** The condenser's heat put, each step, into the highest layer
+from the condenser's top up that is no warmer than its water plus 10 or
+20 degF, as a plume rising past colder water would leave it (the
+condenser's top layer itself where that is warmer), instead of into the
+layers it wraps, in the walk and in the replay that starts it, on the
+parameters in use, no refit, over the 116 scored recoveries from
+2026-04-17: against the walk's slow climb before its probes come
+together (:doc:`simulator`, "Accuracy").
+
+**Found.** Per recovery, minutes off (mean bias), at 10 and 20 degF: the
+11 held-out draw-free went from 4.8 (2.2 long) to 42.9 and 43.0, all
+short, their electricity from 4.0 % to 42.3 % and 42.5 % off; the 16
+held out with water in use from 18.3 (1.7 short) to 86.5 and 87.0, all
+short; before 2026-09-18 the 10 draw-free from 11.1 to 42.0 and 42.2 and
+the 79 with water in use from 27.7 (25.2 long) to 56.3 and 56.5, a mean
+51.2 and 51.4 short. The recovery of 2026-08-12 03:32 UTC went from 38.3
+min short to 112.7 and 114.5.
+
+**Why dropped.** Far short in every group. By construction none of the
+condenser's heat goes in below its top layer, under both probes (only
+the layers' conduction carries any down), and the lower probe stops the
+walk; the walks' layers were not kept. The excess barely mattered.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores and the patch are
+kept with the site's scores (``mixed-cold-recovery-2026-11-02``).
+
+
 The condenser's span higher, or the heat scaled down (2026-11-02)
 =================================================================
 

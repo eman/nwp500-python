@@ -600,7 +600,8 @@ much, and so did the condenser's span taken down to the bottom
 a run", "The condenser's span reaching the bottom"). Moving the
 condenser's span higher or scaling the heat down, against the two
 errors, did not take them out together (:doc:`simulator-tried`, "The
-condenser's span higher, or the heat scaled down").
+condenser's span higher, or the heat scaled down"), and neither did its
+heat rising as a plume ("The condenser's heat rising as a plume").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
