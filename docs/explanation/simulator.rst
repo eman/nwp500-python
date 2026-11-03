@@ -785,7 +785,23 @@ before the meter's step scaled down"). April's do not follow: its 16
 draws go from 1.6 to 4.9, 5.9 and 7.7 degF short. Which of the meter's
 readings is right the record does not say. On these parameters, fitted
 on the earlier gallons, a walk on today's meter falls about 2 degF short
-after a large draw, as at the held-out draws.
+after a large draw, as at the held-out draws. The walk's error after a
+large draw grows with the draw's length, and the other way either side
+of the step (measured 2026-11-03 on the clean draws of 8 gal or more
+with the compressor off from 05-01, the lower probe's fall over the
+hour): before it the walk falls 3.6 degF further than the record over
+the draws of more than 15 minutes (24 of them) and 0.1 over those of 10
+or less (29); after it, 6.4 less (6) and 1.3 (4). Pooled, the change at
+the step goes with the draws' minutes (0.53 degF a minute, a standard
+error of 0.16) more than with their metered gallons (0.30, 0.24), as the
+meter's lower reading would have it, since at a like metered size a draw
+after the step runs longer (those of 8 to 12 gal a median of 9.4 minutes
+before, 11.8 after). Before the step the meter read the pump's longer
+runs higher against the pump than its shorter ones (0.86 under 5 gal,
+0.94 at 8 to 12), which fits the longer draws falling further then,
+though after it the longer runs read higher too (0.79 under 8 gal, 0.87
+at 8 to 12, 4 runs) and the longer draws fall less; the record does not
+show it is the cause.
 
 Circulation running through a summer recovery slows the walk's more than
 the record's (measured 2026-11-02 on the parameters in use, the share at
