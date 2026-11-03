@@ -71,6 +71,9 @@ class Step:
     inlet_f: float
     #: Circulation running, and its own flow, gal/min.
     circulating: bool = False
+    #: Of ``element_on``, the lower element: it heats the bottom, not
+    #: the top.
+    lower_element_on: bool = False
     circulation_gpm: float = 0.0
     #: Whether ``inlet_f`` was measured (an inlet probe).
     inlet_measured: bool = False
@@ -173,6 +176,7 @@ def record(steps: Sequence[Step], params: HeaterParams) -> TankRecord:
     air = [math.nan] * n
     compressor = [False] * n
     element = [False] * n
+    lower_element = [False] * n
     circulating = [False] * n
     for k in range(n):
         t = first + k * _MINUTE
@@ -183,6 +187,7 @@ def record(steps: Sequence[Step], params: HeaterParams) -> TankRecord:
         upper[k], lower[k], air[k] = s.upper_f, s.lower_f, s.ambient_f
         compressor[k] = s.compressor_on
         element[k] = s.element_on
+        lower_element[k] = s.element_on and s.lower_element_on
         circulating[k] = s.circulating
     known = [a for a in air if math.isfinite(a)]
     held = known[0] if known else AMBIENT_DEFAULT_F
@@ -208,6 +213,7 @@ def record(steps: Sequence[Step], params: HeaterParams) -> TankRecord:
         element=_runs(element),
         circulating=_runs(circulating),
         draws=tuple(sorted(drawn.values())),
+        lower_element=_runs(lower_element),
     )
 
 

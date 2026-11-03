@@ -504,7 +504,11 @@ runs climb it 2.01 (the next layer up, 15.8 gal, gives 2.00). More
 layers do not close it (the layer count, above). The
 record's element runs mostly come with water drawn or the compressor
 running, and replayed they read the upper probe closer from the lower
-layer (7.9 degF RMS on 24 runs against 10.2), so that one is kept.
+layer (4.4 degF RMS on 24 runs against 4.7, measured 2026-11-02 on the
+installation's fitted parameters), so that one is kept. The replay
+heats the lower element's minutes of an element run in the lower
+element's layer (``TankRecord.lower_element``); with every minute in
+the upper's, as before 2026-11-02, the same runs read 8.2 against 10.7.
 It runs to its off point (the setpoint; Energy Saver's upper element
 stops 1.62 degF short, and its heat still in transit lands after). Its
 heat is walked with whatever else the tank is doing: a coast with its

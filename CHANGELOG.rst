@@ -708,6 +708,16 @@ Changed
 Fixed
 -----
 
+- The record's replay (``tank_fit``) heated every element minute in the
+  upper element's layer, the lower element's too: ``TankRecord`` now
+  holds the lower element's runs (``lower_element``, from a frame's
+  ``lower_element_on``, which the history frames and ``Step`` now
+  carry), and the replay heats those in the lower element's layer. On
+  one installation (2026-04-16 to 10-26) the lower element ran 11 times,
+  62.8 min; the record's 24 element runs, each replayed from the layers
+  at its start, read the upper probe to 4.4 degF RMS against 8.2 and the
+  lower to 6.8 against 8.7. The recoveries' energy before 2026-09-18
+  comes 20.1 % off against 20.9; nothing held out moved.
 - ``sim_score`` splits every draw the detector times that is under way
   at an event's start, where it split only one at
   ``DrawParams.undiluted_gpm`` or faster. A slower one was replayed
