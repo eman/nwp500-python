@@ -13,6 +13,38 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The condenser's span higher, or the heat scaled down (2026-11-02)
+=================================================================
+
+**Tried.** On the parameters in use, no refit, over the 116 scored
+recoveries from 2026-04-17, against the two errors of :doc:`simulator`'s
+"Accuracy" (the walk slow before its probes come together, about a tenth
+fast once they have): the condenser's span to 0.40 at its top instead of
+the fitted 0.272, so its heat reaches the lower probe sooner; the heat
+map scaled by 0.91 (its heat and its slopes), so a mixed climb comes at
+the record's pace; and both.
+
+**Found.** Per recovery, minutes off (mean bias), for the span, the
+scale and both: the 11 held-out draw-free from 4.8 (2.2 long) to 4.0
+(0.6 long), 19.5 (18.9 long) and 17.5 (16.9 long), their electricity
+from 4.0 % to 3.8 %, 10.9 % and 12.0 % off; the 16 held out with water
+in use from 18.3 (1.7 short) to 19.6 (8.9 short), 42.4 and 32.9; before
+2026-09-18 the 10 draw-free from 11.1 to 18.1, 14.6 and 19.6, their
+electricity from 20.1 % to 39.0 %, 28.1 % and 46.1 % off, and the 79
+with water in use from 27.7 (25.2 long) to 20.7 (17.0 long), 57.2 and
+47.5. The recovery of 2026-08-12 03:32 UTC went from 38.3 min short to
+47.6, 1.0 and 11.1 short.
+
+**Why dropped.** The span helps where its recoveries start with the
+probes apart and hurts the rest, the mixed cold start most; the scale
+lengthens nearly every recovery; both together are worse than either
+where it helped. Each was moved alone, off the point the tank's terms
+were fitted at together.
+
+**Account.** :doc:`simulator`, "Accuracy". The scores are kept with the
+site's scores (``mixed-cold-recovery-2026-11-02``).
+
+
 The condenser's span reaching the bottom (2026-11-02)
 =====================================================
 

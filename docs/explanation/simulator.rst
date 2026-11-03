@@ -585,20 +585,22 @@ five such stretches or more, the record's to 0.98-1.07 (1.01; the map is
 fitted on such stretches). Before the probes come together the walk is
 slow instead: in the 11 of the 12 from a lower probe under 120 degF that
 started with the probes more than 3 degF apart, from 20 minutes in to
-the record's first minute with them within 3 degF (32-103 min), the
+the record's first minute with them within 3 degF (32-103 min long), the
 walk's probes' mean climbed a median 0.89 times as fast as the record's,
-and its lower probe 0.93, slower in 10 of the 11. In a recovery that
-starts with its probes apart the two partly cancel; one from a mixed
-tank has only the fast part. The 11 recoveries since 2026-04-17 that
-started with the upper probe under 125 degF came out a mean 2.8 % of the
-record's minutes short, 8 of them short, against 10 % long for the other
-105. Stirring the water below the condenser into its pool through a run,
-not only at its start, took that one to 2.7 min long and those of
-2026-09-30 02:51 and 10-23 22:48 to 5.2 and 4.4 min short, but
-lengthened nearly every recovery by about as much, and so did the
-condenser's span taken down to the bottom (:doc:`simulator-tried`, "The
-water below the condenser stirred through a run", "The condenser's span
-reaching the bottom").
+and its lower probe 0.93, slower in 10 of the 11. In those, the two
+partly cancel; one from a mixed tank has only the fast part. The 11
+recoveries since 2026-04-17 that started with the upper probe under 125
+degF came out a mean 2.8 % of the record's minutes short, 8 of them
+short, against 10 % long for the other 105. Stirring the water below the
+condenser into its pool through a run, not only at its start, took that
+one to 2.7 min long and those of 2026-09-30 02:51 and 10-23 22:48 to 5.2
+and 4.4 min short, but lengthened nearly every recovery by about as
+much, and so did the condenser's span taken down to the bottom
+(:doc:`simulator-tried`, "The water below the condenser stirred through
+a run", "The condenser's span reaching the bottom"). Moving the
+condenser's span higher or scaling the heat down, against the two
+errors, did not take them out together ("The condenser's span higher, or
+the heat scaled down").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
