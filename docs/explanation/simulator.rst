@@ -684,9 +684,47 @@ the runs' own flow"). On this record a walk's recovery with circulation
 inside it reads long by up to hours in July and August and as the
 record's from mid-September.
 
-Not yet measured on the layered tank: a forecast's draw windows, and
-the time to ready and an element run's energy after a switch into an
-element mode.
+A forecast's draw windows, and the element modes, measured 2026-11-02 on
+the parameters in use (fitted before 2026-09-18, the share at 0.25):
+
+- **A forecast's draw windows.** The 29 held-out days of the day
+  backtest (2026-09-18 to 10-26), each walked as the heater was told
+  over it, with the draw forecast issued before the day in place of the
+  metered draws: 225 windows, about 8 a day. The record's upper probe
+  crossed the line in 4 (the delivered water crosses 5.3 to 7.3 gal
+  later, :doc:`draws`), two adjacent windows on each of the two
+  depletion days (the evenings of 09-29 and 10-02, local). The walk on
+  the forecast flagged none of the 4, on the forecast's expected draws
+  or with each window's long draws placed first, and none of the other
+  221. The forecast expected 4.3 and 2.8 gal in the first window of each
+  where the meter read 30.8 and 54.4 (the median window expects 2.2).
+  Walked on the metered draws, the same days flag all 4 and none of the
+  others: the misses are the forecast's. On 09-29 the walk on the
+  forecast left 14.6 gal deliverable at the window's opening, 10.3 over
+  what it expected; on 10-02, 43.7.
+- **An element run's energy after a switch.** The record's 46 switches
+  into an element mode (2026-04-16 to 10-19; 25 to Energy Saver, 16 to
+  Electric, 5 to High Demand), each walked with the mode written at the
+  switch, to the record's next mode change. Over the 19 in which the
+  record or the walk drew 0.05 kWh or more of element electricity, the
+  walk's came to 15.18 kWh against the record's 16.20 (6.3 % low), a
+  mean 0.142 kWh off (median 0.042), the elements' running time a mean
+  1.6 min off; 13 within 0.05 kWh. The 5 of them held out (from
+  2026-09-18) came to 2.69 against 2.71 kWh, a mean 0.116 kWh off. The
+  four largest misses are switches to Energy Saver with the lower probe
+  at 85 to 100 degF: on 04-28 13:40 UTC the element ran 22.6 min in the
+  record and 11.2 in the walk.
+- **The time to ready after a switch** is scored only where the tank
+  could not already deliver the bath at it: by the record's probes, 3 of
+  the 46 at the default 28.7 gal (one inside a TOU window, where the
+  mode is not reachable), 6 at 50 gal. Read on the probes in both, the
+  walk was slower in each of the three the record's hold reached: at
+  28.7 gal, 05-05 04:45 UTC, 16 min in the record against 76; at 50 gal,
+  04-30 16:08, 16 min against 32, and 05-05, 99 min against none inside
+  the 110-min hold. On 04-28 13:40 the record did not reach the bath in
+  its 22.7-min hold, the walk in 10. ``time_to_ready`` reads the walk's
+  layers, not its probes: at 05-05 it found the bath ready at the
+  switch, where the record's probes delivered 23 gal.
 
 
 Limitations
