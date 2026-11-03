@@ -35,11 +35,13 @@ with water in use from 27.7 (25.2 long) to 20.7 (17.0 long), 57.2 and
 47.5. The recovery of 2026-08-12 03:32 UTC went from 38.3 min short to
 47.6, 1.0 and 11.1 short.
 
-**Why dropped.** The span helps where its recoveries start with the
-probes apart and hurts the rest, the mixed cold start most; the scale
-lengthens nearly every recovery; both together are worse than either
-where it helped. Each was moved alone, off the point the tank's terms
-were fitted at together.
+**Why dropped.** The span helps most of the recoveries with water in use
+before 2026-09-18 (64 of 73), not those held out (8 of 16), and makes
+most that start with the probes together worse (11 of 15), the mixed
+cold start further short; the scale lengthens nearly every recovery;
+both together are worse than either where it helped. None was refitted
+with the tank's other terms, which were fitted together with the span
+and the map as they are.
 
 **Account.** :doc:`simulator`, "Accuracy". The scores are kept with the
 site's scores (``mixed-cold-recovery-2026-11-02``).
