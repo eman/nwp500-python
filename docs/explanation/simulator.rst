@@ -713,7 +713,7 @@ the parameters in use (fitted before 2026-09-18, the share at 0.25):
   against 20.27 in the record (2.9 % low), a mean 0.150 kWh off (median
   0.045), 10 within 0.05 kWh; the 5 held out (from 2026-09-18), 3.20
   against 3.21, a mean 0.120 off. The elements' running time was a mean
-  1.6 min off. The 9 switches to Electric, where the compressor does not
+  1.6 min off. The 9 of them to Electric, where the compressor does not
   run beside the element, came to 8.15 against 8.19 kWh, a mean 0.034
   off. The six largest misses are switches to Energy Saver, where it
   does: on 04-28 13:40 UTC the element ran 22.6 min in the record and
