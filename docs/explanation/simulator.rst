@@ -759,7 +759,27 @@ the parameters in use (fitted before 2026-09-18, the share at 0.25):
   there (``sim_score``, above). Before, the switch at 04-28 13:40, 6 s
   into a 29.7 gal draw at 1.7 gal/min, was walked without the draw: the
   element ran 11.2 min against the record's 22.6 (21.9 with it), and the
-  19 came to 19.68 kWh, 2.9 % low, a mean 0.150 off.
+  19 came to 19.68 kWh, 2.9 % low, a mean 0.150 off. Two of the six,
+  both high (05-05 and 10-03, the element 0.36 and 0.24 kWh more in the
+  walk), are the walk's upper element running on. It stops on the upper
+  probe (in Energy Saver 1.62 degF short of the setpoint,
+  ``ElementParams.energy_saver_upper_off_below_setpoint_f``), and the
+  walk's probe climbs slower under it: at its height, 0.72 of the column
+  (21.1 gal from there up), the model's climb from a mixed tank is about
+  1.6 degF a minute, where the record's 29 clean element runs climbed
+  2.0 (:doc:`simulator-tried`, "The upper element higher"). Over the
+  first upper-element run after the 4 draw-free switches to Energy Saver
+  where the record's ran 2 min or more and the walk's ran with it, the
+  record's upper probe climbed 1.60 degF a minute and the walk's 1.19,
+  over 6.5 min against 8.9 (measured 2026-11-02); after the 4 such to
+  Electric, 1.88 against 1.37, over 10.5 min against 12.8. In Electric
+  the lower element heats what the upper leaves, so the elements' whole
+  running time came out alike (05-01, 20.4 min in both); in Energy Saver
+  the compressor heats the rest, and over 05-05 and 10-03 it did not run
+  less to offset the element's extra. The other four are not this: on
+  04-30 the element's energy matched and the miss is the compressor's,
+  over a 500 min hold; on 09-21, 04-21 and 04-28 the walk's element ran
+  less.
 - **The time to ready after a switch** is scored only where the tank
   could not already deliver the bath at it: by the record's probes, 3 of
   the 46 at the default 28.7 gal (one 1.5 s after a TOU window's close,
