@@ -511,17 +511,18 @@ under-promised, by 1.35 gal on average (0-3.92) against 1.24.
 With every draw the detector timed split at a recovery's start, a slower
 one's rest all at the start, as the score walks a slower draw at its
 onset, on the same params on 2026-11-02: 44 of the 116 recoveries from
-2026-04-17 to 10-26 started inside one, a mean 5.8 gal still to run,
-which the walk had not taken. The 16 held out came out 18.3 min off
-(12.3-25.3), a mean 1.7 short; all 27 12.8 min off. Before 2026-09-18
-the 79 with water in use came out 27.7 min off (21.5-35.3) against 25.3,
-a mean 25.2 long against 9.2. On the 44 the mean went from 7.5 min short
-to 25.3 long, a mean 23.7 min off to 26.9, in both sets of days the
-lower probe's error after a draw falls into (below): leaving the rest
-out had hidden that the walk runs a recovery long when a draw runs on
-into it. Walked over the rest of its time instead, the 44 came out the
-same, 25.4 long. The draw-free, the electricity and the days did not
-move.
+2026-04-17 to 10-26 started inside a slower one (46 inside a timed draw;
+the 2 fast ones did not move), a mean 5.8 gal still to run, which the
+walk had not taken. The 16 held out came out 18.3 min off (12.3-25.3), a
+mean 1.7 short; all 27 12.8 min off. Before 2026-09-18 the 79 with water
+in use came out 27.7 min off (21.5-35.3) against 25.3, a mean 25.2 long
+against 9.2. On the 44 the mean went from 7.5 min short to 25.3 long, a
+mean 23.7 min off to 26.9, in both sets of days the lower probe's error
+after a draw falls into (below): leaving the rest out had hidden that
+the walk runs a recovery long when a draw runs on into it. Walked over
+the rest of its time instead, the 44 came out the same, 25.4 long. The
+draw-free and the electricity did not move, nor the days: no local
+midnight of the record falls inside a timed draw.
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:

@@ -25,8 +25,8 @@ its onset.
 
 **Found.** Held out, the 16 recoveries with water in use came out 18.4
 min off against 18.3, a mean 1.7 short either way. Over the 44
-recoveries from 2026-04-17 to 10-26 that started inside a draw, a mean
-25.4 min long against 25.3, 27.0 min off against 26.9.
+recoveries from 2026-04-17 to 10-26 that started inside a slower draw, a
+mean 25.4 min long against 25.3, 27.0 min off against 26.9.
 
 **Why dropped.** It scored the same and walks a slower draw two ways:
 timing every draw scored worse (below, "A metered draw timed by the draw
