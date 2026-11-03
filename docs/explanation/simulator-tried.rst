@@ -32,8 +32,8 @@ the parameters in use against the refit: the recoveries 13.2 min off
 (11) against 19.4, the draw-free 4.3 (5) against 8.0, those with water
 in use 20.7 (6) against 28.9; the lower probe after the 16 draws 2.01
 degF RMS against 2.11; the upper probe in standby 0.210 degF RMS against
-0.256 (25 windows, its interval 0.22 to 0.30 clear of the first); the
-day's electricity 24.7 % off against 23.8, a starts placed share of 0.65
+0.256 (25 windows, its interval 0.22 to 0.30 clear of 0.210); the day's
+electricity 24.7 % off against 23.8, a starts placed share of 0.65
 against 0.55.
 
 **Why dropped.** Worse or no better on every score but the day's
