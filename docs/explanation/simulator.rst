@@ -762,16 +762,17 @@ split came of them shuffled in 6 % of 2,000. The lower probe's split
 holds a step in the house meter, whose gallons size the draws: at
 2026-09-12 19:51 UTC the meter (a Droplet) began reading the circulation
 pump's runs lower (:doc:`standby-loss`, "What the pump's flow says").
-Over runs of like length it read 0.911 of the pump's volume before and
-0.789 after, and the showers read 0.86 of their flow before, a step to
-about 0.87. With each draw before then taken as 0.87 of its metered
-gallons, in the replay and the walk, the same 117 draws come out 1.66
-degF too short (a standard error of 0.31), against 2.2 (0.8) for those
-held out, whose draws it does not scale: the two alike (measured
-2026-11-03, :doc:`simulator-tried`, "The draws before the meter's step
-scaled down"). April's do not follow: its 16 draws go from 1.6 to 5.9
-degF short. Which of the meter's readings is right the record does not
-say. On these parameters, fitted on the earlier gallons, a walk on
+Its reading of the pump's runs of like length also fell through the
+record, from 0.98 in April to 0.76 in October, and the runs either side
+of the step are too few to fix the step's size. With each draw before
+then taken as 0.90, 0.87 or 0.81 of its metered gallons, in the replay
+and the walk, the same 117 draws come out 0.92, 1.66 and 3.09 degF too
+short (standard errors about 0.3), against 2.2 (0.8) for those held out,
+whose draws it does not scale (measured 2026-11-03,
+:doc:`simulator-tried`, "The draws before the meter's step scaled
+down"). April's do not follow: its 16 draws go from 1.6 to 4.9, 5.9 and
+7.7 degF short. Which of the meter's readings is right the record does
+not say. On these parameters, fitted on the earlier gallons, a walk on
 today's meter falls about 2 degF short after a large draw, as at the
 held-out draws.
 
