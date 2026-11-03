@@ -30,16 +30,17 @@ draw-free went from 4.8 (2.2 long) to 44.4 (38.2 long), their
 electricity from 4.0 % to 27.4 % off; the 16 held out with water in use
 from 18.3 (1.7 short) to 64.5 (63.3 long); before 2026-09-18 the 10
 draw-free from 11.1 to 22.5 and the 79 with water in use from 27.7 to
-79.8. The mixed cold starts came right: 2026-08-12 03:32 UTC from 38.3
-min short to 2.7 long, 09-30 02:51 from 46.1 to 5.2 short, 10-23 22:48
-from 61.4 to 4.4 short.
+79.8. It lengthened 106 of the 116, by a median 53.0 min. Three of the
+11 that started with the upper probe under 125 degF came right, the
+three that had run furthest short: 2026-08-12 03:32 UTC, from a mixed
+tank, from 38.3 min short to 2.7 long, 09-30 02:51 from 46.1 to 5.2
+short, 10-23 22:48 from 61.4 to 4.4 short; the other 8 ended 34.4-87.7
+min long.
 
-**Why dropped.** Far worse everywhere else. Pooled at every step, the
-condenser's heat warms the cold bottom before it rises past the lower
-probe, so less of it rises past the lower probe while that bottom is
-cold, and a recovery that starts with a cold bottom under warmer water
-runs long. What the mixed start needs is the bottom taking heat as the
-tank warms, not the probe held under the pool.
+**Why dropped.** Far worse everywhere else. The lengthening was about as
+large whatever the start, so the three came right only because they had
+started about as far short; the trial does not single out what a mixed
+start lacks.
 
 **Account.** :doc:`simulator`, "Accuracy". The scores, the band table
 and the patch are kept with the site's scores
