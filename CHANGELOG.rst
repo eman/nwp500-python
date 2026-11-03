@@ -708,6 +708,20 @@ Changed
 Fixed
 -----
 
+- ``sim_score`` splits every draw the detector times that is under way
+  at an event's start, where it split only one at
+  ``DrawParams.undiluted_gpm`` or faster. A slower one was replayed
+  whole at its onset, the start's probes laid over the replay, and the
+  event's walk did not take the rest: a recovery starting 89 s into a
+  10.9 gal draw was walked without 9 gal of it. The rest is now all at
+  the start, as the score walks a slower draw at its onset. Measured
+  2026-11-02 on the parameters fitted before 2026-09-18: of the 116
+  recoveries 2026-04-17 to 10-26, 44 had a slower one under way. Held
+  out, the 16 with water in use came out 18.3 min off (12.3-25.3)
+  against 21.2, a mean 1.7 short against 13.1; before 2026-09-18 the 79
+  came out 27.7 min off (21.5-35.3) against 25.3, a mean 25.2 long
+  against 9.2. The draw-free and the electricity did not move, nor the
+  days: no local midnight of the record falls inside a timed draw.
 - A recorded recovery is walked with each change of the setpoint inside
   it as a write at its instant (``sim_score.Recovery.setpoints``), where
   it was walked to the setpoint in force at its start; a restart a write

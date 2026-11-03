@@ -217,15 +217,17 @@ water meter's draws for the draw and deliverable-gallon metrics. Give
 the fit the draws before the split, and the score the record
 (``tank_fit.tank_record``) to start each event from its replay. The
 record times each draw by the history's draw detector
-(``TankRecord.draw_seconds``). The score walks one the detector times
-at the parameters' ``DrawParams.undiluted_gpm`` or faster over that
-time, the tank's water whole; one under way at an event's start is
-replayed as far as it ran by then and walked on for the rest. It walks
-every other draw at its onset, where the meter sizes it: timing them
-all scored worse (:doc:`../explanation/simulator-tried`). The fits set
-neither that flow nor the share of a slower draw's cold side the tank
-gives as well (``DrawParams.undiluted_share``): set both on the fitted
-parameters, as ``site_example_params`` does.
+(``TankRecord.draw_seconds``). The score walks one the detector times at
+the parameters' ``DrawParams.undiluted_gpm`` or faster over that time,
+the tank's water whole. It walks every other draw at its onset, where
+the meter sizes it: timing them all scored worse
+(:doc:`../explanation/simulator-tried`). A draw the detector times that
+is under way at an event's start is replayed as far as it ran by then,
+and the event's walk takes the rest: a fast one's over the rest of its
+time, a slower one's all at the start. The fits set neither that flow
+nor the share of a slower draw's cold side the tank gives as well
+(``DrawParams.undiluted_share``): set both on the fitted parameters, as
+``site_example_params`` does.
 
 .. code-block:: python
 

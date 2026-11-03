@@ -13,6 +13,30 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+A slower draw's rest at a start walked over its time (2026-11-02)
+=================================================================
+
+**Tried.** Measured, not adopted, on the parameters fitted before
+2026-09-18 (the share at 0.25, the site's installation): with every draw
+the detector timed split at an event's start (``sim_score``, now kept),
+a slower draw's rest walked over the rest of its time, at its own flow,
+where the score walks it all at the start, as it walks a slower draw at
+its onset.
+
+**Found.** Held out, the 16 recoveries with water in use came out 18.4
+min off against 18.3, a mean 1.7 short either way. Over the 44
+recoveries from 2026-04-17 to 10-26 that started inside a slower draw, a
+mean 25.4 min long against 25.3, 27.0 min off against 26.9.
+
+**Why dropped.** It scored the same and walks a slower draw two ways:
+timing every draw scored worse (below, "A metered draw timed by the draw
+detector").
+
+**Account.** :doc:`simulator`, *Accuracy* (the recoveries);
+``reference/sim-score/slow-draw-under-way-2026-11-02/`` in the checkout
+(not in the repository).
+
+
 The circulation priced at the runs' own flow (2026-11-02)
 =========================================================
 

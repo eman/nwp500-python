@@ -999,13 +999,13 @@ def _state(
 ) -> sim.HeaterState:
     """The heater at an event's start: its probes, and with a
     ``record``, the layers its replay leaves (``tank_fit.start_state``).
-    ``split``: a timed fast draw under way at ``at`` replayed only as far
-    as it ran by then, its rest the event's (``_loads``)."""
+    ``split``: a timed draw under way at ``at`` replayed only as far as
+    it ran by then, its rest the event's (``_loads``)."""
     layers = None
     if record is not None:
         lay = st.layout(params)
         # Cut before the start minute's draws move, by their onsets.
-        whole = _ran_by(record, record, params, at) if split else record
+        whole = _ran_by(record, record, at) if split else record
         part = _replayable(whole, at)
         layers = tf.start_state(
             lay, params, part, at, upper_f, lower_f
@@ -1049,33 +1049,31 @@ def _replayable(record: tf.TankRecord, at: datetime) -> tf.TankRecord:
 
 
 def _under_way(
-    record: tf.TankRecord, params: HeaterParams, at: datetime
+    record: tf.TankRecord, at: datetime
 ) -> list[tuple[datetime, float, float]]:
-    """The record's draws under way at ``at`` the score times
-    (``_timed``): ``(onset, gallons, seconds)``, started before ``at``
-    and running past it at ``params.draw.undiluted_gpm`` or faster."""
+    """The record's draws under way at ``at``: ``(onset, gallons,
+    seconds)``, each timed by the draw detector
+    (``TankRecord.draw_seconds``), started before ``at`` and running
+    past it."""
     out: list[tuple[datetime, float, float]] = []
     for onset, seconds in record.draw_seconds.items():
         if not onset < at < onset + timedelta(seconds=seconds):
             continue
         gal = dict(record.draws).get(onset)
-        if gal is not None and params.draw.undiluted(gal / (seconds / 60.0)):
+        if gal is not None:
             out.append((onset, gal, seconds))
     return out
 
 
 def _ran_by(
-    part: tf.TankRecord,
-    record: tf.TankRecord,
-    params: HeaterParams,
-    at: datetime,
+    part: tf.TankRecord, record: tf.TankRecord, at: datetime
 ) -> tf.TankRecord:
     """``part``, the record replayed to ``at``, with each draw under way
     there (``_under_way``) only the gallons it delivered by ``at``, at
     its even flow."""
     ran = {
         onset: gal * (at - onset).total_seconds() / seconds
-        for onset, gal, seconds in _under_way(record, params, at)
+        for onset, gal, seconds in _under_way(record, at)
     }
     if not ran:
         return part
@@ -1090,8 +1088,10 @@ def _loads(
     params: HeaterParams | None = None,
 ) -> sim.Loads:
     """An event's loads: its ``draws`` (``_timed``), with ``params``
-    the rest of each timed fast draw under way at ``start`` from there
+    the rest of each timed draw under way at ``start`` from there
     (``_under_way``; its start replayed with ``_state``'s ``split``),
+    as ``_timed`` walks a draw: over the rest of its time at
+    ``params.draw.undiluted_gpm`` or faster, else all at ``start``;
     and with a ``record``, the circulation runs it recorded from
     ``start`` to ``end`` (an event with none is known to have had
     none)."""
@@ -1102,9 +1102,13 @@ def _loads(
             sim.Draw(
                 at=start,
                 gallons=gal * left / seconds,
-                duration_s=left,
+                duration_s=(
+                    left
+                    if params.draw.undiluted(gal / (seconds / 60.0))
+                    else 0.0
+                ),
             )
-            for onset, gal, seconds in _under_way(record, params, start)
+            for onset, gal, seconds in _under_way(record, start)
             if (left := seconds - (start - onset).total_seconds()) > 0.0
         )
         draws = rest + _timed(draws, record, params)
