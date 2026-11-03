@@ -32,9 +32,9 @@ furthest short came right as with the stir: 2026-08-12 03:32 UTC 3.1 min
 long, 09-30 02:51 4.8 short, 10-23 22:48 4.1 short.
 
 **Why dropped.** As the stir: a bottom that takes heat lengthens nearly
-every recovery, so the walk's balance on the others rests on a bottom
-that stays cold, and the record's probes do not show which recoveries'
-bottoms take heat.
+every recovery, so, on the parameters fitted with the span at 0.159, the
+walk's balance on the others rests on a bottom that stays cold, and the
+record's probes do not show which recoveries' bottoms take heat.
 
 **Account.** :doc:`simulator`, "Accuracy". The scores are kept with the
 site's scores (``mixed-cold-recovery-2026-11-02``).

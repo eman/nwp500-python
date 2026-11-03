@@ -577,15 +577,22 @@ the whole tank: its bottom layer, under the condenser, went from 82.8 to
 with some 7 of the 63.2 gal still cold. The heat is fitted as the whole
 tank's mass times the record's climb, so a walk climbs faster by the
 share of the tank it leaves unheated, whatever the real tank's bottom
-does. The 11 recoveries since 2026-04-17 that started with the upper
-probe under 125 degF came out a mean 2.8 % of the record's minutes
-short, 8 of them short, against 10 % long for the other 105. Stirring
-the water below the condenser into its pool through a run, not only at
-its start, took that one to 2.7 min long and those of 2026-09-30 02:51
-and 10-23 22:48 to 5.2 and 4.4 min short, but lengthened nearly every
-recovery by about as much, and so did the condenser's span taken down to
-the bottom (:doc:`simulator-tried`, "The water below the condenser
-stirred through a run", "The condenser's span reaching the bottom").
+does. It does so in the mixed part of nearly every long recovery: over
+20-minute stretches with the probes within 3 degF, the walk's climb came
+to 1.08-1.12 of its map's heat (a median 1.10) in each of the 11
+draw-free recoveries from a lower probe under 120 degF with five such
+stretches or more, the record's to 0.98-1.07 (1.01; the map is fitted on
+such stretches). What keeps the others near the record lies outside
+those stretches, and was not found. The 11 recoveries since 2026-04-17
+that started with the upper probe under 125 degF came out a mean 2.8 %
+of the record's minutes short, 8 of them short, against 10 % long for
+the other 105. Stirring the water below the condenser into its pool
+through a run, not only at its start, took that one to 2.7 min long and
+those of 2026-09-30 02:51 and 10-23 22:48 to 5.2 and 4.4 min short, but
+lengthened nearly every recovery by about as much, and so did the
+condenser's span taken down to the bottom (:doc:`simulator-tried`, "The
+water below the condenser stirred through a run", "The condenser's span
+reaching the bottom").
 
 **Whole days** (``sim_score.day_events``), measured on 2026-10-31 on the
 same split and installation, the parameters fitted on that date's code:
