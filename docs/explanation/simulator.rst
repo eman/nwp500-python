@@ -642,14 +642,16 @@ since its step what a known volume put it at on 2026-11-04 (the two sets
 of days, below), the draws of the days held out from the fit (those the
 slower draw's share was chosen on) at 1/0.85 of their metered gallons
 (measured 2026-11-04 on the same params): electricity 12.9 % off
-(7.7-19.3), a mean 2.4 % low; two days ordered as the meter orders them
-90 % of the time (85-95 %); starts 74 % placed (61-86 %), 0.45 a day
-missed and 0.28 false (0.14-0.45); the lowest upper probe 2.3 degF off
-(1.4-3.5), 0.4 cold; the end state's mean of the two probes 3.1 degF off
-(1.7-4.8). 10-20 then starts, and comes out 1 % high (2,832 Wh against
-the meter's 2,805) where it was 42 % low; 10-18 still does not start.
-The draws of late September it likely takes too far (the same, below).
-What follows is on the draws as metered.
+(7.7-19.3), a mean 2.4 % low, within 12 % on 18 days; two days ordered
+as the meter orders them 90 % of the time (85-95 %); starts 74 % placed
+(61-86 %), 0.45 a day missed and 0.28 false (0.14-0.45); the lowest
+upper probe 2.3 degF off (1.4-3.5), 0.4 cold; the end state's mean of
+the two probes 3.1 degF off (1.7-4.8). 10-20 then starts at 21:00 as the
+record does, and comes out 1 % high (2,832 Wh against the meter's 2,805)
+where it was 42 % low, the walk's false start at 11:58 kept and the
+record's at 07:35 still missed; 10-18 still does not start. The draws of
+late September it likely takes too far (the same, below). What follows
+is on the draws as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on 10-20
