@@ -1876,7 +1876,6 @@ def time_to_ready(
         bath_gal = p.bath_gal
         bath_source = "configured"
         defaults.append(f"bath_gal={bath_gal}")
-    bath_gal = round(bath_gal, 1)
     shower_source: Literal["weekly_forecast", "default", "request"] = (
         "weekly_forecast" if shower_from_forecast else "request"
     )

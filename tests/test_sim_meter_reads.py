@@ -192,3 +192,11 @@ def test_readiness_takes_a_bath_and_a_shower_delivered() -> None:
     assert half.bath.volume_gal == whole.bath.volume_gal == 20.0
     assert half.bath.margin_gal == whole.bath.margin_gal
     assert half.showers.ready_for == whole.showers.ready_for
+
+
+def test_a_fractional_bath_is_rounded_once_delivered() -> None:
+    # 10.14 metered at 0.5 is 20.28 delivered, 20.3 as reported.
+    s = _scenario(state=HeaterState(upper_f=140.0, lower_f=135.0))
+    half = time_to_ready(s, _reads(0.5), bath_gal=10.14)
+    whole = time_to_ready(s, default_params(), bath_gal=20.28)
+    assert half.bath.volume_gal == whole.bath.volume_gal == 20.3

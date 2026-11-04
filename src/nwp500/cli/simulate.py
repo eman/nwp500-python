@@ -129,8 +129,8 @@ class Inputs:
     #: Where the air, its humidity and the inlet are read live
     #: (``sim_home_assistant.Sources``), when the heater is.
     sources: Any = None
-    #: The bath and the shower readiness is judged against, delivered,
-    #: in the preferred unit; None: the parameters'.
+    #: The bath and the shower readiness is judged against, as the meter
+    #: reads them, in the preferred unit; None: the parameters'.
     bath: float | None = None
     shower: float | None = None
 

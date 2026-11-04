@@ -1134,14 +1134,14 @@ _tz_option = click.option(
 @click.option(
     "--bath",
     type=float,
-    help="The bath readiness is judged against, delivered, preferred unit "
-    "(default the parameters', 28.7 gal)",
+    help="The bath readiness is judged against, as the meter reads it, "
+    "preferred unit (default the parameters', 28.7 gal)",
 )
 @click.option(
     "--shower",
     type=float,
-    help="A shower, delivered, preferred unit (default the parameters', "
-    "12 gal)",
+    help="A shower, as the meter reads it, preferred unit (default the "
+    "parameters', 12 gal)",
 )
 @click.option(
     "--format",
