@@ -60,6 +60,17 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **How near a walk came to its start triggers.**
+  ``sim.start_margins(result.points, hp_lower_on_f, tou_windows)`` gives
+  each coast of a walk and its nearest approach to each heat-pump
+  trigger in force over it (``StartMargin``): the lower zone's margin
+  over ``hp_lower_on`` outside the TOU windows, the upper zone's over
+  the window's ``UPPER_DEFICIT_F`` inside them, where and whether the
+  coast ended in a start. A caller can weigh a start the walk did not
+  call by how nearly it called it. On the site's 29 held-out days the
+  three starts the walk missed on coasts with no start came at lower
+  margins of 7.0-9.0 °F, among the five smallest of 24, and none of the
+  19 over 9.0 °F missed one.
 - **A slower draw takes more of the tank than the valve's share.**
   Each delivered gallon takes ``s + undiluted_share · (1 − s)`` of the
   tank's water, ``s`` the valve's share
