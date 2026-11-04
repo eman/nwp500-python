@@ -629,15 +629,25 @@ These are with a draw at 2 gal/min or faster taking the tank's water
 whole over the time the detector held it (``DrawParams.undiluted_gpm``,
 :doc:`simulator-methodology`, "A fast draw"), on the same params on
 2026-10-31. Before it: electricity 16.5 % off (10.8-22.9), 12.8 % low,
-within 12 % on 18 days; starts 79 % placed, 0.41 missed and 0.10
-false a day; the lowest upper probe 3.8 degF off (2.2-5.7), 2.8 warm,
-the end state 5.4 degF off (3.8-7.3) against 4.8 (3.2-6.6). With a
-slower draw's share as well (``DrawParams.undiluted_share``), on the
-same params on 2026-11-01: electricity 14.3 % off (8.8-20.6), a mean
-9.8 % low, within 12 % on 20 days; two days ordered as the meter
-orders them 86 % of the time (79-92 %); starts 78 % placed, 0.45 a day
-missed and 0.17 false (0.07-0.28); the lowest upper probe 2.6 degF off
-(1.6-3.8), 1.3 warm; the end state 4.0 degF off (2.5-5.8).
+within 12 % on 18 days; starts 79 % placed, 0.41 missed and 0.10 false a
+day; the lowest upper probe 3.8 degF off (2.2-5.7), 2.8 warm, the end
+state 5.4 degF off (3.8-7.3) against 4.8 (3.2-6.6). With a slower draw's
+share as well (``DrawParams.undiluted_share``), on the same params on
+2026-11-01: electricity 14.3 % off (8.8-20.6), a mean 9.8 % low, within
+12 % on 20 days; two days ordered as the meter orders them 86 % of the
+time (79-92 %); starts 78 % placed, 0.45 a day missed and 0.17 false
+(0.07-0.28); the lowest upper probe 2.6 degF off (1.6-3.8), 1.3 warm;
+the end state 4.0 degF off (2.5-5.8). Taken as if the meter had read
+since its step what a known volume put it at on 2026-11-04 (the two sets
+of days, below), the held-out days' draws at 1/0.85 of their metered
+gallons (measured 2026-11-04 on the same params): electricity 12.9 % off
+(7.7-19.3), a mean 2.4 % low; two days ordered as the meter orders them
+90 % of the time (85-95 %); starts 74 % placed (61-86 %), 0.45 a day
+missed and 0.28 false (0.14-0.45); the lowest upper probe 2.3 degF off
+(1.4-3.5), 0.4 cold; the end state 3.1 degF off (1.7-4.8). 10-20 then
+starts, and comes out 1 % high (2,832 Wh against the meter's 2,805)
+where it was 42 % low; 10-18 still does not start. The draws of late
+September it likely takes too far (the same, below).
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on 10-20
