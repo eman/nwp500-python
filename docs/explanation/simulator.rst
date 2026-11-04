@@ -654,8 +654,19 @@ late September it likely takes too far (the same, below). The reading is
 ``DrawParams.meter_reads``, 1 (the meter as it reads) unless set: at
 0.85 it takes every draw so where the walk, the replay and the score
 take it, and puts the same days within 0.01 of these, the held-out days
-all falling after the step (measured 2026-11-03). What follows
-is on the draws as metered.
+all falling after the step (measured 2026-11-03). The false starts it
+adds are starts the record made, taken early, and one more (measured
+2026-11-04, 8 against 5): 09-28's goes, and the starts of 09-18, 09-23
+and 10-11, placed as metered, come 118, 57 and 56 min before the
+record's, each after a draw the walk takes further than the record.
+09-18's 17.8 gal leaves its lower probe 21.9 degF under the record's an
+hour on, against 15.7 as metered, the record's falling over the hour
+after; 09-23's 10.5 leaves its upper probe 3.5 under an hour before
+the window's opening, against 0.7 over. 10-24 gains a start at the window's close,
+its lower probe 7.8 degF under the record's after a 21.1 gal draw where
+the record's barely moved. The missed starts stay 0.45 a day: 09-28
+gains the record's two and 10-20 one, the three early ones lost. What
+follows is on the draws as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on 10-20
@@ -844,6 +855,14 @@ It measures that day alone: the meter's reading of the pump's runs of 5
 to 8 gallons went on falling after the step, from 0.84 to 09-30 to 0.76
 from mid-October, so if those runs held their flow, and the meter read
 them as it reads a tap's draw, it read nearer 0.94 in late September.
+The runs do not tell that fall from their own shortening (measured
+2026-11-04 on the 49 after the step): a run's reading falls 0.0022 a day
+on the date alone (a standard error of 0.0007), and fits as well on its
+length (0.920 less 0.75 over its gallons, a residual of 0.059 against
+0.057), the runs' median falling from 7.8 to 5.0 gal and the two
+correlated 0.73; taken together the date's slope is 0.0020 (0.0010) and
+the length's 0.13 (0.41). The 0.94 holds only if the fall is the
+meter's.
 Taken as if the meter had read 0.85 since the step, the held-out draws
 at 1/0.85 of their metered gallons, in the replay and the walk, put the
 walk's lower probe after their 32 large draws 1.45 degF too far (a

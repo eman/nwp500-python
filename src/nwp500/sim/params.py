@@ -489,12 +489,13 @@ class DrawParams:
     #: the meter's gallons as read (``history.record``). 1: the meter as it
     #: reads. On the site, 1.00 gal filled at a hot tap read 0.846 on
     #: 2026-11-03: one fill, on a meter that drifted after its step of
-    #: 2026-09-12 (it read nearer 0.94 in late September, if its circulation
-    #: runs held their flow and it read them as it reads a tap's draw). The
-    #: held-out days with their draws from the step on at 0.85 came out 2.4
-    #: % low in electricity, against 9.8 % as metered. The flows a draw is
-    #: judged by (``undiluted_gpm``, ``draw_gpm``) and its
-    #: ``domain_volume_gal`` stay the meter's, as they were measured.
+    #: 2026-09-12 (nearer 0.94 in late September if its circulation runs
+    #: held their flow, the meter read them as it reads a tap's draw, and
+    #: their fall is the meter's, not their shortening; the runs do not tell
+    #: the two apart). The held-out days with their draws from the step on
+    #: at 0.85 came out 2.4 % low in electricity, against 9.8 % as metered.
+    #: The flows a draw is judged by (``undiluted_gpm``, ``draw_gpm``) and
+    #: its ``domain_volume_gal`` stay the meter's, as they were measured.
     meter_reads: float = field(
         default=1.0, metadata=_p(DEFAULT, "1", INSTALLATION)
     )
