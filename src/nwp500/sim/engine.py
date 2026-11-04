@@ -224,6 +224,9 @@ class PathPoint:
     #: The tank's layers here, °F, the bottom first, for a physics whose
     #: state has them (``physics.stratified``); None otherwise.
     layers_f: tuple[float, ...] | None = field(default=None, compare=False)
+    #: Heating was disabled here (``controller.disabled``): Vacation, or
+    #: powered off with no entry having turned the heater on.
+    heating_disabled: bool = False
 
 
 @dataclass
@@ -695,6 +698,7 @@ class _Engine:
                 0.0,
                 mode=self.mode,
                 layers_f=_layers_of(self.tank_state),
+                heating_disabled=ctl.disabled(self.state, self.settings),
             )
         ]
         self.heating: list[HeatingInterval] = carried
@@ -1078,6 +1082,7 @@ class _Engine:
                     p.element_wh,
                     self.mode,
                     _layers_of(p.state),
+                    ctl.disabled(self.state, self.settings),
                 )
             )
         cycle = self.cycle
@@ -1349,6 +1354,7 @@ class _Engine:
                 0.0,
                 mode=self.mode,
                 layers_f=_layers_of(self.tank_state),
+                heating_disabled=ctl.disabled(self.state, self.settings),
             )
         )
 

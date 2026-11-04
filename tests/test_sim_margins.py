@@ -6,7 +6,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from test_sim_api import WINDOW, _peak, _scenario, at
 
-from nwp500.sim import Draw, Loads, Schedules, default_params, simulate
+from nwp500.sim import (
+    Draw,
+    Loads,
+    Schedules,
+    Settings,
+    default_params,
+    simulate,
+)
 from nwp500.sim.engine import PathPoint
 from nwp500.sim.margins import start_margins
 from nwp500.sim.physics.element import HeaterMode
@@ -23,15 +30,18 @@ def _p(
     *,
     heating: bool = False,
     mode: HeaterMode = "heat_pump",
+    setpoint: float = SETPOINT,
+    disabled: bool = False,
 ) -> PathPoint:
     return PathPoint(
         at=T0 + timedelta(minutes=minutes),
         upper_f=upper,
         lower_f=lower,
-        setpoint_f=SETPOINT,
+        setpoint_f=setpoint,
         heating=heating,
         input_wh=None,
         mode=mode,
+        heating_disabled=disabled,
     )
 
 
@@ -69,22 +79,75 @@ def test_the_lower_trigger_held_while_the_upper_zone_is_at_the_setpoint() -> (
     assert m.margin_f == pytest.approx(100.0 - 104.9)
 
 
-def test_inside_a_window_the_upper_deficit_and_at_its_close_the_lower() -> None:
+def test_inside_a_window_the_upper_deficit_and_the_lower_crossing() -> None:
+    # The lower trigger reads inside the window too: a crossing there
+    # starts the heater at the close.
     window = ((T0 + timedelta(minutes=10), T0 + timedelta(minutes=30)),)
     points = [
         _p(0, 135.0, 112.0),
         _p(10, 130.0, 100.0),
         _p(20, 129.0, 99.0),
-        _p(30, 128.5, 98.0),
+        _p(30, 128.5, 101.0),
     ]
     lower, upper = start_margins(points, 104.9, window)
-    assert upper.trigger == "upper_at_tou_open"
+    assert (lower.trigger, upper.trigger) == ("lower", "upper_at_tou_open")
     assert upper.at == points[2].at
     assert upper.margin_f == pytest.approx(129.0 - (SETPOINT - UPPER_DEFICIT_F))
-    # The lower trigger reads outside the window: before it, and at the
-    # close.
-    assert lower.at == points[3].at
-    assert lower.margin_f == pytest.approx(98.0 - 104.9)
+    assert lower.at == points[2].at
+    assert lower.margin_f == pytest.approx(99.0 - 104.9)
+
+
+def test_the_lower_trigger_no_nearer_than_the_setpoint() -> None:
+    # A low setpoint under hp_lower_on: the compressor's trigger is the
+    # setpoint (controller.lower_trigger_f).
+    points = [_p(0, 100.0, 104.0, mode="high_demand", setpoint=102.5)]
+    (m,) = start_margins(points, 118.0)
+    assert m.margin_f == pytest.approx(104.0 - 102.5)
+
+
+def test_energy_saver_a_draw_releases_the_held_lower_trigger() -> None:
+    points = [
+        _p(0, SETPOINT + 5.0, 110.0, mode="energy_saver"),
+        _p(10, SETPOINT + 4.0, 96.0, mode="energy_saver"),
+        _p(20, SETPOINT + 3.0, 95.0, mode="energy_saver"),
+    ]
+    assert start_margins(points, 104.9) == ()
+    drew = (Draw(at=T0 + timedelta(minutes=5), gallons=8.0),)
+    (m,) = start_margins(points, 104.9, draws=drew)
+    assert m.at == points[1].at
+    assert m.margin_f == pytest.approx(96.0 - 104.9)
+
+
+def test_heating_disabled_counts_for_neither() -> None:
+    points = [_p(0, 120.0, 100.0, disabled=True), _p(10, 119.0, 99.0)]
+    (m,) = start_margins(points, 104.9)
+    assert m.at == points[1].at
+
+
+def test_no_points_no_margins() -> None:
+    assert start_margins([], 104.9) == ()
+
+
+def test_a_draw_s_start_reads_the_state_after_the_drop() -> None:
+    # The engine writes the state just after a draw at a start's instant,
+    # heating, at the last coast point's instant: that is what crossed.
+    s = _scenario(loads=Loads(draws=(Draw(at=at(1), gallons=20.0),)))
+    result = simulate(s, default_params())
+    (start,) = [h.start for h in result.heating]
+    assert (start.at, start.trigger) == (at(1), "lower")
+    lower = next(m for m in start_margins(result.points, 105.0) if m.started)
+    assert lower.end == start.at
+    assert lower.margin_f < 0.0
+
+
+def test_a_vacation_walk_has_no_margins() -> None:
+    s = _scenario(
+        settings=Settings(setpoint_f=140.9, mode=5, hp_lower_on_f=105.0),
+        loads=Loads(draws=(Draw(at=at(1), gallons=20.0),)),
+    )
+    result = simulate(s, default_params())
+    assert result.heating == []
+    assert start_margins(result.points, 105.0) == ()
 
 
 def test_electric_and_no_lower_setting_count_for_neither() -> None:

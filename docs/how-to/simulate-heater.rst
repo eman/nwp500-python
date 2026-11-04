@@ -839,7 +839,8 @@ where the elements answer it, at most
 
 A whole walk's coasts carry the same question: how near each came to a
 start it did not make. ``start_margins`` reads it off the walk's
-points, given the lower trigger and the TOU windows the walk was given:
+points, given the lower trigger, the TOU windows and the draws the walk
+was given:
 
 .. code-block:: python
 
@@ -847,19 +848,22 @@ points, given the lower trigger and the TOU windows the walk was given:
 
    result = simulate(scenario, params, tou_windows_in_force=windows)
    for m in start_margins(
-       result.points, scenario.settings.hp_lower_on_f, windows
+       result.points,
+       scenario.settings.hp_lower_on_f,
+       windows,
+       scenario.loads.draws,
    ):
        print(m.start, m.end, m.trigger, m.at, m.margin_f, m.started)
 
-Each ``StartMargin`` is one coast and one trigger: ``lower`` outside
-the windows (the lower zone over ``hp_lower_on``), ``upper_at_tou_open``
-inside them (the upper zone over the setpoint less the window's
-``UPPER_DEFICIT_F``). A coast that its own trigger ended stands near 0;
-one that ended without a start says how near it came. On the site's
-held-out days the starts the walk missed fell on the coasts with the
-smallest lower margins (:doc:`/explanation/simulator`, "Accuracy"), so
-read a coast a few degrees clear of its trigger as one that could have
-started.
+Each ``StartMargin`` is one coast and one trigger: ``lower`` (the lower
+zone over its trigger, which inside a window starts the heater at the
+close) and, inside the windows, ``upper_at_tou_open`` (the upper zone
+over the setpoint less the window's ``UPPER_DEFICIT_F``). A coast its
+own trigger ended stands at or under 0; one that ended without a start
+says how near it came. On the site's held-out days the few starts the
+walk missed outright fell on coasts among the smallest margins
+(:doc:`/explanation/simulator`, "Accuracy"); the record is too short to
+say how small is too small.
 
 
 Ask how much hot water is left

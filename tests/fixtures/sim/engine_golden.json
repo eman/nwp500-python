@@ -4,10 +4,10 @@
    "heating": "fcc4313e004984ec",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "ce5a5d38e681c9b6",
-   "points": "b7aea6c2b5c1a402",
+   "points": "3323a2027cc71e32",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "5132fcfcbb0c16006eacbe43f5bce428260bf5291cd6875dbdd95d23b6a43e93",
+  "sha256": "ec86397a9d3fe468110ce6c4fab870348aae6fec092bdfd1723487d50005b686",
   "summary": {
    "heating": [
     [
@@ -44,10 +44,10 @@
    "heating": "e2f160cf316c33aa",
    "mode_writes": "a417ab1edcec7f9b",
    "modes": "433b93ee1b350f06",
-   "points": "84c0ab131c7eedb8",
+   "points": "9ea12cfbb84281a6",
    "writes": "821f72d283748b0b"
   },
-  "sha256": "bbefb3c9e2ca404ba6e9c3898a21390bc31f369456cef77fcb36cc55401e757e",
+  "sha256": "218161fb1892ccdcb288f438a60e5a3c559c7dea68759eb3bfb012ff2667c20b",
   "summary": {
    "heating": [
     [
@@ -184,10 +184,10 @@
    "heating": "2267a15100371606",
    "mode_writes": "71c236b6f12cfe41",
    "modes": "347ea922ad62e7ab",
-   "points": "7941bfd0d3ff8b8d",
+   "points": "0fba83f69678c4e6",
    "writes": "38b28717e3968940"
   },
-  "sha256": "628f1dd288aee93a2f34b1cb55247d2d4070c1b57d1b8be3b266cd5530ebcd25",
+  "sha256": "c8166d70abc59acd62dcc5676d0489d1e1729b70fd5726bf928b492a3dcbcfa7",
   "summary": {
    "heating": [
     [
@@ -269,10 +269,10 @@
    "heating": "3ada48d711ffa940",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "ce5a5d38e681c9b6",
-   "points": "d6641d55817f18b3",
+   "points": "927a7d72b8bb3d9d",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "097ab8e916317f161e60262e0eb1a7d998b20a9b53d68da161ac707028760d2f",
+  "sha256": "078144e28b02b6dd063593f48cae80674979492e696a3bddbb3dc4da26560977",
   "summary": {
    "heating": [
     [
@@ -319,10 +319,10 @@
    "heating": "6eb1859be591e9fe",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "8cfcacb71730221e",
-   "points": "fccffdd9a26d67e7",
+   "points": "6e71f848889cde3b",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "01a4d36d77145d258e3962c2e784f0a95e88e27e45f3663240649997432456e5",
+  "sha256": "632d5f931478cb24aa7504e45edae312eeb51009753629ffffc44f0a0eca4769",
   "summary": {
    "heating": [
     [
