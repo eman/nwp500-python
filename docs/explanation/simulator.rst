@@ -901,6 +901,18 @@ after it the longer runs read higher too (0.79 under 8 gal over 45 runs,
 0.87 at 8 to 12 over 4), but the longer draws fall less. What sets the
 change the record does not show.
 
+At ``DrawParams.meter_reads`` 0.85 the growth after the step mostly goes
+(measured 2026-11-04 on the 28 of those draws from 09-18, held out from
+the fit): the walk falls 0.9 degF further than the record over the draws
+of 10 minutes or less (4), 2.1 further over those of 10 to 15 (18) and
+1.8 less over the longer (6), against 1.3, 1.2 and 6.4 less as metered,
+so the scale takes about 3.5 degF off the shorter and 4.6 off the
+longest. What growth with minutes is left, 0.24 degF a minute (a
+standard error of 0.13) against 0.28 (0.12) as metered, rests on one
+draw, 10-02 00:50's 9.4 gal over 43 minutes: without it, 0.14 (0.24).
+Taken with the gallons, the minutes' term holds at 0.27 (0.13) and the
+gallons' goes from 0.21 (0.27) to -0.30 (0.27).
+
 Circulation running through a summer recovery slows the walk's more than
 the record's (measured 2026-11-03 on the parameters in use, the share at
 0.25, every scored recovery walked with the record's runs, setpoint
