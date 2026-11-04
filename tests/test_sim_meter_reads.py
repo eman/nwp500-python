@@ -8,7 +8,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from test_sim_api import _scenario, at
 
-from nwp500.sim import Draw, Loads, default_params, simulate
+from nwp500 import sim_score as ss
+from nwp500.sim import (
+    Draw,
+    DrawWindow,
+    HeaterState,
+    Loads,
+    default_params,
+    next_recovery,
+    simulate,
+    time_to_ready,
+)
 from nwp500.sim import history as hist
 from nwp500.sim import tank_fit as tf
 from nwp500.sim.params import (
@@ -17,6 +27,7 @@ from nwp500.sim.params import (
     params_from_document,
     params_to_document,
 )
+from nwp500.sim.physics import stratified as S
 
 T0 = datetime(2026, 10, 1, 6, 0, tzinfo=UTC)
 
@@ -100,3 +111,84 @@ def test_it_round_trips_and_an_older_document_reads_it_off() -> None:
     assert "meter_reads" in doc["draw"]
     del doc["draw"]["meter_reads"]
     assert params_from_document(doc).draw.meter_reads == 1.0
+
+
+def test_a_window_s_expected_gallons_are_the_meter_s() -> None:
+    window = DrawWindow(start=at(1), end=at(2), expected_gal=6.0)
+    s = _scenario(loads=Loads(windows=(window,)))
+    (half,) = simulate(s, _reads(0.5)).windows
+    (whole,) = simulate(s, default_params()).windows
+    assert half.expected_gal == pytest.approx(12.0)
+    assert whole.expected_gal == pytest.approx(6.0)
+    assert half.margin_gal == pytest.approx(half.deliverable_gal - 12.0)
+    assert half.deliverable_gal == pytest.approx(whole.deliverable_gal)
+
+
+def _quiet_record(gal: float) -> tf.TankRecord:
+    steps = [
+        hist.Step(
+            seconds=60.0,
+            upper_f=128.0,
+            lower_f=126.0,
+            flow_gpm=0.0,
+            compressor_on=False,
+            element_on=False,
+            ambient_f=62.0,
+            inlet_f=60.0,
+            flow_volume="delivered",
+            at=T0 + timedelta(minutes=k),
+        )
+        for k in range(180)
+    ]
+    rec = hist.record(steps, default_params())
+    return replace(rec, draws=((T0 + timedelta(minutes=100), gal),))
+
+
+def test_the_replay_takes_a_record_s_draws_delivered() -> None:
+    lay = S.layout(default_params())
+    until = T0 + timedelta(minutes=170)
+    half = tf.replay(lay, _reads(0.5), _quiet_record(6.0), until)
+    whole = tf.replay(lay, default_params(), _quiet_record(12.0), until)
+    as_read = tf.replay(lay, default_params(), _quiet_record(6.0), until)
+    assert half is not None and whole is not None and as_read is not None
+    assert S.observe(lay, half) == pytest.approx(S.observe(lay, whole))
+    assert S.observe(lay, half) != pytest.approx(S.observe(lay, as_read))
+
+
+def test_a_recovery_takes_the_rest_of_a_draw_under_way_delivered() -> None:
+    def recovery(
+        gallons: float, params: HeaterParams
+    ) -> list[tuple[datetime, float, float]]:
+        draw = Draw(at=at(1), gallons=gallons, duration_s=1800.0)
+        s = _scenario(
+            state=HeaterState(
+                upper_f=125.0, lower_f=100.0, compressor_running=True
+            ),
+            loads=Loads(draws=(draw,)),
+        )
+        s = s.model_copy(update={"start": at(1) + timedelta(minutes=10)})
+        return list(next_recovery(s, params).points)
+
+    # Both under the undiluted flow (``undiluted_gpm``, the meter's).
+    assert recovery(20.0, _reads(0.5)) == recovery(40.0, default_params())
+    assert recovery(20.0, _reads(0.5)) != recovery(20.0, default_params())
+
+
+def test_the_score_takes_a_delivery_s_gallons_delivered() -> None:
+    def scored(gal: float, params: HeaterParams) -> float:
+        e = ss.Delivery(T0, 140.0, 138.0, 140.0, True, gal)
+        got = ss.score(ss.Events(deliveries=(e,)), params)
+        return got.metrics["deliverable_bias_gal"].value
+
+    assert scored(5.0, _reads(0.5)) == pytest.approx(
+        scored(10.0, default_params())
+    )
+
+
+def test_readiness_takes_a_bath_and_a_shower_delivered() -> None:
+    s = _scenario(state=HeaterState(upper_f=140.0, lower_f=135.0))
+    half = time_to_ready(s, _reads(0.5), bath_gal=10.0, shower_gal=5.0)
+    whole = time_to_ready(s, default_params(), bath_gal=20.0, shower_gal=10.0)
+    assert half.bath.volume_gal == whole.bath.volume_gal == 20.0
+    assert half.bath.margin_gal == whole.bath.margin_gal
+    assert half.showers.ready_for == whole.showers.ready_for

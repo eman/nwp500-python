@@ -616,7 +616,17 @@ def simulate(
         windows=tuple(
             draw_windows(
                 sim,
-                [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
+                [
+                    (
+                        w.start,
+                        w.end,
+                        # The meter's, as a draw's (``meter_reads``).
+                        None
+                        if w.expected_gal is None
+                        else params.draw.delivered_gal(w.expected_gal),
+                    )
+                    for w in s.loads.windows
+                ],
                 delivery,
                 params,
                 inlet_on=lambda at: _inlet_f(s, params, at),
@@ -1845,7 +1855,9 @@ def time_to_ready(
 
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
-    ``defaults_used``. ``shower_from_forecast``: the
+    ``defaults_used``. Both are gallons as the meter reads them, a
+    ``Draw``'s: the answer judges and gives them delivered
+    (``DrawParams.delivered_gal``, the same at ``meter_reads`` 1). ``shower_from_forecast``: the
     ``shower_gal`` given is a draw forecast's
     (``draw_forecast.shower_gal``). ``drawing``: water is being drawn
     now. ``inlet_measured``: the scenario's inlet is the mains as
@@ -1871,6 +1883,9 @@ def time_to_ready(
         shower_gal = p.shower_gal
         shower_source = "default"
         defaults.append(f"shower_gal={shower_gal}")
+    # The meter's gallons, as a draw's (``DrawParams.meter_reads``).
+    bath_gal = round(params.draw.delivered_gal(bath_gal), 1)
+    shower_gal = params.draw.delivered_gal(shower_gal)
     # In a TOU window now: the heater's own marker. Unknown counts as in
     # force, as for the counter test and for ``element_mode``: the
     # conservative direction is "it may not heat".

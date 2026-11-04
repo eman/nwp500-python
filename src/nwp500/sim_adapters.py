@@ -366,8 +366,8 @@ def loads(
 ) -> Loads:
     """Hot water drawn: ``(instant, volume)`` pairs, the volume in the
     preferred unit as a meter on the delivered (mixed) line counts it;
-    and the windows to judge, ``(start, end, expected volume or None)``
-    (``sim.DrawWindow``)."""
+    and the windows to judge, ``(start, end, expected volume or None)``,
+    the volume as the same meter counts it (``sim.DrawWindow``)."""
     return Loads(
         draws=tuple(
             Draw(at=at, gallons=_volume_to_sim(v)) for at, v in _finite(draws)

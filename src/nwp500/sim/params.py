@@ -496,7 +496,7 @@ class DrawParams:
     #: judged by (``undiluted_gpm``, ``draw_gpm``) and its
     #: ``domain_volume_gal`` stay the meter's, as they were measured.
     meter_reads: float = field(
-        default=1.0, metadata=_p(MEASURED, "1", INSTALLATION)
+        default=1.0, metadata=_p(DEFAULT, "1", INSTALLATION)
     )
     #: The installation's climate, which places the mains by the day
     #: (``cold_supply.mains_f``): the year's mean outdoor air and its
@@ -996,15 +996,16 @@ class ReadinessParams:
     #: answer that a probe error this size would flip says
     #: ``bath_ready_within_probe_resolution``.
     probe_resolution_f: float = field(default=1.0, metadata=_p(DEFAULT, "°F"))
-    #: The bath readiness is judged against, delivered gallons: the
-    #: larger of two hot-only fills to one household's usual bath level,
-    #: read on a meter (22.4 and 28.7 gal). The level is a household's
+    #: The bath readiness is judged against, gallons as the meter reads
+    #: them (taken delivered at ``DrawParams.meter_reads``): the larger
+    #: of two hot-only fills to one household's usual bath level, read
+    #: on a meter (22.4 and 28.7 gal). The level is a household's
     #: choice; set your own.
     bath_gal: float = field(
         default=28.7, metadata=_p(MEASURED, "gal", INSTALLATION)
     )
-    #: A shower, delivered gallons, when the caller has no forecast of
-    #: its own. Assumed, not measured.
+    #: A shower, gallons as the meter reads them (as ``bath_gal``), when
+    #: the caller has no forecast of its own. Assumed, not measured.
     shower_gal: float = field(
         default=12.0, metadata=_p(DEFAULT, "gal", INSTALLATION)
     )
