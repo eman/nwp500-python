@@ -139,7 +139,7 @@ held out; April's go further from them; at 0.87 about four fifths of the
 recoveries' long run stays. Which of the meter's readings is right the
 record does not say, and the pump's figure is its own estimate, not a
 measure. The draws are kept as metered. A volume measured at a tap later
-put the meter at 0.85 on 2026-11-04 (:doc:`simulator`, "Accuracy"), but
+put the meter at 0.85 on 2026-11-03 (:doc:`simulator`, "Accuracy"), but
 the meter's reading of the pump's runs went on falling after the step,
 so that one fill does not give its scale on earlier days; rescaling the
 record's draws, and a refit on them, would want more such measurements.
