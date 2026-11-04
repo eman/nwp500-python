@@ -669,7 +669,20 @@ after, so its hour's samples do not show why. 10-24 gains a start at the
 window's close, its lower probe falling 33.0 degF over the hour of a
 21.1 gal draw to 7.8 under the record's, whose fell 6.5 with the heater
 running. The missed starts stay 0.45 a day: 09-28 gains the record's two
-and 10-20 one, the three early ones lost. What follows is on the draws
+and 10-20 one, the three early ones lost.
+
+The walk's lower probe falls little sooner than the record's after a
+large draw, and further (measured 2026-11-04 on the clean compressor-off
+draws of 8 gal or more, their hour after). Over the 28 held out, the
+record's comes to half its hour's fall a median 2 minutes after the
+walk's (11 against 9, later in 22 of the 28 as metered and 23 at 0.85),
+and to 90 % 2 or 3 minutes after; over the 95 from 05-01 to the step, 1
+and 2. The walk goes furthest below the record 8 minutes in as metered
+and 11 at 0.85, a median 1.3 and 4.2 degF, by 5 degF or more in 4 of the
+28 and 10 at 0.85, and the record closes a median 4.4 and 3.0 degF of
+that within the hour. 09-18's early start is at such a draw's onset: the
+walk takes it under the trigger there, and stands 6.9 degF under the
+record 11 minutes on and 6.1 at the hour. What follows is on the draws
 as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
