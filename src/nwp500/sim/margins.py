@@ -39,12 +39,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
+from nwp500.sim.circulation import RUN_GAP, Circulation
 from nwp500.sim.controller import COMPRESSOR_MODES
 from nwp500.sim.engine import PathPoint
 from nwp500.sim.inputs import Loads
+from nwp500.sim.params import HeaterParams
 from nwp500.sim.tou_triggers import (
     DROP_STARTS_MODE,
     LOWER_HOLD_MODES,
@@ -145,6 +147,7 @@ def start_margins(
     hp_lower_on_f: float | None,
     tou_windows: Sequence[tuple[datetime, datetime]] = (),
     loads: Loads | None = None,
+    params: HeaterParams | None = None,
 ) -> tuple[StartMargin, ...]:
     """Each coast of ``points`` (``SimulationResult.points``) and its
     nearest approach to each heat-pump trigger it was in force for, in
@@ -152,14 +155,29 @@ def start_margins(
     walk was given, ``simulate(tou_windows_in_force=...)``) the upper
     one. ``loads`` are the walk's (``Scenario.loads``): in Energy Saver
     a drop, a draw's or the circulation's, releases the held lower
-    trigger. A point in a
+    trigger; ``params`` the walk's, for the gap its circulation runs are
+    merged within (``CirculationParams.run_gap_min``; without them, the
+    default gap). A point in a
     mode without the compressor, or with heating disabled, counts for
     neither."""
     drops: list[_Span] = []
     if loads is not None:
         # A draw over several minutes lands at each of its pieces.
         drops += [(t, t) for d in loads.draws for t, _ in d.pieces()]
-        drops += [(r.start, r.end) for r in loads.circulation or ()]
+        if loads.circulation is not None:
+            # The runs as the walk takes them: merged within the
+            # circulation's gap, those after ``circulation_known_until``
+            # left out (``api._circulation``).
+            gap = (
+                RUN_GAP
+                if params is None or params.circulation is None
+                else timedelta(minutes=params.circulation.run_gap_min)
+            )
+            drops += Circulation(
+                tuple((r.start, r.end) for r in loads.circulation),
+                loads.circulation_known_until,
+                gap,
+            ).runs
     out: list[StartMargin] = []
     for i, j, k in _coasts(points):
         best: dict[MarginTrigger, tuple[float, datetime]] = {}

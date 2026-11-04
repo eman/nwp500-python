@@ -139,6 +139,34 @@ def test_energy_saver_released_only_by_a_drop() -> None:
     assert m.margin_f == pytest.approx(96.0 - 104.9)
 
 
+def test_energy_saver_circulation_as_the_walk_takes_it() -> None:
+    # Two runs 6 min apart, neither in the step from 0 to 5 min, merge
+    # within the default gap into one that is: the drop over the step
+    # releases the hold. A run past circulation_known_until is not taken
+    # and releases nothing.
+    es: HeaterMode = "energy_saver"
+    points = [
+        _p(0, SETPOINT + 5.0, 98.0, mode=es),
+        _p(5, SETPOINT + 4.0, 97.0, mode=es),
+    ]
+    runs = (
+        CirculationRun(start=T0 - timedelta(minutes=6), end=T0),
+        CirculationRun(
+            start=T0 + timedelta(minutes=6), end=T0 + timedelta(minutes=10)
+        ),
+    )
+    (m,) = start_margins(points, 104.9, loads=Loads(circulation=runs))
+    assert m.at == points[1].at
+    late = (
+        CirculationRun(
+            start=T0 + timedelta(minutes=2), end=T0 + timedelta(minutes=4)
+        ),
+    )
+    unknown = Loads(circulation=late, circulation_known_until=T0)
+    assert start_margins(points, 104.9, loads=unknown) == ()
+    assert start_margins(points, 104.9, loads=Loads(circulation=late))
+
+
 def test_energy_saver_a_draw_over_minutes_releases_at_each_piece() -> None:
     # Held in Energy Saver, the upper zone over the setpoint: the
     # engine starts at the draw's piece that takes the lower zone under

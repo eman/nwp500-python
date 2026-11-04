@@ -62,7 +62,7 @@ Added
 
 - **How near a walk came to its start triggers.**
   ``sim.start_margins(result.points, hp_lower_on_f, tou_windows,
-  loads)`` gives each coast of a walk and its nearest approach to each
+  loads, params)`` gives each coast of a walk and its nearest approach to each
   heat-pump trigger in force over it (``StartMargin``): the lower zone
   over its trigger (``hp_lower_on``, no nearer than the setpoint), held
   as the heater holds it and in Energy Saver released by a drop, a
