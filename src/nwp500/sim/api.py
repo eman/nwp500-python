@@ -1857,11 +1857,12 @@ def time_to_ready(
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
     ``defaults_used``. Both are gallons as the meter reads them, a
     ``Draw``'s: the answer judges and gives them delivered
-    (``DrawParams.delivered_gal``, the same at ``meter_reads`` 1). ``shower_from_forecast``: the
-    ``shower_gal`` given is a draw forecast's
-    (``draw_forecast.shower_gal``). ``drawing``: water is being drawn
-    now. ``inlet_measured``: the scenario's inlet is the mains as
-    measured; without it the answer says ``inlet_temp_modelled``.
+    (``DrawParams.delivered_gal``, the same at ``meter_reads`` 1).
+    ``shower_from_forecast``: the ``shower_gal`` given is a draw
+    forecast's (``draw_forecast.shower_gal``). ``drawing``: water is
+    being drawn now. ``inlet_measured``: the scenario's inlet is the
+    mains as measured; without it the answer says
+    ``inlet_temp_modelled``.
 
     Raises ``ValueError`` for a setpoint written outside the heater's
     range, as ``simulate`` does.

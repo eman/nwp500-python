@@ -63,14 +63,17 @@ Added
 - **The house meter's reading of a gallon.** ``DrawParams.meter_reads``
   (1, the meter as it reads, unless set; over 0 and at most 2) takes
   each metered gallon as ``1 / meter_reads`` delivered
-  (``DrawParams.delivered_gal``) where the tank takes it: a ``Draw``'s
-  gallons in a walk, a record's draws in its replay and the tank fit, a
-  delivery's gallons in the score. A record still holds the meter's
-  gallons. The flows a draw is judged by, and its domain volume, stay
-  the meter's. On the site's 29 held-out days (measured 2026-11-03 on
-  the parameters in use) 0.85, a known volume's reading on that day,
-  puts the day's electricity 2.4 % low against 9.8 % at 1, 12.9 % off
-  against 14.3, and the false starts at 0.28 a day against 0.17.
+  (``DrawParams.delivered_gal``) where the tank takes it or is judged
+  against it: a ``Draw``'s gallons in a walk, a ``DrawWindow``'s
+  expected gallons, a bath's and a shower's in ``time_to_ready`` (and
+  ``ReadinessParams.bath_gal`` and ``shower_gal``), a record's draws in
+  its replay and the tank fit, a delivery's gallons in the score. A
+  record still holds the meter's gallons. The flows a draw is judged by,
+  and its domain volume, stay the meter's. On the site's 29 held-out
+  days (measured 2026-11-03 on the parameters in use) 0.85, a known
+  volume's reading on that day, puts the day's electricity 2.4 % low
+  against 9.8 % at 1, 12.9 % off against 14.3, and the false starts at
+  0.28 a day against 0.17.
 - **How near a walk came to its start triggers.**
   ``sim.start_margins(result.points, hp_lower_on_f, tou_windows, loads,
   params)`` gives each coast of a walk and its nearest approach to each
