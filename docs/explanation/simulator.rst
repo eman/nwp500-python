@@ -819,33 +819,37 @@ after it the longer runs read higher too (0.79 under 8 gal over 45 runs,
 change the record does not show.
 
 Circulation running through a summer recovery slows the walk's more than
-the record's (measured 2026-11-02 on the parameters in use, the share at
+the record's (measured 2026-11-03 on the parameters in use, the share at
 0.25, every scored recovery walked with the record's runs, setpoint
-writes and draws). Of the 21 recoveries with circulation inside them,
-the 16 before 2026-09-14 came out a mean 45 min long (58 min absolute),
-the six from 07-08 to 08-04, each with 22 to 28 minutes of circulation,
-38 to 217 min long, 07-28 16:45 UTC's 152 among them; the five from
-09-14 came out 3 min long (11 absolute), and the 72 of the fit period
-with none 0.3 (16.5). Walked without the runs, the 16 came out 26 min
-short. The heat the summer's runs took is priced about as the record
-measured it: each run's flow times the drop from the upper probe to the
-return line came to 1.16 and 1.03 times the walk's price for it at the
-1.40 gal/min the walk prices runs at, over the 44 and 42 runs of July
-and August with the compressor running (1.04 and 1.01 over the 45 and 48
-with it off). 07-28's seven runs overlapping the recovery, counted
-whole, measured 10,177 BTU against the walk's 12,744. Where the walk
-takes that heat from differs. Over the hours of July and August holding
-a run and no draw or heating (53), the walk's lower probe fell 10.0 degF
-against the record's 5.3 and its upper 1.7 against 1.2, where over
-September and October (16) the two came within about 0.6 degF. The heat
-pump stops on the lower probe, so a walk whose lower probe the runs keep
-cool runs on. Why the summer's runs reached the record's lower probe
-less is not known; priced at 1.05 gal/min, about 07-28's runs' own flow,
-07-28's walk without its setpoint write stopped 10 minutes sooner, of
-the 109 it was long (:doc:`simulator-tried`, "The circulation priced at
-the runs' own flow"). On this record a walk's recovery with circulation
-inside it reads long by up to hours in July and August and as the
-record's from mid-September.
+writes and draws, a slower draw under way at its start split there). Of
+the 21 recoveries with circulation inside them, the 16 before 2026-09-14
+came out a mean 57 min long (61 min absolute), the six from 07-08 to
+08-04, each with 22 to 28 minutes of circulation, 38 to 240 min long,
+07-28 16:45 UTC's 152 among them; the five from 09-14 came out 9 min
+long (13 absolute), and the 72 of the fit period with none 14.7 (18.4).
+Walked without the runs, the 16 came out 16 min short. Measured on
+2026-11-02, before a slower draw under way at a recovery's start was
+split there, the 16 were 45 min long, the five 3 and the 72 0.3; what
+the runs add to the 16, walked with them against without, is 71 min then
+and 73 now. The heat the summer's runs took is priced about as the
+record measured it: each run's flow times the drop from the upper probe
+to the return line came to 1.16 and 1.03 times the walk's price for it
+at the 1.40 gal/min the walk prices runs at, over the 44 and 42 runs of
+July and August with the compressor running (1.04 and 1.01 over the 45
+and 48 with it off). 07-28's seven runs overlapping the recovery,
+counted whole, measured 10,177 BTU against the walk's 12,744. Where the
+walk takes that heat from differs. Over the hours of July and August
+holding a run and no draw or heating (53), the walk's lower probe fell
+10.0 degF against the record's 5.3 and its upper 1.7 against 1.2, where
+over September and October (16) the two came within about 0.6 degF. The
+heat pump stops on the lower probe, so a walk whose lower probe the runs
+keep cool runs on. Why the summer's runs reached the record's lower
+probe less is not known; priced at 1.05 gal/min, about 07-28's runs' own
+flow, 07-28's walk without its setpoint write stopped 10 minutes sooner,
+of the 109 it was long (:doc:`simulator-tried`, "The circulation priced
+at the runs' own flow"). On this record a walk's recovery with
+circulation inside it reads long by up to hours in July and August and
+as the record's from mid-September.
 
 A forecast's draw windows, and the element modes, measured 2026-11-02 on
 the parameters in use (fitted before 2026-09-18, the share at 0.25):
