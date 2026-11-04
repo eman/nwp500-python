@@ -671,18 +671,24 @@ window's close, its lower probe falling 33.0 degF over the hour of a
 running. The missed starts stay 0.45 a day: 09-28 gains the record's two
 and 10-20 one, the three early ones lost.
 
-The walk's lower probe falls little sooner than the record's after a
-large draw, and further (measured 2026-11-04 on the clean compressor-off
-draws of 8 gal or more, their hour after). Over the 28 held out, the
-record's comes to half its hour's fall a median 2 minutes after the
-walk's (11 against 9, later in 22 of the 28 as metered and 23 at 0.85),
-and to 90 % 2 or 3 minutes after; over the 95 from 05-01 to the step, 1
-and 2. The walk goes furthest below the record 8 minutes in as metered
-and 11 at 0.85, a median 1.3 and 4.2 degF, by 5 degF or more in 4 of the
-28 and 10 at 0.85, and the record closes a median 4.4 and 3.0 degF of
-that within the hour. 09-18's early start is at such a draw's onset: the
-walk takes it under the trigger there, and stands 6.9 degF under the
-record 11 minutes on and 6.1 at the hour. What follows is on the draws
+After a large draw the walk's lower probe falls at once, the record's
+over about ten minutes (measured 2026-11-04 on the clean compressor-off
+draws of 8 gal or more, their hour after, each walked as the score walks
+it, at its onset unless at ``undiluted_gpm`` or faster). Over the 28
+held out, the record's comes to half its hour's fall a median 10 minutes
+after the walk's (11 against 1, later in 27 of the 28 as metered and in
+all 28 at 0.85); over the 95 from 05-01 to the step, 8. The walk stands
+furthest under the record a minute in, a median 10.7 degF as metered and
+12.8 at 0.85, by 5 degF or more in 22 and 23 of the 28. By the hour the
+gap is gone: a median 3.1 degF the other way as metered, the record
+ending under the walk in 23 of the 28, and 0.1 at 0.85. 09-18's early
+start is that fall: the walk's lower probe stands at 104.6 degF a minute
+after the draw, under its 104.9 trigger, where the record's fell to
+111.9 by 10 minutes and 109.6 by the hour. Each draw walked over the
+detector's span instead, the record's half comes a median 2 minutes
+after the walk's and the walk's dip is 4.2 degF at 11 minutes (at 0.85),
+but the days come out no better (:doc:`simulator-tried`, "Every timed
+draw walked over its span, the days"). What follows is on the draws
 as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
