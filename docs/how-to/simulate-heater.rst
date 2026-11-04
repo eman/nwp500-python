@@ -839,7 +839,7 @@ where the elements answer it, at most
 
 A whole walk's coasts carry the same question: how near each came to a
 start it did not make. ``start_margins`` reads it off the walk's
-points, given the lower trigger, the TOU windows and the draws the walk
+points, given the lower trigger, the TOU windows and the loads the walk
 was given:
 
 .. code-block:: python
@@ -851,7 +851,7 @@ was given:
        result.points,
        scenario.settings.hp_lower_on_f,
        windows,
-       scenario.loads.draws,
+       scenario.loads,
    ):
        print(m.start, m.end, m.trigger, m.at, m.margin_f, m.started)
 

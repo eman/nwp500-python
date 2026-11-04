@@ -1759,6 +1759,7 @@ class _Engine:
                 0.0,
                 mode=self.mode,
                 layers_f=_layers_of(self.tank_state),
+                heating_disabled=ctl.disabled(self.state, self.settings),
             )
         )
 

@@ -7,7 +7,9 @@ import pytest
 from test_sim_api import WINDOW, _peak, _scenario, at
 
 from nwp500.sim import (
+    CirculationRun,
     Draw,
+    HeaterState,
     Loads,
     Schedules,
     Settings,
@@ -113,9 +115,47 @@ def test_energy_saver_a_draw_releases_the_held_lower_trigger() -> None:
     ]
     assert start_margins(points, 104.9) == ()
     drew = (Draw(at=T0 + timedelta(minutes=5), gallons=8.0),)
-    (m,) = start_margins(points, 104.9, draws=drew)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=drew))
     assert m.at == points[1].at
     assert m.margin_f == pytest.approx(96.0 - 104.9)
+
+
+def test_energy_saver_released_only_by_a_drop() -> None:
+    # A draw that leaves the lower zone where it was does not release
+    # the hold; a circulation run that takes it down does.
+    es: HeaterMode = "energy_saver"
+    points = [
+        _p(0, SETPOINT + 5.0, 98.0, mode=es),
+        _p(10, SETPOINT + 4.0, 98.0, mode=es),
+        _p(20, SETPOINT + 3.0, 96.0, mode=es),
+    ]
+    flat = Loads(draws=(Draw(at=T0 + timedelta(minutes=5), gallons=0.5),))
+    assert start_margins(points, 104.9, loads=flat) == ()
+    run = CirculationRun(
+        start=T0 + timedelta(minutes=12), end=T0 + timedelta(minutes=18)
+    )
+    (m,) = start_margins(points, 104.9, loads=Loads(circulation=(run,)))
+    assert m.at == points[2].at
+    assert m.margin_f == pytest.approx(96.0 - 104.9)
+
+
+def test_energy_saver_a_draw_over_minutes_releases_at_each_piece() -> None:
+    # Held in Energy Saver, the upper zone over the setpoint: the
+    # engine starts at the draw's piece that takes the lower zone under
+    # its trigger, minutes after the draw's onset.
+    s = _scenario(
+        state=HeaterState(upper_f=135.0, lower_f=110.0),
+        settings=Settings(setpoint_f=118.0, mode=3, hp_lower_on_f=105.0),
+        loads=Loads(draws=(Draw(at=at(1), gallons=15.0, duration_s=900.0),)),
+    )
+    result = simulate(s, default_params())
+    (start,) = [h.start for h in result.heating][:1]
+    assert start.trigger == "lower"
+    assert start.at > at(1)
+    got = start_margins(result.points, 105.0, loads=s.loads)
+    lower = next(m for m in got if m.started)
+    assert lower.end == start.at
+    assert lower.margin_f <= 0.0
 
 
 def test_heating_disabled_counts_for_neither() -> None:
