@@ -901,20 +901,21 @@ after it the longer runs read higher too (0.79 under 8 gal over 45 runs,
 0.87 at 8 to 12 over 4), but the longer draws fall less. What sets the
 change the record does not show.
 
-At ``DrawParams.meter_reads`` 0.85 the error falls at every length, the
-longest draws' most, and its growth with minutes stays (measured
-2026-11-04 on the 28 of those draws from 09-18, held out from the fit).
-The walk falls 0.9 degF further than the record over the draws of 10
-minutes or less (4), 2.1 further over those of 10 to 15 (18) and 1.8
-less over the longer (6), against 1.3, 1.2 and 6.4 less as metered: 2.2
-degF off the shortest, 3.4 off those of 10 to 15 and 4.6 off the
-longest, which carry more gallons. The growth is 0.24 degF a minute (a
-standard error of 0.13) against 0.28 (0.12) as metered, and taken with
-the gallons the minutes' term holds at 0.27 (0.13), the gallons' going
-from 0.21 (0.27) to -0.30 (0.27). Without one draw, 10-02 00:50's 9.4
-gal over 43 minutes, it is 0.14 (0.24) at 0.85 and 0.37 (0.23) as
-metered: that draw carries the growth's standard error at 0.85, not most
-of its size, and without it neither is told from none.
+At ``DrawParams.meter_reads`` 0.85 the walk's lower probe falls further
+at every length, the longest draws' error coming down and those of 10 to
+15 minutes going past the record's, and the error's growth with minutes
+stays (measured 2026-11-04 on the 28 of those draws from 09-18, held out
+from the fit). The walk falls 0.9 degF further than the record over the
+draws of 10 minutes or less (4), 2.1 further over those of 10 to 15 (18)
+and 1.8 less over the longer (6), against 1.3, 1.2 and 6.4 less as
+metered: 2.2 degF off the shortest, 3.4 off those of 10 to 15 and 4.6
+off the longest, which carry more gallons. The growth is 0.24 degF a
+minute (a standard error of 0.13) against 0.28 (0.12) as metered, and
+taken with the gallons the minutes' term holds at 0.27 (0.13), the
+gallons' going from 0.21 (0.27) to -0.30 (0.27). Without one draw, 10-02
+00:50's 9.4 gal over 43 minutes, it is 0.14 (0.24) at 0.85 and 0.37
+(0.23) as metered: that draw carries the growth's standard error at
+0.85, not most of its size, and without it neither is told from none.
 
 Circulation running through a summer recovery slows the walk's more than
 the record's (measured 2026-11-03 on the parameters in use, the share at
