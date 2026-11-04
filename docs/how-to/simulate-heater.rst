@@ -837,6 +837,35 @@ lower zone; in Electric, or with the heat pump outside its range, above
 where the elements answer it, at most
 ``element.upper_reengages_below_setpoint_f`` under the setpoint.
 
+A whole walk's coasts carry the same question: how near each came to a
+start it did not make. ``start_margins`` reads it off the walk's
+points, given the lower trigger, the TOU windows, the loads and the
+parameters the walk was given:
+
+.. code-block:: python
+
+   from nwp500.sim import start_margins
+
+   result = simulate(scenario, params, tou_windows_in_force=windows)
+   for m in start_margins(
+       result.points,
+       scenario.settings.hp_lower_on_f,
+       windows,
+       scenario.loads,
+       params,
+   ):
+       print(m.start, m.end, m.trigger, m.at, m.margin_f, m.started)
+
+Each ``StartMargin`` is one coast and one trigger: ``lower`` (the lower
+zone over its trigger, which inside a window starts the heater at the
+close) and, inside the windows, ``upper_at_tou_open`` (the upper zone
+over the setpoint less the window's ``UPPER_DEFICIT_F``). A coast its
+own trigger ended stands at or under 0; one that ended without a start
+says how near it came. On the site's held-out days the few starts the
+walk missed outright fell on coasts among the smallest margins
+(:doc:`/explanation/simulator`, "Accuracy"); the record is too short to
+say how small is too small.
+
 
 Ask how much hot water is left
 ==============================

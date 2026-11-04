@@ -733,7 +733,17 @@ since, yet on 10-18 the walk's upper probe ran 2 degF warm by 20:41. A
 start the walk calls or misses by less than a probe's error a draw
 should be read as uncertain, and after a day of draws a wider margin can
 be too, as on 10-20, where at 21:00 the walk's lower probe stood 15 degF
-above the record's.
+above the record's. ``sim.start_margins`` gives each coast of a walk its
+nearest approach to each trigger. On the 29 held-out days (measured
+2026-11-03 on the same params, the draws as metered) the walk placed all
+but 11 of the record's compressor starts within 30 minutes, and 3 of the
+11 fell on coasts it did not start, 5 on coasts it started at another
+time and 3 while it was heating. By trigger, inside the windows 2 of 23
+such coasts: 10-18 at the smallest upper margin, 1.8 degF, at the
+window's close, and 10-24 at the fourth smallest, 7.8; for the lower
+trigger 1 of 24, 10-20 at the second smallest, 7.0 degF. The lower
+margin of 23 of the 24 is read at the walk's end, where it stops. Three
+misses rank the margin; they do not fix a threshold.
 
 The lower probe's error after a large draw falls into two sets of days,
 not the fit's split (measured 2026-11-02 on the same 169 draws, walked

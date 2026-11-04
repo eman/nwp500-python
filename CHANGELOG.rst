@@ -60,6 +60,22 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **How near a walk came to its start triggers.**
+  ``sim.start_margins(result.points, hp_lower_on_f, tou_windows, loads,
+  params)`` gives each coast of a walk and its nearest approach to each
+  heat-pump trigger in force over it (``StartMargin``): the lower zone
+  over its trigger (``hp_lower_on``, no nearer than the setpoint), held
+  as the heater holds it and in Energy Saver released by a drop, a
+  draw's or the circulation's; inside the TOU windows the upper zone
+  over the setpoint less ``UPPER_DEFICIT_F`` as well; where, and whether
+  the coast ended in a start. A caller can weigh a start the walk did
+  not call by how nearly it called it. On the site's 29 held-out days, 3
+  of the 11 recorded starts the walk did not place fell on coasts it did
+  not start: inside the windows at the smallest and fourth smallest
+  upper margins of 23 (1.8 and 7.8 °F), and for the lower trigger at the
+  second smallest of 24 (7.0 °F).
+- ``PathPoint.heating_disabled``: heating was disabled at the point
+  (Vacation, or powered off with no entry having turned the heater on).
 - **A slower draw takes more of the tank than the valve's share.**
   Each delivered gallon takes ``s + undiluted_share · (1 − s)`` of the
   tank's water, ``s`` the valve's share

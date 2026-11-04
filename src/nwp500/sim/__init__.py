@@ -61,6 +61,7 @@ from nwp500.sim.inputs import (
     TouPeriod,
     Write,
 )
+from nwp500.sim.margins import StartMargin, start_margins
 from nwp500.sim.params import (
     CirculationParams,
     HeaterParams,
@@ -117,6 +118,7 @@ __all__ = (
     "Settings",
     "ShowersReady",
     "SimulationResult",
+    "StartMargin",
     "TouPeriod",
     "Trace",
     "Write",
@@ -131,6 +133,7 @@ __all__ = (
     "simulate",
     "site_example_params",
     "standby",
+    "start_margins",
     "recovery_as_of",
     "time_to_ready",
     "with_valve",
