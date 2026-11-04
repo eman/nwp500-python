@@ -830,8 +830,8 @@ long (13 absolute), and the 72 of the fit period with none 14.7 (18.4).
 Walked without the runs, the 16 came out 16 min short. Measured on
 2026-11-02, before a slower draw under way at a recovery's start was
 split there, the 16 were 45 min long, the five 3 and the 72 0.3; what
-the runs add to the 16, walked with them against without, is 71 min then
-and 73 now. The heat the summer's runs took is priced about as the
+the runs add to the 16, walked with them against without, is 72 min then
+and 74 now. The heat the summer's runs took is priced about as the
 record measured it: each run's flow times the drop from the upper probe
 to the return line came to 1.16 and 1.03 times the walk's price for it
 at the 1.40 gal/min the walk prices runs at, over the 44 and 42 runs of
@@ -848,8 +848,8 @@ probe less is not known; priced at 1.05 gal/min, about 07-28's runs' own
 flow, 07-28's walk without its setpoint write stopped 10 minutes sooner,
 of the 109 it was long (:doc:`simulator-tried`, "The circulation priced
 at the runs' own flow"). On this record a walk's recovery with
-circulation inside it reads long by up to hours in July and August and
-as the record's from mid-September.
+circulation inside it reads long by up to hours in July and August, and
+from mid-September no longer than one without circulation.
 
 A forecast's draw windows, and the element modes, measured 2026-11-02 on
 the parameters in use (fitted before 2026-09-18, the share at 0.25):
