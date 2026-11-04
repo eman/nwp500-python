@@ -794,22 +794,39 @@ are 1.60 too short (April's mains lie below the range of those from
 instead of 04-16 puts the draws of 05-01 to 05-14 0.63 degF too far
 against 0.79 (14), and those of 05-15 to 06-14 1.94 either way (34), so
 the first two weeks of May sit between April and those of 05-15 to 06-14
-on either start. Which of the meter's readings is right the record does
-not say. On these parameters, fitted on the earlier gallons, a walk on
-today's meter falls about 2 degF short after a large draw, as at the
-held-out draws. The walk's error after a large draw changes with the
-draw's length, the other way either side of the step (measured
-2026-11-03 on the clean draws of 8 gal or more with the compressor off
-from 05-01, the lower probe's fall over the hour): before it the walk
-falls 0.1 degF further than the record over the draws of 10 minutes or
-less (29 of them), 1.6 over those of 10 to 15 (42) and 3.6 over those of
-more than 15 (24); after it, 1.3 less (4), 1.3 (21) and 6.4 (6, a
-standard error of 1.8), so that after the step the growth rests on its 6
-longest draws. Whether the change at the step goes with the draws'
-minutes or their metered gallons the record does not tell (pooled and
-taken per spread, 2.8 and 1.2 degF, the minutes ahead in 78 % of
-resamples). The clean draws of 8 to 12 and 12 to 16 metered gallons run
-longer after the step (medians of 9.5 against 11.3 minutes and 12.2
+on either start. A known volume puts today's reading low (measured
+2026-11-04 03:19 UTC): 1.00 gal, as the vessel holds it, filled at a hot
+tap with no other water in use and the circulation pump off, read 0.846
+gal, so on that day the meter read 0.85 of the water it passed (one
+fill, which the meter read backwards, to about 0.03 from its own noise).
+It measures that day alone: the meter's reading of the pump's runs of 5
+to 8 gallons went on falling after the step, from 0.84 to 09-30 to 0.76
+from mid-October, so if those runs held their flow, and the meter read
+them as it reads a tap's draw, it read nearer 0.94 in late September.
+Taken as if the meter had read 0.85 since the step, the held-out draws
+at 1/0.85 of their metered gallons, in the replay and the walk, put the
+walk's lower probe after their 32 large draws 1.45 degF too far (a
+standard error of 0.79) where as metered it falls 2.21 short, those of
+09-18 to 09-30 2.00 too far against 1.57 short (15) and those from 10-01
+0.96 too far against 2.77 short (17), its RMS 4.60 against 4.86; their
+16 recoveries with water in use come out 20.9 min off against 18.3 (7.2
+long against 1.7 short) and the 11 draw-free 4.2 against 4.8. The draws
+are sized from the meter outside this package, unscaled. On these
+parameters, fitted on the earlier gallons, the walk on the held-out
+draws as metered (2026-09-18 to 10-25, after the step) falls about 2
+degF short after a large draw. The walk's error after a large draw
+changes with the draw's length, the other way either side of the step
+(measured 2026-11-03 on the clean draws of 8 gal or more with the
+compressor off from 05-01, the lower probe's fall over the hour): before
+it the walk falls 0.1 degF further than the record over the draws of 10
+minutes or less (29 of them), 1.6 over those of 10 to 15 (42) and 3.6
+over those of more than 15 (24); after it, 1.3 less (4), 1.3 (21) and
+6.4 (6, a standard error of 1.8), so that after the step the growth
+rests on its 6 longest draws. Whether the change at the step goes with
+the draws' minutes or their metered gallons the record does not tell
+(pooled and taken per spread, 2.8 and 1.2 degF, the minutes ahead in 78
+% of resamples). The clean draws of 8 to 12 and 12 to 16 metered gallons
+run longer after the step (medians of 9.5 against 11.3 minutes and 12.2
 against 14.0), as a lower reading or a slower flow would have them; the
 4 of 16 to 30 do not. Before the step the meter read the pump's longer
 runs higher against the pump than its shorter ones (0.86 under 5 gal,
