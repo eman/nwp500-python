@@ -779,11 +779,12 @@ def _refusal(served: Recovered) -> SimulationError:
 def _pieces(
     draws: Sequence[Draw], params: HeaterParams
 ) -> list[tuple[datetime, float, bool]]:
-    """``draws`` as the walk takes them (``Draw.pieces``), each piece
-    with whether its draw takes the tank's water whole
-    (``DrawParams.undiluted``)."""
+    """``draws`` as the walk takes them (``Draw.pieces``), in delivered
+    gallons (``DrawParams.delivered_gal``), each piece with whether its
+    draw takes the tank's water whole (``DrawParams.undiluted``, on the
+    meter's flow)."""
     return [
-        (at, g, params.draw.undiluted(d.flow_gpm))
+        (at, params.draw.delivered_gal(g), params.draw.undiluted(d.flow_gpm))
         for d in draws
         for at, g in d.pieces()
     ]
@@ -1445,7 +1446,9 @@ def _to_start(
             )
     at_start = sorted(
         (
-            sum(g for at, g in d.pieces() if at >= start),
+            params.draw.delivered_gal(
+                sum(g for at, g in d.pieces() if at >= start)
+            ),
             params.draw.undiluted(d.flow_gpm),
         )
         for d in s.loads.draws

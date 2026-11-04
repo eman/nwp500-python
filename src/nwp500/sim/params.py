@@ -481,6 +481,23 @@ class DrawParams:
     undiluted_share: float = field(
         default=0.0, metadata=_p(MEASURED, "1", INSTALLATION)
     )
+    #: The share of a delivered gallon the house meter reads, 0-2: each
+    #: metered gallon is ``1 / meter_reads`` delivered gallons as the tank
+    #: gives them (``delivered_gal``), taken so where the tank takes a draw:
+    #: a ``Draw``'s ``gallons`` in a walk, a record's draws in its replay
+    #: and the tank fit, a delivery's gallons in the score. A record holds
+    #: the meter's gallons as read (``history.record``). 1: the meter as it
+    #: reads. On the site, 1.00 gal filled at a hot tap read 0.846 on
+    #: 2026-11-03: one fill, on a meter that drifted after its step of
+    #: 2026-09-12 (it read nearer 0.94 in late September, if its circulation
+    #: runs held their flow and it read them as it reads a tap's draw). The
+    #: held-out days with their draws from the step on at 0.85 came out 2.4
+    #: % low in electricity, against 9.8 % as metered. The flows a draw is
+    #: judged by (``undiluted_gpm``, ``draw_gpm``) and its
+    #: ``domain_volume_gal`` stay the meter's, as they were measured.
+    meter_reads: float = field(
+        default=1.0, metadata=_p(MEASURED, "1", INSTALLATION)
+    )
     #: The installation's climate, which places the mains by the day
     #: (``cold_supply.mains_f``): the year's mean outdoor air and its
     #: warmest monthly mean less its coldest, °F
@@ -503,6 +520,10 @@ class DrawParams:
             raise ValueError("undiluted_gpm is not a positive flow")
         if not 0.0 <= self.undiluted_share <= 1.0:
             raise ValueError("undiluted_share is not a share")
+        if not (
+            math.isfinite(self.meter_reads) and 0.0 < self.meter_reads <= 2.0
+        ):
+            raise ValueError("meter_reads is not a share of a gallon")
         if self.climate_f is not None:
             mean, swing = self.climate_f
             if not (math.isfinite(mean) and math.isfinite(swing)):
@@ -514,6 +535,11 @@ class DrawParams:
                 raise ValueError(
                     f"climate_f's mean is under {CLIMATE_MEAN_MIN_F} °F"
                 )
+
+    def delivered_gal(self, metered_gal: float) -> float:
+        """The delivered gallons ``metered_gal`` read on the house meter
+        stands for (``meter_reads``)."""
+        return metered_gal / self.meter_reads
 
     def mains_on(self, day: date) -> float:
         """The mains on ``day``, °F: the climate's (``climate_f``,

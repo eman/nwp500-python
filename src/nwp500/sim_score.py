@@ -1363,7 +1363,8 @@ def _delivery_score(
         )
     except SimulationError, ValueError:
         return False, False
-    error = got.gal - e.delivered_gal
+    # The event's gallons are the meter's (``DrawParams.meter_reads``).
+    error = got.gal - params.draw.delivered_gal(e.delivered_gal)
     if not e.crossed:
         tally.add("deliverable_short_gal", max(0.0, -error), day)
         tally.add("deliverable_under_share", float(error < 0.0), day)
