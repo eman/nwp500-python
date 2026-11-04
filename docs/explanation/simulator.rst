@@ -650,7 +650,11 @@ the two probes 3.1 degF off (1.7-4.8). 10-20 then starts at 21:00 as the
 record does, and comes out 1 % high (2,832 Wh against the meter's 2,805)
 where it was 42 % low, the walk's false start kept (at 11:56) and the
 record's at 07:35 still missed; 10-18 still does not start. The draws of
-late September it likely takes too far (the same, below). What follows
+late September it likely takes too far (the same, below). The reading is
+``DrawParams.meter_reads``, 1 (the meter as it reads) unless set: at
+0.85 it takes every draw so where the walk, the replay and the score
+take it, and puts the same days within 0.01 of these, the held-out days
+all falling after the step (measured 2026-11-03). What follows
 is on the draws as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
@@ -848,7 +852,8 @@ standard error of 0.79) where as metered it falls 2.21 short, those of
 0.96 too far against 2.77 short (17), its RMS 4.60 against 4.86; their
 16 recoveries with water in use come out 20.9 min off against 18.3 (7.2
 long against 1.7 short) and the 11 draw-free 4.2 against 4.8. The draws
-are sized from the meter outside this package, unscaled. On these
+are sized from the meter outside this package, unscaled, and taken at
+``DrawParams.meter_reads`` (1 unless set). On these
 parameters, fitted on the earlier gallons, the walk on the held-out
 draws as metered (2026-09-18 to 10-25, after the step) falls about 2
 degF short after a large draw. The walk's error after a large draw

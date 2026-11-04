@@ -206,8 +206,10 @@ Under "deliverable now", the table gives the bath and the showers the
 tank is ready for (``sim.time_to_ready``): the bath ready with its
 margin, or how short it is and when the heat pump has it ready; and the
 whole showers, as a shower the tank can't finish isn't counted. Both are
-delivered volumes, past the mixing valve. ``--bath`` and ``--shower``
-give them in the preferred unit; without them, the parameters'
+volumes past the mixing valve as the house meter reads them, taken
+delivered at the parameters' ``DrawParams.meter_reads`` (1 unless set),
+and the table gives them delivered. ``--bath`` and ``--shower`` give
+them in the preferred unit; without them, the parameters'
 (``ReadinessParams.bath_gal``, 28.7 gal, and ``shower_gal``, 12 gal).
 
 A reading's age is from when Home Assistant last heard the sensor

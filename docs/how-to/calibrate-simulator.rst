@@ -229,6 +229,14 @@ nor the share of a slower draw's cold side the tank gives as well
 (``DrawParams.undiluted_share``): set both on the fitted parameters, as
 ``site_example_params`` does.
 
+A meter that reads a delivered gallon as less, or more, than one is set
+by ``DrawParams.meter_reads`` (the share of a gallon it reads; 1 unless
+set): the replay, the fit and the score take each metered gallon as
+``1 / meter_reads`` delivered. Measure it with a known volume. It is one
+value for every draw: a meter whose reading moved over the fit's span
+is not one value, and a fit with it set has not been measured here
+(:doc:`../explanation/simulator`, "Accuracy", on this site's meter).
+
 .. code-block:: python
 
    import json

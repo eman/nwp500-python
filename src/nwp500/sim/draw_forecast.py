@@ -6,7 +6,8 @@ A forecaster learned from an installation's meter publishes, for each
 10-minute slot of a week, how many long and short draws are expected
 to **start** in it (``*_rate``, additive over slots) and how long and
 how large one is given that it does (``*_duration_mean_s``,
-``*_volume_mean_gal``, delivered gallons past the mixing valve).
+``*_volume_mean_gal``, gallons past the mixing valve as the meter reads
+them, a ``Draw``'s; ``DrawParams.meter_reads`` takes them delivered).
 Only a mean may be multiplied by a rate to get an expectation: a median
 sits below the mean of a right-skewed duration.
 
@@ -103,7 +104,7 @@ class ForecastSlot:
 @dataclass(frozen=True)
 class ExpectedDraw:
     """One aggregate draw per class per slot: ``volume_gal`` is the
-    expected delivered volume (rate x mean), ``per_draw_gal`` the
+    expected volume as the meter reads it (rate x mean), ``per_draw_gal`` the
     slot's own per-draw mean, ``duration_s`` the expected time drawing
     (rate x mean)."""
 
@@ -492,7 +493,8 @@ def forecast_loads(
 
 
 def shower_gal(profile: DrawProfile) -> float | None:
-    """The long draw a household expects, delivered gallons: the
+    """The long draw a household expects, the meter's gallons (as
+    ``time_to_ready`` takes them, ``DrawParams.meter_reads``): the
     rate-weighted mean of the profile's long draws' per-draw volume (its
     volumes over its rates), for ``time_to_ready``'s ``shower_gal`` over
     the next 24 hours. None when the profile expects no long draw."""
