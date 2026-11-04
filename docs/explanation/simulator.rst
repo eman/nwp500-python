@@ -691,9 +691,9 @@ but the days come out no better (:doc:`simulator-tried`, "Every timed
 draw walked over its span, the days"). The figures here on the lower
 probe's fall over the hour after a large draw (by the draw's length, at
 the meter's reading) walk each draw over the detector's span; walked as
-the score walks it, the hour's fall comes out about the same, a median
-3.0 degF short against 2.9 as metered and 0.1 too far against 0.5 at
-0.85 on the 28, and before the step 0.0, 1.4 and 4.1 degF further than
+the score walks it, the hour's fall comes out about the same, a mean 2.3
+degF short either way as metered and 1.3 too far against 1.1 at 0.85 on
+the 28, and before the step a mean 0.0, 1.4 and 4.1 degF further than
 the record by length against 0.1, 1.6 and 3.6 (the 95). What follows is
 on the draws as metered.
 
