@@ -694,8 +694,8 @@ the meter's reading) walk each draw over the detector's span; walked as
 the score walks it, the hour's fall comes out about the same, a median
 3.0 degF short against 2.9 as metered and 0.1 too far against 0.5 at
 0.85 on the 28, and before the step 0.0, 1.4 and 4.1 degF further than
-the record by length against 0.1, 1.6 and 3.6 (the 95). What follows is on the draws
-as metered.
+the record by length against 0.1, 1.6 and 3.6 (the 95). What follows is
+on the draws as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on 10-20
