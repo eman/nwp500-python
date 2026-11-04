@@ -638,10 +638,10 @@ share as well (``DrawParams.undiluted_share``), on the same params on
 time (79-92 %); starts 78 % placed, 0.45 a day missed and 0.17 false
 (0.07-0.28); the lowest upper probe 2.6 degF off (1.6-3.8), 1.3 warm;
 the end state 4.0 degF off (2.5-5.8). Taken as if the meter had read
-since its step what a known volume put it at on 2026-11-04 (the two sets
+since its step what a known volume put it at on 2026-11-03 (the two sets
 of days, below), the draws of the days held out from the fit (those the
 slower draw's share was chosen on) at 1/0.85 of their metered gallons
-(measured 2026-11-04 on the same params): electricity 12.9 % off
+(measured 2026-11-03 on the same params): electricity 12.9 % off
 (7.7-19.3), a mean 2.4 % low, within 12 % on 18 days; two days ordered
 as the meter orders them 90 % of the time (85-95 %); starts 74 % placed
 (61-86 %), 0.45 a day missed and 0.28 false (0.14-0.45); the lowest
@@ -683,24 +683,37 @@ Of the two days still missed, 10-18 and 10-20 (measured 2026-11-02 on
 the parameters fitted before 2026-09-18, the share at 0.25), neither
 shows a fault that a term was seen to mend. On 10-18 the walk's upper
 probe matched the record's to 11:00 and was 2 degF warmer by 20:41: the
-day's draws and the evening's coast each took it a little less. Over the
-clean draws of 8 gal or more (less than a gallon of other draws in the
-hour after) the upper probe's fall in the hour after came out 0.11 degF
-too small before 2026-09-18 (110 draws, a standard error of 0.05) and as
-the record's after it (28, 1.40 against 1.39 degF, a standard error of
-0.19), though the later draws are among those the share was chosen on.
-The record's start came within 0.2 degF of the line. On 10-20 the record
-started twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its
-lower probe from 131.9 to 104.7 degF by 07:35, when its compressor came
-on, and the walk's to 113.8; the walk started at 11:58 instead and
-heated until about 16:00, so it met the draw of 18:31 (15.8 gal) with
-its lower probe at 140.4 degF against the record's 130.6. That draw took
-the record's to 97.3 by 19:00 and the walk's to 113.8, which left the
-walk 8 degF above the trigger at 21:00, when the window closed and the
-record started. Over the 169 draws of 8 gal or more with the compressor
-off for the hour after, the walk's fall in that hour is 1.2 degF too far
-on average before 2026-09-18 and 2.2 too short after it, with a spread
-of 4.1 degF about those means (one standard deviation, the draws on both
+day's draws and the evening's coast each took it a little less. The
+coast, from 15:00 to 20:30 with no circulation and 0.1 gal drawn, took
+the walk's upper probe 0.60 degF an hour against the record's 0.72 (a
+line fitted over the half-hours), from a walk 1.3 degF warmer than the
+record at the upper probe and 5.6 at the lower, its probes 15 degF apart
+and the record's 19. On the 59 held-out quiet windows, each started from
+the record's state (measured 2026-11-03 on the same params), the walk's
+upper probe fell as the record's, 0.002 degF an hour the less pooled
+over 456 hours, and on the 21 starting with the probes more than 5 degF
+apart 0.02 an hour the further; of the 13 of those 5 hours or more, none
+fell more than 0.035 degF an hour the less (a standard deviation of
+0.034). The walk takes no coast short on average, but the evening's 0.12
+is more than any such window, and may come from the state the day's walk
+carried to 15:00 rather than from the coast. Over the clean draws of 8
+gal or more (less than a gallon of other draws in the hour after) the
+upper probe's fall in the hour after came out 0.11 degF too small before
+2026-09-18 (110 draws, a standard error of 0.05) and as the record's
+after it (28, 1.40 against 1.39 degF, a standard error of 0.19), though
+the later draws are among those the share was chosen on. The record's
+start came within 0.2 degF of the line. On 10-20 the record started
+twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its lower
+probe from 131.9 to 104.7 degF by 07:35, when its compressor came on,
+and the walk's to 113.8; the walk started at 11:58 instead and heated
+until about 16:00, so it met the draw of 18:31 (15.8 gal) with its lower
+probe at 140.4 degF against the record's 130.6. That draw took the
+record's to 97.3 by 19:00 and the walk's to 113.8, which left the walk 8
+degF above the trigger at 21:00, when the window closed and the record
+started. Over the 169 draws of 8 gal or more with the compressor off for
+the hour after, the walk's fall in that hour is 1.2 degF too far on
+average before 2026-09-18 and 2.2 too short after it, with a spread of
+4.1 degF about those means (one standard deviation, the draws on both
 sides together). The error follows the tank's temperature at the draw
 weakly (a correlation of -0.25 with the upper probe, 6 % of its
 variance, the walk falling further from a hotter tank), and none of the
