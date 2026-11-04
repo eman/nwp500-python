@@ -13,6 +13,36 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+Every timed draw walked over its span, the days (2026-11-04)
+============================================================
+
+**Tried.** In the day backtest of the 29 days held out from 2026-09-18,
+on the parameters in use, every draw the draw detector times walked over
+its span, instead of only those at ``DrawParams.undiluted_gpm`` or
+faster (``sim_score._timed`` patched, on 7f2dbcb, not merged), at
+``DrawParams.meter_reads`` 1 and 0.85.
+
+**Found.** At 0.85 the false starts went from 0.28 to 0.24 a day and the
+missed from 0.45 to 0.48; the electricity 15.3 % off against 12.9, a
+mean 6.3 % low against 2.4; the end state 4.2 degF off against 3.1. As
+metered the false starts stayed 0.17, the missed went to 0.48, the
+electricity 15.8 % off against 14.3, a mean 11.4 % low against 9.8. At
+0.85 the starts moved rather than came right: 09-23's at the window's
+opening came 26 minutes before the record's instead of 57, inside the
+score's 30; 10-24's extra one at the close went, but the day came out 41
+% low against 21 % high; 09-28's and 10-20's at the close, which 0.85
+had placed, were lost, 10-20 coming out 42 % low again; 09-18's and
+10-11's early starts stayed early, 10-11's by 28 minutes more.
+
+**Why dropped.** Worse on the day's electricity, its end state and the
+missed starts at either reading, and it moves starts rather than fixing
+them.
+
+**Account.** :doc:`simulator`, "Accuracy" (the lower probe after a large
+draw); "A metered draw timed by the draw detector", below, the same
+timing judged on the recoveries.
+
+
 The tank refitted with the earlier draws on today's meter (2026-11-03)
 ======================================================================
 

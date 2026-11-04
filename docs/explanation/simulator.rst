@@ -669,8 +669,33 @@ after, so its hour's samples do not show why. 10-24 gains a start at the
 window's close, its lower probe falling 33.0 degF over the hour of a
 21.1 gal draw to 7.8 under the record's, whose fell 6.5 with the heater
 running. The missed starts stay 0.45 a day: 09-28 gains the record's two
-and 10-20 one, the three early ones lost. What follows is on the draws
-as metered.
+and 10-20 one, the three early ones lost.
+
+After a large draw the walk's lower probe falls at once, the record's
+over about ten minutes (measured 2026-11-04 on the clean compressor-off
+draws of 8 gal or more, their hour after, each walked as the score walks
+it, at its onset unless at ``undiluted_gpm`` or faster). Over the 28
+held out, the record's comes to half its hour's fall a median 10 minutes
+after the walk's (11 against 1, later in 27 of the 28 as metered and in
+all 28 at 0.85); over the 95 from 05-01 to the step, 8. The walk stands
+furthest under the record a minute in, a median 10.7 degF as metered and
+12.8 at 0.85, by 5 degF or more in 22 and 23 of the 28. By the hour the
+gap is gone: a median 3.1 degF the other way as metered, the record
+ending under the walk in 23 of the 28, and 0.1 at 0.85. 09-18's early
+start is that fall: the walk's lower probe stands at 104.6 degF a minute
+after the draw, under its 104.9 trigger, where the record's fell to
+111.9 by 10 minutes and 109.6 by the hour. Each draw walked over the
+detector's span instead, the record's half comes a median 2 minutes
+after the walk's and the walk's dip is 4.2 degF at 11 minutes (at 0.85),
+but the days come out no better (:doc:`simulator-tried`, "Every timed
+draw walked over its span, the days"). The figures here on the lower
+probe's fall over the hour after a large draw (by the draw's length, at
+the meter's reading) walk each draw over the detector's span; walked as
+the score walks it, the hour's fall comes out about the same, a mean 2.3
+degF short either way as metered and 1.3 too far against 1.1 at 0.85 on
+the 28, and before the step a mean 0.0, 1.4 and 4.1 degF further than
+the record by length against 0.1, 1.6 and 3.6 (the 95). What follows is
+on the draws as metered.
 
 The days the walk misses are the ones that matter to a schedule. On
 three, the record starts at or near the window's close (21:00 on 10-20
