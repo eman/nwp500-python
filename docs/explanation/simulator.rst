@@ -648,7 +648,7 @@ as the meter orders them 90 % of the time (85-95 %); starts 74 % placed
 upper probe 2.3 degF off (1.4-3.5), 0.4 cold; the end state's mean of
 the two probes 3.1 degF off (1.7-4.8). 10-20 then starts at 21:00 as the
 record does, and comes out 1 % high (2,832 Wh against the meter's 2,805)
-where it was 42 % low, the walk's false start at 11:58 kept and the
+where it was 42 % low, the walk's false start kept (at 11:56) and the
 record's at 07:35 still missed; 10-18 still does not start. The draws of
 late September it likely takes too far (the same, below). What follows
 is on the draws as metered.
