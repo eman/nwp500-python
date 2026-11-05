@@ -43,7 +43,7 @@ well as the zone; 09-18's and 10-21's stayed. The full refits' fit came
 out with ``ua_bottom_btu_hr_f`` at 0 and ``upper_probe_height`` at 0.98
 at 13.78 (both on their bounds), and at 7 with the bottom's loss at 1.57
 and the upper probe at 0.956; the event RMSE went from 2.44 to 2.26 degF
-at 13.78 and from 2.25 to 2.16 at 7. The walk's lower probe an hour
+at 13.78 and from 2.24 to 2.16 at 7. The walk's lower probe an hour
 after a draw, less the record's: held out a mean -1.29, +0.66, -0.10,
 +0.35 and +0.73 degF, 4.59, 4.14, 4.10, 4.01 and 3.77 RMS; before the
 step -1.58, +0.30, -0.35, -0.05 and +0.23, 4.06, 3.45, 3.51, 3.39 and
