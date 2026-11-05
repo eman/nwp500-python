@@ -13,6 +13,47 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The start triggers read through a lagged lower probe (2026-11-04)
+=================================================================
+
+**Tried.** The heat pump's start triggers reading the walk's lower probe
+through a first-order lag, the tank's heat, the recovery's stop and the
+elements reading the walk's own lower zone, so that a large draw's drop
+reaches the triggers over minutes, as the record's probe shows it
+(:doc:`simulator`, "Accuracy", the lower probe after a large draw). The
+time constant was fitted on the 95 clean compressor-off draws of 8 gal
+or more from 05-01 to the meter's step, by the RMS of the lower probe
+over the hour after each, walked as the score walks them: 18.75 minutes,
+3.9 degF against 7.7 unlagged, and on the 28 held out 4.8 against 8.4 at
+``DrawParams.meter_reads`` 0.85. Scored in the day backtest of the 29
+days held out from 2026-09-18 on the parameters in use, on 384170e (a
+patch, not merged), at 18.75 minutes with ``meter_reads`` 0.85 and 1,
+and at 10 minutes (where the record's half-fall comes when the walk's
+does) with 0.85.
+
+**Found.** At 0.85 and 18.75 minutes the false starts stayed 0.28 a day
+and the missed went from 0.45 to 0.52; the electricity 13.9 % off
+against 12.9, a mean 5.0 % low against 2.4; the end state 3.7 degF off
+against 3.1. At 10 minutes the false starts stayed 0.28, the missed went
+to 0.48, the electricity 14.1 % off, 4.5 % low, the end state 3.9 degF
+off. As metered at 18.75 minutes the false starts went from 0.17 to 0.24
+and the missed from 0.45 to 0.55, the electricity 16.4 % off against
+14.3, 12.1 % low against 9.8. At 0.85 and 18.75 minutes 10-11's early
+start came right and 10-24's extra one at the window's close went, but
+10-24 came out 41 % low against 21 % high, and 09-28 lost the three
+starts 0.85 had placed. 09-18's stayed early: its walk's lower probe
+settles at 103.6 to 104.6 degF, under the 104.9 trigger, where the
+record's settles at 109.6, so the lagged probe crosses too, later.
+
+**Why dropped.** No fewer false starts at 0.85, more missed at either
+reading, and the day's electricity and end state worse. Where the walk
+starts early after a large draw, it is as much how far its lower probe
+falls as how soon.
+
+**Account.** :doc:`simulator`, "Accuracy" (the lower probe after a large
+draw); "Every timed draw walked over its span, the days", below.
+
+
 Every timed draw walked over its span, the days (2026-11-04)
 ============================================================
 
