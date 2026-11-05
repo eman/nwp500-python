@@ -28,8 +28,8 @@ over the hour after each, walked as the score walks them: 18.75 minutes,
 ``DrawParams.meter_reads`` 0.85. Scored in the day backtest of the 29
 days held out from 2026-09-18 on the parameters in use, on 384170e (a
 patch, not merged), at 18.75 minutes with ``meter_reads`` 0.85 and 1,
-and at 10 minutes (where the record's half-fall comes when the walk's
-does) with 0.85.
+and at 10 minutes (where, over the 95, the record's lower probe comes to
+half its fall when the lagged walk's does) with 0.85.
 
 **Found.** At 0.85 and 18.75 minutes the false starts stayed 0.28 a day
 and the missed went from 0.45 to 0.52; the electricity 13.9 % off
@@ -39,11 +39,11 @@ to 0.48, the electricity 14.1 % off, 4.5 % low, the end state 3.9 degF
 off. As metered at 18.75 minutes the false starts went from 0.17 to 0.24
 and the missed from 0.45 to 0.55, the electricity 16.4 % off against
 14.3, 12.1 % low against 9.8. At 0.85 and 18.75 minutes 10-11's early
-start came right and 10-24's extra one at the window's close went, but
-10-24 came out 41 % low against 21 % high, and 09-28 lost the three
-starts 0.85 had placed. 09-18's stayed early: its walk's lower probe
-settles at 103.6 to 104.6 degF, under the 104.9 trigger, where the
-record's settles at 109.6, so the lagged probe crosses too, later.
+start came right and 10-24 had one false start fewer, but came out 41 %
+low against 21 % high, and 09-28 lost the three starts 0.85 had placed.
+09-18's stayed early: its walk's lower probe settles at 103.6 to 104.6
+degF, under the 104.9 trigger, where the record's settles at 109.6, so
+the lagged probe crosses too, later.
 
 **Why dropped.** No fewer false starts at 0.85, more missed at either
 reading, and the day's electricity and end state worse. Where the walk
