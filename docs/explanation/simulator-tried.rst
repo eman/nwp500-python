@@ -13,6 +13,45 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The start's stir at the compressor's stop too (2026-11-05)
+==========================================================
+
+**Tried.** The start's stir (``stratified.stir``: the water the
+condenser wraps and the water below it pooled to their mean) also at the
+start of the step where the compressor stops, its heating credited, in
+the walks and in the replay that starts them, on the parameters in use
+(``TankParams.correction_top_height`` 0.75, the share at 0.25): against
+the walk's lower probe off by a few gallons of depth after a large draw
+(:doc:`simulator`, "Accuracy", the lower probe after a large draw). Over
+the 28 clean held-out draws of 8 gal or more with the compressor off at
+``DrawParams.meter_reads`` 0.85 from the meter's step, the 99 clean from
+2026-05-01 to the step as metered, and the 29 held-out days at 0.85.
+
+**Found.** The walk's lower probe at the hour, less the record's: held
+out a mean -1.29 to -0.70 degF, RMS 4.59 to 4.71, 8 to 16 draws off by 3
+degF or more; before the step -1.58 to -1.40, RMS 4.06 to 4.49, 31 to
+49. Of the 8 held-out draws off by 3 or more, 4 came nearer (2026-10-21
+13:05 UTC from -16.5 to -13.5, 09-18 18:57 from -6.1 to -4.9) and 4 went
+further (09-30 13:03 from -10.1 to -11.0, 10-02 00:50 from +7.3 to
++8.3); the largest moves were draws that had been near (10-21 01:31 from
+-1.9 to +3.7). The upper probe through them moved under 0.15 degF RMS.
+Over the 29 days the compressor's false starts went from 8 to 6 and the
+missed from 13 to 12, but the day's electricity came 13.5 % off against
+12.8 (a mean 5.7 % low against 2.5), the day's end state 3.81 degF off
+against 3.11, the lower probe through standby 0.64 degF RMS against 0.51
+and through draws 1.85 against 1.71, the draw-free recoveries 3.8 min
+off against 3.5.
+
+**Why dropped.** It spreads the lower probe's error after a draw rather
+than taking it away, and costs the day's electricity, its end state and
+the standby the two fewer false starts do not pay for. Read statically
+it would have cooled the water the probe stands for (deeper); walked,
+the probe came less deep on the mean and the draws moved both ways.
+
+**Account.** :doc:`simulator`, "Accuracy". The scripts and the walks are
+kept with the site's scores (``stop-stir-2026-11-05``).
+
+
 A smaller inlet zone, for the top's drop at a draw (2026-11-05)
 ===============================================================
 
