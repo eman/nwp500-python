@@ -785,19 +785,20 @@ there), is well inside the spread of the 28 such draws held out at 0.85
 (an RMS of 1.5 degF, a median of 0.15); the 11:11 draw's has nothing to
 be judged against; the coast from 15:00 to 21:00 added 0.5, 0.08 degF an
 hour, more than any of those 13 quiet windows (0.035 at most), as the
-0.12 as metered was. The miss builds in small steps over the day, the
-draws' within their spread and the evening coast's the largest. That
-coast's drift is mostly the state the day's walk carried to 15:00, not
-the coast (measured 2026-11-04, each a line through the upper probe's
-gap every 10 minutes): restarted from the record's state at 15:04 (the
-replay, as the score starts an event) it drifts 0.04 degF an hour at
-0.85 over the next 5 hours, against the day's walk's 0.12 over 15:00 to
-20:00 and 0.09 over 15:00 to 21:00, where the gap's ends give the 0.08
-above (as metered 0.03 against 0.17 and 0.14). Over the 56 held-out
-quiet coasts of 5 hours from a rested tank (the compressor off, no
-circulation, under 0.5 gal drawn in them, no draw of a gallon in the 3
-hours before nor the compressor in the hour before), walked the same way
-at 0.85, the walk's upper probe fell a mean 0.02 degF an hour too
+0.12 above as metered (2026-11-02, 15:00 to 20:30) was. The miss builds
+in small steps over the day, the draws' within their spread and the
+evening coast's the largest. That coast's drift is mostly the state the
+day's walk carried to 15:00, not the coast (measured 2026-11-04, each a
+line through the upper probe's gap, every 10 minutes on the coasts and
+every half hour on the day's walk): restarted from the record's state at
+15:04 (the replay, as the score starts an event) it drifts 0.04 degF an
+hour at 0.85 over the next 5 hours, against the day's walk's 0.12 over
+15:00 to 20:00 and 0.09 over 15:00 to 21:00, where the gap's ends give
+the 0.08 above (as metered 0.03 against 0.17 and 0.14). Over the 56
+held-out quiet coasts of 5 hours from a rested tank (the compressor off,
+no circulation, under 0.5 gal drawn in them, no draw of a gallon in the
+3 hours before nor the compressor in the hour before), walked the same
+way at 0.85, the walk's upper probe fell a mean 0.02 degF an hour too
 little, a standard deviation of 0.06; one drifted as fast as the day's
 walk over 15:00 to 20:00, 6 as fast as over 15:00 to 21:00. The 9
 starting half an hour after a draw of 8 gal or more drifted 0.04 (0.05),
