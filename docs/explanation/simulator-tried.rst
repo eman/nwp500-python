@@ -29,7 +29,8 @@ the 28 clean held-out draws of 8 gal or more with the compressor off at
 ``DrawParams.meter_reads`` 0.85 from the meter's step, the 99 clean from
 2026-05-01 to the step as metered, and the 29 held-out days at 0.85; it
 stirred 97, 222 and 460 times in the replays, and 73 times in the days'
-walks.
+walks (each walk, and each look-ahead the engine walks from a stop,
+stirring that stop's state once).
 
 **Found.** The compressor is off through each draw's hour, so the draws
 took it only through the replay. The walk's lower probe at the hour,
@@ -40,12 +41,13 @@ more, 3 came nearer (2026-10-21 13:05 UTC from -16.5 to -13.5, 09-18
 18:57 from -6.1 to -4.9) and 5 went further (09-30 13:03 from -10.1 to
 -11.0, 10-02 00:50 from +7.3 to +8.3); the largest moves were draws that
 had been near (10-21 01:31 from -1.9 to +3.7). The upper probe through
-them moved under 0.15 degF RMS. Over the 29 days the compressor's false
-starts went from 8 to 6 and the missed from 13 to 12, but the day's
-electricity came 13.8 % off against 12.8 (a mean 5.2 % low against 2.5),
-the day's end state 4.05 degF off against 3.11, the lower probe through
-standby 0.64 degF RMS against 0.51 and through draws 1.85 against 1.71,
-the draw-free recoveries 4.1 min off against 3.5.
+them moved 0.15 degF RMS held out and 0.07 before the step. Over the 29
+days the compressor's false starts went from 8 to 6 and the missed from
+13 to 12, but the day's electricity came 13.8 % off against 12.8 (a mean
+5.2 % low against 2.5), the day's end state 4.05 degF off against 3.11,
+the lower probe through standby 0.64 degF RMS against 0.51 and through
+draws 1.85 against 1.71, the draw-free recoveries 4.1 min off against
+3.5.
 
 **Why dropped.** It spreads the lower probe's error after a draw rather
 than taking it away, and costs the day's electricity, its end state and
