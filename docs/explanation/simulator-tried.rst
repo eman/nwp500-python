@@ -38,7 +38,7 @@ at 7.75 minutes (2.5 and 0.8 at 15). The electricity came 12.8 and 12.7
 state 3.05 and 3.01 degF off against 3.11.
 
 **Why dropped.** No start was gained, lost or misplaced, and the
-electricity and the end state by little. Of the 13 starts within 30
+electricity and the end state changed little. Of the 13 starts within 30
 minutes after a large draw, 10 are on the lower trigger (9 at the draw),
 and every walk was unchanged through them. The held-out draws' walk
 falls too far as well as too soon, which a lag of minutes does not take.
