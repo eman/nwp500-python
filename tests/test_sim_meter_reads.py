@@ -373,3 +373,11 @@ def test_readings_across_a_repeated_hour_go_by_the_instant() -> None:
     assert d.reads_at(between) == 0.5
     assert d.reads_at(datetime(2026, 11, 1, 1, 30, tzinfo=la)) == 1.0
     assert d.reads_at(datetime(2026, 11, 1, 1, 30, tzinfo=la, fold=1)) == 0.8
+
+
+def test_a_naive_instant_is_not_looked_up() -> None:
+    d = _since((at(2), 0.5)).draw
+    with pytest.raises(ValueError, match="naive"):
+        d.reads_at(at(3).replace(tzinfo=None))
+    with pytest.raises(ValueError, match="naive"):
+        default_params().draw.delivered_gal(1.0, at(3).replace(tzinfo=None))

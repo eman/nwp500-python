@@ -542,7 +542,7 @@ class DrawParams:
             at, share = item
             if isinstance(at, str):
                 at = datetime.fromisoformat(at)
-            if at.tzinfo is None:
+            if at.utcoffset() is None:
                 raise ValueError(f"meter_reads_since[{k}]'s instant is naive")
             if not (math.isfinite(share) and 0.0 < share <= 2.0):
                 raise ValueError(
@@ -571,7 +571,10 @@ class DrawParams:
     def reads_at(self, at: datetime | None = None) -> float:
         """The share of a gallon the meter reads at ``at``: the last of
         ``meter_reads_since`` from at or before it, else
-        ``meter_reads``. None: as it reads now, the last of them."""
+        ``meter_reads``. None: as it reads now, the last of them. A
+        naive ``at`` is a ``ValueError``: its zone is not known."""
+        if at is not None and at.utcoffset() is None:
+            raise ValueError("reads_at's instant is naive")
         since = self.meter_reads_since
         if not since:
             return self.meter_reads
