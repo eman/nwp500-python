@@ -13,6 +13,53 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+Conduction raised after a draw or a run, and fading (2026-11-05)
+================================================================
+
+**Tried.** The tank's axial conductance
+(``TankParams.conductance_btu_hr_f``, fitted 0.55 BTU/hr·°F) times
+1 + K exp(-h / tau), h the hours since the walk last drew or heated,
+so that a tank a draw or a run has just disturbed mixes faster and a
+rested one is left alone: against the record's upper probe falling
+faster after a draw and heating than the walk's (:doc:`simulator`,
+"Accuracy"). Scored in the day backtest of the 29 days held out from
+2026-09-18 on the parameters in use, at ``DrawParams.meter_reads`` 0.85
+(measured 2026-11-05); at K 0 the patch scores as the code does.
+
+**Found.** The quiet half hours' drift after a draw and heating was
++0.094 degF an hour, after a draw alone +0.018.
+
+- Raised on every step, K 4 and tau 1 or 2 h: after both +0.024 and
+  -0.020, after a draw alone -0.071 and -0.112; the recoveries 33.6 and
+  33.4 min off on average against 14.1, their electricity 12.8 and
+  13.0 % against 3.9.
+- Raised only on steps with nothing heating or flowing, K 2 or 4 with
+  tau 1 h, and 4 with 2 h: after both +0.036, -0.017 and -0.069, after
+  a draw alone -0.041, -0.094 and -0.139. At K 2, tau 1 h, the false
+  starts went from 0.28 a day to 0.21 and the missed from 0.45 to 0.38
+  (6 and 11 on the 29 days against 8 and 13), the electricity from 12.9
+  % off to 10.6; the upper probe through draws from 0.37 degF RMS to
+  0.43, the draw-free recoveries from 4.2 min off to 5.5, the day's end
+  state from 3.1 degF off to 3.3, the day's lowest upper from 0.37 degF
+  low to 0.68.
+- Raised only after a run ends, on steps with nothing heating or
+  flowing, K 2 and 4 with tau 1 h, and 2 with 3 h: after a draw alone
+  unchanged (+0.014 to +0.019), after both +0.083, +0.060 and +0.046;
+  the false starts 0.24, 0.21 and 0.21 a day; the electricity 13.2,
+  14.0 and 15.4 % off, the day's end state 3.3, 3.9 and 4.4 degF off.
+
+**Why dropped.** Started by every draw, it cools the top after a draw
+alone, which the record does not; started only by a run's end, it
+takes a part of the excess and costs the electricity and the day's end
+state. The excess is after a draw on a day that has heated and lasts
+hours; neither event's time alone marks it. A gain in the starts
+of one or two over the 29 days does not outweigh the rest.
+
+**Account.** :doc:`simulator`, "Accuracy" (the record's upper probe
+after a draw and heating, after 10-18). The patch and the scores are
+kept with the site's scores (``record-top-2026-11-05``).
+
+
 A higher axial conductance, for the drift after a draw (2026-11-05)
 ===================================================================
 

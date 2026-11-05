@@ -865,7 +865,24 @@ other way: a correlation of -0.27 with the top layer's (+0.10 degF an
 hour in the third with the coolest walk top against the replay's, +0.04
 in the warmest), -0.02 with the lower half's, -0.08 with the whole
 tank's and -0.05 with the spread's, on instants several to a day. The
-state differs, but the drift does not follow it. On 10-20 the record
+state differs, but the drift does not follow it. The record says where
+the drift is (measured 2026-11-05, the same quiet half hours,
+circulation kept). After both a draw and heating the record's upper
+probe falls a mean 0.67 degF an hour against 0.60 before either, and the
+walk's 0.58 against 0.60: the record falls faster, the walk about as
+before. Fitted on the record's own upper less air, upper less lower and
+circulation, the day's having had both adds 0.07 degF an hour to the
+record's fall and takes 0.03 from the walk's; 27 of the 28 days that had
+both drift warm on the mean. The excess is largest just after a draw on
+a day that has heated (+0.23 degF an hour in the hour after, 42 half
+hours on 21 days; +0.05 after a draw before any heating) and just after
+a run ends on a day that has drawn (+0.17, 46 on 22 days), and falls to
+about +0.04 after three hours. After a draw of 8 gal or more metered
+that follows heating, the walk's upper probe falls 0.32 degF more than
+the record's in the draw's half hour, and the record's then goes on
+falling, 0.54 degF more than the walk's over the next 90 minutes (10
+draws), to end 0.22 under it. Conduction raised after each draw or run
+and fading did not take it (:doc:`simulator-tried`). On 10-20 the record
 started twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its
 lower probe from 131.9 to 104.7 degF by 07:35, when its compressor came
 on, and the walk's to 113.8; the walk started at 11:58 instead and
