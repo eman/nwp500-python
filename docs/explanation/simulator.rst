@@ -707,11 +707,11 @@ the record's. On the night of 09-19 the walk's recovery from the
 window's opening at 23:00 UTC ran to 02:12:47, 42 min past the record's
 stop, its upper probe 6.3 degF under the record's at 00:30; the record
 ran four short runs at the night's writes from 01:36 to 02:23, the first
-inside the walk's run and two starting just after it ended, and the
-walk's one start at 02:18 places one of them. On 09-26 the walk's late
-start at 19:23 UTC was still running at 23:53, its upper probe 15.8 degF
-under the record's at 23:45, when a write restarted the record 18 min
-after its run from 17:08 stopped. Of the other four, three are the
+two starting inside the walk's run and the last two just after it ended,
+and the walk's one start at 02:18 places the second. On 09-26 the walk's
+late start at 19:23 UTC was still running at 23:53, its upper probe 15.8
+degF under the record's at 23:45, when a write restarted the record 18
+min after its run from 17:08 stopped. Of the other four, three are the
 heater's own starts that the walk makes late or not at all, its probe
 warmer than the record's at them. On 09-26 the lower probes' gap, walk
 less record, came to +1.5 degF over 9.5 hours from 07:00 UTC with one
