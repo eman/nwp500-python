@@ -883,48 +883,66 @@ the record's in the draw's half hour, and the record's then comes down
 to it, 0.54 degF more than the walk's over the next 90 minutes (10 draws
 on 10 days, 90 minutes quiet after each): there the record's fall comes
 later, not larger. Conduction raised after each draw or run and fading
-did not take it (:doc:`simulator-tried`). On 10-20 the record started
-twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its lower
-probe from 131.9 to 104.7 degF by 07:35, when its compressor came on,
-and the walk's to 113.8; the walk started at 11:58 instead and heated
-until about 16:00, so it met the draw of 18:31 (15.8 gal) with its lower
-probe at 140.4 degF against the record's 130.6. That draw took the
-record's to 97.3 by 19:00 and the walk's to 113.8, which left the walk 8
-degF above the trigger at 21:00, when the window closed and the record
-started. Over the 169 draws of 8 gal or more with the compressor off for
-the hour after, the walk's fall in that hour is 1.2 degF too far on
-average before 2026-09-18 and 2.2 too short after it, with a spread of
-4.1 degF about those means (one standard deviation, the draws on both
-sides together). The error follows the tank's temperature at the draw
-weakly (a correlation of -0.25 with the upper probe, 6 % of its
-variance, the walk falling further from a hotter tank), and none of the
-other inputs the walk is given, the draw's gallons or flow, the time
-since the last heating, the hour or the air, follows it with a
-correlation over 0.22. A scheduler sees only the walk's margin to a
-trigger. For the lower probe's, the measurement above, each draw walked
-from the record's state over the hour after it, puts the walk's error at
-about 4 degF a draw (4.2 degF RMS before 2026-09-18) and about 5 on the
-draws since (4.9, the walk standing about 2 degF high). A day's walk,
-which carries its own state from draw to draw, can be further off, as on
-10-20, where at 21:00 the walk stood 8 degF above its trigger and the
-record 7 below it. For the upper probe's, which set 10-18's start, the
-same walk, read at the hour's end on those draws, puts the error at
-about 0.5 degF a draw (0.51 RMS) before 2026-09-18 and about 1 (0.97)
-since, yet on 10-18 the walk's upper probe ran 2 degF warm by 20:41. A
-start the walk calls or misses by less than a probe's error a draw
-should be read as uncertain, and after a day of draws a wider margin can
-be too, as on 10-20, where at 21:00 the walk's lower probe stood 15 degF
-above the record's. ``sim.start_margins`` gives each coast of a walk its
-nearest approach to each trigger. On the 29 held-out days (measured
-2026-11-03 on the same params, the draws as metered) the walk placed all
-but 11 of the record's compressor starts within 30 minutes, and 3 of the
-11 fell on coasts it did not start, 5 on coasts it started at another
-time and 3 while it was heating. By trigger, inside the windows 2 of 23
-such coasts: 10-18 at the smallest upper margin, 1.8 degF, at the
-window's close, and 10-24 at the fourth smallest, 7.8; for the lower
-trigger 1 of 24, 10-20 at the second smallest, 7.0 degF. The lower
-margin of 23 of the 24 is read at the walk's end, where it stops. Three
-misses rank the margin; they do not fix a threshold.
+did not take it (:doc:`simulator-tried`). Nor is the later fall the
+upper probe's own lag (measured 2026-11-05, the score's walks of the
+large draws). Over the 95 clean draws of 8 gal or more with the
+compressor off from 05-01 to the meter's step, the walk's upper probe
+falls 0.35 degF in the draw's first minute and the record's 0.01; at 15
+minutes 0.52 against 0.42, at the hour 1.04 against 1.11. A first-order
+lag on the walk's probe fits best at 7.75 minutes and takes the hour's
+RMS only from 0.35 degF to 0.32. On the 28 held out at 0.85 the walk's
+falls 1.03 in the first minute and 1.73 by the hour, against the
+record's 0.01 and 1.39: too far, not too soon, and the lag that fits
+them best is 55.5 minutes. Where a draw empties the top the record's
+probe follows within minutes: on 2026-09-30 it fell from 122.2 to 102.6
+degF between 5 and 9 minutes after the draw of 02:42 UTC. Of the 65
+starts the day walks made on the 29 days, 2 were on a trigger that reads
+the upper probe within 30 minutes after a draw of over 8 gal metered:
+09-30 02:51 UTC at a window's opening, a minute before the record's
+compressor, and 10-03 03:15 UTC, 23 minutes after it. A lag would only
+have made either later, so it was not tried in the day backtest. On
+10-20 the record started twice. The draws of 06:03 and 07:12 (11.4 and
+6.3 gal) took its lower probe from 131.9 to 104.7 degF by 07:35, when
+its compressor came on, and the walk's to 113.8; the walk started at
+11:58 instead and heated until about 16:00, so it met the draw of 18:31
+(15.8 gal) with its lower probe at 140.4 degF against the record's
+130.6. That draw took the record's to 97.3 by 19:00 and the walk's to
+113.8, which left the walk 8 degF above the trigger at 21:00, when the
+window closed and the record started. Over the 169 draws of 8 gal or
+more with the compressor off for the hour after, the walk's fall in that
+hour is 1.2 degF too far on average before 2026-09-18 and 2.2 too short
+after it, with a spread of 4.1 degF about those means (one standard
+deviation, the draws on both sides together). The error follows the
+tank's temperature at the draw weakly (a correlation of -0.25 with the
+upper probe, 6 % of its variance, the walk falling further from a hotter
+tank), and none of the other inputs the walk is given, the draw's
+gallons or flow, the time since the last heating, the hour or the air,
+follows it with a correlation over 0.22. A scheduler sees only the
+walk's margin to a trigger. For the lower probe's, the measurement
+above, each draw walked from the record's state over the hour after it,
+puts the walk's error at about 4 degF a draw (4.2 degF RMS before
+2026-09-18) and about 5 on the draws since (4.9, the walk standing about
+2 degF high). A day's walk, which carries its own state from draw to
+draw, can be further off, as on 10-20, where at 21:00 the walk stood 8
+degF above its trigger and the record 7 below it. For the upper probe's,
+which set 10-18's start, the same walk, read at the hour's end on those
+draws, puts the error at about 0.5 degF a draw (0.51 RMS) before
+2026-09-18 and about 1 (0.97) since, yet on 10-18 the walk's upper probe
+ran 2 degF warm by 20:41. A start the walk calls or misses by less than
+a probe's error a draw should be read as uncertain, and after a day of
+draws a wider margin can be too, as on 10-20, where at 21:00 the walk's
+lower probe stood 15 degF above the record's. ``sim.start_margins``
+gives each coast of a walk its nearest approach to each trigger. On the
+29 held-out days (measured 2026-11-03 on the same params, the draws as
+metered) the walk placed all but 11 of the record's compressor starts
+within 30 minutes, and 3 of the 11 fell on coasts it did not start, 5 on
+coasts it started at another time and 3 while it was heating. By
+trigger, inside the windows 2 of 23 such coasts: 10-18 at the smallest
+upper margin, 1.8 degF, at the window's close, and 10-24 at the fourth
+smallest, 7.8; for the lower trigger 1 of 24, 10-20 at the second
+smallest, 7.0 degF. The lower margin of 23 of the 24 is read at the
+walk's end, where it stops. Three misses rank the margin; they do not
+fix a threshold.
 
 The lower probe's error after a large draw falls into two sets of days,
 not the fit's split (measured 2026-11-02 on the same 169 draws, walked
