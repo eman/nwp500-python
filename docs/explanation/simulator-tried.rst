@@ -36,9 +36,9 @@ before the step, 5 held out) the mean excess fall went from 0.42 degF to
 **Why dropped.** On 09-24 and 09-21 it did as well as leaning the
 probes' correction only to 0.75 of the height
 (``TankParams.correction_top_height``: 8.0 and 6.3), but before the step
-it took the stratified draws' excess only to 0.40, where the lean took
-it to 0.18 (held out, 1.93 against 2.02), and the inlet zone is fitted.
-The lean was kept.
+it took the stratified draws' excess only to 0.40 and 0.39, where the
+lean took it to 0.18 (held out, 1.93 against 2.02 and 2.01), and the
+inlet zone is fitted. The lean was kept.
 
 **Account.** :doc:`simulator`, "Accuracy". The scripts and the walks
 are kept with the site's scores (``top-drop-2026-11-05``).
