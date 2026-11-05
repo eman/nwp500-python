@@ -291,7 +291,8 @@ class DrawWindow(_Value):
     #: Gallons the window is expected to draw, if known, as the meter
     #: reads them, a ``Draw``'s ``gallons`` (a forecast's, an
     #: ensemble's): the result's ``expected_gal`` is them delivered
-    #: (``DrawParams.delivered_gal``, the same at ``meter_reads`` 1) and
+    #: at the reading at the window's start (``DrawParams.delivered_gal``,
+    #: the same at ``meter_reads`` 1 with no ``meter_reads_since``) and
     #: its ``margin_gal`` the deliverable gallons less those.
     expected_gal: Annotated[float, Field(ge=0.0)] | None = None
     #: For a draw forecast's window (``draw_forecast.forecast_loads``):

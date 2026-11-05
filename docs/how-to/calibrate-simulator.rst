@@ -232,10 +232,28 @@ nor the share of a slower draw's cold side the tank gives as well
 A meter that reads a delivered gallon as less, or more, than one is set
 by ``DrawParams.meter_reads`` (the share of a gallon it reads; 1 unless
 set): the replay, the fit and the score take each metered gallon as
-``1 / meter_reads`` delivered. Measure it with a known volume. It is one
-value for every draw: a meter whose reading moved over the fit's span
-is not one value, and a fit with it set has not been measured here
-(:doc:`../explanation/simulator`, "Accuracy", on this site's meter).
+``1 / meter_reads`` delivered. Measure it with a known volume. A meter
+whose reading moved over the fit's span takes dated readings
+(``DrawParams.meter_reads_since``, each ``(from, share)``, the share
+from its instant on, ``meter_reads`` before the first): each draw is
+taken at the reading at its own instant. A fit with either set has not
+been measured here (:doc:`../explanation/simulator`, "Accuracy", on
+this site's meter).
+
+.. code-block:: python
+
+   from dataclasses import replace
+   from datetime import UTC, datetime
+
+   step = datetime(2026, 9, 12, 19, 51, tzinfo=UTC)
+   params = replace(
+       params,
+       draw=replace(
+           params.draw,
+           meter_reads=1.0,
+           meter_reads_since=((step, 0.85),),
+       ),
+   )
 
 .. code-block:: python
 
