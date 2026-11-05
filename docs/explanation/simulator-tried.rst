@@ -46,12 +46,15 @@ and the missed from 0.45 to 0.55, the electricity 16.4 % off against
 start came right and 10-24 had one false start fewer, but came out 41 %
 low against 21 % high, and 09-28's three starts, placed at 0.85, were
 all lost to the score: its start at the window's close went and the
-other two came 30 and 58 minutes late. 09-18's stayed early: its walk's
-lower probe settles at 103.6 to 104.6 degF, under the 104.9 trigger,
-where the record's settles at 109.6, so the lagged probe crosses too:
-the walk started at 19:29, 32 minutes after the draw and 85 before the
-record's start. 09-23's early start, the upper zone's at the window's
-opening, which the lag does not touch, stayed early.
+other two came 30 and 58 minutes late. 09-18's stayed early, starting at
+19:29, 32 minutes after the draw and 85 before the record's start:
+walked from the record's state with that draw alone (as "Accuracy"
+measures it), the walk's lower probe settles at 103.6 to 104.6 degF,
+under the 104.9 trigger, where the record's settles at 109.6, and the
+day's walk falls further (101.0 degF at 19:00 unlagged), so the lagged
+probe crosses too. 09-23's early start, the upper zone's at the window's
+opening, whose trigger reads the upper probe, stayed early: it moved
+from 03:03 to 03:11, 49 minutes before the record's.
 
 **Why dropped.** No fewer false starts at 0.85, more missed at either
 reading, and the day's electricity and end state worse. Of the early
