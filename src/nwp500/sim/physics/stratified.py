@@ -175,6 +175,10 @@ class Layout:
     lower_probe_spread_gal: float = 0.0
     #: What the lower probe reads above the water it feels, °F.
     lower_probe_offset_f: float = 0.0
+    #: Where the probes' lean stops (``TankParams.correction_top_height``),
+    #: a share of the volume; None, or above the upper probe: the upper
+    #: probe's height.
+    correction_top: float | None = None
     #: The column's axial conductance, end to end, BTU/hr·°F.
     conductance_btu_hr_f: float
     #: The air and the condenser's water the heat pump's maps are read
@@ -216,6 +220,12 @@ class Layout:
             _share(name, getattr(self, name))
         if not self.lower_probe < self.upper_probe:
             raise ValueError("the lower probe reads below the upper")
+        if self.correction_top is not None:
+            _share("correction_top", self.correction_top)
+            if not self.lower_probe < self.correction_top:
+                raise ValueError(
+                    "the probes' correction tops out above the lower probe"
+                )
         low, high = self.condenser_span
         _share("condenser_span", low)
         _share("condenser_span", high)
@@ -333,8 +343,12 @@ def _dot(weights: Sequence[float], layers: Sequence[float]) -> float:
 
 def _point_shape(lay: Layout) -> tuple[float, ...]:
     """The lean ``estimate`` builds on: flat below the lower probe's
-    height and above the upper's, linear between, 0 to 1."""
-    lo, hi = lay.lower_probe, lay.upper_probe
+    height and above ``Layout.correction_top`` (the upper probe's, if
+    lower or unset), linear between, 0 to 1."""
+    lo = lay.lower_probe
+    hi = lay.upper_probe
+    if lay.correction_top is not None:
+        hi = min(hi, lay.correction_top)
     return tuple(min(1.0, max(0.0, (c - lo) / (hi - lo))) for c in lay.centers)
 
 
@@ -357,6 +371,7 @@ def layout(params: HeaterParams) -> Layout:
         upper_probe_spread_gal=t.upper_probe_spread_gal,
         lower_probe_spread_gal=t.lower_probe_spread_gal,
         lower_probe_offset_f=t.lower_probe_offset_f,
+        correction_top=t.correction_top_height,
         map_air_f=params.controller.hp_air_range_f,
         map_water_f=params.controller.hp_water_range_f,
     )
@@ -892,8 +907,9 @@ def observe(lay: Layout, state: TankState) -> tuple[float, float]:
 def _shape(lay: Layout) -> tuple[float, ...]:
     """The profile ``estimate`` builds from, as a share of the way from
     what the lower probe feels to what the upper does: flat below the
-    lower probe's height and above the upper's, linear between, scaled
-    so the probes' weights read 0 and 1 exactly."""
+    lower probe's height and above the lean's top (``_point_shape``),
+    linear between, scaled so the probes' weights read 0 and 1
+    exactly."""
     s = _point_shape(lay)
     a, b = _dot(lay.lower_weights, s), _dot(lay.upper_weights, s)
     return tuple((v - a) / (b - a) for v in s)
@@ -901,8 +917,8 @@ def _shape(lay: Layout) -> tuple[float, ...]:
 
 def estimate(lay: Layout, upper_f: float, lower_f: float) -> TankState:
     """A profile the probes read as ``upper_f`` and ``lower_f``
-    (``observe``): level below the lower probe and above the upper,
-    linear between."""
+    (``observe``): level below the lower probe and above the lean's top
+    (``Layout.correction_top``), linear between."""
     felt = lower_f - lay.lower_probe_offset_f
     return TankState(tuple(felt + (upper_f - felt) * s for s in _shape(lay)))
 

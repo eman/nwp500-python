@@ -654,15 +654,19 @@ circulation's runs. The tank starts as the profile the probes stand for
 at the span's start and is walked through all of it on the layered
 tank's own physics, corrected toward the probes every 10 minutes they
 are read (``stratified.assimilate``), and the probes' last readings are
-laid over the end. Those layers are the scenario's
+laid over the end. Each correction leans as the probes' profile does:
+level below the lower probe, linear from it to
+``TankParams.correction_top_height`` (0.75 of the height), level above,
+so a cold lower probe's correction leaves the water just under the upper
+probe as it was. Those layers are the scenario's
 ``HeaterState.layers_f``. ``sim_adapters.layers_from_history`` and
 ``layers_from_changes`` read them from a record, and
 ``sim_home_assistant.HomeAssistantTank`` keeps them current from Home
 Assistant. A meter silent for more than an hour in the span is refused,
 as is a record with no flow reading at all, and the replay starts no
-earlier than the flow's first reading. A span the heater went unheard
-is walked across with its values held; across a span the meter was
-unknown, the flow holds 60 seconds and then is none.
+earlier than the flow's first reading. A span the heater went unheard is
+walked across with its values held; across a span the meter was unknown,
+the flow holds 60 seconds and then is none.
 
 **Without a record** the simulation starts from the profile the two
 probes stand for (``stratified.estimate``) and says so

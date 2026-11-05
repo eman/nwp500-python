@@ -572,6 +572,36 @@ class TestTheFit:
         with pytest.raises(ValueError):
             tf.fit(TRUE, record, [])
 
+    def test_the_lower_probe_stays_under_the_correction_top(
+        self, history, record
+    ) -> None:
+        """A correction topped inside the lower probe's fitting range
+        caps it: every trial stays a layout, and the fit lands under
+        the top."""
+        _, _, path = history
+        top = 0.3
+        start = replace(
+            TRUE,
+            tank=replace(
+                TRUE.tank, correction_top_height=top, lower_probe_height=0.295
+            ),
+        )
+        got = tf.fit(start, record, _coasts(path), max_evaluations=20)
+        assert got.terms["lower_probe_height"] <= top - 0.01 + 1e-12
+
+    def test_a_top_that_empties_the_lower_probe_range_is_refused(
+        self, history, record
+    ) -> None:
+        _, _, path = history
+        low = replace(
+            TRUE,
+            tank=replace(
+                TRUE.tank, correction_top_height=0.055, lower_probe_height=0.04
+            ),
+        )
+        with pytest.raises(ValueError, match="fitting range empty"):
+            tf.fit(low, record, _coasts(path), max_evaluations=1)
+
 
 def _climb(path: TankPath) -> tf.Coast:
     """The compressor's run, as a recovery event."""

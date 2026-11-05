@@ -220,6 +220,26 @@ class TankParams:
     #: What the lower probe reads above the water it feels, °F: the
     #: probes' disagreement in a mixed tank.
     lower_probe_offset_f: float = field(default=0.0, metadata=_p(DEFAULT, "°F"))
+    #: Where the probes' correction stops leaning, as a share of the
+    #: volume: a profile built from the probes (``stratified.estimate``)
+    #: and the replay's correction toward them (``assimilate``) run level
+    #: below the lower probe, linear from it to here, and level above
+    #: (the upper probe's height, if lower). Not fitted. At the upper
+    #: probe's height the water just under that probe took a cold lower
+    #: probe's correction: of the 28 clean held-out draws of 8 gal or
+    #: more, three in an evening window with no heating (two with the
+    #: probes 22 and 40 °F apart) dropped the walk's upper probe
+    #: 2.9-9.8 °F at the draw against the record's 1.1-3.1 by 15
+    #: minutes. At 0.75, over the
+    #: 29 held-out days from 2026-09-18 at ``DrawParams.meter_reads``
+    #: 0.85 on the installation's parameters (measured 2026-11-05),
+    #: the upper probe through draws read 0.33 °F RMS against 0.37,
+    #: the recoveries 13.4 min off against 14.1 and the day's
+    #: electricity 12.8 % against 12.9, the compressor's starts as
+    #: before; 0.65 missed one more start.
+    correction_top_height: float = field(
+        default=0.75, metadata=_p(DEFAULT, "fraction")
+    )
     #: Where the elements heat, the same way, each into the layer at its
     #: height: the upper element with 17.7 gal of the 63.2 above it, the
     #: volume its rise on 29 clean runs (2.01 °F/min at 5,148 W) heats,

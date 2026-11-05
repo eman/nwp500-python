@@ -2,6 +2,7 @@
 temperature, from its layers (``nwp500.sim.delivery``)."""
 
 import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -77,12 +78,40 @@ class TestDeliverable:
         assert rd.deliverable(P, LINE - 5.0, LINE - 10.0).gal == 0.0
 
     def test_the_water_above_the_probe_is_deliverable(self) -> None:
-        """The outlet is above the upper probe: a probe just under the
-        line leaves the warmer water above it, no more than the tank
-        holds above the probe."""
-        got = rd.deliverable(P, LINE - 0.5, LINE - 5.0).gal
+        """The outlet is above the upper probe: with the probes' lean
+        reaching it, a probe just under the line leaves the warmer water
+        above it, no more than the tank holds above the probe."""
+        reach = replace(
+            P,
+            tank=replace(
+                P.tank, correction_top_height=P.tank.upper_probe_height
+            ),
+        )
+        got = rd.deliverable(reach, LINE - 0.5, LINE - 5.0).gal
         above = (1.0 - P.tank.upper_probe_height) * P.tank.volume_gal
         assert 0.0 < got < 1.5 * above
+
+    def test_a_lean_topped_below_the_probe_leaves_nothing_above_it(
+        self,
+    ) -> None:
+        """Topped below the upper probe (``correction_top_height``), the
+        lean leaves the water above its top level, a little above the
+        probe (about 0.03 degF per degF between the probes): with the
+        probes 4.5 degF apart a probe 0.5 degF under the line leaves
+        it under the line."""
+        assert P.tank.correction_top_height < P.tank.upper_probe_height
+        assert rd.deliverable(P, LINE - 0.5, LINE - 5.0).gal == 0.0
+
+    def test_a_wide_gap_lifts_the_whole_top_over_the_line(self) -> None:
+        """The level top reads above the probe by more as the probes
+        part: 30 degF apart it is over the line, and every gallon above
+        the lean's top is deliverable at once."""
+        top = P.tank.correction_top_height
+        u, lo = LINE - 0.5, LINE - 30.5
+        layers = st.estimate(st.layout(P), u, lo).layers_f
+        assert layers[-1] > LINE > u
+        got = rd.deliverable(P, u, lo).gal
+        assert got == pytest.approx((1.0 - top) * P.tank.volume_gal, rel=0.02)
 
     def test_the_valve_stretches_the_tank(self) -> None:
         """Through the valve each tank gallon is blended with the

@@ -13,6 +13,37 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+A smaller inlet zone, for the top's drop at a draw (2026-11-05)
+===============================================================
+
+**Tried.** Measured, not built: ``TankParams.inlet_mix_gal`` at 7 and
+3 gal instead of the fitted 13.8, in the replay that starts each draw
+and in the draw, over the 123 clean draws of 8 gal or more with the
+compressor off from 05-01 (95 before the meter's step, 28 held out),
+on the parameters in use at ``DrawParams.meter_reads`` 0.85 from the
+step: against the walk's upper probe falling too far at a draw from a
+stratified tank (:doc:`simulator`, "Accuracy", the upper probe after a
+large draw).
+
+**Found.** The walk's fall at the draw less the record's by 15 minutes
+stayed +0.09 degF on the mean before the step and went from -0.43 to
+-0.38 and -0.39 held out. 2026-09-24 01:22 UTC's fall went from 9.8 degF
+to 8.0 and 8.2 (the record's 3.1), 09-21 02:32's from 6.7 to 6.2 and 6.0
+(1.6). On the stratified draws (the probes 5 degF or more apart: 9
+before the step, 5 held out) the mean excess fall went from 0.42 degF to
+0.40 and 0.39 before the step and from 2.38 to 2.02 and 2.01 held out.
+
+**Why dropped.** On 09-24 and 09-21 it did as well as leaning the
+probes' correction only to 0.75 of the height
+(``TankParams.correction_top_height``: 8.0 and 6.3), but before the step
+it took the stratified draws' excess only to 0.40 and 0.39, where the
+lean took it to 0.18 (held out, 1.93 against 2.02 and 2.01), and the
+inlet zone is fitted. The lean was kept.
+
+**Account.** :doc:`simulator`, "Accuracy". The scripts and the walks
+are kept with the site's scores (``top-drop-2026-11-05``).
+
+
 The start triggers reading a lagged upper probe (2026-11-05)
 ============================================================
 
