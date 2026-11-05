@@ -227,9 +227,10 @@ class TankParams:
     #: (the upper probe's height, if lower). Not fitted. At the upper
     #: probe's height the water just under that probe took a cold lower
     #: probe's correction: of the 28 clean held-out draws of 8 gal or
-    #: more, the three from tanks stratified in an evening with no
-    #: heating dropped the walk's upper probe 2.9-9.8 °F at the draw
-    #: against the record's 1.1-3.1 by 15 minutes. At 0.75, over the
+    #: more, three in an evening window with no heating (two with the
+    #: probes 22 and 40 °F apart) dropped the walk's upper probe
+    #: 2.9-9.8 °F at the draw against the record's 1.1-3.1 by 15
+    #: minutes. At 0.75, over the
     #: 29 held-out days from 2026-09-18 at ``DrawParams.meter_reads``
     #: 0.85 on the installation's parameters (measured 2026-11-05),
     #: the upper probe through draws read 0.33 °F RMS against 0.37,

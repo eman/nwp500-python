@@ -917,23 +917,26 @@ apart. The walk's tank there was too cold just under the upper probe: on
 under 133-138 above, so a draw that lifted the water a sixth of the
 height gave the probe 126. The replay's correction toward the probes
 leaned linearly from the lower probe's height to the upper's, so a cold
-lower probe's correction reached nearly to the top. Leaning only to 0.75
-of the height (``TankParams.correction_top_height``) took the stratified
-draws' excess fall from 0.42 degF to 0.18 on the 9 before the step and
-from 2.38 to 1.93 on the 5 held out (09-24's from 6.7 to 4.9); an inlet
-zone of 7 or 3 gal instead of the fitted 13.8 left them within 0.3 degF
-of where they were, and 09-24's fall at 8.0 and 8.2. On 10-20 the record
-started twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its
-lower probe from 131.9 to 104.7 degF by 07:35, when its compressor came
-on, and the walk's to 113.8; the walk started at 11:58 instead and
-heated until about 16:00, so it met the draw of 18:31 (15.8 gal) with
-its lower probe at 140.4 degF against the record's 130.6. That draw took
-the record's to 97.3 by 19:00 and the walk's to 113.8, which left the
-walk 8 degF above the trigger at 21:00, when the window closed and the
-record started. Over the 169 draws of 8 gal or more with the compressor
-off for the hour after, the walk's fall in that hour is 1.2 degF too far
-on average before 2026-09-18 and 2.2 too short after it, with a spread
-of 4.1 degF about those means (one standard deviation, the draws on both
+lower probe's correction reached nearly to the top. On the stratified
+draws (the probes 5 degF or more apart: 9 before the step, 5 held out,
+09-21 and 09-24 among them), leaning only to 0.75 of the height
+(``TankParams.correction_top_height``) took the mean excess fall from
+0.42 degF to 0.18 before the step and from 2.38 to 1.93 held out,
+09-24's fall from 9.8 to 8.0 and 09-21's from 6.7 to 6.3. An inlet zone
+of 7 or 3 gal instead of the fitted 13.8 did as well on those two (8.0
+and 8.2; 6.2 and 6.0) and took the held-out mean to 2.02 and 2.01, but
+the 9 before the step only to 0.40 and 0.39. On 10-20 the record started
+twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its lower
+probe from 131.9 to 104.7 degF by 07:35, when its compressor came on,
+and the walk's to 113.8; the walk started at 11:58 instead and heated
+until about 16:00, so it met the draw of 18:31 (15.8 gal) with its lower
+probe at 140.4 degF against the record's 130.6. That draw took the
+record's to 97.3 by 19:00 and the walk's to 113.8, which left the walk 8
+degF above the trigger at 21:00, when the window closed and the record
+started. Over the 169 draws of 8 gal or more with the compressor off for
+the hour after, the walk's fall in that hour is 1.2 degF too far on
+average before 2026-09-18 and 2.2 too short after it, with a spread of
+4.1 degF about those means (one standard deviation, the draws on both
 sides together). The error follows the tank's temperature at the draw
 weakly (a correlation of -0.25 with the upper probe, 6 % of its
 variance, the walk falling further from a hotter tank), and none of the

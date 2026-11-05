@@ -360,18 +360,23 @@ Changed
   ``TankParams.correction_top_height`` (0.75, not fitted; the upper
   probe's height if lower) and level above it. At the upper probe's
   height the water just under that probe took a cold lower probe's
-  correction, and a large draw from a tank stratified in an evening
-  without heating dropped the walk's upper probe 2.9-9.8 °F against the
-  record's 1.1-3.1. Over the site's 29 held-out days (measured
-  2026-11-05 at ``DrawParams.meter_reads`` 0.85 on the parameters in
-  use, not refitted) the upper probe through draws reads 0.33 °F RMS
-  against 0.37, the recoveries 13.4 min off against 14.1 (the draw-free
-  3.5 against 4.2), the day's electricity 12.8 % off against 12.9, the
+  correction: three large held-out draws in an evening window without
+  heating, two from tanks with the probes 22 and 40 °F apart, dropped
+  the walk's upper probe 2.9-9.8 °F against the record's 1.1-3.1. Over
+  the site's 29 held-out days (measured 2026-11-05 at
+  ``DrawParams.meter_reads`` 0.85 on the parameters in use, not
+  refitted) the upper probe through draws reads 0.33 °F RMS against
+  0.37, the recoveries 13.4 min off against 14.1 (the draw-free 3.5
+  against 4.2), the day's electricity 12.8 % off against 12.9, the
   compressor's starts as before; the elements start twice more over the
   29 days, the recoveries' electricity is a mean 2.7 % low against 1.6,
   and the lower probe through draws reads 1.71 °F RMS against 1.68. A
-  walk without layers reads more heat above the lean's top than it did:
-  a probe just under the line now promises no water above it.
+  walk without layers reads the water above the lean's top level, a
+  little above the upper probe (0.03 °F per °F between the probes), so
+  it crosses the line at once: on the defaults, with the upper probe 0.5
+  °F under the line, nothing is promised with the probes up to 16 °F
+  apart and the 15.8 gal above 0.75 from 18 °F, against 6.6-9.2 gal
+  before.
 - **A gallon of hot water holds less heat.** Every heat in the
   simulator took water at 8.34 BTU per gallon per °F, the mains'
   value; hot water is lighter, 8.24 at 120 °F and 8.20 at 140, so the

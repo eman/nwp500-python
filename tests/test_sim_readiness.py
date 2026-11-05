@@ -95,10 +95,23 @@ class TestDeliverable:
         self,
     ) -> None:
         """Topped below the upper probe (``correction_top_height``), the
-        lean leaves the water above the probe at the probe's reading:
-        a probe under the line promises nothing."""
+        lean leaves the water above its top level, a little above the
+        probe (about 0.03 degF per degF between the probes): with the
+        probes 4.5 degF apart a probe 0.5 degF under the line leaves
+        it under the line."""
         assert P.tank.correction_top_height < P.tank.upper_probe_height
         assert rd.deliverable(P, LINE - 0.5, LINE - 5.0).gal == 0.0
+
+    def test_a_wide_gap_lifts_the_whole_top_over_the_line(self) -> None:
+        """The level top reads above the probe by more as the probes
+        part: 30 degF apart it is over the line, and every gallon above
+        the lean's top is deliverable at once."""
+        top = P.tank.correction_top_height
+        u, lo = LINE - 0.5, LINE - 30.5
+        layers = st.estimate(st.layout(P), u, lo).layers_f
+        assert layers[-1] > LINE > u
+        got = rd.deliverable(P, u, lo).gal
+        assert got == pytest.approx((1.0 - top) * P.tank.volume_gal, rel=0.02)
 
     def test_the_valve_stretches_the_tank(self) -> None:
         """Through the valve each tank gallon is blended with the
