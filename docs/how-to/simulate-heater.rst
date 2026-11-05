@@ -857,6 +857,8 @@ parameters the walk was given:
        params,
    ):
        print(m.start, m.end, m.trigger, m.at, m.margin_f, m.started)
+       if m.after_large_draw:
+           print("  read after", m.drawn_gal, "gal in the hour")
 
 Each ``StartMargin`` is one coast and one trigger: ``lower`` (the lower
 zone over its trigger, which inside a window starts the heater at the
@@ -867,6 +869,15 @@ says how near it came. On the site's held-out days the few starts the
 walk missed outright fell on coasts among the smallest margins
 (:doc:`/explanation/simulator`, "Accuracy"); the record is too short to
 say how small is too small.
+
+``drawn_gal`` is the gallons the loads drew in the hour up to the
+margin's point (the meter's, by the pieces the walk takes each draw in;
+None without the loads), and ``after_large_draw`` says it was 8 gal or
+more (``margins.LARGE_DRAW_GAL``). A lower margin read there is the
+least sure: on the site's held-out draws of that size the walk's lower
+probe an hour after was right on median, but 3.4 to 16.5 °F off, either
+way, on the 9 it missed by 3 °F or more (measured 2026-11-04 at
+``meter_reads`` 0.85; :doc:`/explanation/simulator`, "Accuracy").
 
 
 Ask how much hot water is left

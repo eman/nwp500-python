@@ -20,6 +20,15 @@ its end (23 of the 24 at the walk's end), where the walk stops rather
 than where the record started. Three misses rank the margin; they do not
 fix a threshold.
 
+A lower margin read within the hour after a large draw is the least
+sure: on the 28 clean compressor-off draws of 8 gal or more held out
+from 2026-09-18 (measured 2026-11-04 at ``DrawParams.meter_reads``
+0.85), the walk's lower probe an hour after was right on median but 3.4
+to 16.5 °F off, either way, on the 9 it missed by 3 °F or more
+(``docs/explanation/simulator.rst``, "Accuracy"). Each margin carries
+the gallons drawn in the hour up to where it was read (``drawn_gal``)
+and whether that was such a draw (``after_large_draw``).
+
 The triggers are the heat pump's (``tou_triggers.heater_start``): the
 lower zone falling to its trigger (``hp_lower_on``, no nearer the
 setpoint than the setpoint itself, ``controller.lower_trigger_f``), held
@@ -54,6 +63,16 @@ from nwp500.sim.tou_triggers import (
     in_window,
 )
 
+#: How far back from a margin's point the draws counted in its
+#: ``drawn_gal`` reach: the hour the lower probe's error after a large
+#: draw was measured over.
+DRAWN_SPAN = timedelta(hours=1)
+
+#: The metered gallons in ``DRAWN_SPAN`` from which a margin is read
+#: after a large draw (``StartMargin.after_large_draw``): the draws the
+#: lower probe's error after one was measured on.
+LARGE_DRAW_GAL = 8.0
+
 #: A span a drop can come in: a draw's piece (an instant) or a
 #: circulation run.
 _Span = tuple[datetime, datetime]
@@ -80,6 +99,17 @@ class StartMargin:
     #: The coast ended in a start of any cause (the next point heats:
     #: a trigger, or a write), not at the walk's end.
     started: bool
+    #: The gallons drawn in the ``DRAWN_SPAN`` up to ``at``, as the
+    #: loads give them (the meter's), each draw by the pieces the walk
+    #: takes it in; None without the loads.
+    drawn_gal: float | None = None
+
+    @property
+    def after_large_draw(self) -> bool:
+        """Read within ``DRAWN_SPAN`` after ``LARGE_DRAW_GAL`` or more
+        drawn: for the lower trigger, the walk's lower probe there is
+        the least sure (the module's account)."""
+        return self.drawn_gal is not None and self.drawn_gal >= LARGE_DRAW_GAL
 
 
 def _coasts(points: Sequence[PathPoint]) -> Iterable[tuple[int, int, int]]:
@@ -142,6 +172,16 @@ def _upper_margin(p: PathPoint) -> float:
     return p.upper_f - (p.setpoint_f - UPPER_DEFICIT_F)
 
 
+def _drawn(
+    pieces: Sequence[tuple[datetime, float]] | None, at: datetime
+) -> float | None:
+    """The gallons of ``pieces`` in the ``DRAWN_SPAN`` up to ``at``,
+    one at ``at`` itself included (its drop is read there)."""
+    if pieces is None:
+        return None
+    return sum(g for t, g in pieces if at - DRAWN_SPAN < t <= at)
+
+
 def start_margins(
     points: Sequence[PathPoint],
     hp_lower_on_f: float | None,
@@ -157,13 +197,15 @@ def start_margins(
     a drop, a draw's or the circulation's, releases the held lower
     trigger; ``params`` the walk's, for the gap its circulation runs are
     merged within (``CirculationParams.run_gap_min``; without them, the
-    default gap). A point in a
-    mode without the compressor, or with heating disabled, counts for
-    neither."""
+    default gap), and each margin the gallons the draws put in the hour
+    up to it (``StartMargin.drawn_gal``). A point in a mode without the
+    compressor, or with heating disabled, counts for neither."""
     drops: list[_Span] = []
+    pieces: list[tuple[datetime, float]] | None = None
     if loads is not None:
         # A draw over several minutes lands at each of its pieces.
-        drops += [(t, t) for d in loads.draws for t, _ in d.pieces()]
+        pieces = [p for d in loads.draws for p in d.pieces()]
+        drops += [(t, t) for t, _ in pieces]
         if loads.circulation is not None:
             # The runs as the walk takes them: merged within the
             # circulation's gap, those after ``circulation_known_until``
@@ -207,6 +249,7 @@ def start_margins(
                         at=at,
                         margin_f=margin,
                         started=j < len(points),
+                        drawn_gal=_drawn(pieces, at),
                     )
                 )
     return tuple(out)
