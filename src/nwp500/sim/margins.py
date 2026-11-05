@@ -202,13 +202,21 @@ def start_margins(
     trigger; ``params`` the walk's, for the gap its circulation runs are
     merged within (``CirculationParams.run_gap_min``; without them, the
     default gap), and each margin the gallons the draws put in the hour
-    up to it (``StartMargin.drawn_gal``). A point in a mode without the
+    up to it (``StartMargin.drawn_gal``), from the walk's first point on,
+    as the engine takes them. A point in a mode without the
     compressor, or with heating disabled, counts for neither."""
     drops: list[_Span] = []
     pieces: list[tuple[datetime, float]] | None = None
     if loads is not None:
-        # A draw over several minutes lands at each of its pieces.
-        pieces = [p for d in loads.draws for p in d.pieces()]
+        # A draw over several minutes lands at each of its pieces; those
+        # before the walk's first point it never took.
+        first = points[0].at if points else None
+        pieces = [
+            p
+            for d in loads.draws
+            for p in d.pieces()
+            if first is None or p[0] >= first
+        ]
         drops += [(t, t) for t, _ in pieces]
         if loads.circulation is not None:
             # The runs as the walk takes them: merged within the

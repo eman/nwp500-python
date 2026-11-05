@@ -17,7 +17,7 @@ from nwp500.sim import (
     simulate,
 )
 from nwp500.sim.engine import PathPoint
-from nwp500.sim.margins import start_margins
+from nwp500.sim.margins import StartMargin, start_margins
 from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tou_triggers import UPPER_DEFICIT_F
 
@@ -348,3 +348,34 @@ def test_simulate_without_a_lower_setting_reads_only_the_windows() -> None:
     )
     result = simulate(s, default_params(), tou_windows_in_force=WINDOW)
     assert {m.trigger for m in result.margins} == {"upper_at_tou_open"}
+
+
+def test_a_draw_before_the_walk_is_not_counted() -> None:
+    # The engine takes the draws from the start on; one before it is in
+    # the state given, not in the hour the walk drew.
+    early = Draw(at=at(-0.5), gallons=20.0)
+    s = _scenario(
+        state=HeaterState(upper_f=139.0, lower_f=105.2),
+        loads=Loads(draws=(early,)),
+    )
+    result = simulate(s, default_params())
+    assert result.margins
+    assert all(m.drawn_gal == 0.0 for m in result.margins)
+    assert not any(m.after_large_draw for m in result.margins)
+
+
+def test_simulate_reads_its_margins_on_its_own_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import nwp500.sim.api as api
+
+    seen: list[object] = []
+
+    def spy(*args: object, **kw: object) -> tuple[StartMargin, ...]:
+        seen.append(args[4] if len(args) > 4 else kw.get("params"))
+        return start_margins(*args, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(api, "start_margins", spy)
+    p = default_params()
+    simulate(_scenario(), p)
+    assert seen == [p]

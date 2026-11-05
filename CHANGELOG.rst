@@ -95,7 +95,9 @@ Added
   minute after, and an hour after was 3.4 to 16.5 °F off, either way, on
   the 9 it missed by 3 °F or more. ``simulate`` gives them on its result
   (``SimulationResult.margins``), read on the lower trigger, the TOU
-  windows, the loads and the parameters the walk had.
+  windows, the draws from its start on, the circulation and the
+  parameters the walk had. ``start_margins`` counts no draw before the
+  walk's first point.
 - ``PathPoint.heating_disabled``: heating was disabled at the point
   (Vacation, or powered off with no entry having turned the heater on).
 - **A slower draw takes more of the tank than the valve's share.**

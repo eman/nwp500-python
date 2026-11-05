@@ -55,7 +55,8 @@ class SimulationResult:
     draw_out_of_domain_at: datetime | None = None
     #: Each coast's nearest approach to each heat-pump start trigger in
     #: force over it (``margins.start_margins``, on the lower trigger,
-    #: the TOU windows, the loads and the parameters the walk had): a
+    #: the TOU windows, the draws from the start on, the circulation and
+    #: the parameters the walk had): a
     #: start the walk did not call, weighed by how nearly it called it.
     #: ``StartMargin.after_large_draw`` marks a lower margin read in the
     #: hour after 8 gal or more drawn, where it is the least sure.
