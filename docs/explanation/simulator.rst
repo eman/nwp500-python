@@ -897,8 +897,8 @@ against 1.39: too soon and too far, and the lag that fits them best is
 55.5 minutes. On 2026-09-30 the record's probe followed a draw within
 minutes, from 122.2 to 102.6 degF between 5 and 9 minutes after the draw
 of 02:42 UTC. Of the 65 starts the day walks made on the 29 days, 13
-came within 30 minutes after a draw of over 8 gal metered began, 10 of
-them at the draw on the lower trigger, whose wait on the upper zone
+came within 30 minutes after a draw of over 8 gal metered began, 10 on
+the lower trigger (9 of them at the draw), whose wait on the upper zone
 reads the upper probe. With the start triggers reading the walk's upper
 probe through a lag of 7.75 or 15 minutes, no half hour's heating
 changed: two days' walks differed, from 09-24 03:00 and 09-30 02:30 UTC,

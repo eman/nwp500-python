@@ -37,11 +37,11 @@ at 7.75 minutes (2.5 and 0.8 at 15). The electricity came 12.8 and 12.7
 % off against 12.9, a mean 2.5 and 2.6 % low against 2.4; the day's end
 state 3.05 and 3.01 degF off against 3.11.
 
-**Why dropped.** It moved no start, and the electricity and the end
-state by little. Of the 13 starts within 30 minutes after a large draw,
-10 are at the draw on the lower trigger, and none of them moved. The
-held-out draws' walk falls too far as well as too soon, which a lag of
-minutes does not take.
+**Why dropped.** No start was gained, lost or misplaced, and the
+electricity and the end state by little. Of the 13 starts within 30
+minutes after a large draw, 10 are on the lower trigger (9 at the draw),
+and none of their walks differed. The held-out draws' walk falls too far
+as well as too soon, which a lag of minutes does not take.
 
 **Account.** :doc:`simulator`, "Accuracy" (the upper probe after a
 large draw). The patch and the scores are kept with the site's scores
