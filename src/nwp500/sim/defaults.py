@@ -25,6 +25,7 @@ valve or its own climate (``DrawParams.climate_f``) passes its own
 
 import math
 from dataclasses import replace
+from datetime import UTC, datetime
 
 from nwp500.sim.params import (
     INSTALLATION_TERMS,
@@ -75,6 +76,15 @@ SITE_UNDILUTED_GPM = 2.0
 #: The share of a slower draw's cold side the site's tank gave as well
 #: (``DrawParams.undiluted_share``).
 SITE_UNDILUTED_SHARE = 0.25
+#: The installation's house meter (``DrawParams.meter_reads_since``):
+#: as it reads (``meter_reads`` 1) before its step of 2026-09-12 19:51
+#: UTC, and 0.85 of a delivered gallon from it: the reading of one fill
+#: on 2026-11-03 (1.00 gal at a hot tap read 0.846), applied from the
+#: step, where the meter drifted after it (``DrawParams.meter_reads``'
+#: account). The held-out days from 2026-09-18 scored at 0.85 came out
+#: 2.4 % low in electricity against 9.8 % as metered (measured
+#: 2026-11-03 on that installation's parameters in use).
+SITE_METER_READS_SINCE = ((datetime(2026, 9, 12, 19, 51, tzinfo=UTC), 0.85),)
 
 #: The mains of the federal rating test for water heaters (10 CFR 430,
 #: Subpart B, Appendix E), °F: colder than most of the year's mains
@@ -340,7 +350,8 @@ def sized(params: HeaterParams, volume_code: int) -> HeaterParams:
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
-    with no mixing valve (``NO_VALVE``), no circulation and the rating
+    with no mixing valve (``NO_VALVE``), no circulation, a meter that
+    reads as it reads (``meter_reads`` 1, no dated readings) and the rating
     test's mains all year (``RATING_INLET_F``, no climate). Every other
     installation term is still that site's, labelled so
     (``params.scope_of``) and named in ``unfitted``
@@ -354,6 +365,8 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
             inlet_temp_f=RATING_INLET_F,
             inlet_from_probe=False,
             climate_f=None,
+            meter_reads=1.0,
+            meter_reads_since=(),
         ),
         circulation=None,
         unfitted=INSTALLATION_TERMS,
@@ -362,8 +375,8 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
 
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
-    (``SITE_VALVE``, ``SITE_UNDILUTED_GPM``, ``SITE_UNDILUTED_SHARE``)
-    and circulation
+    (``SITE_VALVE``, ``SITE_UNDILUTED_GPM``, ``SITE_UNDILUTED_SHARE``),
+    house meter (``SITE_METER_READS_SINCE``) and circulation
     (``SITE_CIRCULATION``) included: a
     snapshot of its fit of 2026-10-11, the heat pump's performance map
     fitted on 2026-10-26 and the layered tank's terms on 2026-10-27.
@@ -382,6 +395,7 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
             valved.draw,
             undiluted_gpm=SITE_UNDILUTED_GPM,
             undiluted_share=SITE_UNDILUTED_SHARE,
+            meter_reads_since=SITE_METER_READS_SINCE,
         ),
         circulation=SITE_CIRCULATION,
     )

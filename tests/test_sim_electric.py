@@ -52,7 +52,11 @@ def test_two_days_in_electric_keep_the_upper_zone_in_its_band(
     the draw, before the elements answer, and the lower element takes
     a while to bring back."""
     site = sim.site_example_params()
-    params = replace(site, draw=replace(site.draw, undiluted_share=0.0))
+    # The meter as it reads: the band, not the meter's share, is tested.
+    params = replace(
+        site,
+        draw=replace(site.draw, undiluted_share=0.0, meter_reads_since=()),
+    )
     got = sim.simulate(_electric(draws=draws), params)
     later = [
         h for h in got.heating if h.start.trigger == "electric_upper_short"

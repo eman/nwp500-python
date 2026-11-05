@@ -80,7 +80,9 @@ Added
   bath's and a shower's at the scenario's start, a window's at its
   start. On the site, 1 before the meter's step of 2026-09-12 19:51
   UTC and 0.85 from it scores the held-out days as 0.85 throughout
-  does, as they fall after the step.
+  does, as they fall after the step; ``site_example_params`` carries
+  it (``defaults.SITE_METER_READS_SINCE``), and ``default_params``
+  reads as the meter reads.
 - **How near a walk came to its start triggers.**
   ``sim.start_margins(result.points, hp_lower_on_f, tou_windows, loads,
   params)`` gives each coast of a walk and its nearest approach to each

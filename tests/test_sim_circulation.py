@@ -96,7 +96,9 @@ def _scenario(**kw: Any) -> Scenario:
 
 @pytest.fixture(scope="module")
 def params() -> HeaterParams:
-    return site_example_params()
+    # The meter as it reads: a draw's gallons below are delivered.
+    site = site_example_params()
+    return replace(site, draw=replace(site.draw, meter_reads_since=()))
 
 
 MIN = timedelta(minutes=1)
