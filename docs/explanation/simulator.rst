@@ -698,6 +698,31 @@ An inlet zone of 7 gal instead of the fitted 13.8, which leaves less of
 the inlet's cold mixed up the bottom, and refits of the tank under it
 were tried and dropped (:doc:`simulator-tried`).
 
+On the same walks the missed starts are 13 of the record's 46 over the
+29 days, and nine come from when the walk itself heated (measured
+2026-11-05). Five are the record's starts that the four early lower-zone
+starts and the night of 09-23's took: at the record's, the walk was
+heating or had heated. Four come inside a walk's run longer than the
+record's. On the night of 09-19 the walk's recovery from the window's
+opening at 23:00 UTC ran to 02:12, 42 min past the record's stop, its
+upper probe 6.3 degF under the record's at 00:30; the record then ran
+four short runs at the night's writes from 01:36 to 02:23, and the
+walk's one start at 02:18 places one of them. On 09-26 the walk's late
+start at 19:23 UTC was still running at 23:53, its upper probe 15.8 degF
+under the record's at 23:45, when a write restarted the record 18 min
+after its run from 17:08 stopped. Of the other four, two are lower-zone
+starts that the walk makes late, its lower probe warmer than the
+record's after what lifted the record's water to it: on 09-26 the gap,
+walk less record, came to +1.5 degF over 9.5 quiet hours from 07:00 UTC,
+a 3 min circulation run just before 17:00 took it from +2.4 to +5.6, and
+it was +6.3 at the record's start at 17:08; on 10-20 the 11.5 gal drawn
+between 13:00 and 13:30 UTC took it from +0.1 to +3.6, and it was +3.3
+at the record's start at 14:35. On 09-20 the record's lower probe fell
+3.6 degF in the 14 minutes from the day walk's start at 07:00 UTC to its
+start, with no draw or circulation run in the hour. On the night of
+10-18 the record started at 03:41 UTC with its lower probe 4.0 degF
+above its setting, which no modelled rule explains.
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks
