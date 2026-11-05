@@ -192,6 +192,8 @@ def start_margins(
     tou_windows: Sequence[tuple[datetime, datetime]] = (),
     loads: Loads | None = None,
     params: HeaterParams | None = None,
+    *,
+    until: datetime | None = None,
 ) -> tuple[StartMargin, ...]:
     """Each coast of ``points`` (``SimulationResult.points``) and its
     nearest approach to each heat-pump trigger it was in force for, in
@@ -203,7 +205,9 @@ def start_margins(
     merged within (``CirculationParams.run_gap_min``; without them, the
     default gap), and each margin the gallons the draws put in the hour
     up to it (``StartMargin.drawn_gal``), from the walk's first point on,
-    as the engine takes them. A point in a mode without the
+    as the engine takes them, and before ``until`` where it is given
+    (the walk's end, which the engine takes no draw at). A point in a
+    mode without the
     compressor, or with heating disabled, counts for neither."""
     drops: list[_Span] = []
     pieces: list[tuple[datetime, float]] | None = None
@@ -215,7 +219,8 @@ def start_margins(
             p
             for d in loads.draws
             for p in d.pieces()
-            if first is None or p[0] >= first
+            if (first is None or p[0] >= first)
+            and (until is None or p[0] < until)
         ]
         drops += [(t, t) for t, _ in pieces]
         if loads.circulation is not None:

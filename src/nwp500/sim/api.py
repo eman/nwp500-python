@@ -638,7 +638,12 @@ def simulate(
         ),
         draw_out_of_domain_at=out_of_domain_at,
         margins=start_margins(
-            sim.points, s.settings.hp_lower_on_f, windows, s.loads, params
+            sim.points,
+            s.settings.hp_lower_on_f,
+            windows,
+            s.loads,
+            params,
+            until=s.until,
         ),
         **_end(s, sim),
     )

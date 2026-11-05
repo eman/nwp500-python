@@ -842,7 +842,7 @@ where the elements answer it, at most
 A whole walk's coasts carry the same question: how near each came to a
 start it did not make. ``simulate`` answers it on its result
 (``SimulationResult.margins``), read on the lower trigger, the TOU
-windows, the draws from its start on, the circulation and the
+windows, the draws it took, the circulation and the
 parameters the walk had:
 
 .. code-block:: python

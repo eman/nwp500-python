@@ -379,3 +379,18 @@ def test_simulate_reads_its_margins_on_its_own_parameters(
     p = default_params()
     simulate(_scenario(), p)
     assert seen == [p]
+
+
+def test_a_draw_at_the_walk_s_end_is_not_counted() -> None:
+    # The engine takes no draw at ``until``; the helper, given no end,
+    # reads one at its last point.
+    s = _scenario(
+        state=HeaterState(upper_f=139.0, lower_f=130.0),
+        loads=Loads(draws=(Draw(at=at(12), gallons=20.0),)),
+    )
+    result = simulate(s, default_params())
+    assert result.points[-1].at == s.until
+    assert result.margins
+    assert all(m.drawn_gal == 0.0 for m in result.margins)
+    inclusive = start_margins(result.points, 105.0, loads=s.loads)
+    assert any(m.after_large_draw for m in inclusive)
