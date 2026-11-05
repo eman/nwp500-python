@@ -74,6 +74,7 @@ from nwp500.sim.inputs import (
     Settings,
     Write,
 )
+from nwp500.sim.margins import start_margins
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.element import BASE_REASONS, HeaterMode
 from nwp500.sim.physics.heat_pump import (
@@ -636,6 +637,14 @@ def simulate(
             )
         ),
         draw_out_of_domain_at=out_of_domain_at,
+        margins=start_margins(
+            sim.points,
+            s.settings.hp_lower_on_f,
+            windows,
+            s.loads,
+            params,
+            until=s.until,
+        ),
         **_end(s, sim),
     )
 

@@ -840,25 +840,21 @@ where the elements answer it, at most
 ``element.upper_reengages_below_setpoint_f`` under the setpoint.
 
 A whole walk's coasts carry the same question: how near each came to a
-start it did not make. ``start_margins`` reads it off the walk's
-points, given the lower trigger, the TOU windows, the loads and the
-parameters the walk was given:
+start it did not make. ``simulate`` answers it on its result
+(``SimulationResult.margins``), read on the lower trigger, the TOU
+windows, the draws it took, the circulation and the
+parameters the walk had:
 
 .. code-block:: python
 
-   from nwp500.sim import start_margins
-
    result = simulate(scenario, params, tou_windows_in_force=windows)
-   for m in start_margins(
-       result.points,
-       scenario.settings.hp_lower_on_f,
-       windows,
-       scenario.loads,
-       params,
-   ):
+   for m in result.margins:
        print(m.start, m.end, m.trigger, m.at, m.margin_f, m.started)
        if m.after_large_draw:
            print("  read after", m.drawn_gal, "gal in the hour")
+
+``start_margins(points, hp_lower_on_f, tou_windows, loads, params)``
+reads them off any walk's points, as ``simulate`` does.
 
 Each ``StartMargin`` is one coast and one trigger: ``lower`` (the lower
 zone over its trigger, which inside a window starts the heater at the
