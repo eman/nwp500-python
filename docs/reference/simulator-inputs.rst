@@ -1011,6 +1011,15 @@ with. Heights are shares of the volume from the bottom.
      - What the lower probe reads above the water it feels: the probes'
        disagreement in a mixed tank (about 0.5 degF on the record, the
        lower higher, after a recovery).
+   * - ``tank.correction_top_height``
+     - 0.75
+     - Where the probes' lean stops: a profile built from the probes,
+       and the replay's correction toward them, run level below the
+       lower probe, linear from it to here, and level above (the upper
+       probe's height, if lower). Not fitted: on the site's held-out
+       days the upper probe through draws and the recoveries read better
+       at 0.75 than at the upper probe's height, and 0.65 missed one
+       more start (measured 2026-11-05).
    * - ``loss.ua_bottom_btu_hr_f``
      - 1.8 BTU/hr per degF
      - About 90 BTU/hr over a 50 degF gap to the air, from the bottom

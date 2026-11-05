@@ -2,6 +2,7 @@
 temperature, from its layers (``nwp500.sim.delivery``)."""
 
 import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -77,12 +78,27 @@ class TestDeliverable:
         assert rd.deliverable(P, LINE - 5.0, LINE - 10.0).gal == 0.0
 
     def test_the_water_above_the_probe_is_deliverable(self) -> None:
-        """The outlet is above the upper probe: a probe just under the
-        line leaves the warmer water above it, no more than the tank
-        holds above the probe."""
-        got = rd.deliverable(P, LINE - 0.5, LINE - 5.0).gal
+        """The outlet is above the upper probe: with the probes' lean
+        reaching it, a probe just under the line leaves the warmer water
+        above it, no more than the tank holds above the probe."""
+        reach = replace(
+            P,
+            tank=replace(
+                P.tank, correction_top_height=P.tank.upper_probe_height
+            ),
+        )
+        got = rd.deliverable(reach, LINE - 0.5, LINE - 5.0).gal
         above = (1.0 - P.tank.upper_probe_height) * P.tank.volume_gal
         assert 0.0 < got < 1.5 * above
+
+    def test_a_lean_topped_below_the_probe_leaves_nothing_above_it(
+        self,
+    ) -> None:
+        """Topped below the upper probe (``correction_top_height``), the
+        lean leaves the water above the probe at the probe's reading:
+        a probe under the line promises nothing."""
+        assert P.tank.correction_top_height < P.tank.upper_probe_height
+        assert rd.deliverable(P, LINE - 0.5, LINE - 5.0).gal == 0.0
 
     def test_the_valve_stretches_the_tank(self) -> None:
         """Through the valve each tank gallon is blended with the

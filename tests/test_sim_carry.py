@@ -827,7 +827,7 @@ class TestCarryOn:
             }
         )
         same, owing = sim.carry_on(
-            [walk(111.2), walk(110.8)],
+            [walk(110.9), walk(110.5)],
             tail,
             PARAMS,
             tou_windows_in_force=window,

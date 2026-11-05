@@ -136,16 +136,16 @@ def test_an_instant_draw_in_the_engine_takes_more() -> None:
 
 
 def test_the_resolution_judges_the_same_gallons() -> None:
-    """26 gal from 118 and 100 degF: short of what the valve's share
+    """29 gal from 118 and 100 degF: short of what the valve's share
     delivers, out of a probe's reach of what the site's does."""
     site = delivery.deliverable(SITE, 118.0, 100.0, inlet_f=60.0).gal
     valved = delivery.deliverable(VALVED, 118.0, 100.0, inlet_f=60.0).gal
-    assert site < 26.0 < valved
+    assert site < 29.0 < valved
     assert not delivery.within_resolution(
-        SITE, 118.0, 100.0, None, 26.0, inlet_f=60.0
+        SITE, 118.0, 100.0, None, 29.0, inlet_f=60.0
     )
     assert delivery.within_resolution(
-        VALVED, 118.0, 100.0, None, 26.0, inlet_f=60.0
+        VALVED, 118.0, 100.0, None, 29.0, inlet_f=60.0
     )
 
 

@@ -353,6 +353,25 @@ Added
 Changed
 -------
 
+- **The probes' lean stops at 0.75 of the height.** A profile built from
+  the two probes (``stratified.estimate``) and the replay's correction
+  toward them (``assimilate``) ran linear from the lower probe's height
+  to the upper's; they now run linear to
+  ``TankParams.correction_top_height`` (0.75, not fitted; the upper
+  probe's height if lower) and level above it. At the upper probe's
+  height the water just under that probe took a cold lower probe's
+  correction, and a large draw from a tank stratified in an evening
+  without heating dropped the walk's upper probe 2.9-9.8 °F against the
+  record's 1.1-3.1. Over the site's 29 held-out days (measured
+  2026-11-05 at ``DrawParams.meter_reads`` 0.85 on the parameters in
+  use, not refitted) the upper probe through draws reads 0.33 °F RMS
+  against 0.37, the recoveries 13.4 min off against 14.1 (the draw-free
+  3.5 against 4.2), the day's electricity 12.8 % off against 12.9, the
+  compressor's starts as before; the elements start twice more over the
+  29 days, the recoveries' electricity is a mean 2.7 % low against 1.6,
+  and the lower probe through draws reads 1.71 °F RMS against 1.68. A
+  walk without layers reads more heat above the lean's top than it did:
+  a probe just under the line now promises no water above it.
 - **A gallon of hot water holds less heat.** Every heat in the
   simulator took water at 8.34 BTU per gallon per °F, the mains'
   value; hot water is lighter, 8.24 at 120 °F and 8.20 at 140, so the

@@ -340,8 +340,16 @@ class TestTimeToReady:
         walk = simulate(electric, params).simulation
         minutes = rows["electric"].ready_in_minutes
         assert minutes is not None
-        then = T0 + timedelta(minutes=minutes)
-        point = next(p for p in walk.points if p.at == then)
+        # The row's minutes are rounded to a tenth: the walk's instant
+        # they stand for is the nearest.
+        point = min(
+            walk.points,
+            key=lambda p: abs(p.at - (T0 + timedelta(minutes=minutes))),
+        )
+        assert (
+            abs((point.at - T0).total_seconds() / 60.0 - minutes) <= 0.05 + 1e-9
+        )
+        then = point.at
         from nwp500.sim.delivery import deliverable
 
         mains = params.draw.mains_on(s.start)
