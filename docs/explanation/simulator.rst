@@ -694,34 +694,58 @@ the meter's reading) walk each draw over the detector's span; walked as
 the score walks it, the hour's fall comes out about the same, a mean 2.3
 degF short either way as metered and 1.3 too far against 1.1 at 0.85 on
 the 28, and before the step a mean 0.0, 1.4 and 4.1 degF further than
-the record by length against 0.1, 1.6 and 3.6 (the 95). What follows is
-on the draws as metered.
+the record by length against 0.1, 1.6 and 3.6 (the 95).
 
-The days the walk misses are the ones that matter to a schedule. On
-three, the record starts at or near the window's close (21:00 on 10-20
-and 10-21, 20:41 on 10-18) and the walk does not: its lower probe reads
-warmer by then than the trigger, and the day comes out 41 to 100 % low.
-The record's lower probe sat within 0.5 degF of its 104.9 degF trigger
-(104.7 at 07:35 on 10-20, 104.4 at 21:00 on 10-21), and the walk's 11 to
-12 degF above it; its running power matched the record's, about 400 W,
-and it ran 2 to 3 h a day less. The window shows the shortfall, it does
-not make it: the slower draws cooled the walk's lower probe less than
-the record's, over the 32 held-out draws of 8 gal or more with the
-compressor off 11.1 degF against 14.9, walked from the record's own
-state before each with its draws over the hour. At 20:41 on 10-18 the
-record's upper probe was 14.2 degF short of the setpoint, at the
-window's 14.4 degF start, the walk's 12.3. With a slower draw's share as
-well, those draws cooled it 12.6 degF, and 10-21 starts at 21:00 and
-comes out 4.5 % low; 10-18 and 10-20 still do not start. On two, evening
-draws in the window (69 and 57 gal on 09-29 and 10-02) took the record's
-upper probe to 79.5 and 96.1 degF, the only two days on which the record
-crossed the line. Each held one draw of 31 or 54 gal at 2.4 or 2.7
-gal/min. Through the valve the walk's upper probe held at 107.5 and
-113.3 degF and called neither. Taking that draw's water whole over its
-time, it fell to 96.2 and 94.8 degF and called both. 10-02's electricity
-went from 2.6 % high to 7.7 % high, and 09-29's from 5.0 % to 3.3 %. On
-09-28 a 19 gal draw at 2.2 gal/min moved a start, one more missed and
-one more false, and the day's electricity went from 27 % low to 9 % low.
+How far the walk's lower probe falls after a large draw, against the
+record's, comes to a few gallons of the water the draw moves past the
+probe (measured 2026-11-04 on the same draws, walked as the score walks
+them: the height in the walk's own layers before the draw that each
+one's reading an hour after stands for, times the column's 63.2 gal). On
+median it is right: the walk's water past the probe is 13.7 gal against
+the record's 14.0 over the 28 held out at 0.85, and 12.6 against 13.0
+over the 95 from 05-01 to the step. Draw by draw it is not: the 9 of the
+28 an hour off by 3 degF or more at 0.85 are a median 3.8 gal off (up to
+5.8), 6 too deep and 3 too shallow, where the walk's layers are 0.9 to
+4.3 degF a gallon steep; on 09-18 the walk moved 3.9 gal more past the
+probe than the record's reading leaves. Over the 95 the walk is too deep
+more where its layers under the probe were cold (a mean 5.1 degF at the
+hour where its bottom layer was 85 to 90 degF before the draw, 2.8 at 90
+to 95, about 0 above 95) and where the compressor had stopped less than
+8 hours before (1.9 to 4.7 degF, against 0.2 after longer); on the 28 at
+0.85 less clearly. Pooling the water the condenser wraps and below it,
+as the start's stir does, would take the walk deeper still: the probe's
+water an hour after such a draw comes from about the condenser's top, a
+quarter of the way up, which the pool cools. The probes cannot tell a
+draw's gallons from where the walk's layers lie; a lower margin read
+after a large draw (``margins.start_margins``) is good to a few gallons
+of the walk's layers under the probe.
+
+What follows is on the draws as metered. The days the walk misses are
+the ones that matter to a schedule. On three, the record starts at or
+near the window's close (21:00 on 10-20 and 10-21, 20:41 on 10-18) and
+the walk does not: its lower probe reads warmer by then than the
+trigger, and the day comes out 41 to 100 % low. The record's lower probe
+sat within 0.5 degF of its 104.9 degF trigger (104.7 at 07:35 on 10-20,
+104.4 at 21:00 on 10-21), and the walk's 11 to 12 degF above it; its
+running power matched the record's, about 400 W, and it ran 2 to 3 h a
+day less. The window shows the shortfall, it does not make it: the
+slower draws cooled the walk's lower probe less than the record's, over
+the 32 held-out draws of 8 gal or more with the compressor off 11.1 degF
+against 14.9, walked from the record's own state before each with its
+draws over the hour. At 20:41 on 10-18 the record's upper probe was 14.2
+degF short of the setpoint, at the window's 14.4 degF start, the walk's
+12.3. With a slower draw's share as well, those draws cooled it 12.6
+degF, and 10-21 starts at 21:00 and comes out 4.5 % low; 10-18 and 10-20
+still do not start. On two, evening draws in the window (69 and 57 gal
+on 09-29 and 10-02) took the record's upper probe to 79.5 and 96.1 degF,
+the only two days on which the record crossed the line. Each held one
+draw of 31 or 54 gal at 2.4 or 2.7 gal/min. Through the valve the walk's
+upper probe held at 107.5 and 113.3 degF and called neither. Taking that
+draw's water whole over its time, it fell to 96.2 and 94.8 degF and
+called both. 10-02's electricity went from 2.6 % high to 7.7 % high, and
+09-29's from 5.0 % to 3.3 %. On 09-28 a 19 gal draw at 2.2 gal/min moved
+a start, one more missed and one more false, and the day's electricity
+went from 27 % low to 9 % low.
 
 Of the two days still missed, 10-18 and 10-20 (measured 2026-11-02 on
 the parameters fitted before 2026-09-18, the share at 0.25), neither
