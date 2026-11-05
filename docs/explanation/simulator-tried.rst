@@ -13,6 +13,41 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The start triggers reading a lagged upper probe (2026-11-05)
+============================================================
+
+**Tried.** The heat pump's start triggers (the lower trigger's wait on
+the upper zone, the upper zone's start at a window's opening) reading
+the walk's upper probe through a first-order lag, every other reading
+the walk's own, so that a large draw's drop at the top reaches them
+over minutes, as the record's probe shows it after the score's walk
+takes the draw at once (:doc:`simulator`, "Accuracy", the upper probe
+after a large draw). The time constant was fitted on the 95 clean
+compressor-off draws of 8 gal or more from 05-01 to the meter's step,
+by the RMS of the upper probe over the hour after each: 7.75 minutes,
+0.32 degF against 0.35 unlagged. Scored in the day backtest of the 29
+days held out from 2026-09-18 on the parameters in use, at
+``DrawParams.meter_reads`` 0.85, at 7.75 and 15 minutes (measured
+2026-11-05); unlagged, the patch scores as the code does.
+
+**Found.** No half hour's heating changed, and the false starts (0.28 a
+day) and the missed (0.45) stayed. Two days' walks differed, from 09-24
+03:00 and 09-30 02:30 UTC, by up to 1.3 and 0.8 degF at the half hours
+at 7.75 minutes (2.5 and 0.8 at 15). The electricity came 12.8 and 12.7
+% off against 12.9, a mean 2.5 and 2.6 % low against 2.4; the day's end
+state 3.05 and 3.01 degF off against 3.11.
+
+**Why dropped.** It moved no start, and the electricity and the end
+state by little. Of the 13 starts within 30 minutes after a large draw,
+10 are at the draw on the lower trigger, and none of them moved. The
+held-out draws' walk falls too far as well as too soon, which a lag of
+minutes does not take.
+
+**Account.** :doc:`simulator`, "Accuracy" (the upper probe after a
+large draw). The patch and the scores are kept with the site's scores
+(``upper-lag-2026-11-05``).
+
+
 Conduction raised after a draw or a run, and fading (2026-11-05)
 ================================================================
 
