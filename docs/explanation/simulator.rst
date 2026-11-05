@@ -744,10 +744,11 @@ and an element run, carries 0.6, the walk's elements drawing 984 Wh
 against the record's 565. The heater's idle draw, which the walk leaves
 out, read 1.0 W at every quiet minute over the 29 days (neither source
 on and no edge of either within 10 minutes), bar a few 7 W readings.
-Over the minutes neither source ran that comes to 1.0 % of the metered
-and 1.7 % of a mean day, 12.6 % of 10-22's 188 Wh: 12.5 to 23.6 Wh a
-day, as many minutes as the heater stood idle. What it draws while a
-source runs was not measured.
+Over the minutes neither source ran that comes to 1.0 % of the 29 days'
+metered electricity and 1.7 % on the mean of the days' own shares, each
+day weighed alike, 12.6 % of 10-22's 188 Wh: 12.5 to 23.6 Wh a day, as
+many minutes as the heater stood idle. What it draws while a source runs
+was not measured.
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
