@@ -344,9 +344,12 @@ def test_the_coast_fit_takes_a_draw_at_its_reading() -> None:
     as_read = tf.errors(default_params(), None, coast(6.0))
     whole = tf.errors(default_params(), None, coast(12.0))
     assert later is not None and as_read is not None and whole is not None
-    for a, b in zip(later, as_read, strict=True):
-        assert a == pytest.approx(b, abs=1e-9)
-    assert list(later) != pytest.approx(list(whole), abs=1e-9)
+
+    def flat(e: tuple[tuple[float, ...], ...]) -> list[float]:
+        return [x for part in e for x in part]
+
+    assert flat(later) == pytest.approx(flat(as_read), abs=1e-9)
+    assert flat(later) != pytest.approx(flat(whole), abs=1e-9)
 
 
 def test_a_reading_in_a_fold_round_trips() -> None:

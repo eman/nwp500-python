@@ -168,13 +168,17 @@ def _member(
                 )
                 if draw_class == "long":
                     long_draws.append((at, at + timedelta(seconds=duration)))
-    draws.sort(key=lambda d: d.at)
+    draws.sort(key=_draw_at)
     return Member(
         loads=Loads(draws=tuple(draws), windows=tuple(windows)),
         long_draws=tuple(sorted(long_draws)),
         start=start,
         end=end,
     )
+
+
+def _draw_at(d: Draw) -> datetime:
+    return d.at
 
 
 def _long_seconds(
