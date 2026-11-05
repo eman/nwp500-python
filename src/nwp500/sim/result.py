@@ -23,6 +23,7 @@ from nwp500.sim.engine import (
     energy_by_source,
 )
 from nwp500.sim.inputs import HeaterState, History, Settings
+from nwp500.sim.margins import StartMargin
 from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import Point
 
@@ -52,6 +53,13 @@ class SimulationResult:
     #: range to the end (``DrawParams.domain_upper_f``); None when the
     #: walk ends in range.
     draw_out_of_domain_at: datetime | None = None
+    #: Each coast's nearest approach to each heat-pump start trigger in
+    #: force over it (``margins.start_margins``, on the lower trigger,
+    #: the TOU windows, the loads and the parameters the walk had): a
+    #: start the walk did not call, weighed by how nearly it called it.
+    #: ``StartMargin.after_large_draw`` marks a lower margin read in the
+    #: hour after 8 gal or more drawn, where it is the least sure.
+    margins: tuple[StartMargin, ...] = ()
     #: The heater at ``until``, for a scenario from there to go on from
     #: (its ``state``, ``history`` and ``settings``): the probes and the
     #: layers where the walk ended, what was running, and what the

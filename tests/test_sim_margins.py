@@ -304,3 +304,47 @@ def test_the_hour_holds_both_its_ends_and_eight_gallons_is_large() -> None:
     small = Draw(at=T0, gallons=7.9)
     (m,) = start_margins(points, 104.9, loads=Loads(draws=(small,)))
     assert not m.after_large_draw
+
+
+def test_simulate_carries_the_walk_s_margins() -> None:
+    s = _scenario(loads=Loads(draws=(Draw(at=at(1), gallons=20.0),)))
+    p = default_params()
+    result = simulate(s, p)
+    assert result.margins == start_margins(
+        result.points, s.settings.hp_lower_on_f, (), s.loads, p
+    )
+    (lower,) = [m for m in result.margins if m.started]
+    assert lower.after_large_draw
+    assert lower.drawn_gal == pytest.approx(20.0)
+
+
+def test_simulate_s_margins_read_the_windows_in_force() -> None:
+    s = _scenario(state=HeaterState(upper_f=139.0, lower_f=130.0))
+    p = default_params()
+    result = simulate(s, p, tou_windows_in_force=WINDOW)
+    assert result.margins == start_margins(
+        result.points, s.settings.hp_lower_on_f, WINDOW, s.loads, p
+    )
+    assert "upper_at_tou_open" in {m.trigger for m in result.margins}
+    alone = simulate(s, p)
+    assert "upper_at_tou_open" not in {m.trigger for m in alone.margins}
+
+
+def test_simulate_s_margins_read_the_schedule_s_windows() -> None:
+    sched = Schedules(tou_enabled=True, tou_periods=_peak(4, 9))
+    s = _scenario(
+        state=HeaterState(upper_f=139.0, lower_f=130.0), schedules=sched
+    )
+    result = simulate(s, default_params())
+    assert "upper_at_tou_open" in {m.trigger for m in result.margins}
+    off = simulate(_scenario(state=s.state), default_params())
+    assert "upper_at_tou_open" not in {m.trigger for m in off.margins}
+
+
+def test_simulate_without_a_lower_setting_reads_only_the_windows() -> None:
+    s = _scenario(
+        settings=Settings(setpoint_f=140.9, hp_lower_on_f=None),
+        state=HeaterState(upper_f=139.0, lower_f=130.0),
+    )
+    result = simulate(s, default_params(), tou_windows_in_force=WINDOW)
+    assert {m.trigger for m in result.margins} == {"upper_at_tou_open"}
