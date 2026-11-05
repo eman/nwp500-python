@@ -13,6 +13,55 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+A 7 gal inlet zone and tank refits, for the early starts (2026-11-05)
+=====================================================================
+
+**Tried.** Measured, not built: ``TankParams.inlet_mix_gal`` at 7 and 3
+gal instead of the fitted 13.78, on the parameters in use
+(``correction_top_height`` 0.75, the share at 0.25), against the walk's
+early starts after draws and circulation runs (:doc:`simulator`,
+"Accuracy", the false starts). Then two refits at 7 gal from those
+parameters, on the 2026-04-16 to 09-18 record as metered: the condenser
+span alone on its 90 recoveries, and every tank term but the inlet zone
+with the span on its 208 quiet windows, 208 draws and 90 recoveries (as
+``sim_calibrate`` fits the tank). The same full refit at 13.78 was the
+check. Each scored over the 29 held-out days at
+``DrawParams.meter_reads`` 0.85 and the clean draws of 8 gal or more
+with the compressor off (28 held out at 0.85, 99 from 05-01 to the
+meter's step as metered).
+
+**Found.** Over the 29 days, as in use; the zone at 7 gal; with its
+condenser refit; the full refit at 13.78; the full refit at 7: the false
+starts 8, 4, 5, 5 and 4; the day's electricity 12.8, 13.6, 14.9, 12.9
+and 13.4 % off (a mean 2.5, 6.1, 7.9, 5.2 and 5.8 % low); the day's end
+state 3.11, 4.62, 4.98, 3.86 and 4.70 degF off; the recoveries 13.4,
+17.4, 15.6, 16.5 and 17.1 min off. At 3 gal the starts came as at 7 and
+the recoveries further off (18.8 min). Every one of them cleared the
+night of 09-23's start and 10-11's, and all but the condenser refit,
+which kept one at 21:52 UTC, 10-24's two, the full refit at 13.78 as
+well as the zone; 09-18's and 10-21's stayed. The full refits' fit came
+out with ``ua_bottom_btu_hr_f`` at 0 and ``upper_probe_height`` at 0.98
+at 13.78 (both on their bounds), and at 7 with the bottom's loss at 1.57
+and the upper probe at 0.956; the event RMSE went from 2.44 to 2.26 degF
+at 13.78 and from 2.25 to 2.16 at 7. The walk's lower probe an hour
+after a draw, less the record's: held out a mean -1.29, +0.66, -0.10,
++0.35 and +0.73 degF, 4.59, 4.14, 4.10, 4.01 and 3.77 RMS; before the
+step -1.58, +0.30, -0.35, -0.05 and +0.23, 4.06, 3.45, 3.51, 3.39 and
+3.34 RMS. The upper probe through draws read 0.33, 0.31, 0.30, 0.26 and
+0.24 degF RMS.
+
+**Why dropped.** The false starts came nearly as much from refitting the
+tank on the code as it now stands, at the fitted zone (5 against 4), as
+from the smaller zone; and every change left the day's electricity
+further low, its end state further off and its recoveries longer, which
+a schedule prices. The parameters in use stay.
+
+**Account.** :doc:`simulator`, "Accuracy". The scripts, the walks, the
+scores and the refits' parameters are kept with the site's scores
+(``early-starts-2026-11-05``;
+``params-site-fit-before-2026-09-18-share-0.25-inlet*``).
+
+
 The start's stir at the compressor's stop too (2026-11-05)
 ==========================================================
 

@@ -672,6 +672,32 @@ window's close, its lower probe falling 33.0 degF over the hour of a
 running. The missed starts stay 0.45 a day: 09-28 gains the record's two
 and 10-20 one, the three early ones lost.
 
+On the parameters in use with the probes' lean topped at 0.75 (measured
+2026-11-05, at 0.85) the false starts stay 8 over the 29 days. Five come
+early, and four of those are the lower probe: 09-18's, 10-11's, 10-21's
+and 10-24's (118, 51, 324 and 286 min before the record's). The fifth,
+on the night of 09-23, is the upper zone's at the window's opening, the
+walk's upper probe 3.8 degF under the record's after the 01:22 UTC draw.
+Before each of the four the walk holds steep cold water just under its
+lower probe, and what lifts that water to the probe takes the probe
+further than the record's: over the first 10 minutes of the last draw
+before each the walk's lower probe fell 1.7 to 2.5 degF a delivered
+gallon against the record's 0.4 to 1.8. On 10-21 at 13:05 UTC the walk's
+layers read 138 degF down to 0.46 of the height and 131, 111 and 95 at
+0.38, 0.29 and 0.21, so 11.3 gal took its lower probe 27.9 degF down in
+10 minutes and the record's 4.9. A circulation run lifts the column as a
+draw does, returning the pipe's water at the bottom: 10-21's draw came 5
+min after one, and between 12:30 and 13:00 UTC, over which it ran, the
+walk's layer at 0.21 fell from 128 to 95 degF; on 10-24 the run at 20:30
+UTC took the walk's lower probe 12.1 degF down and the record's 5.4,
+with no draw. Over the 10 runs on these days with no draw or heating
+near them, though, the walk's lower probe fell 0.74 degF further than
+the record's on the mean (3.80 RMS), so the runs alone do not show a
+fault of the circulation's. An inlet zone of 7 gal instead of the fitted
+13.8, which leaves less of the inlet's cold mixed up the bottom, and
+refits of the tank under it were tried and dropped
+(:doc:`simulator-tried`).
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks
