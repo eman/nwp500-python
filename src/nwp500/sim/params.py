@@ -39,9 +39,10 @@ imports ``circulation`` alone); none imports it back.
 """
 
 import math
+from bisect import bisect_right
 from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, field, fields
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from itertools import pairwise
 from types import MappingProxyType, NoneType, UnionType
@@ -500,6 +501,15 @@ class DrawParams:
     meter_reads: float = field(
         default=1.0, metadata=_p(DEFAULT, "1", INSTALLATION)
     )
+    #: Dated readings of the same share: ``(from, share)``, in order,
+    #: each the share the meter reads from its instant on (a timezone-
+    #: aware instant; a document holds it as ISO 8601), ``meter_reads``
+    #: before the first. For a meter whose reading moved: on the site,
+    #: 1 before its step of 2026-09-12 19:51 UTC and 0.85 from it, as
+    #: the score was measured. Empty: ``meter_reads`` throughout.
+    meter_reads_since: tuple[tuple[datetime, float], ...] = field(
+        default=(), metadata=_p(DEFAULT, "1", INSTALLATION)
+    )
     #: The installation's climate, which places the mains by the day
     #: (``cold_supply.mains_f``): the year's mean outdoor air and its
     #: warmest monthly mean less its coldest, °F
@@ -526,6 +536,21 @@ class DrawParams:
             math.isfinite(self.meter_reads) and 0.0 < self.meter_reads <= 2.0
         ):
             raise ValueError("meter_reads is not a share of a gallon")
+        since: list[tuple[datetime, float]] = []
+        for k, item in enumerate(self.meter_reads_since):
+            at, share = item
+            if isinstance(at, str):
+                at = datetime.fromisoformat(at)
+            if at.tzinfo is None:
+                raise ValueError(f"meter_reads_since[{k}]'s instant is naive")
+            if not (math.isfinite(share) and 0.0 < share <= 2.0):
+                raise ValueError(
+                    f"meter_reads_since[{k}] is not a share of a gallon"
+                )
+            if since and at <= since[-1][0]:
+                raise ValueError("meter_reads_since is not in order")
+            since.append((at, float(share)))
+        object.__setattr__(self, "meter_reads_since", tuple(since))
         if self.climate_f is not None:
             mean, swing = self.climate_f
             if not (math.isfinite(mean) and math.isfinite(swing)):
@@ -538,10 +563,24 @@ class DrawParams:
                     f"climate_f's mean is under {CLIMATE_MEAN_MIN_F} °F"
                 )
 
-    def delivered_gal(self, metered_gal: float) -> float:
+    def reads_at(self, at: datetime | None = None) -> float:
+        """The share of a gallon the meter reads at ``at``: the last of
+        ``meter_reads_since`` from at or before it, else
+        ``meter_reads``. None: as it reads now, the last of them."""
+        since = self.meter_reads_since
+        if not since:
+            return self.meter_reads
+        if at is None:
+            return since[-1][1]
+        k = bisect_right([t for t, _ in since], at)
+        return since[k - 1][1] if k else self.meter_reads
+
+    def delivered_gal(
+        self, metered_gal: float, at: datetime | None = None
+    ) -> float:
         """The delivered gallons ``metered_gal`` read on the house meter
-        stands for (``meter_reads``)."""
-        return metered_gal / self.meter_reads
+        at ``at`` stands for (``reads_at``)."""
+        return metered_gal / self.reads_at(at)
 
     def mains_on(self, day: date) -> float:
         """The mains on ``day``, °F: the climate's (``climate_f``,
@@ -1142,9 +1181,12 @@ OPTIONAL_PARTS = frozenset({"circulation"})
 
 
 def _plain(value: Any) -> Any:
-    """A field's value as JSON holds it: a tuple as a list."""
+    """A field's value as JSON holds it: a tuple as a list, an instant
+    as ISO 8601."""
     if isinstance(value, tuple):
         return [_plain(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
+    if isinstance(value, datetime):
+        return value.isoformat()
     return value
 
 
@@ -1183,7 +1225,8 @@ def _check(where: str, hint: Any, value: Any) -> None:
     """A ``ValueError`` naming ``where`` when ``value`` is not what a
     document holds for a field of type ``hint``: a number for a float, a
     whole number for an int,
-    a list for a tuple, null for None."""
+    a list for a tuple, an ISO 8601 string for an instant, null for
+    None."""
     args = get_args(hint)
     if get_origin(hint) is UnionType:
         if value is None and NoneType in args:
@@ -1213,10 +1256,23 @@ def _check(where: str, hint: Any, value: Any) -> None:
         ok, kind = isinstance(value, bool), "true or false"
     elif hint is str:
         ok, kind = isinstance(value, str), "a string"
+    elif hint is datetime:
+        ok, kind = _iso(value), "an ISO 8601 instant"
     else:
         return
     if not ok:
         raise ValueError(f"{where} is {value!r}, not {kind}")
+
+
+def _iso(value: Any) -> bool:
+    """Whether ``value`` is an instant as a document holds it."""
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
 
 
 #: The two-zone tank's term groups in ``HeaterParams.unfitted``, and its

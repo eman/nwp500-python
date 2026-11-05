@@ -624,7 +624,7 @@ def simulate(
                         # The meter's, as a draw's (``meter_reads``).
                         None
                         if w.expected_gal is None
-                        else params.draw.delivered_gal(w.expected_gal),
+                        else params.draw.delivered_gal(w.expected_gal, w.start),
                     )
                     for w in s.loads.windows
                 ],
@@ -803,7 +803,11 @@ def _pieces(
     draw takes the tank's water whole (``DrawParams.undiluted``, on the
     meter's flow)."""
     return [
-        (at, params.draw.delivered_gal(g), params.draw.undiluted(d.flow_gpm))
+        (
+            at,
+            params.draw.delivered_gal(g, at),
+            params.draw.undiluted(d.flow_gpm),
+        )
         for d in draws
         for at, g in d.pieces()
     ]
@@ -1465,8 +1469,10 @@ def _to_start(
             )
     at_start = sorted(
         (
-            params.draw.delivered_gal(
-                sum(g for at, g in d.pieces() if at >= start)
+            sum(
+                params.draw.delivered_gal(g, at)
+                for at, g in d.pieces()
+                if at >= start
             ),
             params.draw.undiluted(d.flow_gpm),
         )
@@ -1893,8 +1899,8 @@ def time_to_ready(
         shower_source = "default"
         defaults.append(f"shower_gal={shower_gal}")
     # The meter's gallons, as a draw's (``DrawParams.meter_reads``).
-    bath_gal = round(params.draw.delivered_gal(bath_gal), 1)
-    shower_gal = params.draw.delivered_gal(shower_gal)
+    bath_gal = round(params.draw.delivered_gal(bath_gal, s.start), 1)
+    shower_gal = params.draw.delivered_gal(shower_gal, s.start)
     # In a TOU window now: the heater's own marker. Unknown counts as in
     # force, as for the counter test and for ``element_mode``: the
     # conservative direction is "it may not heat".

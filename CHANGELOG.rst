@@ -73,7 +73,14 @@ Added
   days (measured 2026-11-03 on the parameters in use) 0.85, a known
   volume's reading on that day, puts the day's electricity 2.4 % low
   against 9.8 % at 1, 12.9 % off against 14.3, and the false starts at
-  0.28 a day against 0.17.
+  0.28 a day against 0.17. A meter whose reading moved takes dated
+  readings (``DrawParams.meter_reads_since``, ``(from, share)`` in
+  order, ``meter_reads`` before the first; ``DrawParams.reads_at``):
+  each metered gallon is taken at the reading at its own instant, a
+  bath's and a shower's at the scenario's start, a window's at its
+  start. On the site, 1 before the meter's step of 2026-09-12 19:51
+  UTC and 0.85 from it scores the held-out days as 0.85 throughout
+  does, as they fall after the step.
 - **How near a walk came to its start triggers.**
   ``sim.start_margins(result.points, hp_lower_on_f, tou_windows, loads,
   params)`` gives each coast of a walk and its nearest approach to each

@@ -200,3 +200,95 @@ def test_a_fractional_bath_is_rounded_once_delivered() -> None:
     half = time_to_ready(s, _reads(0.5), bath_gal=10.14)
     whole = time_to_ready(s, default_params(), bath_gal=20.28)
     assert half.bath.volume_gal == whole.bath.volume_gal == 20.3
+
+
+def _since(*readings: tuple[datetime, float]) -> HeaterParams:
+    p = default_params()
+    return replace(p, draw=replace(p.draw, meter_reads_since=readings))
+
+
+def test_a_dated_reading_holds_from_its_instant_on() -> None:
+    d = _since((at(2), 0.5), (at(4), 0.8)).draw
+    assert d.reads_at(at(1)) == 1.0
+    assert d.reads_at(at(2)) == 0.5
+    assert d.reads_at(at(3)) == 0.5
+    assert d.reads_at(at(5)) == 0.8
+    assert d.reads_at() == 0.8
+    assert d.delivered_gal(4.0, at(3)) == pytest.approx(8.0)
+    assert d.delivered_gal(4.0, at(1)) == pytest.approx(4.0)
+    assert default_params().draw.reads_at() == 1.0
+
+
+@pytest.mark.parametrize(
+    ("readings", "match"),
+    [
+        (((at(2).replace(tzinfo=None), 0.5),), "naive"),
+        (((at(2), 0.5), (at(1), 0.8)), "in order"),
+        (((at(2), 0.5), (at(2), 0.8)), "in order"),
+        (((at(2), 0.0),), "share"),
+        (((at(2), float("nan")),), "share"),
+    ],
+)
+def test_dated_readings_refused(
+    readings: tuple[tuple[datetime, float], ...], match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        replace(default_params().draw, meter_reads_since=readings)
+
+
+def test_dated_readings_round_trip_as_iso() -> None:
+    p = _since((at(2), 0.85))
+    doc = params_to_document(p)
+    assert doc["draw"]["meter_reads_since"] == [[at(2).isoformat(), 0.85]]
+    assert params_from_document(doc) == p
+    doc["draw"]["meter_reads_since"] = [["not a time", 0.85]]
+    with pytest.raises(ValueError, match="ISO 8601"):
+        params_from_document(doc)
+
+
+def test_a_walk_takes_each_draw_at_its_own_reading() -> None:
+    def walk(
+        draws: tuple[Draw, ...], params: HeaterParams
+    ) -> list[tuple[datetime, float, float]]:
+        s = _scenario(loads=Loads(draws=draws))
+        return [
+            (p.at, p.upper_f, p.lower_f) for p in simulate(s, params).points
+        ]
+
+    dated = _since((at(1.5), 0.5))
+    before = (Draw(at=at(1), gallons=6.0), Draw(at=at(2), gallons=3.0))
+    same = (Draw(at=at(1), gallons=6.0), Draw(at=at(2), gallons=6.0))
+    assert walk(before, dated) == walk(same, default_params())
+
+
+def test_the_replay_takes_a_record_s_draws_at_their_reading() -> None:
+    lay = S.layout(default_params())
+    until = T0 + timedelta(minutes=170)
+    rec = _quiet_record(6.0)
+    after = _since((T0 + timedelta(minutes=50), 0.5))
+    before = _since((T0 + timedelta(minutes=150), 0.5))
+    whole = tf.replay(lay, default_params(), _quiet_record(12.0), until)
+    got_after = tf.replay(lay, after, rec, until)
+    got_before = tf.replay(lay, before, rec, until)
+    as_read = tf.replay(lay, default_params(), rec, until)
+    assert whole is not None and got_after is not None
+    assert got_before is not None and as_read is not None
+    assert S.observe(lay, got_after) == pytest.approx(S.observe(lay, whole))
+    assert S.observe(lay, got_before) == pytest.approx(S.observe(lay, as_read))
+
+
+def test_a_delivery_and_a_bath_take_the_reading_at_their_instant() -> None:
+    e = ss.Delivery(T0, 140.0, 138.0, 140.0, True, 5.0)
+
+    def scored(params: HeaterParams) -> float:
+        got = ss.score(ss.Events(deliveries=(e,)), params)
+        return got.metrics["deliverable_bias_gal"].value
+
+    assert scored(_since((T0, 0.5))) == pytest.approx(scored(_reads(0.5)))
+    later = _since((T0 + timedelta(hours=1), 0.5))
+    assert scored(later) == pytest.approx(scored(default_params()))
+    s = _scenario(state=HeaterState(upper_f=140.0, lower_f=135.0))
+    dated = time_to_ready(s, _since((s.start, 0.5)), bath_gal=10.0)
+    assert dated.bath.volume_gal == 20.0
+    late = _since((s.start + timedelta(hours=1), 0.5))
+    assert time_to_ready(s, late, bath_gal=10.0).bath.volume_gal == 10.0
