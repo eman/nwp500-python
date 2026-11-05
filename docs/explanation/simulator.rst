@@ -698,6 +698,36 @@ An inlet zone of 7 gal instead of the fitted 13.8, which leaves less of
 the inlet's cold mixed up the bottom, and refits of the tank under it
 were tried and dropped (:doc:`simulator-tried`).
 
+On the same walks the missed starts are 13 of the record's 46 over the
+29 days, and nine come from when the walk itself heated (measured
+2026-11-05). Five are the record's starts that the four early lower-zone
+starts and the night of 09-23's took: at the record's, the walk was
+heating or had heated. Four come with the walk's recovery running behind
+the record's. On the night of 09-19 the walk's recovery from the
+window's opening at 23:00 UTC ran to 02:12:47, 42 min past the record's
+stop, its upper probe 6.3 degF under the record's at 00:30; the record
+ran four short runs at the night's writes from 01:36 to 02:23, the first
+two starting inside the walk's run and the last two just after it ended,
+and the walk's one start at 02:18 places the second. On 09-26 the walk's
+late start at 19:23 UTC was still running at 23:53, its upper probe 15.8
+degF under the record's at 23:45, when a write restarted the record 18
+min after its run from 17:08 stopped. Of the other four, three are the
+heater's own starts that the walk makes late or not at all, its probe
+warmer than the record's at them. On 09-26 the lower probes' gap, walk
+less record, came to +1.5 degF over 9.5 hours from 07:00 UTC with one
+0.4 gal draw, a 3 min circulation run just before 17:00 took it from
++2.4 to +5.6, and it was +6.3 at the record's lower-zone start at 17:08.
+On 10-20 the 11.5 gal drawn between 13:00 and 13:30 UTC took it from
++0.1 to +3.6; a 6.3 gal draw from about 14:10 then took both lower
+probes about 15 degF down, the walk's at once and the record's over 25
+minutes, to the record's lower-zone start at 14:35 with the gap at +3.2.
+On the night of 10-18 the record started at 03:41 UTC on the open
+window's upper deficit, its upper probe 14.6 degF short of the setpoint
+against the rule's 14.4; the walk's read 1.8 degF warmer, 12.8 short,
+and the walk did not start. On 09-20 the record's lower probe fell 3.6
+degF in the 14 minutes from the day walk's start at 07:00 UTC to its
+lower-zone start, with no draw or circulation run in the hour.
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks
