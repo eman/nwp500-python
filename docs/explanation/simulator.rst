@@ -715,18 +715,18 @@ before the draw (a mean 5.1 degF at the hour at 85 to 90, 2.8 at 90 to
 95, about 0 above 95; 2.0 for the 6 colder still) and where the
 compressor had stopped less than 8 hours before (1.9 to 4.7 degF,
 against 0.2 after longer); on the 28 at 0.85 less clearly. Pooling the
-water the condenser wraps and below it at the compressor's stop, as the
-start's stir does at its start, was tried and dropped (measured
-2026-11-05 on the parameters in use, :doc:`simulator-tried`): read on
-the walks' own layers before these draws it would cool the water their
-readings stand for in 26 of the 28, but walked it left the walk's lower
-probe at the hour less deep on the mean (0.70 degF under the record's
-against 1.29 on the 28 at 0.85) and further off on more draws (16 of the
-28 by 3 degF or more against 8, 49 of the 99 clean before the step
-against 31). A lower margin read after a large draw
-(``margins.start_margins``, marked ``StartMargin.after_large_draw``) is
-good to a few gallons of the walk's layers under the probe: on these 9,
-3.4 to 16.5 degF.
+water the condenser wraps and below it at the compressor's stop (in the
+replay and the walk), as the start's stir does at its start, was tried
+and dropped (measured 2026-11-05 on the parameters in use,
+:doc:`simulator-tried`): read on the walks' own layers before these
+draws it would cool the water their readings stand for in 26 of the 28,
+but walked it left the walk's lower probe at the hour less deep on the
+mean (0.66 degF under the record's against 1.29 on the 28 at 0.85) and
+further off on more draws (16 of the 28 by 3 degF or more against 8, 49
+of the 99 clean before the step against 31). A lower margin read after a
+large draw (``margins.start_margins``, marked
+``StartMargin.after_large_draw``) is good to a few gallons of the walk's
+layers under the probe: on these 9, 3.4 to 16.5 degF.
 
 What follows is on the draws as metered. The days the walk misses are
 the ones that matter to a schedule. On three, the record starts at or
