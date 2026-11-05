@@ -728,6 +728,25 @@ and the walk did not start. On 09-20 the record's lower probe fell 3.6
 degF in the 14 minutes from the day walk's start at 07:00 UTC to its
 lower-zone start, with no draw or circulation run in the hour.
 
+On the same walks the day's electricity comes 12.8 % off and 2.5 % low,
+and most of the error is when the compressor runs, not what it draws
+while running (measured 2026-11-05): over the 29 days the walk's
+compressor ran 269 min a day against the record's 270, at 399 W against
+403. The ten days with a false or missed start carry 7.7 of the 12.8
+points. 10-18 alone carries 3.4: its one start, on the open window's
+upper deficit on the night of 10-18 (above), is missed, so the walk
+draws nothing against the record's 198 min run and 1,371 Wh. The 18 days
+with every start placed and no element run carry 4.5: 10-23's run came
+83 min short and 09-22's 47 min long, and on 10-13 and 10-14 the walk's
+compressor drew 386 and 381 W against the record's 418, its minutes the
+same or longer. 10-02, the one day with every start placed and an
+element run, carries 0.6, the walk's elements drawing 984 Wh against the
+record's 565. The heater's idle draw, which the walk leaves out, read
+1.0 W at every quiet minute over the 29 days (neither source on and no
+edge of either within 10 minutes), bar a few 7 W readings: 1.3 % of the
+metered and 2.0 % of a mean day, 12.6 % of 10-22's 188 Wh. It is the
+same under any schedule.
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks
