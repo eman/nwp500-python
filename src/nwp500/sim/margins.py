@@ -21,13 +21,16 @@ than where the record started. Three misses rank the margin; they do not
 fix a threshold.
 
 A lower margin read within the hour after a large draw is the least
-sure: on the 28 clean compressor-off draws of 8 gal or more held out
+sure. On the 28 clean compressor-off draws of 8 gal or more held out
 from 2026-09-18 (measured 2026-11-04 at ``DrawParams.meter_reads``
-0.85), the walk's lower probe an hour after was right on median but 3.4
-to 16.5 °F off, either way, on the 9 it missed by 3 °F or more
+0.85), the walk's lower probe fell at once, a median 12.8 °F under the
+record's a minute after, which took about ten minutes more to come half
+way; an hour after it was right on median, but 3.4 to 16.5 °F off,
+either way, on the 9 it missed by 3 °F or more
 (``docs/explanation/simulator.rst``, "Accuracy"). Each margin carries
 the gallons drawn in the hour up to where it was read (``drawn_gal``)
-and whether that was such a draw (``after_large_draw``).
+and whether they came to 8 or more (``after_large_draw``): the hour's
+draws summed, where those figures are of one draw each.
 
 The triggers are the heat pump's (``tou_triggers.heater_start``): the
 lower zone falling to its trigger (``hp_lower_on``, no nearer the
@@ -64,8 +67,8 @@ from nwp500.sim.tou_triggers import (
 )
 
 #: How far back from a margin's point the draws counted in its
-#: ``drawn_gal`` reach: the hour the lower probe's error after a large
-#: draw was measured over.
+#: ``drawn_gal`` reach, inclusive: the hour the lower probe's error
+#: after a large draw was measured over.
 DRAWN_SPAN = timedelta(hours=1)
 
 #: The metered gallons in ``DRAWN_SPAN`` from which a margin is read
@@ -176,10 +179,11 @@ def _drawn(
     pieces: Sequence[tuple[datetime, float]] | None, at: datetime
 ) -> float | None:
     """The gallons of ``pieces`` in the ``DRAWN_SPAN`` up to ``at``,
-    one at ``at`` itself included (its drop is read there)."""
+    both ends included: a piece is stamped at the start of the water it
+    draws, and one at ``at`` itself is read there."""
     if pieces is None:
         return None
-    return sum(g for t, g in pieces if at - DRAWN_SPAN < t <= at)
+    return sum(g for t, g in pieces if at - DRAWN_SPAN <= t <= at)
 
 
 def start_margins(

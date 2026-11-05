@@ -262,12 +262,12 @@ def test_each_margin_the_gallons_drawn_in_the_hour_up_to_it() -> None:
 
 def test_a_draw_over_the_hour_s_edge_counts_its_pieces_inside() -> None:
     # 12 gal over 20 minutes, a minute's piece each, from 70 min before
-    # the point: those after 60 min before it count (the 11th to the
-    # 19th minute, 9 of 20), 5.4 gal.
+    # the point: those from 60 min before it on count (the 11th to the
+    # 20th minute, 10 of 20), 6 gal.
     points = [_p(0, 135.0, 120.0), _p(70, 134.0, 110.0)]
     d = Draw(at=T0, gallons=12.0, duration_s=1200.0)
     (m,) = start_margins(points, 104.9, loads=Loads(draws=(d,)))
-    assert m.drawn_gal == pytest.approx(5.4)
+    assert m.drawn_gal == pytest.approx(6.0)
     assert not m.after_large_draw
 
 
@@ -289,3 +289,18 @@ def test_a_walk_s_start_after_a_large_draw_is_marked() -> None:
     )
     assert lower.drawn_gal == pytest.approx(20.0)
     assert lower.after_large_draw
+
+
+def test_the_hour_holds_both_its_ends_and_eight_gallons_is_large() -> None:
+    points = [_p(0, 135.0, 120.0), _p(60, 134.0, 110.0)]
+    edge = Draw(at=T0, gallons=8.0)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(edge,)))
+    assert m.at == points[1].at
+    assert m.drawn_gal == pytest.approx(8.0)
+    assert m.after_large_draw
+    before = Draw(at=T0 - timedelta(seconds=1), gallons=8.0)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(before,)))
+    assert m.drawn_gal == 0.0
+    small = Draw(at=T0, gallons=7.9)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(small,)))
+    assert not m.after_large_draw

@@ -871,13 +871,16 @@ walk missed outright fell on coasts among the smallest margins
 say how small is too small.
 
 ``drawn_gal`` is the gallons the loads drew in the hour up to the
-margin's point (the meter's, by the pieces the walk takes each draw in;
-None without the loads), and ``after_large_draw`` says it was 8 gal or
-more (``margins.LARGE_DRAW_GAL``). A lower margin read there is the
-least sure: on the site's held-out draws of that size the walk's lower
-probe an hour after was right on median, but 3.4 to 16.5 °F off, either
-way, on the 9 it missed by 3 °F or more (measured 2026-11-04 at
-``meter_reads`` 0.85; :doc:`/explanation/simulator`, "Accuracy").
+margin's point, both ends included (the meter's, by the pieces the walk
+takes each draw in; None without the loads), and ``after_large_draw``
+says they came to 8 gal or more (``margins.LARGE_DRAW_GAL``). A lower
+margin read there is the least sure. On the site's held-out single draws
+of that size (measured 2026-11-04 at ``meter_reads`` 0.85) the walk's
+lower probe fell at once, a median 12.8 °F under the record's a minute
+after; an hour after it was right on median, but 3.4 to 16.5 °F off,
+either way, on the 9 it missed by 3 °F or more
+(:doc:`/explanation/simulator`, "Accuracy"). The flag sums the hour's
+draws; the figures are of one draw each.
 
 
 Ask how much hot water is left
