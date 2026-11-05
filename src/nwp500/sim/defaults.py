@@ -78,11 +78,12 @@ SITE_UNDILUTED_GPM = 2.0
 SITE_UNDILUTED_SHARE = 0.25
 #: The installation's house meter (``DrawParams.meter_reads_since``):
 #: as it reads (``meter_reads`` 1) before its step of 2026-09-12 19:51
-#: UTC, and 0.85 of a delivered gallon from it, as 1.00 gal filled at
-#: a hot tap read 0.846 on 2026-11-03. The held-out days from
-#: 2026-09-18 scored at 0.85 came out 2.4 % low in electricity against
-#: 9.8 % as metered (measured 2026-11-03 on that installation's
-#: parameters in use).
+#: UTC, and 0.85 of a delivered gallon from it: the reading of one fill
+#: on 2026-11-03 (1.00 gal at a hot tap read 0.846), applied from the
+#: step, where the meter drifted after it (``DrawParams.meter_reads``'
+#: account). The held-out days from 2026-09-18 scored at 0.85 came out
+#: 2.4 % low in electricity against 9.8 % as metered (measured
+#: 2026-11-03 on that installation's parameters in use).
 SITE_METER_READS_SINCE = ((datetime(2026, 9, 12, 19, 51, tzinfo=UTC), 0.85),)
 
 #: The mains of the federal rating test for water heaters (10 CFR 430,
