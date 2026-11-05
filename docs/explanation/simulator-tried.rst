@@ -18,18 +18,22 @@ The start triggers read through a lagged lower probe (2026-11-04)
 
 **Tried.** The heat pump's start triggers reading the walk's lower probe
 through a first-order lag, the tank's heat, the recovery's stop and the
-elements reading the walk's own lower zone, so that a large draw's drop
-reaches the triggers over minutes, as the record's probe shows it
-(:doc:`simulator`, "Accuracy", the lower probe after a large draw). The
-time constant was fitted on the 95 clean compressor-off draws of 8 gal
-or more from 05-01 to the meter's step, by the RMS of the lower probe
-over the hour after each, walked as the score walks them: 18.75 minutes,
-3.9 degF against 7.7 unlagged, and on the 28 held out 4.8 against 8.4 at
-``DrawParams.meter_reads`` 0.85. Scored in the day backtest of the 29
-days held out from 2026-09-18 on the parameters in use, on 384170e (a
-patch, not merged), at 18.75 minutes with ``meter_reads`` 0.85 and 1,
-and at 10 minutes (where, over the 95, the record's lower probe comes to
-half its fall when the lagged walk's does) with 0.85.
+elements' own rules reading the walk's own zones (with the heat pump out
+of its range the elements' entry read the lagged one too, and in Energy
+Saver a draw's drop could no longer start the heater; every held-out day
+is in Heat Pump), so that a large draw's drop reaches the triggers over
+minutes, as the record's probe shows it (:doc:`simulator`, "Accuracy",
+the lower probe after a large draw). The time constant was fitted on the
+95 clean compressor-off draws of 8 gal or more from 05-01 to the meter's
+step, by the RMS of the lower probe over the hour after each, walked as
+the score walks them: 18.75 minutes, 3.9 degF against 7.7 unlagged, and
+on the 28 held out 4.8 against 8.4 at ``DrawParams.meter_reads`` 0.85
+and 5.9 against 6.7 as metered (where 8 to 10 minutes gives the least,
+5.0). Scored in the day backtest of the 29 days held out from 2026-09-18
+on the parameters in use, on 384170e (a patch, not merged), at 18.75
+minutes with ``meter_reads`` 0.85 and 1, and at 10 minutes (where, over
+the 95, the record's lower probe comes to half its fall when the lagged
+walk's does) with 0.85.
 
 **Found.** At 0.85 and 18.75 minutes the false starts stayed 0.28 a day
 and the missed went from 0.45 to 0.52; the electricity 13.9 % off
@@ -40,15 +44,20 @@ off. As metered at 18.75 minutes the false starts went from 0.17 to 0.24
 and the missed from 0.45 to 0.55, the electricity 16.4 % off against
 14.3, 12.1 % low against 9.8. At 0.85 and 18.75 minutes 10-11's early
 start came right and 10-24 had one false start fewer, but came out 41 %
-low against 21 % high, and 09-28 lost the three starts 0.85 had placed.
-09-18's stayed early: its walk's lower probe settles at 103.6 to 104.6
-degF, under the 104.9 trigger, where the record's settles at 109.6, so
-the lagged probe crosses too, later.
+low against 21 % high, and 09-28's three starts, placed at 0.85, were
+all lost to the score: its start at the window's close went and the
+other two came 30 and 58 minutes late. 09-18's stayed early: its walk's
+lower probe settles at 103.6 to 104.6 degF, under the 104.9 trigger,
+where the record's settles at 109.6, so the lagged probe crosses too:
+the walk started at 19:29, 32 minutes after the draw and 85 before the
+record's start. 09-23's early start, the upper zone's at the window's
+opening, which the lag does not touch, stayed early.
 
 **Why dropped.** No fewer false starts at 0.85, more missed at either
-reading, and the day's electricity and end state worse. Where the walk
-starts early after a large draw, it is as much how far its lower probe
-falls as how soon.
+reading, and the day's electricity and end state worse. Of the early
+starts after a large draw at 0.85, the lag put right one that was how
+soon the walk's lower probe fell (10-11), and not one that was how far
+(09-18).
 
 **Account.** :doc:`simulator`, "Accuracy" (the lower probe after a large
 draw); "Every timed draw walked over its span, the days", below.
