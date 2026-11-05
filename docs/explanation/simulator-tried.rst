@@ -40,8 +40,8 @@ state 3.05 and 3.01 degF off against 3.11.
 **Why dropped.** No start was gained, lost or misplaced, and the
 electricity and the end state by little. Of the 13 starts within 30
 minutes after a large draw, 10 are on the lower trigger (9 at the draw),
-and none of their walks differed. The held-out draws' walk falls too far
-as well as too soon, which a lag of minutes does not take.
+and every walk was unchanged through them. The held-out draws' walk
+falls too far as well as too soon, which a lag of minutes does not take.
 
 **Account.** :doc:`simulator`, "Accuracy" (the upper probe after a
 large draw). The patch and the scores are kept with the site's scores
