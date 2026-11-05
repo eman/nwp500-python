@@ -96,6 +96,9 @@ CONDENSER_TERMS: tuple[tuple[str, str, float, float, float], ...] = (
     ("tank", "condenser_low", 0.0, 0.5, 0.05),
     ("tank", "condenser_width", 0.1, 1.0, 0.05),
 )
+#: How far under ``TankParams.correction_top_height`` the lower probe's
+#: height is fitted to at most.
+_TOP_MARGIN = 0.01
 #: The condenser span as ``CONDENSER_TERMS`` name it.
 _SPAN = ("condenser_low", "condenser_width")
 
@@ -844,6 +847,18 @@ def fit(
         raise ValueError("no events to fit on")
     lo = np.array([t[2] for t in terms])
     hi = np.array([t[3] for t in terms])
+    for i, t in enumerate(terms):
+        if t[:2] == ("tank", "lower_probe_height"):
+            # The probes' lean tops out above the lower probe
+            # (``TankParams.correction_top_height``): a trial at or past
+            # it is refused, so the fit stays under it.
+            top = params.tank.correction_top_height - _TOP_MARGIN
+            hi[i] = min(hi[i], top)
+            if not lo[i] < hi[i]:
+                raise ValueError(
+                    "the probes' correction tops out under the lower "
+                    "probe's fitting range"
+                )
     scale = np.array([t[4] for t in terms])
     x0 = np.clip(np.array(term_values(params, terms)), lo, hi)
     n = len(coasts)
