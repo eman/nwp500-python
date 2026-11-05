@@ -17,14 +17,17 @@ Conduction raised after a draw or a run, and fading (2026-11-05)
 ================================================================
 
 **Tried.** The tank's axial conductance
-(``TankParams.conductance_btu_hr_f``, fitted 0.55 BTU/hr·°F) times
-1 + K exp(-h / tau), h the hours since the walk last drew or heated,
-so that a tank a draw or a run has just disturbed mixes faster and a
-rested one is left alone: against the record's upper probe falling
-faster after a draw and heating than the walk's (:doc:`simulator`,
-"Accuracy"). Scored in the day backtest of the 29 days held out from
-2026-09-18 on the parameters in use, at ``DrawParams.meter_reads`` 0.85
-(measured 2026-11-05); at K 0 the patch scores as the code does.
+(``TankParams.conductance_btu_hr_f``, fitted 0.55 BTU/hr·°F) times 1 + K
+exp(-h / tau), h the hours since the last draw or heating, so that a
+tank a draw or a run has just disturbed mixes faster and a rested one is
+left alone: against the record's upper probe falling faster after a draw
+and heating than the walk's (:doc:`simulator`, "Accuracy"). Scored in
+the day backtest of the 29 days held out from 2026-09-18 on the
+parameters in use, at ``DrawParams.meter_reads`` 0.85 (measured
+2026-11-05); at K 0 the patch scores as the code does. The patch is the
+tank's step, so the replay that sets each day's and each event's start
+was raised as well, after the record's draws and runs, and the draws and
+runs before a day walk's start, the replay's, counted for it.
 
 **Found.** The quiet half hours' drift after a draw and heating was
 +0.094 degF an hour, after a draw alone +0.018.
