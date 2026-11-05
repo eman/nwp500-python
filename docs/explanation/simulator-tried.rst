@@ -17,26 +17,27 @@ A higher axial conductance, for the drift after a draw (2026-11-05)
 ===================================================================
 
 **Tried.** The tank's axial conductance
-(``TankParams.conductance_btu_hr_f``, fitted 0.55 BTU/hr·°F, its prior
-0.50) at 3, 10 and 30, so that the top of a tank a draw has stratified
-cools faster as the record's does, where a rested tank, nearer uniform,
-would be left alone. Scored in the day backtest of the 29 days held out
-from 2026-09-18 on the parameters in use otherwise, at
+(``TankParams.conductance_btu_hr_f``, fitted 0.55 BTU/hr·°F, 0.50 in
+``default_params``) at 3, 10 and 30, so that the top of a tank a draw
+has stratified cools faster as the record's does, where a rested tank,
+nearer uniform, would be left alone. Scored in the day backtest of the
+29 days held out from 2026-09-18 on the parameters in use otherwise, at
 ``DrawParams.meter_reads`` 0.85 (measured 2026-11-05).
 
-**Found.** The rested tank is not near uniform in the walk: at 3 a quiet
-half hour before the day's first draw drifts -0.21 degF an hour against
-0.00, one after a draw -0.16 against +0.08; the conductance moves both
-alike, by about 0.09 degF an hour for each BTU/hr·°F to 3. At 3 the
-false starts went from 0.28 a day to 0.41 and the missed from 0.45 to
-0.69, the electricity 40.6 % off against 12.9, the standby's upper probe
-1.14 degF RMS against 0.21, the upper gap at 15:00 a median -1.38 degF
-against +0.30. At 10 and 30 every one was worse still (the false starts
-0.59 and 0.79).
+**Found.** Rested coasts moved too: at 3 a quiet half hour before the
+day's first draw drifts -0.21 degF an hour against 0.00, one after a
+draw -0.16 against +0.08; the conductance moves both alike, by about
+0.09 degF an hour for each BTU/hr·°F to 3. At 3 the false starts went
+from 0.28 a day to 0.41 and the missed from 0.45 to 0.69, the
+electricity 40.6 % off against 12.9, the standby's upper probe 1.14 degF
+RMS against 0.21, the upper gap at 15:00 a median -1.38 degF against
++0.30. At 10 and 30 the false starts (0.59 and 0.79), the missed, the
+standby's upper probe and the 15:00 gap were worse still; the
+electricity was 29.6 and 43.2 % off.
 
 **Why dropped.** It cannot take the drift after a draw without taking
-the rested coasts with it, and every figure the score keeps was worse at
-the least tried.
+the rested coasts with it, and the starts, the electricity, the standby
+and the day's end state were worse at the least tried.
 
 **Account.** :doc:`simulator`, "Accuracy" (the day's walk across the
 held-out days, after 10-18).
