@@ -42,7 +42,7 @@ import math
 from bisect import bisect_right
 from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, field, fields
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from itertools import pairwise
 from types import MappingProxyType, NoneType, UnionType
@@ -503,7 +503,8 @@ class DrawParams:
     )
     #: Dated readings of the same share: ``(from, share)``, in order,
     #: each the share the meter reads from its instant on (a timezone-
-    #: aware instant; a document holds it as ISO 8601), ``meter_reads``
+    #: aware instant, kept in UTC; a document holds it as ISO 8601),
+    #: ``meter_reads``
     #: before the first. For a meter whose reading moved: on the site,
     #: 1 before its step of 2026-09-12 19:51 UTC and 0.85 from it, as
     #: the score was measured. Empty: ``meter_reads`` throughout.
@@ -547,6 +548,10 @@ class DrawParams:
                 raise ValueError(
                     f"meter_reads_since[{k}] is not a share of a gallon"
                 )
+            # In UTC: ordered by the instant (a zone's own comparison
+            # reads the wall clock, a repeated hour's fold ignored), and
+            # equal and hashed alike whatever zone it came in.
+            at = at.astimezone(UTC)
             if since and at <= since[-1][0]:
                 raise ValueError("meter_reads_since is not in order")
             since.append((at, float(share)))
@@ -572,7 +577,7 @@ class DrawParams:
             return self.meter_reads
         if at is None:
             return since[-1][1]
-        k = bisect_right([t for t, _ in since], at)
+        k = bisect_right([t for t, _ in since], at.astimezone(UTC))
         return since[k - 1][1] if k else self.meter_reads
 
     def delivered_gal(

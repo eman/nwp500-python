@@ -1872,7 +1872,8 @@ def time_to_ready(
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
     ``defaults_used``. Both are gallons as the meter reads them, a
     ``Draw``'s: the answer judges and gives them delivered
-    (``DrawParams.delivered_gal``, the same at ``meter_reads`` 1).
+    at the reading at the scenario's start (``DrawParams.delivered_gal``,
+    the same at ``meter_reads`` 1 with no ``meter_reads_since``).
     ``shower_from_forecast``: the ``shower_gal`` given is a draw
     forecast's (``draw_forecast.shower_gal``). ``drawing``: water is
     being drawn now. ``inlet_measured``: the scenario's inlet is the

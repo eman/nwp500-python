@@ -292,3 +292,84 @@ def test_a_delivery_and_a_bath_take_the_reading_at_their_instant() -> None:
     assert dated.bath.volume_gal == 20.0
     late = _since((s.start + timedelta(hours=1), 0.5))
     assert time_to_ready(s, late, bath_gal=10.0).bath.volume_gal == 10.0
+
+
+def test_a_window_takes_the_reading_at_its_start() -> None:
+    window = DrawWindow(start=at(1), end=at(2), expected_gal=6.0)
+    s = _scenario(loads=Loads(windows=(window,)))
+    (from_start,) = simulate(s, _since((at(1), 0.5))).windows
+    (later,) = simulate(s, _since((at(5), 0.5))).windows
+    assert from_start.expected_gal == pytest.approx(12.0)
+    assert later.expected_gal == pytest.approx(6.0)
+
+
+def test_a_recovery_takes_a_draw_under_way_at_its_reading() -> None:
+    def recovery(
+        gallons: float, params: HeaterParams
+    ) -> list[tuple[datetime, float, float]]:
+        draw = Draw(at=at(1), gallons=gallons, duration_s=1800.0)
+        s = _scenario(
+            state=HeaterState(
+                upper_f=125.0, lower_f=100.0, compressor_running=True
+            ),
+            loads=Loads(draws=(draw,)),
+        )
+        s = s.model_copy(update={"start": at(1) + timedelta(minutes=10)})
+        return list(next_recovery(s, params).points)
+
+    # A reading after the recovery: the draw is taken at the one before.
+    later = _since((at(5), 0.5))
+    assert recovery(20.0, later) == recovery(20.0, default_params())
+    assert recovery(20.0, later) != recovery(40.0, default_params())
+
+
+def test_the_coast_fit_takes_a_draw_at_its_reading() -> None:
+    def coast(gal: float) -> tf.Coast:
+        return tf.Coast(
+            start=T0,
+            end=T0 + timedelta(hours=1),
+            upper_f=130.0,
+            lower_f=128.0,
+            air=((T0, 66.0),),
+            observed=tuple(
+                (T0 + timedelta(minutes=m), 130.0, 128.0)
+                for m in range(0, 61, 10)
+            ),
+            draws=((T0 + timedelta(minutes=5), gal),),
+        )
+
+    later = tf.errors(
+        _since((T0 + timedelta(minutes=30), 0.5)), None, coast(6.0)
+    )
+    as_read = tf.errors(default_params(), None, coast(6.0))
+    whole = tf.errors(default_params(), None, coast(12.0))
+    assert later is not None and as_read is not None and whole is not None
+    for a, b in zip(later, as_read, strict=True):
+        assert a == pytest.approx(b, abs=1e-9)
+    assert list(later) != pytest.approx(list(whole), abs=1e-9)
+
+
+def test_a_reading_in_a_fold_round_trips() -> None:
+    from zoneinfo import ZoneInfo
+
+    la = ZoneInfo("America/Los_Angeles")
+    for fold in (0, 1):
+        t = datetime(2026, 11, 1, 1, 30, tzinfo=la, fold=fold)
+        p = _since((t, 0.85))
+        back = params_from_document(params_to_document(p))
+        assert back == p
+        assert hash(back.draw) == hash(p.draw)
+        assert p.draw.meter_reads_since[0][0].timestamp() == t.timestamp()
+
+
+def test_readings_across_a_repeated_hour_go_by_the_instant() -> None:
+    from zoneinfo import ZoneInfo
+
+    la = ZoneInfo("America/Los_Angeles")
+    pdt = datetime(2026, 11, 1, 1, 45, tzinfo=la)  # 08:45 UTC
+    pst = datetime(2026, 11, 1, 1, 15, tzinfo=la, fold=1)  # 09:15 UTC
+    d = _since((pdt, 0.5), (pst, 0.8)).draw
+    between = datetime(2026, 11, 1, 1, 0, tzinfo=la, fold=1)  # 09:00 UTC
+    assert d.reads_at(between) == 0.5
+    assert d.reads_at(datetime(2026, 11, 1, 1, 30, tzinfo=la)) == 1.0
+    assert d.reads_at(datetime(2026, 11, 1, 1, 30, tzinfo=la, fold=1)) == 0.8

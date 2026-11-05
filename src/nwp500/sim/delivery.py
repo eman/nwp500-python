@@ -275,7 +275,8 @@ class DrawWindowResult:
     start: datetime
     end: datetime
     #: Delivered gallons the caller expects the window to draw (its
-    #: metered ones taken at ``DrawParams.meter_reads``).
+    #: metered ones taken at the reading at its start,
+    #: ``DrawParams.reads_at``).
     expected_gal: float | None
     upper_f: float
     lower_f: float
