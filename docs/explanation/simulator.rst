@@ -848,22 +848,38 @@ and the large draws' +0.01. 10-18's +1.05 at 15:00 is +0.11 from its
 quiet half hours, +0.41 from its small draws' and +0.53 from its large
 one's. The drift comes once the walk has both drawn and heated, not
 after a draw alone: the state the day's walk carries (above). A higher
-axial conductance is not the cure (:doc:`simulator-tried`). On 10-20 the
-record started twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal)
-took its lower probe from 131.9 to 104.7 degF by 07:35, when its
-compressor came on, and the walk's to 113.8; the walk started at 11:58
-instead and heated until about 16:00, so it met the draw of 18:31 (15.8
-gal) with its lower probe at 140.4 degF against the record's 130.6. That
-draw took the record's to 97.3 by 19:00 and the walk's to 113.8, which
-left the walk 8 degF above the trigger at 21:00, when the window closed
-and the record started. Over the 169 draws of 8 gal or more with the
-compressor off for the hour after, the walk's fall in that hour is 1.2
-degF too far on average before 2026-09-18 and 2.2 too short after it,
-with a spread of 4.1 degF about those means (one standard deviation, the
-draws on both sides together). The error follows the tank's temperature
-at the draw weakly (a correlation of -0.25 with the upper probe, 6 % of
-its variance, the walk falling further from a hotter tank), and none of
-the other inputs the walk is given, the draw's gallons or flow, the time
+axial conductance is not the cure (:doc:`simulator-tried`). Nor is the
+drift the layers the walk carries there (measured 2026-11-05 at 0.85,
+against the replay's layers at the same instant, corrected to the probes
+every 10 minutes). At 23 quiet instants before any draw or heating the
+walk's layers are the replay's to a mean within 0.1 degF a layer (0.13
+to 0.17 apart on average either way). At 122 after both, the walk's are
+more stratified: its bottom layer a mean 2.0 degF colder (median 1.1),
+the four from about 0.5 to 0.83 of the height 0.5 to 1.3 degF warmer,
+its top less its bottom 50.4 degF against 48.0, with about the same heat
+(the layers' mean +0.1). Over the next two hours of quiet (69 of the
+122) the upper probe drifts a mean +0.07 degF an hour, and goes with
+none of those differences but the top layer's, and that one weakly the
+other way: a correlation of -0.27 with the top layer's (+0.10 degF an
+hour in the third with the coolest walk top against the replay's, +0.04
+in the warmest), -0.02 with the lower half's, -0.08 with the whole
+tank's and -0.05 with the spread's, on instants several to a day. The
+state differs, but the drift does not follow it. On 10-20 the record
+started twice. The draws of 06:03 and 07:12 (11.4 and 6.3 gal) took its
+lower probe from 131.9 to 104.7 degF by 07:35, when its compressor came
+on, and the walk's to 113.8; the walk started at 11:58 instead and
+heated until about 16:00, so it met the draw of 18:31 (15.8 gal) with
+its lower probe at 140.4 degF against the record's 130.6. That draw took
+the record's to 97.3 by 19:00 and the walk's to 113.8, which left the
+walk 8 degF above the trigger at 21:00, when the window closed and the
+record started. Over the 169 draws of 8 gal or more with the compressor
+off for the hour after, the walk's fall in that hour is 1.2 degF too far
+on average before 2026-09-18 and 2.2 too short after it, with a spread
+of 4.1 degF about those means (one standard deviation, the draws on both
+sides together). The error follows the tank's temperature at the draw
+weakly (a correlation of -0.25 with the upper probe, 6 % of its
+variance, the walk falling further from a hotter tank), and none of the
+other inputs the walk is given, the draw's gallons or flow, the time
 since the last heating, the hour or the air, follows it with a
 correlation over 0.22. A scheduler sees only the walk's margin to a
 trigger. For the lower probe's, the measurement above, each draw walked
