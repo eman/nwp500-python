@@ -87,7 +87,13 @@ Added
   of the 11 recorded starts the walk did not place fell on coasts it did
   not start: inside the windows at the smallest and fourth smallest
   upper margins of 23 (1.8 and 7.8 °F), and for the lower trigger at the
-  second smallest of 24 (7.0 °F).
+  second smallest of 24 (7.0 °F). Each carries the gallons drawn in the
+  hour up to its point (``StartMargin.drawn_gal``) and whether they came
+  to 8 gal or more (``after_large_draw``), where a lower margin is the
+  least sure: on the site's held-out single draws of that size the
+  walk's lower probe fell at once, a median 12.8 °F under the record's a
+  minute after, and an hour after was 3.4 to 16.5 °F off, either way, on
+  the 9 it missed by 3 °F or more.
 - ``PathPoint.heating_disabled``: heating was disabled at the point
   (Vacation, or powered off with no entry having turned the heater on).
 - **A slower draw takes more of the tank than the valve's share.**

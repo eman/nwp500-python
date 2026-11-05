@@ -720,8 +720,9 @@ would cool the water their readings stand for in 26 of the 28 (a median
 2.9 degF) and 88 of the 95, which lies about the condenser's top for the
 median plug, and warm it only for draws of 18 gal or more that reach
 into the pool. A lower margin read after a large draw
-(``margins.start_margins``) is good to a few gallons of the walk's
-layers under the probe: on these 9, 3.4 to 16.5 degF.
+(``margins.start_margins``, marked ``StartMargin.after_large_draw``) is
+good to a few gallons of the walk's layers under the probe: on these 9,
+3.4 to 16.5 degF.
 
 What follows is on the draws as metered. The days the walk misses are
 the ones that matter to a schedule. On three, the record starts at or

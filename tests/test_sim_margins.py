@@ -240,3 +240,67 @@ def test_a_walk_s_start_at_a_window_opening_reached_its_trigger() -> None:
     assert upper.margin_f <= 0.0
     # The coast after the recovery, to the walk's end, starts nothing.
     assert all(m.margin_f > 0.0 for m in got if not m.started)
+
+
+def test_each_margin_the_gallons_drawn_in_the_hour_up_to_it() -> None:
+    points = [_p(0, 135.0, 120.0), _p(30, 134.0, 110.0), _p(90, 133.0, 112.0)]
+    draws = (
+        # Out of the hour before the nearest point (30 min), by a minute.
+        Draw(at=T0 - timedelta(minutes=31), gallons=4.0),
+        # Over 10 minutes, every piece in the hour.
+        Draw(at=T0 + timedelta(minutes=5), gallons=6.0, duration_s=600.0),
+        # At the point itself: its drop is read there.
+        Draw(at=T0 + timedelta(minutes=30), gallons=2.5),
+        # After it.
+        Draw(at=T0 + timedelta(minutes=40), gallons=9.0),
+    )
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=draws))
+    assert m.at == points[1].at
+    assert m.drawn_gal == pytest.approx(8.5)
+    assert m.after_large_draw
+
+
+def test_a_draw_over_the_hour_s_edge_counts_its_pieces_inside() -> None:
+    # 12 gal over 20 minutes, a minute's piece each, from 70 min before
+    # the point: those from 60 min before it on count (the 11th to the
+    # 20th minute, 10 of 20), 6 gal.
+    points = [_p(0, 135.0, 120.0), _p(70, 134.0, 110.0)]
+    d = Draw(at=T0, gallons=12.0, duration_s=1200.0)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(d,)))
+    assert m.drawn_gal == pytest.approx(6.0)
+    assert not m.after_large_draw
+
+
+def test_without_the_loads_the_gallons_are_not_known() -> None:
+    (m,) = start_margins([_p(0, 135.0, 120.0)], 104.9)
+    assert m.drawn_gal is None
+    assert not m.after_large_draw
+    (m,) = start_margins([_p(0, 135.0, 120.0)], 104.9, loads=Loads())
+    assert m.drawn_gal == 0.0
+
+
+def test_a_walk_s_start_after_a_large_draw_is_marked() -> None:
+    s = _scenario(loads=Loads(draws=(Draw(at=at(1), gallons=20.0),)))
+    result = simulate(s, default_params())
+    lower = next(
+        m
+        for m in start_margins(result.points, 105.0, loads=s.loads)
+        if m.started
+    )
+    assert lower.drawn_gal == pytest.approx(20.0)
+    assert lower.after_large_draw
+
+
+def test_the_hour_holds_both_its_ends_and_eight_gallons_is_large() -> None:
+    points = [_p(0, 135.0, 120.0), _p(60, 134.0, 110.0)]
+    edge = Draw(at=T0, gallons=8.0)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(edge,)))
+    assert m.at == points[1].at
+    assert m.drawn_gal == pytest.approx(8.0)
+    assert m.after_large_draw
+    before = Draw(at=T0 - timedelta(seconds=1), gallons=8.0)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(before,)))
+    assert m.drawn_gal == 0.0
+    small = Draw(at=T0, gallons=7.9)
+    (m,) = start_margins(points, 104.9, loads=Loads(draws=(small,)))
+    assert not m.after_large_draw
