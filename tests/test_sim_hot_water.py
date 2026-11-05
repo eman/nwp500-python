@@ -70,8 +70,10 @@ BIG_WINDOW = DrawWindow(start=at(0.5), end=at(1.25), expected_gal=100.0)
 @pytest.fixture(scope="module")
 def params() -> HeaterParams:
     """One installation's parameters, its mixing valve included: the
-    numbers below are that site's."""
-    return site_example_params()
+    numbers below are that site's, its meter as it reads (the gallons
+    below are delivered)."""
+    site = site_example_params()
+    return replace(site, draw=replace(site.draw, meter_reads_since=()))
 
 
 @pytest.fixture(autouse=True)

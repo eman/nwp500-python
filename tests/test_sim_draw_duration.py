@@ -15,7 +15,11 @@ from nwp500.sim import Draw, Loads, codec
 from nwp500.sim.inputs import DRAW_STEP
 from nwp500.sim.physics.stratified import ACTIVE_STEP
 
-SITE = sim.site_example_params()
+#: The site, its meter as it reads: the minutes below, not its share.
+SITE = replace(
+    sim.site_example_params(),
+    draw=replace(sim.site_example_params().draw, meter_reads_since=()),
+)
 #: Every draw through the valve, at its share: the meter's minutes below
 #: carry no flow (``DrawParams.undiluted_gpm``), the shower's 2 gal/min
 #: would, and none takes more of the tank (``undiluted_share``).

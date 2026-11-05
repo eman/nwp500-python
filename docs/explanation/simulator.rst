@@ -235,32 +235,32 @@ household's draws. ``params.note_of`` names the frame a value was
 fitted in where it matters: a sensor it was fitted against, hardware it
 was fitted through.
 
-The values come from one NWP500-65, fitted between 2026-10-11 and
-10-24 from 240 V operation at one installation. ``site_example_params(volume_code)`` is
-that installation whole, its thermostatic mixing valve included.
-``default_params(volume_code)`` is the same with **no mixing valve**:
-the one draw setting with no fitted numbers in it, and the one that
-errs the safe way for a valve owner who leaves it unset (every gallon
-charged as tank water, so depletion is called early, never late). An
-installation with a valve sets its line (``with_valve``). It also has
-no circulation, and it names the installation's draw terms as not
-fitted (``HeaterParams.unfitted``), so the answers they reach say
-``draw_uncalibrated`` until an installation's own meter fits them. The 50 and
-80 gal models get the 65's tank resized to theirs
-(``defaults.sized``). The manual gives each model's rated storage and
-outside dimensions (Ø21.7 × 63, Ø25 × 63 and Ø25 × 71.6 in). The 65
-and the 80 are as wide, so the 80's extra water over its extra height
-gives the inside diameter, 21.0 in under 2.0 in of wall. The same wall
-on the 50 gives a column 17.7 in across and 42.4 tall, as tall as the
-65's 42.1: the 50 is narrower, the 80 taller. The sides' loss scales
-with the shell, the bottom's with the cross-section, and the column's
-conductance with the cross-section over its height. The probes'
-spreads and the inlet zone are gallons along the column, so they
+The values come from one NWP500-65, fitted between 2026-10-11 and 10-24
+from 240 V operation at one installation.
+``site_example_params(volume_code)`` is that installation whole, its
+thermostatic mixing valve and its house meter's dated reading
+(``SITE_METER_READS_SINCE``) included. ``default_params(volume_code)``
+is the same with **no mixing valve**: the one draw setting with no
+fitted numbers in it, and the one that errs the safe way for a valve
+owner who leaves it unset (every gallon charged as tank water, so
+depletion is called early, never late). An installation with a valve
+sets its line (``with_valve``). It also has no circulation, and it names
+the installation's draw terms as not fitted (``HeaterParams.unfitted``),
+so the answers they reach say ``draw_uncalibrated`` until an
+installation's own meter fits them. The 50 and 80 gal models get the
+65's tank resized to theirs (``defaults.sized``). The manual gives each
+model's rated storage and outside dimensions (Ø21.7 × 63, Ø25 × 63 and
+Ø25 × 71.6 in). The 65 and the 80 are as wide, so the 80's extra water
+over its extra height gives the inside diameter, 21.0 in under 2.0 in of
+wall. The same wall on the 50 gives a column 17.7 in across and 42.4
+tall, as tall as the 65's 42.1: the 50 is narrower, the 80 taller. The
+sides' loss scales with the shell, the bottom's with the cross-section,
+and the column's conductance with the cross-section over its height. The
+probes' spreads and the inlet zone are gallons along the column, so they
 scale with the cross-section. The tanks lose 3.55, 4.12 and 4.74
-BTU/h·°F. The top's loss (the head, its fittings and pipes), the
-heights as shares of the volume, the compressor, the elements and the
-controller are the 65's. None of the 50's or the 80's terms is
-measured.
+BTU/h·°F. The top's loss (the head, its fittings and pipes), the heights
+as shares of the volume, the compressor, the elements and the controller
+are the 65's. None of the 50's or the 80's terms is measured.
 
 What carries to another installation, and what does not:
 
@@ -356,16 +356,17 @@ Entry points
    and ``start_hold`` as the walks had them, any windows over the
    tail's own span.
 
-   An example, walked on 2026-10-31 with ``site_example_params()``: a
-   120 °F day with 75 gal drawn (two morning showers, three evening
-   draws), priced at an illustrative $0.20 a kWh and $0.50 from 16:00
-   to 21:00. Of five boosts, each back to 120 °F at 21:00, 140 °F from
-   13:00 is the cheapest over its own day ($0.65, the standing day
-   $0.62) and leaves the lower tank at 96.9 °F. Carried through the
-   same day again it is the third of the boosts ($1.40, against $1.35
-   for 130 °F from 13:40 or 14:00, and $1.28 standing). Tails of 24 h
-   left every walk within 0.81 °F of the standing one's (108 Wh);
-   12 h, 5.7 °F (201 Wh); 36 h, 0.20 °F.
+   An example, walked on 2026-10-31 with ``site_example_params()``
+   before it carried the meter's reading (its draws as metered): a 120
+   °F day with 75 gal drawn (two morning showers, three evening draws),
+   priced at an illustrative $0.20 a kWh and $0.50 from 16:00 to 21:00.
+   Of five boosts, each back to 120 °F at 21:00, 140 °F from 13:00 is
+   the cheapest over its own day ($0.65, the standing day $0.62) and
+   leaves the lower tank at 96.9 °F. Carried through the same day again
+   it is the third of the boosts ($1.40, against $1.35 for 130 °F from
+   13:40 or 14:00, and $1.28 standing). Tails of 24 h left every walk
+   within 0.81 °F of the standing one's (108 Wh); 12 h, 5.7 °F (201 Wh);
+   36 h, 0.20 °F.
 
 ``standby`` with ``settings`` also says when the heater would start
 itself on the coast and why; every walk with draws says when a draw

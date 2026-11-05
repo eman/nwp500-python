@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,6 +12,7 @@ from nwp500.sim.defaults import (
     RATING_INLET_F,
     SITE_CIRCULATION,
     SITE_CLIMATE,
+    SITE_METER_READS_SINCE,
     SITE_UNDILUTED_GPM,
     SITE_UNDILUTED_SHARE,
     SITE_VALVE,
@@ -209,6 +210,7 @@ def test_the_site_example_is_that_fitted_model() -> None:
                 climate_f=None,
                 undiluted_gpm=None,
                 undiluted_share=0.0,
+                meter_reads_since=(),
             ),
         )
     )
@@ -216,6 +218,10 @@ def test_the_site_example_is_that_fitted_model() -> None:
     assert site.draw.climate_f == SITE_CLIMATE
     assert site.draw.undiluted_gpm == SITE_UNDILUTED_GPM
     assert site.draw.undiluted_share == SITE_UNDILUTED_SHARE
+    assert site.draw.meter_reads_since == SITE_METER_READS_SINCE
+    step = SITE_METER_READS_SINCE[0][0]
+    assert site.draw.reads_at(step - timedelta(minutes=1)) == 1.0
+    assert site.draw.reads_at(step) == 0.85
 
 
 def test_the_default_is_the_site_without_its_mixing_valve() -> None:
@@ -231,7 +237,9 @@ def test_the_default_is_the_site_without_its_mixing_valve() -> None:
         inlet_temp_f=RATING_INLET_F,
         inlet_from_probe=False,
         climate_f=None,
+        meter_reads_since=(),
     )
+    assert d.draw.meter_reads == 1.0 and d.draw.meter_reads_since == ()
     assert with_valve(d, SITE_VALVE) == replace(
         site, draw=rated, circulation=None, unfitted=INSTALLATION_TERMS
     )
