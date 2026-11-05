@@ -856,8 +856,8 @@ def fit(
             hi[i] = min(hi[i], top)
             if not lo[i] < hi[i]:
                 raise ValueError(
-                    "the probes' correction tops out under the lower "
-                    "probe's fitting range"
+                    "the probes' correction's top leaves the lower "
+                    "probe's fitting range empty"
                 )
     scale = np.array([t[4] for t in terms])
     x0 = np.clip(np.array(term_values(params, terms)), lo, hi)

@@ -589,7 +589,7 @@ class TestTheFit:
         got = tf.fit(start, record, _coasts(path), max_evaluations=20)
         assert got.terms["lower_probe_height"] <= top - 0.01 + 1e-12
 
-    def test_a_top_under_the_lower_probe_range_is_refused(
+    def test_a_top_that_empties_the_lower_probe_range_is_refused(
         self, history, record
     ) -> None:
         _, _, path = history
@@ -599,7 +599,7 @@ class TestTheFit:
                 TRUE.tank, correction_top_height=0.055, lower_probe_height=0.04
             ),
         )
-        with pytest.raises(ValueError, match="fitting range"):
+        with pytest.raises(ValueError, match="fitting range empty"):
             tf.fit(low, record, _coasts(path), max_evaluations=1)
 
 
