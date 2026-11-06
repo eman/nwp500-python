@@ -810,6 +810,43 @@ during it the most, and the heater's idle draw 0.55. The same warmth
 taken throughout a walk, in its probes, stops and replay, was tried and
 dropped (:doc:`simulator-tried`, 2026-10-28).
 
+The runs with water drawn around them were walked again from their
+recorded starts, as the score walks them (measured 2026-11-06, on the
+parameters in use with the warmth above, 0.85). The four that run
+longest, 2026-09-22 17:14 UTC (40 min long), 09-23 13:08 (26), 10-13
+13:09 (66) and 10-14 12:57 (24), each start with 7 to 14 gal drawn in
+the 30 minutes before or the first 10. While the tank is stratified,
+from 10 minutes in to where the lower probe comes within 1 degF of the
+upper, the walk's lower probe climbs 8 to 17 % slower than the record's
+on three of them, and the two probes meet 14 to 28 minutes later than
+the record's; on the 11 free recoveries that meet so they come within 20
+minutes either way, under a minute early on average. The walk's lower
+probe also falls deeper in the first 30 minutes on all four, by 0.6 to
+4.4 degF. More heat from cold water, the heat map's plane steeper below
+the 114 degF it was fitted down to (a sensitivity, not fitted), shortens
+the four but takes the free recoveries and the short runs with draws
+shorter with them: at 16 BTU/h a degF more, the free recoveries go from
+a mean 0.2 to 2.3 minutes short and the runs with draws from 23.1 to
+19.1 minutes off, their mean from 7.5 long to 2.8 short
+(:doc:`simulator-tried`, "More heat from cold water, for the runs after
+a large draw").
+
+Of 10-13's 66 minutes, 42 are a 4 minute circulation run at 19:15 UTC,
+20 minutes after the record's stop: the late walk was still heating, and
+its lower probe held near 142 degF for about 40 minutes while the run's
+heat came back; walked without it the run comes 24 minutes long. The
+runs are not overcharged across the four held-out recoveries with
+circulation inside them: walked without them, 10-14 comes 2 minutes long
+(from 24), but 10-06 13:11 69 minutes short (from 10 short) and 10-26
+14:06 37 short (from 16 long). The walk's pipe cools from the last run
+alone (``circulation.cooled_share``), not warmed by a draw; none of the
+four has a run after a draw, so that is not tested here. 10-23 22:48, 43
+minutes short walked from its start (83 in the day's walk above), is the
+known case of a run with draws inside it: 15.4 gal drawn 50 minutes in
+and 6.1 at 2 h 20 min, the record's lower probe fell 15 degF over 30
+minutes and 2 degF after the second, the walk's about 9 degF at once and
+not at all after the second, so it reaches the stop sooner.
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks
