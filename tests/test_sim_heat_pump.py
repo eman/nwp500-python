@@ -124,6 +124,46 @@ class TestTheMap:
         )
         assert "power_too_low" in hpf.violations(c, air_f)
 
+    def test_the_high_speeds_warmest_air_is_checked(self) -> None:
+        # The heat falling with the air and the power flat, the heat
+        # from the air is least at the high speed's warmest, just under
+        # the fan's air between two of the grid's: under 0 there, over
+        # it at every one of the grid's and at the fan's air itself.
+        air_f = (40.0, 110.0)
+        airs = np.linspace(*air_f, hpf.CHECK_POINTS)
+        fan = float((airs[3] + airs[4]) / 2)
+        c = replace(
+            C,
+            heat_btu_h=5364.8 + 100.0 * (fan - 65.0),
+            heat_btu_h_per_air_f=-100.0,
+            heat_btu_h_per_water_f=0.0,
+            heat_btu_h_per_air_water_f=0.0,
+            power_w=400.0,
+            power_w_per_air_f=0.0,
+            power_w_per_water_f=0.0,
+            power_w_per_air_water_f=0.0,
+            fan_high_below_air_f=fan,
+            fan_high_w=1250.0,
+        )
+        below = float(np.nextafter(fan, -np.inf))
+        assert hp.evaporator_btu_h(c, below, 120.0) < 0.0
+        assert all(
+            hp.evaporator_btu_h(c, float(a), 120.0) > 0.0 for a in [*airs, fan]
+        )
+        assert "evaporator_heat_negative" in hpf.violations(c, air_f)
+        # And with the fan's air at the envelope's warm edge.
+        edge = replace(
+            c,
+            heat_btu_h=c.heat_btu_h + 100.0 * (110.0 - fan),
+            fan_high_below_air_f=110.0,
+        )
+        assert hp.evaporator_btu_h(edge, 110.0, 120.0) > 0.0
+        assert (
+            hp.evaporator_btu_h(edge, float(np.nextafter(110.0, 0.0)), 120.0)
+            < 0.0
+        )
+        assert "evaporator_heat_negative" in hpf.violations(edge, air_f)
+
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)
         assert hp.carnot_cop(80.0, 75.0) == float("inf")

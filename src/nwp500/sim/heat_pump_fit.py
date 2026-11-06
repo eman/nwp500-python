@@ -842,14 +842,15 @@ def violations(
     ``cop_over_carnot``, ``evaporator_heat_negative``,
     ``power_too_low``; empty when none. The grid holds the envelope's
     corners, where the heat less the power, a plane in each, has its
-    extremes, and the air the fan runs high under
-    (``fan_high_below_air_f``) inside it, the low speed's coldest air,
-    where the power steps."""
+    extremes, and either side of the air the fan runs high under
+    (``fan_high_below_air_f``) inside it, where the power steps: the low
+    speed's coldest air and the high speed's warmest."""
     found: set[str] = set()
     airs = np.linspace(*air_f, CHECK_POINTS)
     fan = c.fan_high_below_air_f
-    if fan is not None and air_f[0] < fan < air_f[1]:
-        airs = np.sort(np.append(airs, fan))
+    if fan is not None and air_f[0] < fan <= air_f[1]:
+        airs = np.unique(np.append(airs, [fan, np.nextafter(fan, -np.inf)]))
+        airs = airs[airs <= air_f[1]]
     waters = np.linspace(*water_f, CHECK_POINTS)
     for air in airs:
         for water in waters:

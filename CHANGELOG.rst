@@ -69,18 +69,19 @@ Added
   over it and the step, at least 0, as the mean the plane leaves of the
   rest (``Plane.fan_high``), fitting no plane with too few or too alike
   at or over it and keeping the base's step with none under it; the
-  calibration report shows the step, and ``violations`` checks the power
-  at the low speed's coldest air. On one NWP500-65 (measured 2026-11-05)
-  the fan ran at about 543 rpm or 895, went to the high speed inside a
-  run as the heater's own air reading fell to about 58 degF and held it
-  to the run's end, and its high speed drew 23.7 W more on the 10-minute
-  metered climb blocks with one speed throughout. Read from the air at
-  the heater, at 60.5 degF and +18.77 W fitted on the blocks before
-  2026-09-18 with the plane kept, the 1,807 winter blocks under 60 degF
-  read 0.4 W low (in the fit) against 19.2 with the plane alone, and the
-  50 held out 7.5 W low against 26.3. The 29 held-out days at
-  ``DrawParams.meter_reads`` 0.85 move only in their electricity, the
-  day's 12.64 % off against 12.80, 2.21 % low against 2.48.
+  calibration report shows the step, and ``violations`` checks either
+  side of its air, where the power steps. On one NWP500-65 (measured
+  2026-11-05) the fan ran at about 543 rpm or 895, went to the high
+  speed inside a run as the heater's own air reading fell to about 58
+  degF and held it to the run's end, and its high speed drew 23.7 W more
+  on the 10-minute metered climb blocks with one speed throughout. Read
+  from the air at the heater, at 60.5 degF and +18.77 W fitted on the
+  blocks before 2026-09-18 with the plane kept, the 1,807 winter blocks
+  under 60 degF read 0.4 W low (in the fit) against 19.2 with the plane
+  alone, and the 50 held out 7.5 W low against 26.3. The 29 held-out
+  days at ``DrawParams.meter_reads`` 0.85 move only in their
+  electricity, the day's 12.64 % off against 12.80, 2.21 % low against
+  2.48.
 - **The house meter's reading of a gallon.** ``DrawParams.meter_reads``
   (1, the meter as it reads, unless set; over 0 and at most 2) takes
   each metered gallon as ``1 / meter_reads`` delivered

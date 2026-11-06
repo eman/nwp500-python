@@ -27,12 +27,13 @@ measured first.
 **Found.** The 1,807 winter blocks under 60 degF read 4.1 W low (in the
 fit) against 19.2 with the plane alone, the 50 held out 18.0 against
 26.3, and the 29 held-out days' electricity 12.69 % off against 12.80.
-Every fit of the knee erred less the higher the knee (to 68 degF for the
-floor, 64 for the slope), the winter's blocks at 60 to 80 degF reading 4
-to 9 W over the plane. The evaporator fan's two speeds carry both
-(measured 2026-11-05): its high speed drew 23.7 W more, and a step for
-it at 60.5 degF read the winter's blocks under 60 degF 0.4 W low and the
-held out 7.5, the 29 days' electricity 12.64 % off.
+Every fit of the knee erred less the higher the knee, to the top of the
+range tried (68 degF for the floor, 64 for the slope), the winter's
+blocks at 60 to 80 degF reading 4 to 9 W over the plane. The evaporator
+fan's two speeds carry both (measured 2026-11-05): its high speed drew
+23.7 W more, and a step for it at 60.5 degF read the winter's blocks
+under 60 degF 0.4 W low and the held out 7.5, the 29 days' electricity
+12.64 % off.
 
 **Why dropped.** The slope stood for a step: the power does not rise
 with the cold under the knee, it rises once, with the fan's speed. The
