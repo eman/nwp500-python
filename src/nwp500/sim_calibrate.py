@@ -376,10 +376,14 @@ def _tank_events(
     climbs = ss.layer_recoveries(found, params, record)
 
     index = cast("pd.DatetimeIndex", frame.index)
+    first, last = cast(datetime, index[0]), cast(datetime, index[-1])
+    # Weeks longer than the history are all of it (and could be past
+    # what a timedelta holds).
     since = (
         None
         if tank_weeks is None
-        else cast(datetime, index[-1]) - timedelta(weeks=tank_weeks)
+        or tank_weeks * 7 * 86400 >= (last - first).total_seconds()
+        else last - timedelta(weeks=tank_weeks)
     )
 
     def ordered(coasts: list[tf.Coast]) -> list[tf.Coast]:

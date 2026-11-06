@@ -131,6 +131,11 @@ class TestTheFits:
         assert sc.TANK_WEEKS * 7 > 20
         default = sc.calibrate(readings, ambient=AIR_F, params=_fitted(12.0))
         assert default.tank.n_windows == 20
+        # Weeks past the history, however many, are all of it.
+        long = sc.calibrate(
+            readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=1e9
+        )
+        assert long.tank.n_windows == 20
         # Too few in the weeks: the note says how many were before them.
         few = sc.calibrate(
             readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=4 / 7
