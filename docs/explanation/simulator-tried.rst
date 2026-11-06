@@ -31,25 +31,28 @@ probe's height.
 
 **Found.** On the fit period the events' error fell from 2.44 degF (the
 draws at onset; refit so, 2.26) to 1.81 with the spans on the terms in
-use, 1.55 refit at 0.25 and 1.43 at 0 (the lower probe's height then on
-its 0.5 bound). Held out, against the model in use (refit at 0.25, then
-at 0): the starts placed 0.784 and 0.793 against 0.741, the false 0.28
-and 0.21 a day against 0.28, the missed 0.41 and 0.38 against 0.45; but
-the day's electricity 14.2 and 12.8 % off against 11.4 (a mean 0.8 and
-6.6 % low against 0.7), the end of day 4.17 and 4.45 degF off against
-3.11, the upper probe after a draw 0.60 and 0.52 degF RMS against 0.33,
-the draw-free recoveries 6.7 and 7.0 minutes off against 3.5 and their
-electricity 5.8 and 5.7 % against 3.7, and the recoveries with water in
-use 19.5 and 20.6 minutes off against 20.2, from 6.7 long to 9.6 and
-13.2 short. The span's start against the meter's onset was measured
-after (draws of 1 gal or more): a median 0.1 minutes after it before
-2026-09-18 and 0.2 after, a third of the held out's 1 to 5 minutes
-after; the onset does not place them late.
+use and 1.67 with the share at 0 alone, then 1.55 refit at 0.25 and 1.43
+at 0 (the lower probe's height then on its 0.5 bound). Held out, against
+the model in use (refit at 0.25, then at 0): the starts placed 0.784 and
+0.793 against 0.741, the false 0.28 and 0.21 a day against 0.28, the
+missed 0.41 and 0.38 against 0.45; but the day's electricity 14.2 and
+12.8 % off against 11.4 (a mean 0.8 and 6.6 % low against 0.7), the end
+of day 4.17 and 4.45 degF off against 3.11, the probes after a draw 0.60
+and 0.52 degF RMS against 0.33 (upper) and 3.44 and 3.55 against 1.71
+(lower), the draw-free recoveries 6.7 and 7.0 minutes off against 3.5
+and their electricity 5.8 and 5.7 % against 3.7, and the recoveries with
+water in use 19.5 and 20.6 minutes off against 20.2, from 6.7 minutes
+long to 9.6 and 13.2 short. The span's start against the meter's onset
+was measured after (draws of 1 gal or more): a median 0.1 minutes after
+it on the fit period and 0.2 held out, where 30 % start more than a
+minute after it (95th percentile 5.2); the onset does not place them
+late.
 
-**Why dropped.** Worse held out on the day's electricity, its end, the
-probes after a draw and the draw-free recoveries, for better starts, and
-the recoveries with water in use, which it was for, no closer. The fit
-period's gain did not carry over.
+**Why dropped.** Worse held out on the day's electricity, its end, both
+probes after a draw and the draw-free recoveries, for better starts; the
+recoveries with water in use, which it was for, 0.7 minutes closer at
+0.25 and further at 0, and short where they were long. The fit period's
+gain did not carry over.
 
 **Account.** The scripts, params and scores are kept with the site's
 (``draws-over-span-2026-11-06``, its README naming the two params docs).
