@@ -131,6 +131,20 @@ class TestTheFits:
         assert sc.TANK_WEEKS * 7 > 20
         default = sc.calibrate(readings, ambient=AIR_F, params=_fitted(12.0))
         assert default.tank.n_windows == 20
+        # Refining a fit, the base kept for as few: the same said.
+        kept = sc.calibrate(
+            readings,
+            ambient=AIR_F,
+            params=_fitted(12.0),
+            tank_weeks=4 / 7,
+            keep_better=True,
+        )
+        (tank,) = (j for j in kept.judged if j.group == "tank")
+        assert tank.kept == "base"
+        assert tank.why.endswith(
+            "(16 more events before the last 0.571429 weeks, which the "
+            "tank is fitted on)"
+        )
         # Weeks past the history, however many, are all of it.
         long = sc.calibrate(
             readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=1e9

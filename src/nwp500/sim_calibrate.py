@@ -397,6 +397,17 @@ def _tank_events(
     return _TankEvents(record, *kept, n_before=before, weeks=tank_weeks)
 
 
+def _before_weeks(found: _TankEvents) -> str:
+    """What ``found`` left out as before its weeks, to follow a note
+    saying its events were too few; empty if none."""
+    if not found.n_before:
+        return ""
+    return (
+        f" ({found.n_before} more events before the last "
+        f"{found.weeks:g} weeks, which the tank is fitted on)"
+    )
+
+
 def _fit_tank(
     params: HeaterParams,
     found: _TankEvents,
@@ -412,12 +423,7 @@ def _fit_tank(
     coasts = [*found.windows, *found.draws]
     if len(coasts) < MIN_TANK_EVENTS:
         why = f"{len(coasts)} quiet windows and draws; {MIN_TANK_EVENTS} needed"
-        if found.n_before:
-            why += (
-                f" ({found.n_before} more events before the last "
-                f"{found.weeks:g} weeks, which the tank is fitted on)"
-            )
-        return None, why
+        return None, why + _before_weeks(found)
     terms = tf.TERMS
     if len(found.recoveries) >= MIN_TANK_RECOVERIES:
         coasts += found.recoveries
@@ -489,6 +495,7 @@ def _keep_better_tank(
     if found.record is not None and not open_tank and not held:
         # Nothing to judge a refit by: not worth the fit's minutes.
         j = _judge("tank", what, 0, None, None)
+        j = replace(j, why=j.why + _before_weeks(found))
         judged.append(j)
         return base, _tank_calibration(None, train, j.why), (), found.record
     fit, why = _fit_tank(base, train, map_)
