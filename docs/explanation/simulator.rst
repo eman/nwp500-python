@@ -878,16 +878,20 @@ Walked instead from 30 minutes before their starts (measured
 with the compressor off, the start's draw walked whole inside the walk
 and the heater starting on its own trigger, three of the four still ran
 long: 09-22's run 36 minutes, 09-23's 20 and 10-14's 29, against 40, 26
-and 24 walked from their starts. 10-13's came within a minute, its walk
-then stopping before its circulation run. So the gap is not the tank as
-replayed after the draw; it builds through the draw and the run. Walked
-from their starts with no draw left there, the four come 13 to 47
-minutes short: the walk charges the start's draw 39 to 71 minutes of
-heating (10-13's 94 with its circulation run), and the record's runs,
-read as the whole of their gap, a third to two thirds of that. The like
-draws do not settle it: 10-07's and 10-08's runs, walked from 30 minutes
-before in the same way, moved 26 and 9 minutes from their walks from the
-start, as far as the gap itself.
+and 24 walked from their starts. 10-13's came within a minute (2.8
+minutes before the record's stop), closing the 24 minutes its walk from
+the start ran long without its circulation run, and so stopping before
+that run. So on three of the four the gap is not the tank as replayed
+after the draw; it builds through the draw and the run. Walked from
+their starts with no draw left there, the four come 13 to 47 minutes
+short: the walk charges the start's draw 39 to 71 minutes of heating
+(10-13's 94 with its circulation run), and the record's runs, read as
+the whole of their gap, about a third (0.30 to 0.34) to two thirds
+(0.66) of that. One like run checks the method: 10-08's, with 3.5 gal
+drawn at its start, walked from 30 minutes before in the same way moved
+9 minutes from its walk from the start, less than any of the four's
+gaps. (10-07's, with no draw at its start, moved 26, its walk starting
+10 minutes early.)
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
