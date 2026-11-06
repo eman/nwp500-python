@@ -393,6 +393,13 @@ class CompressorParams:
         default=None, metadata=_p(DEFAULT, "°F")
     )
     fan_high_w: float = field(default=0.0, metadata=_p(DEFAULT, "W"))
+    #: How much higher the (upper, lower) probes read than the water at
+    #: them while the compressor heats, °F: a walk that starts with a
+    #: run under way, not started there nor resumed from a walk's end,
+    #: takes its tank as the probes less these. (0, 0): as read.
+    running_probes_warm_f: tuple[float, float] = field(
+        default=(0.0, 0.0), metadata=_p(DEFAULT, "°F")
+    )
     #: The span of the air and the water each map was fitted on, to the
     #: whole degree, °F: read outside it, a map is its plane carried
     #: past its evidence.
@@ -437,6 +444,10 @@ class CompressorParams:
                 raise ValueError("fan_high_below_air_f is not finite")
         if not math.isfinite(self.fan_high_w):
             raise ValueError("fan_high_w is not finite")
+        warm = tuple(float(v) for v in self.running_probes_warm_f)
+        if len(warm) != 2 or not all(math.isfinite(v) for v in warm):
+            raise ValueError("running_probes_warm_f is not (upper, lower)")
+        object.__setattr__(self, "running_probes_warm_f", warm)
         for name in ("start_hold_after_min", "start_hold_min"):
             object.__setattr__(
                 self, name, tuple(float(v) for v in getattr(self, name))

@@ -122,7 +122,9 @@ def _by_hand(
     **kw: Any,
 ) -> Any:
     """The engine called directly with what ``s`` stands for: a flat
-    ambient on an hourly grid (any grid gives a flat ambient)."""
+    ambient on an hourly grid (any grid gives a flat ambient), and a
+    run under way at the start, not starting there, its probes less
+    their warmth while it heats (``running_probes_warm_f``)."""
     stamps = pd.date_range(at(-2), s.until + timedelta(hours=24), freq="1h")
     frame = pd.DataFrame({"ambient_f": [AMBIENT_F] * len(stamps)}, index=stamps)
     physics = TankPhysics(
@@ -142,10 +144,15 @@ def _by_hand(
         return start_hold_min(params.compressor, off)
 
     kw.setdefault("start_hold", start_hold)
+    du, dl = (
+        params.compressor.running_probes_warm_f
+        if s.state.compressor_running and not kw.get("running_starts")
+        else (0.0, 0.0)
+    )
     return walk(
         start=s.start,
-        upper_f=s.state.upper_f,
-        lower_f=s.state.lower_f,
+        upper_f=s.state.upper_f - du,
+        lower_f=s.state.lower_f - dl,
         running=s.state.compressor_running,
         until=s.until,
         setpoint_f=s.settings.setpoint_f,
@@ -949,3 +956,81 @@ class TestAnElementStopsAtItsOffPoint:
         end = ends[0][0]
         assert end - T0 < timedelta(minutes=15)
         assert all(p.upper_f < 140.0 for p in plain.points if p.at < end)
+
+
+class TestARunUnderWayAtTheStart:
+    """Its probes read warm over the water while it heats
+    (``CompressorParams.running_probes_warm_f``): the walk starts from
+    the water, so much cooler at them."""
+
+    def test_its_tank_is_the_probes_less_their_warmth(
+        self, params: HeaterParams
+    ) -> None:
+        du, dl = params.compressor.running_probes_warm_f
+        assert (du, dl) == (0.51, 0.91)
+        state = HeaterState(
+            upper_f=128.0, lower_f=110.0, compressor_running=True
+        )
+        first = simulate(_scenario(state=state), params).simulation.points[0]
+        assert (first.upper_f, first.lower_f) == pytest.approx(
+            (128.0 - du, 110.0 - dl), abs=0.02
+        )
+        # Its layers given, they are moved so much at the probes.
+        n = params.tank.layers
+        layers = (95.0, 100.0, *([118.0] * (n - 4)), 127.0, 128.0)
+        laid = simulate(
+            _scenario(state=state.model_copy(update={"layers_f": layers})),
+            params,
+        ).simulation.points[0]
+        plain = simulate(
+            _scenario(
+                state=state.model_copy(
+                    update={"layers_f": layers, "compressor_running": False}
+                )
+            ),
+            params,
+        ).simulation.points[0]
+        assert laid.upper_f == pytest.approx(plain.upper_f - du, abs=0.02)
+        assert laid.lower_f == pytest.approx(plain.lower_f - dl, abs=0.02)
+
+    def test_it_runs_longer_than_the_probes_as_read(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=110.0, compressor_running=True
+            )
+        )
+        warm = simulate(s, params).simulation.heating[0]
+        read = simulate(
+            s,
+            replace(
+                params,
+                compressor=replace(
+                    params.compressor, running_probes_warm_f=(0.0, 0.0)
+                ),
+            ),
+        ).simulation.heating[0]
+        assert warm.end - read.end > timedelta(minutes=3)
+
+    def test_a_run_starting_there_reads_them_as_read(
+        self, params: HeaterParams
+    ) -> None:
+        # Starting at the start (a recorded start replayed), its probes
+        # are at rest.
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=110.0, compressor_running=True
+            )
+        )
+        first = simulate(s, params, running_starts=True).simulation.points[0]
+        assert (first.upper_f, first.lower_f) == pytest.approx(
+            (128.0, 110.0), abs=0.02
+        )
+        idle = s.state.model_copy(update={"compressor_running": False})
+        first = simulate(
+            s.model_copy(update={"state": idle}), params
+        ).simulation.points[0]
+        assert (first.upper_f, first.lower_f) == pytest.approx(
+            (128.0, 110.0), abs=0.02
+        )

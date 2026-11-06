@@ -13,6 +13,7 @@ from nwp500.sim.defaults import (
     SITE_CIRCULATION,
     SITE_CLIMATE,
     SITE_METER_READS_SINCE,
+    SITE_RUNNING_PROBES_WARM_F,
     SITE_UNDILUTED_GPM,
     SITE_UNDILUTED_SHARE,
     SITE_VALVE,
@@ -198,8 +199,9 @@ def test_the_site_example_is_that_fitted_model() -> None:
     """The document carries no circulation (its bundle keeps that
     apart), no climate (a weather station's, not the heater's record)
     and no flow its draws took the tank's water whole from nor share of
-    a slower draw's cold side (the draws', not the fit's); the site
-    example adds the installation's."""
+    a slower draw's cold side (the draws', not the fit's) nor the probes'
+    warmth while the compressor heats (measured apart); the site example
+    adds the installation's."""
     site = site_example_params()
     assert params_from_document(json.loads(FITTED_DOC.read_text())) == (
         replace(
@@ -212,9 +214,11 @@ def test_the_site_example_is_that_fitted_model() -> None:
                 undiluted_share=0.0,
                 meter_reads_since=(),
             ),
+            compressor=replace(site.compressor, running_probes_warm_f=(0, 0)),
         )
     )
     assert site.circulation == SITE_CIRCULATION
+    assert site.compressor.running_probes_warm_f == SITE_RUNNING_PROBES_WARM_F
     assert site.draw.climate_f == SITE_CLIMATE
     assert site.draw.undiluted_gpm == SITE_UNDILUTED_GPM
     assert site.draw.undiluted_share == SITE_UNDILUTED_SHARE

@@ -420,6 +420,16 @@ class TankPhysics:
     def estimate(self, upper_f: float, lower_f: float) -> st.TankState:
         return st.mix(st.estimate(self.layout, upper_f, lower_f))
 
+    def at_probes(
+        self, state: TankState, upper_f: float, lower_f: float
+    ) -> st.TankState:
+        """``state`` moved so its probes read ``upper_f`` and
+        ``lower_f``, the correction laid over it in ``estimate``'s
+        shape, then mixed (``stratified.assimilate``)."""
+        return st.mix(
+            st.assimilate(self.layout, _layers(state), upper_f, lower_f)
+        )
+
     def layers(self, layers_f: Sequence[float]) -> st.TankState:
         """The tank of the layers ``layers_f``, °F, the bottom first:
         as many as the parameters lay out (``TankParams.layers``)."""

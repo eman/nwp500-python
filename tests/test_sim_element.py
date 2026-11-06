@@ -671,14 +671,16 @@ class TestWhatEndsTheRecovery:
         self, params: HeaterParams
     ) -> None:
         """Electric stops a compressor running at the start; nothing is
-        left to heat, and the recovery is done at once."""
+        left to heat, and the recovery is done at once. Its probes read
+        warm over the water (``running_probes_warm_f``)."""
+        du, dl = params.compressor.running_probes_warm_f
         s = _scenario(
             125.0,
             110.0,
             given={
                 "state": HeaterState(
-                    upper_f=SETPOINT + 1.2,
-                    lower_f=SETPOINT + 0.7,
+                    upper_f=SETPOINT + 1.2 + du,
+                    lower_f=SETPOINT + 0.7 + dl,
                     compressor_running=True,
                 )
             },

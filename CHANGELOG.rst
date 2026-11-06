@@ -60,6 +60,26 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
+- **A run under way at a walk's start, from the water under its
+  probes.** ``CompressorParams.running_probes_warm_f`` ((0, 0) unless
+  set; ``defaults.SITE_RUNNING_PROBES_WARM_F``, (0.51, 0.91) degF, in
+  ``site_example_params`` and so ``default_params``): how much higher
+  the upper and lower probes read than the water at them while the
+  compressor heats. A scenario that starts with the compressor running,
+  not starting there (``running_starts``) nor resumed from a walk's end
+  (``HeaterState.resume``), takes its tank as the probes less these, its
+  layers given moved so much at the probes (``TankPhysics.at_probes``),
+  in ``simulate``, ``readiness``'s recovery and ``active_cycle``. The
+  values are the probes' step down in the 5 minutes after 47 quiet stops
+  of runs heating 40 minutes or more (measured 2026-10-28,
+  ``recovery-speed``). On the 29 held-out days at
+  ``DrawParams.meter_reads`` 0.85 (measured 2026-11-06), the five runs
+  under way at a day's start on a hot tank, 22 to 128 minutes from their
+  stop, came 4.7 to 15.2 minutes short (8.5 on average), reaching the
+  stop on probes read warm, and now 2.9 short on average; walked from
+  their recorded starts, four of them come 3.0 short to 10.2 long. The
+  day's electricity comes 11.42 % off and 0.72 % low against 12.66 and
+  2.15, the tank's metrics within 0.02 degF.
 - **The evaporator fan's high speed in the compressor's power.**
   ``CompressorParams.fan_high_below_air_f`` (None unless set) and
   ``fan_high_w`` (0): a walk's compressor run puts its fan at the high
