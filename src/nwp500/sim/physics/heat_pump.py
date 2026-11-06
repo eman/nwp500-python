@@ -62,8 +62,9 @@ def heat_btu_h(c: CompressorParams, air_f: float, water_f: float) -> float:
 
 
 def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
-    """The electricity it draws there, W."""
-    return _plane(
+    """The electricity it draws there, W: the plane, and under
+    ``CompressorParams.power_air_knee_f`` its cold-air slope."""
+    w = _plane(
         air_f,
         water_f,
         c.power_w,
@@ -71,6 +72,9 @@ def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
         c.power_w_per_water_f,
         c.power_w_per_air_water_f,
     )
+    if c.power_air_knee_f is not None and air_f < c.power_air_knee_f:
+        w += c.power_w_per_air_below_f * (c.power_air_knee_f - air_f)
+    return w
 
 
 def cop(c: CompressorParams, air_f: float, water_f: float) -> float:

@@ -750,6 +750,30 @@ day weighed alike, 12.6 % of 10-22's 188 Wh: 12.5 to 23.6 Wh a day, as
 many minutes as the heater stood idle. What it draws while a source runs
 was not measured.
 
+10-13's and 10-14's were the two coldest of the 25 record runs of 20 min
+or more with no element on these days, in 57.5 and 58.7 degF of air
+against 61.8 to 88.6 for the rest, and with the walk's run over them
+read 33 and 38 W low; of the others only two, each set against a walk
+run of another length (09-26's of 22 min against 354, the night of
+09-23's of 60 against 118), came more than 16 W off (measured
+2026-11-05). Under 60 degF of air the heater's electricity rises as the
+air falls, where the plane carried down falls: on the 10-minute metered
+climb blocks at the condenser's water, where the walk reads the map, the
+plane read 19.2 W low over the 1,807 winter blocks under 60 degF
+(2025-12-28 to 2026-04-16) and 26.3 W low over the 50 held out, and from
+60 to 80 degF within 3.3 W of the meter in each bin of the fit period
+and the held out. The winter's blocks also read 4 to 9 W over the
+plane's at 60 to 80 degF of air, a season the air does not account for.
+``CompressorParams.power_air_knee_f`` with ``power_w_per_air_below_f``
+gives the power a slope of its own under a knee; at 60 degF and +2.94 W
+a degF, fitted on the blocks before 2026-09-18 with the plane kept, the
+winter's blocks under it read 4.1 W low and the 50 held out 18.0, and
+the 29 days' electricity comes 12.69 % off and 2.37 % low against 12.80
+and 2.48. The knee is set where the summer's blocks break, not fitted:
+the fits tried, a flat floor refitted with its plane and the slope over
+knees from 58 to 64 degF, each erred less the higher it went, to the top
+of the range tried (68 and 64 degF), the winter's season pulling them.
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks

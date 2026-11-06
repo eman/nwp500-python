@@ -533,6 +533,50 @@ class TestTheSlopesSigns:
         assert got.per_air == pytest.approx(10.0)
         assert got.level == pytest.approx(4500.0)
 
+    @staticmethod
+    def _kneed(seed: int) -> pd.DataFrame:
+        # 1.2 W per °F of air over 60 °F, and 3 W more for each °F under.
+        rng = np.random.default_rng(seed)
+        air = rng.uniform(45.0, 90.0, 120)
+        water = rng.uniform(70.0, 145.0, 120)
+        return pd.DataFrame(
+            {
+                "air_f": air,
+                "water_f": water,
+                "power_w": 400.0
+                + 1.2 * (air - 65.0)
+                + 2.7 * (water - 120.0)
+                + 3.0 * np.maximum(0.0, 60.0 - air),
+            }
+        )
+
+    def test_the_power_is_fitted_with_its_knee(self) -> None:
+        rows = self._kneed(5)
+        got = hpf.fit_power_map(rows, 60.0)
+        assert got is not None
+        assert got.per_air == pytest.approx(1.2)
+        assert got.per_air_below == pytest.approx(3.0)
+        assert got.level == pytest.approx(400.0)
+        # The span is every block's, under the knee too.
+        assert got.air_f is not None
+        assert got.air_f[0] < 50.0
+        plain = hpf.fit_power_map(rows)
+        assert plain is not None
+        assert plain.per_air_below == 0.0
+
+    def test_the_fit_reads_the_bases_knee(self) -> None:
+        base = replace(default_params().compressor, power_air_knee_f=60.0)
+        found = hpf.Evidence(
+            heat=pd.DataFrame(), power=self._kneed(6), runs=pd.DataFrame()
+        )
+        fit = hpf.fit_heat_pump(found, base)
+        assert fit.power is not None
+        assert fit.power.per_air_below == pytest.approx(3.0)
+        assert fit.power_error == pytest.approx(0.0, abs=1e-6)
+        c = hpf.with_planes(base, None, fit.power)
+        assert c.power_w_per_air_below_f == pytest.approx(3.0)
+        assert c.power_air_knee_f == 60.0
+
     def test_the_powers_air_is_free(self) -> None:
         rng = np.random.default_rng(3)
         air = rng.uniform(50.0, 90.0, 60)
