@@ -854,20 +854,24 @@ before the start or 7 after and running 10 to 13 minutes (measured
 2026-11-06). 10-07 13:13 and 10-08 13:43 began with draws as like them,
 9.3 and 8.2 gal at 0.93 and 0.82 gal/min begun 10 and 5 minutes before,
 and came 4.5 minutes short and 3.1 long; on those two the record's lower
-probe fell to 103.1 and 99.9 degF, on the four to 89.6 to 94.6. The heat
-in is not what differs: over each recovery's first hour the walk's
-compressor drew within 5 W of the record's metered power on all four
-(323 to 336 W), as it did on the free recoveries (within 17 W), and the
-power is read at the condenser's water, about 2.7 W a degF. Nor is the
-share of the draw the tank gives: with the slower draw's cold side taken
-from the tank at 0.1 or 0 rather than 0.25
-(``DrawParams.undiluted_share``, a sensitivity) the four came 1.5 to 5.4
-minutes shorter (10-13 46 minutes at 0, its walk then stopping before
-its circulation run), the free recoveries' mean absolute error 4.2
-minutes against 4.3 and the runs with draws' 22.0 and 18.3 against 23.1.
-What their walks lack, against the record's, is the heat of 24 to 40
-minutes of heating (10-13's without its circulation run), which neither
-probe shows at the start.
+probe fell to 103.1 and 99.9 degF, on the four to 89.6 to 94.6. The
+compressor's water is not what differs: over each recovery's first hour
+the walk's compressor drew within 5 W of the record's metered power on
+all four (323 to 336 W), as it did on the free recoveries (within 17 W);
+the power is read at the condenser's water, about 2.7 W a degF, so the
+walk's condenser water was near the record's, and the map's heat there
+about the heat at the record's (whether the map's heat is the tank's own
+below 114 degF, the record does not say). Nor is the share of the draw
+the tank gives: with the slower draw's cold side taken from the tank at
+0.1 or 0 rather than 0.25 (``DrawParams.undiluted_share``, a
+sensitivity) the four came 1.5 to 5.4 minutes shorter (10-13 46 minutes
+at 0, its walk then stopping before its circulation run), the free
+recoveries' mean absolute error 4.2 minutes against 4.3 and the runs
+with draws' 22.0 and 18.3 against 23.1. The tables size what their walks
+lack, the heat of 24 to 40 minutes of heating (10-13's without its
+circulation run), not where it went: a tank short of it at the start, or
+the draws inside the runs taking more of it, as the walk's lower probe
+falling deeper suggests, are both open.
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
