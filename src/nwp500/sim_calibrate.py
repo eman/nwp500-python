@@ -614,7 +614,7 @@ def _keep_better_heat_pump(
         ``what`` the refit had; with as many as ``needed`` and still no
         plane, they were too alike to place one, or with a ``fan`` air
         (``CompressorParams.fan_high_below_air_f``) too few or too alike
-        at or over it."""
+        at the fan's low speed, none of its run under it."""
         if fitted is None:
             if term not in unfitted:
                 j = _judge(
@@ -630,8 +630,8 @@ def _keep_better_heat_pump(
                     where = (
                         ""
                         if fan is None
-                        else f", too few or too alike at or over {fan:g} "
-                        "°F, the fan's low speed"
+                        else ", too few or too alike at the fan's low "
+                        f"speed (none of its run under {fan:g} °F)"
                     )
                     j = replace(
                         j,
@@ -1402,14 +1402,14 @@ def report(done: Calibrated) -> list[Term]:
     ) -> str:
         """Why no plane was fitted: too few ``what``, or with enough
         they were too alike to place one (and with a ``fan`` air, too
-        few or too alike at or over it)."""
+        few or too alike at the fan's low speed)."""
         if n < needed:
             return needs(n, what, needed)
         where = (
             ""
             if fan is None
-            else f", too few or too alike at or over {fan:g} °F, the "
-            "fan's low speed"
+            else ", too few or too alike at the fan's low speed (none "
+            f"of its run under {fan:g} °F)"
         )
         return f"{n} {what} place no plane{where}"
 

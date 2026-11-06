@@ -58,6 +58,38 @@ class TestTheMap:
         # The heat is not changed: only the electricity.
         assert hp.heat_btu_h(c, 50.0, 120.0) == hp.heat_btu_h(C, 50.0, 120.0)
 
+    def test_a_run_says_its_fans_speed(self) -> None:
+        c = replace(C, fan_high_below_air_f=60.0, fan_high_w=24.0)
+        plain = hp.power_w(c, 70.0, 120.0)
+        assert hp.power_w(c, 70.0, 120.0, fan_high=True) == plain + 24.0
+        assert hp.power_w(c, 50.0, 120.0, fan_high=False) == pytest.approx(
+            hp.power_w(c, 50.0, 120.0) - 24.0
+        )
+        # No fan's air set, no high speed to add.
+        assert hp.power_w(C, 70.0, 120.0, fan_high=True) == hp.power_w(
+            C, 70.0, 120.0
+        )
+
+    def test_a_runs_high_speed_starts_where_the_air_first_is_under(
+        self,
+    ) -> None:
+        t = datetime(2026, 1, 1, tzinfo=UTC)
+        asked: list[tuple[datetime, datetime | None, float]] = []
+
+        def first_under(
+            a: datetime, b: datetime | None, low: float
+        ) -> datetime | None:
+            asked.append((a, b, low))
+            return a + timedelta(minutes=30)
+
+        c = replace(C, fan_high_below_air_f=59.5, fan_high_w=20.0)
+        end = t + timedelta(hours=2)
+        assert hp.fan_high_from(c, t, end, first_under) == t + timedelta(
+            minutes=30
+        )
+        assert asked == [(t, end, 59.5)]
+        assert hp.fan_high_from(C, t, end, first_under) is None
+
     def test_a_document_carries_the_fan(self) -> None:
         p = sim.default_params()
         c = replace(p.compressor, fan_high_below_air_f=61, fan_high_w=18.2)
@@ -126,9 +158,9 @@ class TestTheMap:
 
     def test_the_high_speeds_warmest_air_is_checked(self) -> None:
         # The heat falling with the air and the power flat, the heat
-        # from the air is least at the high speed's warmest, just under
-        # the fan's air between two of the grid's: under 0 there, over
-        # it at every one of the grid's and at the fan's air itself.
+        # from the air is under 0 at the high speed from just under the
+        # fan's air, between two of the grid's, and over it at the low
+        # speed's coldest, the fan's air itself.
         air_f = (40.0, 110.0)
         airs = np.linspace(*air_f, hpf.CHECK_POINTS)
         fan = float((airs[3] + airs[4]) / 2)
@@ -163,6 +195,38 @@ class TestTheMap:
             < 0.0
         )
         assert "evaporator_heat_negative" in hpf.violations(edge, air_f)
+
+    def test_the_high_speed_is_checked_at_warm_air_too(self) -> None:
+        # A run holds the high speed to its end, into air over the
+        # fan's: the power rising with the air, the heat flat, the high
+        # speed's heat from the air is under 0 only there.
+        c = replace(
+            C,
+            heat_btu_h=2300.0,
+            heat_btu_h_per_air_f=0.0,
+            heat_btu_h_per_water_f=0.0,
+            heat_btu_h_per_air_water_f=0.0,
+            power_w=400.0,
+            power_w_per_air_f=5.0,
+            power_w_per_water_f=0.0,
+            power_w_per_air_water_f=0.0,
+            fan_high_below_air_f=59.5,
+            fan_high_w=100.0,
+        )
+        air_f = (40.0, 110.0)
+        warm = hp.heat_btu_h(c, 110.0, 120.0) - BTU_PER_WH * hp.power_w(
+            c, 110.0, 120.0, fan_high=True
+        )
+        assert warm < 0.0
+        assert hp.evaporator_btu_h(c, 59.0, 120.0) > 0.0
+        assert hp.evaporator_btu_h(c, 110.0, 120.0) > 0.0
+        assert "evaporator_heat_negative" in hpf.violations(c, air_f)
+        low = replace(c, fan_high_w=0.0)
+        assert "evaporator_heat_negative" not in hpf.violations(low, air_f)
+        # With the fan's air at or under the envelope's, no run there
+        # goes to the high speed.
+        cold = replace(c, fan_high_below_air_f=40.0, fan_high_w=5000.0)
+        assert "evaporator_heat_negative" not in hpf.violations(cold, air_f)
 
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)

@@ -536,6 +536,11 @@ class _Cycle:
     #: them (``Stretch.heating_h``): its water judged where it stops.
     heating_h: float = 0.0
     heating_mean_f_h: float = 0.0
+    #: Its fan's speed as a walk that ended under way left it
+    #: (``CompressorRun.fan_high_at``, ``fan_low_through``), for the
+    #: walk that resumes it to hold.
+    fan_high_at: datetime | None = None
+    fan_low_through: datetime | None = None
 
 
 @dataclass
@@ -824,6 +829,7 @@ class _Engine:
                 interval=None
                 if cycle.interval is None
                 else replace(cycle.interval),
+                **self._fan_now(cycle),
             ),
             element=None
             if el is None
@@ -837,6 +843,26 @@ class _Engine:
             else replace(self.mode_writes[held.ref]),
             disabled=ctl.disabled(self.state, self.settings),
         )
+
+    def _fan_now(self, cycle: _Cycle) -> dict[str, datetime | None]:
+        """``cycle``'s fan's speed now, from the air this walk had: its
+        high speed's start, or low through now; as it was without a
+        physics that holds a fan (``TankPhysics.fan_high``)."""
+        fan_high = getattr(self.physics, "fan_high", None)
+        if fan_high is None:
+            return {}
+        high = fan_high(
+            CompressorRun(
+                on_at=cycle.start.at,
+                heats_at=cycle.heats_at,
+                off_at=self.t,
+                fan_high_at=cycle.fan_high_at,
+                fan_low_through=cycle.fan_low_through,
+            )
+        )
+        if high is not None and high <= self.t:
+            return {"fan_high_at": high, "fan_low_through": None}
+        return {"fan_high_at": None, "fan_low_through": self.t}
 
     # ── the tank ──
 
@@ -878,6 +904,8 @@ class _Engine:
                 heats_at=cycle.heats_at,
                 scale=cycle.scale,
                 stirs=cycle.stirs,
+                fan_high_at=cycle.fan_high_at,
+                fan_low_through=cycle.fan_low_through,
             ),
             elements=(
                 *(e for e in self.cooling if self._heats_until(e) > at),

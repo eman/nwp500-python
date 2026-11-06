@@ -62,26 +62,44 @@ Added
 
 - **The evaporator fan's high speed in the compressor's power.**
   ``CompressorParams.fan_high_below_air_f`` (None unless set) and
-  ``fan_high_w`` (0): in air under it the power map's electricity is its
-  plane's plus the step (``physics.heat_pump.power_w``); the heat is
-  unchanged. ``heat_pump_fit.fit_power_map`` takes the air
-  (``fit_heat_pump`` the base's), fits the plane on the blocks at or
-  over it and the step, at least 0, as the mean the plane leaves of the
-  rest (``Plane.fan_high``), fitting no plane with too few or too alike
-  at or over it and keeping the base's step with none under it; the
-  calibration report shows the step, and ``violations`` checks either
-  side of its air, where the power steps. On one NWP500-65 (measured
+  ``fan_high_w`` (0): a walk's compressor run puts its fan at the high
+  speed from the first instant the air is under ``fan_high_below_air_f``
+  to the run's end (``TankPhysics.fan_high``,
+  ``physics.heat_pump.fan_high_from``,
+  ``decay.AmbientSampler.first_under``,
+  ``stratified.Compressor.fan_high_at``), and the power map's
+  electricity is its plane's plus ``fan_high_w`` while it is
+  (``physics.heat_pump.power_w``, its ``fan_high``; without it the speed
+  is read from the air alone, as the record's replay reads it); the heat
+  is unchanged. A run a walk ends under way keeps its fan's speed in the
+  resume (``CompressorRun.fan_high_at``, ``fan_low_through``), so the
+  walk that goes on from ``SimulationResult.end_state`` holds it; a run
+  under way at a scenario's start without one reads its fan from that
+  start. ``heat_pump_fit.power_blocks`` gives each block
+  ``run_air_min_f``, the least air of its run's every minute to the
+  block's end; ``heat_pump_fit.fit_power_map`` takes the air
+  (``fit_heat_pump`` the base's), takes a block for the high speed where
+  that is under it (``heat_pump_fit.fan_high``), fits the plane on the
+  rest and the step, at least 0, as the mean the plane leaves of the
+  high speed's (``Plane.fan_high``), fitting no plane with too few or
+  too alike at the low speed and keeping the base's step with none at
+  the high; ``power_map_error`` reads the blocks so; the calibration
+  report shows the step, and ``violations`` checks the low speed at the
+  fan's air and over and the high at every air, unless the fan's air is
+  at or under the envelope's coldest. On one NWP500-65 (measured
   2026-11-05) the fan ran at about 543 rpm or 895, went to the high
   speed inside a run as the heater's own air reading fell to about 58
   degF and held it to the run's end, and its high speed drew 23.7 W more
   on the 10-minute metered climb blocks with one speed throughout. Read
-  from the air at the heater, at 60.5 degF and +18.77 W fitted on the
-  blocks before 2026-09-18 with the plane kept, the 1,807 winter blocks
-  under 60 degF read 0.4 W low (in the fit) against 19.2 with the plane
-  alone, and the 50 held out 7.5 W low against 26.3. The 29 held-out
-  days at ``DrawParams.meter_reads`` 0.85 move only in their
-  electricity, the day's 12.64 % off against 12.80, 2.21 % low against
-  2.48.
+  from the air at the heater and held so, at 59.0 degF and +20.68 W
+  fitted on the blocks before 2026-09-18 with the plane kept (the
+  blocks' speed so taken agreeing with the fan's measured one on 97.3 %
+  of them), the 1,807 winter blocks under 60 degF read 1.1 W over (in
+  the fit) against 19.2 low with the plane alone, the winter's at 60 to
+  80 degF 1.6 W low against 6.4, and the 50 held out under 60 degF 9.3 W
+  low against 26.3. The 29 held-out days at ``DrawParams.meter_reads``
+  0.85 move only in their electricity, the day's 12.66 % off against
+  12.80, 2.15 % low against 2.48.
 - **The house meter's reading of a gallon.** ``DrawParams.meter_reads``
   (1, the meter as it reads, unless set; over 0 and at most 2) takes
   each metered gallon as ``1 / meter_reads`` delivered

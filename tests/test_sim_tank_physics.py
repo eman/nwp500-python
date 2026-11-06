@@ -374,6 +374,61 @@ class TestTheAmbientSeries:
         assert AmbientSampler(missing).at(T0) == DEFAULT_AMBIENT_F
 
 
+class TestTheFansHighSpeed:
+    """A run's fan goes to its high speed when the air first falls under
+    ``fan_high_below_air_f`` and holds it to the run's end."""
+
+    @staticmethod
+    def _air(values: list[float]) -> pd.DataFrame:
+        stamps = pd.date_range(T0, periods=len(values), freq="1h")
+        return pd.DataFrame({"ambient_f": values}, index=stamps)
+
+    def test_the_air_first_under_a_level(self) -> None:
+        from nwp500.sim.decay import AmbientSampler
+
+        air = AmbientSampler(self._air([62.0, 60.0, 58.0, 61.0, 63.0]))
+        # 62 to 60 crosses 60.5 three quarters of the way.
+        assert air.first_under(T0, None, 60.5) == T0 + timedelta(minutes=45)
+        inside = T0 + timedelta(hours=2, minutes=30)
+        assert air.first_under(inside, None, 60.5) == inside
+        assert air.first_under(T0 + timedelta(hours=3.5), None, 60.5) is None
+        assert air.first_under(T0, T0 + timedelta(minutes=30), 60.5) is None
+        # Flat past the ends: under the level there for all time.
+        cold = AmbientSampler(self._air([55.0, 62.0]))
+        before = T0 - timedelta(days=1)
+        assert cold.first_under(before, None, 60.5) == before
+        assert cold.first_under(T0 + timedelta(hours=3), None, 60.5) is None
+        held = AmbientSampler(self._air([62.0, 55.0]))
+        later = T0 + timedelta(days=3)
+        assert held.first_under(later, None, 60.5) == later
+
+    def test_a_run_holds_its_high_speed_to_its_end(self) -> None:
+        # The air falls under 60 °F an hour in and back over it at three.
+        air = self._air([64.0, 60.0, 56.0, 60.0, 64.0, 64.0, 64.0])
+        base = _params()
+        fan = dataclasses.replace(
+            base,
+            compressor=dataclasses.replace(
+                base.compressor, fan_high_below_air_f=60.0, fan_high_w=20.0
+            ),
+        )
+        end = T0 + timedelta(hours=6)
+        on = Running(compressor=CompressorRun(on_at=T0, heats_at=T0))
+
+        def wh(params: HeaterParams) -> float:
+            physics = TankPhysics(params, air, 50.0, draws_on=False)
+            state = physics.estimate(110.0, 90.0)
+            got = physics.advance(T0, state, end, running=on)
+            return sum(p.input_wh or 0.0 for p in got.points)
+
+        none = dataclasses.replace(
+            fan,
+            compressor=dataclasses.replace(fan.compressor, fan_high_w=0.0),
+        )
+        # High from the hour on, through the warmer air after three.
+        assert wh(fan) - wh(none) == pytest.approx(20.0 * 5.0, rel=1e-6)
+
+
 class TestState:
     def test_the_probes_are_the_states_observation(self) -> None:
         physics = _physics()

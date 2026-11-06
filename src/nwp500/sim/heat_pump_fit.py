@@ -527,6 +527,7 @@ _POWER_COLUMNS = (
     "gap_f",
     "mixed",
     "air_f",
+    "run_air_min_f",
     "water_f",
     "power_w",
     "draw_free",
@@ -542,11 +543,14 @@ def power_blocks(
     and the gap's means, ``mixed`` (every minute of it), ``air_f``,
     ``water_f`` (the water the power is read at: the lower probe's
     mean, until a replay places the condenser's,
-    ``in_condenser_water``), ``power_w`` and the run's ``draw_free``. A
-    block with a minute unmetered is left out."""
+    ``in_condenser_water``), ``power_w``, the run's ``draw_free``, and
+    ``run_air_min_f``, the least air of every minute of its run to the
+    block's end, whatever phase or metering (``fan_high``). A block with
+    a minute unmetered is left out."""
     rows: list[dict[str, object]] = []
     for g in _cycles(frame):
         phase = g["phase"].to_numpy()
+        coldest = np.fmin.accumulate(g["air_f"].to_numpy(dtype=float))
         for name in PHASES:
             for i, j in _stretches(phase == name):
                 for a in range(i, j - block_minutes + 1, block_minutes):
@@ -564,6 +568,9 @@ def power_blocks(
                             "gap_f": float(s["gap_f"].mean()),
                             "mixed": bool(s["mixed"].all()),
                             "air_f": float(s["air_f"].mean()),
+                            "run_air_min_f": float(
+                                coldest[a + block_minutes - 1]
+                            ),
                             "water_f": float(s["lower_f"].mean()),
                             "power_w": float(watts.mean()),
                             "draw_free": bool(s["draw_free"].iloc[0]),
@@ -756,18 +763,19 @@ def fit_power_map(
     air and the water they were read at (``power_blocks``' ``water_f``);
     None with fewer than ``MIN_POWER_BLOCKS``. With the air the fan runs
     high under (``CompressorParams.fan_high_below_air_f``) the plane is
-    fitted on the blocks at or over it, None unless they number
-    ``MIN_POWER_BLOCKS`` and place one (a plane through the cold blocks
-    too would take in the step it is to leave), and the fan's step on
-    what the plane leaves of the rest, their mean and at least 0, None
-    with no block there; the span is every block's."""
+    fitted on the blocks at the low speed (``fan_high``: held to a
+    run's end), None unless they number ``MIN_POWER_BLOCKS`` and place
+    one (a plane through the high speed's too would take in the step it
+    is to leave), and the fan's step on what the plane leaves of the
+    rest, their mean and at least 0, None with no block there; the span
+    is every block's."""
     if len(rows) < MIN_POWER_BLOCKS:
         return None
     air, water, power = _columns(rows, "air_f", "water_f", "power_w")
     ones = np.ones(len(rows))
     if fan_below_f is None:
         return _fit_plane(air, water, power, ones, POWER_SLOPE_SIGNS)
-    over = air >= fan_below_f
+    over = ~fan_high(rows, fan_below_f)
     if int(over.sum()) < MIN_POWER_BLOCKS:
         return None
     plane = _fit_plane(
@@ -800,14 +808,47 @@ def heat_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
     return float(np.sqrt(np.average((got - heat) ** 2, weights=minutes)))
 
 
+def fan_high(rows: pd.DataFrame, below_f: float | None) -> np.ndarray:
+    """Whether each of ``Evidence.power``'s blocks ran its fan at the
+    high speed, as a walk holds it (``heat_pump.fan_high_from``): its
+    run's air under ``below_f`` at any minute to the block's end
+    (``run_air_min_f``, which counts the minutes of the run no block
+    keeps); where that is not given, its air or an earlier block's of
+    its run (``cycle``, by ``start``) under it; each block's own air
+    alone without those. All False with no ``below_f``."""
+    if below_f is None:
+        return np.zeros(len(rows), dtype=bool)
+    out = rows["air_f"].to_numpy(dtype=float) < below_f
+    if "cycle" in rows.columns and "start" in rows.columns:
+        held = (
+            pd.DataFrame(
+                {"cycle": rows["cycle"].to_numpy(), "start": rows["start"]},
+            )
+            .assign(under=out, at=np.arange(len(rows)))
+            .sort_values(["cycle", "start"], kind="stable")
+        )
+        held["held"] = held.groupby("cycle")["under"].cummax()
+        out = np.zeros(len(rows), dtype=bool)
+        out[held["at"].to_numpy()] = held["held"].to_numpy(dtype=bool)
+    if "run_air_min_f" in rows.columns:
+        coldest = rows["run_air_min_f"].to_numpy(dtype=float)
+        out = np.where(np.isfinite(coldest), coldest < below_f, out)
+    return out
+
+
 def power_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
-    """``c``'s power against ``Evidence.power``'s blocks: the RMS
-    error, W; None with none."""
+    """``c``'s power against ``Evidence.power``'s blocks, each fan's
+    speed as a walk holds it (``fan_high``): the RMS error, W; None
+    with none."""
     if rows.empty:
         return None
     air, water, power = _columns(rows, "air_f", "water_f", "power_w")
+    high = fan_high(rows, c.fan_high_below_air_f)
     got = np.array(
-        [hp.power_w(c, a, w) for a, w in zip(air, water, strict=True)]
+        [
+            hp.power_w(c, a, w, fan_high=bool(h))
+            for a, w, h in zip(air, water, high, strict=True)
+        ]
     )
     return float(np.sqrt(np.mean((got - power) ** 2)))
 
@@ -840,28 +881,39 @@ def violations(
     ``air_f`` and the water ``water_f`` (the controller's envelope),
     that no heat pump does (``CARNOT_SHARE``, ``MIN_POWER_W``):
     ``cop_over_carnot``, ``evaporator_heat_negative``,
-    ``power_too_low``; empty when none. The grid holds the envelope's
-    corners, where the heat less the power, a plane in each, has its
-    extremes, and either side of the air the fan runs high under
-    (``fan_high_below_air_f``) inside it, where the power steps: the low
-    speed's coldest air and the high speed's warmest."""
+    ``power_too_low``; empty when none. Each fan speed is a plane in
+    the power, and the grid holds the corners of where each runs, where
+    the heat less the power has its extremes: the low speed at the air
+    the fan runs high under (``fan_high_below_air_f``) and over, the
+    high at any air (a run holds it to its end, ``heat_pump.
+    fan_high_from``) when that air is over the envelope's coldest,
+    where a run can go to it."""
     found: set[str] = set()
-    airs = np.linspace(*air_f, CHECK_POINTS)
+    grid = np.linspace(*air_f, CHECK_POINTS)
     fan = c.fan_high_below_air_f
-    if fan is not None and air_f[0] < fan <= air_f[1]:
-        airs = np.unique(np.append(airs, [fan, np.nextafter(fan, -np.inf)]))
-        airs = airs[airs <= air_f[1]]
+    speeds: list[tuple[bool, np.ndarray]] = [(False, grid)]
+    if fan is not None:
+        low = grid[grid >= fan]
+        if air_f[0] < fan <= air_f[1]:
+            low = np.unique(np.append(low, fan))
+        speeds = [(False, low)]
+        if fan > air_f[0]:
+            speeds.append((True, grid))
     waters = np.linspace(*water_f, CHECK_POINTS)
-    for air in airs:
-        for water in waters:
-            a, w = float(air), float(water)
-            if hp.power_w(c, a, w) < MIN_POWER_W:
-                found.add("power_too_low")
-                continue
-            if hp.cop(c, a, w) > CARNOT_SHARE * hp.refrigerant_carnot_cop(a, w):
-                found.add("cop_over_carnot")
-            if hp.evaporator_btu_h(c, a, w) < 0.0:
-                found.add("evaporator_heat_negative")
+    for high, airs in speeds:
+        for air in airs:
+            for water in waters:
+                a, w = float(air), float(water)
+                power = hp.power_w(c, a, w, fan_high=high)
+                if power < MIN_POWER_W:
+                    found.add("power_too_low")
+                    continue
+                heat = hp.heat_btu_h(c, a, w)
+                carnot = CARNOT_SHARE * hp.refrigerant_carnot_cop(a, w)
+                if heat / (power * BTU_PER_WH) > carnot:
+                    found.add("cop_over_carnot")
+                if heat - power * BTU_PER_WH < 0.0:
+                    found.add("evaporator_heat_negative")
     return tuple(sorted(found))
 
 

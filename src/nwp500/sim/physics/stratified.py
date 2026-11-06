@@ -966,6 +966,11 @@ class Compressor:
     #: Its heating begins at ``heats_at``, with the start's stir; False
     #: for a run under way at the walk's start, already heating.
     stirs: bool = True
+    #: Its fan at the high speed from this instant to ``off_at``
+    #: (``heat_pump.fan_high_from``), when ``fan_held``; else the speed
+    #: is read from the air at each step (``heat_pump.power_w``).
+    fan_high_at: datetime | None = None
+    fan_held: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1176,7 +1181,9 @@ class _Walk:
         out: set[datetime] = set()
         c = self.heating.compressor
         if c is not None:
-            out.update(x for x in (c.on_at, c.heats_at, c.off_at) if x)
+            out.update(
+                x for x in (c.on_at, c.heats_at, c.off_at, c.fan_high_at) if x
+            )
         for e in self.heating.elements:
             out.update((e.on_at, e.on_at + e.lag))
             if e.off_at is not None:
@@ -1251,7 +1258,12 @@ class _Walk:
                 * _overlap_h(a, b, c.heats_at, c.off_at)
             )
             on_h = _overlap_h(a, b, c.on_at, c.off_at)
-            wh = power_w(c.params, read_air, water) * on_h
+            fan = (
+                c.fan_high_at is not None and a >= c.fan_high_at
+                if c.fan_held
+                else None
+            )
+            wh = power_w(c.params, read_air, water, fan_high=fan) * on_h
             heat = [
                 x + y for x, y in zip(heat, condenser_heat(lay, q), strict=True)
             ]

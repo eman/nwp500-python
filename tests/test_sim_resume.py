@@ -762,3 +762,42 @@ def test_a_dropped_resume_is_a_fresh_start() -> None:
     assert got.reasons == (RESUME_DROPPED, *fresh.reasons)
     assert got.defaults_used == fresh.defaults_used
     assert got.simulation == fresh.simulation
+
+
+def test_a_run_carried_on_keeps_its_fans_high_speed() -> None:
+    """A run's fan holds its high speed to the run's end: a call that
+    resumes the run past the cold air's last reading it reads (an hour
+    before its start) holds it as the walk whole does."""
+    base = _settings_in(days_of_draws(2), 1)
+    params = sim.site_example_params()
+    params = dataclasses.replace(
+        params,
+        compressor=dataclasses.replace(
+            params.compressor, fan_high_below_air_f=60.0, fan_high_w=40.0
+        ),
+    )
+    starts = [
+        h.start.at
+        for h in sim.simulate(base, params).heating
+        if h.source == "compressor"
+    ]
+    # A dip under the fan's air just after each run starts, warm after.
+    dips = sorted(
+        (t + timedelta(minutes=m), f)
+        for t in starts
+        for m, f in ((5, 65.0), (15, 55.0), (25, 65.0))
+    )
+    air = ((base.start - timedelta(hours=2), 65.0), *dips)
+    base = base.model_copy(
+        update={
+            "environment": base.environment.model_copy(
+                update={"ambient_f": air}
+            )
+        }
+    )
+    whole = sim.simulate(base, params)
+    runs = [h for h in whole.heating if h.source == "compressor"]
+    assert runs and all(h.end - h.start.at > timedelta(hours=1.5) for h in runs)
+    calls = _api_chained(base, params, _hourly(base))
+    _, heating = _joined([c.simulation for c in calls])
+    assert _same_heating(heating, whole.heating)

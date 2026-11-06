@@ -21,6 +21,8 @@ model.
 """
 
 from bisect import bisect_right
+from collections.abc import Callable
+from datetime import datetime
 
 from nwp500.sim.params import MAP_REF_AIR_F, MAP_REF_WATER_F, CompressorParams
 from nwp500.sim.units import BTU_PER_WH
@@ -62,9 +64,18 @@ def heat_btu_h(c: CompressorParams, air_f: float, water_f: float) -> float:
     )
 
 
-def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
-    """The electricity it draws there, W: the plane, and under
-    ``CompressorParams.fan_high_below_air_f`` the fan's high speed."""
+def power_w(
+    c: CompressorParams,
+    air_f: float,
+    water_f: float,
+    *,
+    fan_high: bool | None = None,
+) -> float:
+    """The electricity it draws there, W: the plane, and with the fan
+    at its high speed ``CompressorParams.fan_high_w``. ``fan_high``
+    says whether it is (a walk's run holds it from the air first under
+    ``fan_high_below_air_f`` to the run's end, ``fan_high_from``);
+    None reads it from the air there alone."""
     w = _plane(
         air_f,
         water_f,
@@ -73,9 +84,33 @@ def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
         c.power_w_per_water_f,
         c.power_w_per_air_water_f,
     )
-    if c.fan_high_below_air_f is not None and air_f < c.fan_high_below_air_f:
+    if fan_high is None:
+        fan_high = (
+            c.fan_high_below_air_f is not None
+            and air_f < c.fan_high_below_air_f
+        )
+    if fan_high and c.fan_high_below_air_f is not None:
         w += c.fan_high_w
     return w
+
+
+def fan_high_from(
+    c: CompressorParams,
+    on_at: datetime,
+    off_at: datetime | None,
+    first_under: Callable[[datetime, datetime | None, float], datetime | None],
+) -> datetime | None:
+    """When a run from ``on_at`` to ``off_at`` (None: on past what is
+    known) puts its fan at the high speed, None if it does not: the
+    first instant the air is under ``CompressorParams.
+    fan_high_below_air_f`` (``first_under``, ``decay.AmbientSampler.
+    first_under``), held from there to the run's end. On one NWP500-65
+    the fan went to its high speed inside a run as the heater's air
+    fell and back to its low only at the stop (127 of 128 within 3
+    min)."""
+    if c.fan_high_below_air_f is None:
+        return None
+    return first_under(on_at, off_at, c.fan_high_below_air_f)
 
 
 def cop(c: CompressorParams, air_f: float, water_f: float) -> float:
