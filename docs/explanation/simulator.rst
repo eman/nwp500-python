@@ -844,7 +844,7 @@ of theirs follows a draw (10-06's at 64 minutes, 5.5 gal drawn in the 30
 before), too few to tell. 10-23 22:48, 43 minutes short walked from its
 start (83 in the day's walk above), is the known case of a run with
 draws inside it: 15.4 gal drawn 50 minutes in and 6.1 at 2 h 20 min, the
-record's lower probe fell 15 degF over 30 minutes and 2 degF after the
+record's lower probe fell 15 degF over 30 minutes and 2.6 degF after the
 second, the walk's about 10 degF at once and not at all after the
 second, so it reaches the stop sooner.
 
