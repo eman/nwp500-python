@@ -1397,10 +1397,25 @@ def report(done: Calibrated) -> list[Term]:
         why = f"{n} {what}; {needed} needed"
         return f"{air_why}; {why}" if air_why else why
 
+    def no_plane(
+        n: int, what: str, needed: int, knee: float | None = None
+    ) -> str:
+        """Why no plane was fitted: too few ``what``, or with enough
+        they were too alike to place one (and with a ``knee``, too few
+        or too alike at or over it)."""
+        if n < needed:
+            return needs(n, what, needed)
+        where = (
+            ""
+            if knee is None
+            else f", too few or too alike at or over the {knee:g} °F knee"
+        )
+        return f"{n} {what} place no plane{where}"
+
     heat_why = claims(pump.heat_violations) or (
         ""
         if pump.heat is not None
-        else needs(
+        else no_plane(
             pump.n_heat,
             "draw-free climbs with the tank mixed",
             hpf.MIN_HEAT_STRETCHES,
@@ -1410,13 +1425,8 @@ def report(done: Calibrated) -> list[Term]:
     power_why = claims(pump.power_violations) or (
         ""
         if pump.power is not None
-        else needs(pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS)
-        if knee is None or pump.n_power < hpf.MIN_POWER_BLOCKS
-        # Enough blocks, but not at or over the knee to place a plane.
-        else (
-            f"{pump.n_power} metered climb blocks, too few or too alike "
-            f"at or over the {knee:g} °F knee to place a plane; "
-            f"{hpf.MIN_POWER_BLOCKS} needed there"
+        else no_plane(
+            pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS, knee
         )
     )
     heat_error = (

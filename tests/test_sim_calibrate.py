@@ -209,9 +209,13 @@ class TestTheFits:
         assert got[name].why == "no metered climb block under the 60 °F knee"
         got = with_fit(None, 60.0)
         why = got["Power at 65 °F air, 120 °F water (W)"].why
-        assert why.startswith("400 metered climb blocks, too few or too alike")
-        assert "60 °F knee" in why
+        assert why == (
+            "400 metered climb blocks place no plane, too few or too alike "
+            "at or over the 60 °F knee"
+        )
         assert not got[name].fitted and got[name].why == why
+        why = with_fit(None, None)["Power at 65 °F air, 120 °F water (W)"].why
+        assert why == "400 metered climb blocks place no plane"
 
     def test_a_heat_pump_fit_reports_its_values_and_errors(
         self, history: str
