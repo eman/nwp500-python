@@ -756,24 +756,26 @@ against 61.8 to 88.6 for the rest, and with the walk's run over them
 read 33 and 38 W low; of the others only two, each set against a walk
 run of another length (09-26's of 22 min against 354, the night of
 09-23's of 60 against 118), came more than 16 W off (measured
-2026-11-05). Under 60 degF of air the heater's electricity rises as the
-air falls, where the plane carried down falls: on the 10-minute metered
-climb blocks at the condenser's water, where the walk reads the map, the
-plane read 19.2 W low over the 1,807 winter blocks under 60 degF
-(2025-12-28 to 2026-04-16) and 26.3 W low over the 50 held out, and from
-60 to 80 degF within 3.3 W of the meter in each bin of the fit period
-and the held out. The winter's blocks also read 4 to 9 W over the
-plane's at 60 to 80 degF of air, a season the air does not account for.
-``CompressorParams.power_air_knee_f`` with ``power_w_per_air_below_f``
-gives the power a slope of its own under a knee; at 60 degF and +2.94 W
-a degF, fitted on the blocks before 2026-09-18 with the plane kept, the
-winter's blocks under it, in the fit, read 4.1 W low and the 50 held out
-18.0, and the 29 days' electricity comes 12.69 % off and 2.37 % low
-against 12.80 and 2.48. The knee is set where the summer's blocks break,
-not fitted: the fits tried, a flat floor refitted with its plane and the
-slope over knees from 58 to 64 degF, each erred less the higher it went,
-to the top of the range tried (68 and 64 degF), the winter's season
-pulling them.
+2026-11-05). The evaporator's fan carries it: the heater's fan ran at
+about 543 rpm or 895, went to the high speed inside a run as the
+heater's own air reading fell to about 58 degF, and held it to the run's
+end, and on the 10-minute metered climb blocks at the condenser's water,
+where the walk reads the map, the high speed drew 23.7 W more (the
+blocks with one speed throughout, 2025-12-28 to 2026-09-18). With the
+plane alone the 1,807 winter blocks under 60 degF (2025-12-28 to
+2026-04-16) read 19.2 W low and the 50 held out 26.3, and the winter's
+at 60 to 80 degF 6.4 W low, the fan's high speed in them too, where the
+fit period's and the held out's came within 3.3 W of the meter in each
+bin. ``CompressorParams.fan_high_below_air_f`` with ``fan_high_w`` adds
+the high speed in air under a set air; at 60.5 degF and +18.77 W, fitted
+on the blocks before 2026-09-18 with the plane kept, the winter's blocks
+under 60 degF, in the fit, read 0.4 W low, the 50 held out 7.5, and the
+winter's at 60 to 80 degF 5.1, and the 29 days' electricity comes 12.64
+% off and 2.21 % low against 12.80 and 2.48. Read from the air alone it
+misses the high speed held to a run's end: each of the 144 winter blocks
+at 60 to 80 degF that ran high came after one under 60.5 degF earlier in
+the same run. A cold-air slope under a knee, tried first, read the
+held-out blocks 18.0 W low (:doc:`simulator-tried`).
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off

@@ -60,24 +60,28 @@ book and the element-mode planner are gone. To move a caller over:
 Added
 -----
 
-- **A cold-air slope in the compressor's power.**
-  ``CompressorParams.power_air_knee_f`` (None unless set) and
-  ``power_w_per_air_below_f`` (0): under the knee the power map's
-  electricity is its plane's plus the slope for each degF the air is
-  under it (``physics.heat_pump.power_w``); the heat is unchanged.
-  ``heat_pump_fit.fit_power_map`` takes the knee (``fit_heat_pump`` the
-  base's) and fits the plane on the blocks at or over it and the slope,
-  at least 0, on the rest (``Plane.per_air_below``), fitting no plane
-  with too few over the knee and keeping the base's slope with none
-  under it; the calibration report shows the slope, and ``violations``
-  checks the power at the knee. On the site's 10-minute metered climb
-  blocks at the condenser's water (measured 2026-11-05) the plane alone
-  read the 1,807 winter blocks under 60 degF 19.2 W low and the 50 held
-  out 26.3 W low; a knee at 60 degF with +2.94 W per degF, fitted on the
-  blocks before 2026-09-18 with the plane kept, reads them 4.1 W low (in
-  the fit) and 18.0 W low. The 29 held-out days at
-  ``DrawParams.meter_reads`` 0.85, few of them in such air, move only in
-  their electricity: 12.69 % off against 12.80, 2.37 % low against 2.48.
+- **The evaporator fan's high speed in the compressor's power.**
+  ``CompressorParams.fan_high_below_air_f`` (None unless set) and
+  ``fan_high_w`` (0): in air under it the power map's electricity is its
+  plane's plus the step (``physics.heat_pump.power_w``); the heat is
+  unchanged. ``heat_pump_fit.fit_power_map`` takes the air
+  (``fit_heat_pump`` the base's), fits the plane on the blocks at or
+  over it and the step, at least 0, as the mean the plane leaves of the
+  rest (``Plane.fan_high``), fitting no plane with too few or too alike
+  at or over it and keeping the base's step with none under it; the
+  calibration report shows the step, and ``violations`` checks either
+  side of its air, where the power steps. On one NWP500-65 (measured
+  2026-11-05) the fan ran at about 543 rpm or 895, went to the high
+  speed inside a run as the heater's own air reading fell to about 58
+  degF and held it to the run's end, and its high speed drew 23.7 W more
+  on the 10-minute metered climb blocks with one speed throughout. Read
+  from the air at the heater, at 60.5 degF and +18.77 W fitted on the
+  blocks before 2026-09-18 with the plane kept, the 1,807 winter blocks
+  under 60 degF read 0.4 W low (in the fit) against 19.2 with the plane
+  alone, and the 50 held out 7.5 W low against 26.3. The 29 held-out
+  days at ``DrawParams.meter_reads`` 0.85 move only in their
+  electricity, the day's 12.64 % off against 12.80, 2.21 % low against
+  2.48.
 - **The house meter's reading of a gallon.** ``DrawParams.meter_reads``
   (1, the meter as it reads, unless set; over 0 and at most 2) takes
   each metered gallon as ``1 / meter_reads`` delivered

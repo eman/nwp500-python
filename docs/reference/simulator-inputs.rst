@@ -813,24 +813,28 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        priced these blocks at 406.9 W against the 418.2 W metered, at
        18.1 W RMS. The runs before 2026-04-16 have no record to replay.
      - 2026-10-29
-   * - ``compressor.power_air_knee_f`` and ``power_w_per_air_below_f``
+   * - ``compressor.fan_high_below_air_f`` and ``fan_high_w``
      - None and 0: the plane alone
-     - Under the knee the electricity is the plane's plus the slope for
-       each degF the air is under it. On one NWP500-65's 10-minute
-       metered climb blocks at the condenser's water (measured
-       2026-11-05), the plane above (fitted 2026-04-16 to 09-18) read
-       19.2 W low on the 1,807 winter blocks under 60 degF (2025-12-28
-       to 2026-04-16) and 26.3 W low on the 50 held out (from
-       2026-09-18), and from 60 to 80 degF of air within 3.3 W of the
-       meter in each bin of the fit period and the held out (60-62,
-       62-65, 65-70, 70-80). A knee at 60 degF with +2.94 W per degF
-       under it, fitted on the blocks before 2026-09-18 with the plane
-       kept, takes those to 4.1 W low (the winter's, in the fit) and
-       18.0 W (the held out's). A calibration with a knee set fits the
-       plane on the blocks at or over it and the slope, at least 0, on
-       the rest; with too few over the knee, or too alike to place a
-       plane, it keeps the base's map, and with none under it the
-       base's slope.
+     - In air under it the electricity is the plane's plus the step. One
+       NWP500-65's fan (measured 2026-11-05, homedb 2025-12-28 to
+       2026-10-26) ran at about 543 rpm or 895; it went to the high
+       speed inside a run as the heater's own air reading fell to about
+       58 degF (126 of the 127 switches to it, one run starting at it)
+       and held it to the run's end (127 of 128 back within 3 min of the
+       stop). On the 10-minute metered climb blocks at the condenser's
+       water with one speed throughout, the high speed drew 23.7 W more.
+       Read from the air at the heater, as the walk reads it, 60.5 degF
+       and +18.77 W, fitted on the blocks before 2026-09-18 with the
+       plane kept, take the 1,807 winter blocks under 60 degF from 19.2
+       W low to 0.4 (in the fit) and the 50 held out from 26.3 W low to
+       7.5. The winter's blocks at 60 to 80 degF still read 5.1 W low: a
+       third of those at 60 to 65 ran high, and each of the 144 at 60 to
+       80 degF that ran high came after one under 60.5 degF earlier in
+       its run: the fan held at its high speed to the run's end, which
+       the air alone does not place. A calibration with the air set fits
+       the plane on the blocks at or over it and the step, at least 0,
+       on the rest; with too few over it, or too alike to place a plane,
+       it keeps the base's map, and with none under it the base's step.
      - 2026-11-05
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``

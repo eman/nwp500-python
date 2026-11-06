@@ -46,34 +46,33 @@ class TestTheMap:
             C.power_w + 29.0 * C.power_w_per_water_f
         )
 
-    def test_the_power_takes_its_own_slope_under_the_knee(self) -> None:
-        c = replace(C, power_air_knee_f=60.0, power_w_per_air_below_f=3.0)
-        plain = replace(C, power_air_knee_f=None)
+    def test_the_fan_adds_its_high_speed_in_cold_air(self) -> None:
+        c = replace(C, fan_high_below_air_f=60.0, fan_high_w=24.0)
+        plain = replace(C, fan_high_below_air_f=None)
         assert hp.power_w(c, 70.0, 120.0) == hp.power_w(plain, 70.0, 120.0)
         assert hp.power_w(c, 60.0, 120.0) == hp.power_w(plain, 60.0, 120.0)
-        assert hp.power_w(c, 50.0, 120.0) == pytest.approx(
-            hp.power_w(plain, 50.0, 120.0) + 30.0
-        )
+        for air in (59.9, 50.0, 40.0):
+            assert hp.power_w(c, air, 120.0) == pytest.approx(
+                hp.power_w(plain, air, 120.0) + 24.0
+            )
         # The heat is not changed: only the electricity.
         assert hp.heat_btu_h(c, 50.0, 120.0) == hp.heat_btu_h(C, 50.0, 120.0)
 
-    def test_a_document_carries_the_knee(self) -> None:
+    def test_a_document_carries_the_fan(self) -> None:
         p = sim.default_params()
-        c = replace(
-            p.compressor, power_air_knee_f=60, power_w_per_air_below_f=2.9
-        )
+        c = replace(p.compressor, fan_high_below_air_f=61, fan_high_w=18.2)
         doc = json.loads(
             json.dumps(params_to_document(replace(p, compressor=c)))
         )
         got = params_from_document(doc).compressor
-        assert got.power_air_knee_f == 60.0
-        assert isinstance(got.power_air_knee_f, float)
-        assert got.power_w_per_air_below_f == 2.9
-        assert sim.default_params().compressor.power_air_knee_f is None
-        with pytest.raises(ValueError, match="power_air_knee_f"):
-            replace(C, power_air_knee_f=float("nan"))
-        with pytest.raises(ValueError, match="power_w_per_air_below_f"):
-            replace(C, power_w_per_air_below_f=float("inf"))
+        assert got.fan_high_below_air_f == 61.0
+        assert isinstance(got.fan_high_below_air_f, float)
+        assert got.fan_high_w == 18.2
+        assert sim.default_params().compressor.fan_high_below_air_f is None
+        with pytest.raises(ValueError, match="fan_high_below_air_f"):
+            replace(C, fan_high_below_air_f=float("nan"))
+        with pytest.raises(ValueError, match="fan_high_w"):
+            replace(C, fan_high_w=float("inf"))
 
     def test_it_is_quoted_at_its_reference(self) -> None:
         assert hp.heat_btu_h(C, 65.0, 120.0) == C.heat_btu_h
@@ -102,27 +101,68 @@ class TestTheMap:
             c, (61.0, 113.0)
         )
 
-    def test_the_power_at_its_knee_is_checked(self) -> None:
-        # Steep either side of a knee between two of the grid's airs, the
-        # power is over MIN_POWER_W at every one but under it at the knee.
+    def test_the_power_at_the_fans_air_is_checked(self) -> None:
+        # The fan's air between two of the grid's: at the low speed's
+        # coldest air the power is under MIN_POWER_W; at every one of the
+        # grid's, warmer or with the high speed's step, it is over.
         air_f = (40.0, 110.0)
         airs = np.linspace(*air_f, hpf.CHECK_POINTS)
-        knee = float((airs[3] + airs[4]) / 2)
-        level = hpf.MIN_POWER_W - 1.0 - 60.0 * (knee - 65.0)
+        fan = float((airs[3] + airs[4]) / 2)
+        level = hpf.MIN_POWER_W - 1.0 - 60.0 * (fan - 65.0)
         c = replace(
             C,
             power_w=level,
             power_w_per_air_f=60.0,
             power_w_per_water_f=0.0,
             power_w_per_air_water_f=0.0,
-            power_air_knee_f=knee,
-            power_w_per_air_below_f=120.0,
+            fan_high_below_air_f=fan,
+            fan_high_w=3000.0,
         )
-        assert hp.power_w(c, knee, 120.0) < hpf.MIN_POWER_W
+        assert hp.power_w(c, fan, 120.0) < hpf.MIN_POWER_W
         assert all(
             hp.power_w(c, float(a), 120.0) > hpf.MIN_POWER_W for a in airs
         )
         assert "power_too_low" in hpf.violations(c, air_f)
+
+    def test_the_high_speeds_warmest_air_is_checked(self) -> None:
+        # The heat falling with the air and the power flat, the heat
+        # from the air is least at the high speed's warmest, just under
+        # the fan's air between two of the grid's: under 0 there, over
+        # it at every one of the grid's and at the fan's air itself.
+        air_f = (40.0, 110.0)
+        airs = np.linspace(*air_f, hpf.CHECK_POINTS)
+        fan = float((airs[3] + airs[4]) / 2)
+        c = replace(
+            C,
+            heat_btu_h=5364.8 + 100.0 * (fan - 65.0),
+            heat_btu_h_per_air_f=-100.0,
+            heat_btu_h_per_water_f=0.0,
+            heat_btu_h_per_air_water_f=0.0,
+            power_w=400.0,
+            power_w_per_air_f=0.0,
+            power_w_per_water_f=0.0,
+            power_w_per_air_water_f=0.0,
+            fan_high_below_air_f=fan,
+            fan_high_w=1250.0,
+        )
+        below = float(np.nextafter(fan, -np.inf))
+        assert hp.evaporator_btu_h(c, below, 120.0) < 0.0
+        assert all(
+            hp.evaporator_btu_h(c, float(a), 120.0) > 0.0 for a in [*airs, fan]
+        )
+        assert "evaporator_heat_negative" in hpf.violations(c, air_f)
+        # And with the fan's air at the envelope's warm edge.
+        edge = replace(
+            c,
+            heat_btu_h=c.heat_btu_h + 100.0 * (110.0 - fan),
+            fan_high_below_air_f=110.0,
+        )
+        assert hp.evaporator_btu_h(edge, 110.0, 120.0) > 0.0
+        assert (
+            hp.evaporator_btu_h(edge, float(np.nextafter(110.0, 0.0)), 120.0)
+            < 0.0
+        )
+        assert "evaporator_heat_negative" in hpf.violations(edge, air_f)
 
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)

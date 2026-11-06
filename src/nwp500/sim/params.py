@@ -385,17 +385,14 @@ class CompressorParams:
     power_w_per_air_water_f: float = field(
         default=0.0, metadata=_p(DEFAULT, "W/°F²")
     )
-    #: The air under which the electricity takes a slope of its own,
-    #: °F, and that slope: ``power_w_per_air_below_f`` W more for each
-    #: °F the air is under the knee, on top of the plane, as a heater
-    #: draws more in cold air than its plane carried down would. None
-    #: reads the plane alone.
-    power_air_knee_f: float | None = field(
+    #: The air under which the evaporator's fan runs at its high speed,
+    #: °F, and what that speed adds to the electricity, W: the plane's
+    #: power plus ``fan_high_w`` in air under ``fan_high_below_air_f``.
+    #: None reads the plane alone.
+    fan_high_below_air_f: float | None = field(
         default=None, metadata=_p(DEFAULT, "°F")
     )
-    power_w_per_air_below_f: float = field(
-        default=0.0, metadata=_p(DEFAULT, "W/°F")
-    )
+    fan_high_w: float = field(default=0.0, metadata=_p(DEFAULT, "W"))
     #: The span of the air and the water each map was fitted on, to the
     #: whole degree, °F: read outside it, a map is its plane carried
     #: past its evidence.
@@ -433,13 +430,13 @@ class CompressorParams:
             object.__setattr__(self, name, (float(low), float(high)))
             if not low < high:
                 raise ValueError(f"{name} is not (low, high)")
-        knee = self.power_air_knee_f
-        if knee is not None:
-            object.__setattr__(self, "power_air_knee_f", float(knee))
-            if not math.isfinite(knee):
-                raise ValueError("power_air_knee_f is not finite")
-        if not math.isfinite(self.power_w_per_air_below_f):
-            raise ValueError("power_w_per_air_below_f is not finite")
+        fan = self.fan_high_below_air_f
+        if fan is not None:
+            object.__setattr__(self, "fan_high_below_air_f", float(fan))
+            if not math.isfinite(fan):
+                raise ValueError("fan_high_below_air_f is not finite")
+        if not math.isfinite(self.fan_high_w):
+            raise ValueError("fan_high_w is not finite")
         for name in ("start_hold_after_min", "start_hold_min"):
             object.__setattr__(
                 self, name, tuple(float(v) for v in getattr(self, name))

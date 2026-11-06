@@ -1,10 +1,10 @@
 """The heat pump as a performance map: the heat it puts into the tank and
 the electricity it draws, each a plane in the air at the heater and the
 lower tank's water about ``params.MAP_REF_AIR_F`` and
-``params.MAP_REF_WATER_F``, the electricity with a slope of its own in
-air under its knee (``CompressorParams.power_air_knee_f``). Each is read
-along its plane wherever the heat pump runs (the walk holds its reads to
-the controller's envelope, ``stratified.Layout.map_air_f`` and
+``params.MAP_REF_WATER_F``, the electricity with the evaporator fan's
+high speed added in cold air (``CompressorParams.fan_high_w``). Each is
+read along its plane wherever the heat pump runs (the walk holds its
+reads to the controller's envelope, ``stratified.Layout.map_air_f`` and
 ``map_water_f``), past the span it was fitted on (``CompressorParams``'
 domains) as within it: held at the span's edge, a plane would give the
 heat a 41 °F air does at 61 °F, and the heat and the power, fitted over
@@ -64,7 +64,7 @@ def heat_btu_h(c: CompressorParams, air_f: float, water_f: float) -> float:
 
 def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
     """The electricity it draws there, W: the plane, and under
-    ``CompressorParams.power_air_knee_f`` its cold-air slope."""
+    ``CompressorParams.fan_high_below_air_f`` the fan's high speed."""
     w = _plane(
         air_f,
         water_f,
@@ -73,8 +73,8 @@ def power_w(c: CompressorParams, air_f: float, water_f: float) -> float:
         c.power_w_per_water_f,
         c.power_w_per_air_water_f,
     )
-    if c.power_air_knee_f is not None and air_f < c.power_air_knee_f:
-        w += c.power_w_per_air_below_f * (c.power_air_knee_f - air_f)
+    if c.fan_high_below_air_f is not None and air_f < c.fan_high_below_air_f:
+        w += c.fan_high_w
     return w
 
 
