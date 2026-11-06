@@ -728,7 +728,8 @@ def test_a_held_heat_pump_entry_landing_later_says_its_rule() -> None:
 
 def test_a_dropped_resume_is_a_fresh_start() -> None:
     """Into Vacation, the call is the one made without the resume: the
-    same defaults named, the same answer."""
+    same defaults named, the same answer. Its probes are still the
+    walk's water, not read warm over it (``running_probes_warm_f``)."""
     params = sim.site_example_params()
     base = days_of_draws(1).model_copy(
         update={
@@ -751,17 +752,28 @@ def test_a_dropped_resume_is_a_fresh_start() -> None:
         }
     )
     got = sim.simulate(then, params)
+    at_rest = dataclasses.replace(
+        params,
+        compressor=dataclasses.replace(
+            params.compressor, running_probes_warm_f=(0.0, 0.0)
+        ),
+    )
     fresh = sim.simulate(
         then.model_copy(
             update={
                 "state": first.end_state.model_copy(update={"resume": None})
             }
         ),
-        params,
+        at_rest,
     )
     assert got.reasons == (RESUME_DROPPED, *fresh.reasons)
     assert got.defaults_used == fresh.defaults_used
     assert got.simulation == fresh.simulation
+    start = got.simulation.points[0]
+    assert (start.upper_f, start.lower_f) == (
+        first.end_state.upper_f,
+        first.end_state.lower_f,
+    )
 
 
 def test_a_run_carried_on_keeps_its_fans_high_speed() -> None:

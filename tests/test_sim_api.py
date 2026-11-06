@@ -122,7 +122,9 @@ def _by_hand(
     **kw: Any,
 ) -> Any:
     """The engine called directly with what ``s`` stands for: a flat
-    ambient on an hourly grid (any grid gives a flat ambient)."""
+    ambient on an hourly grid (any grid gives a flat ambient), and a
+    run under way at the start, not starting there, its probes less
+    their warmth while it heats (``running_probes_warm_f``)."""
     stamps = pd.date_range(at(-2), s.until + timedelta(hours=24), freq="1h")
     frame = pd.DataFrame({"ambient_f": [AMBIENT_F] * len(stamps)}, index=stamps)
     physics = TankPhysics(
@@ -142,10 +144,15 @@ def _by_hand(
         return start_hold_min(params.compressor, off)
 
     kw.setdefault("start_hold", start_hold)
+    du, dl = (
+        params.compressor.running_probes_warm_f
+        if s.state.compressor_running and not kw.get("running_starts")
+        else (0.0, 0.0)
+    )
     return walk(
         start=s.start,
-        upper_f=s.state.upper_f,
-        lower_f=s.state.lower_f,
+        upper_f=s.state.upper_f - du,
+        lower_f=s.state.lower_f - dl,
         running=s.state.compressor_running,
         until=s.until,
         setpoint_f=s.settings.setpoint_f,
@@ -949,3 +956,157 @@ class TestAnElementStopsAtItsOffPoint:
         end = ends[0][0]
         assert end - T0 < timedelta(minutes=15)
         assert all(p.upper_f < 140.0 for p in plain.points if p.at < end)
+
+
+class TestARunUnderWayAtTheStart:
+    """Its probes read warm over the water while it heats
+    (``CompressorParams.running_probes_warm_f``): the walk starts from
+    the water, so much cooler at them."""
+
+    def test_its_tank_is_the_probes_less_their_warmth(
+        self, params: HeaterParams
+    ) -> None:
+        du, dl = params.compressor.running_probes_warm_f
+        assert (du, dl) == (0.51, 0.91)
+        state = HeaterState(
+            upper_f=128.0, lower_f=110.0, compressor_running=True
+        )
+        first = simulate(_scenario(state=state), params).simulation.points[0]
+        assert (first.upper_f, first.lower_f) == pytest.approx(
+            (128.0 - du, 110.0 - dl), abs=0.02
+        )
+        # Its layers given, they are moved so much at the probes.
+        n = params.tank.layers
+        layers = (95.0, 100.0, *([118.0] * (n - 4)), 127.0, 128.0)
+        laid = simulate(
+            _scenario(state=state.model_copy(update={"layers_f": layers})),
+            params,
+        ).simulation.points[0]
+        plain = simulate(
+            _scenario(
+                state=state.model_copy(
+                    update={"layers_f": layers, "compressor_running": False}
+                )
+            ),
+            params,
+        ).simulation.points[0]
+        assert laid.upper_f == pytest.approx(plain.upper_f - du, abs=0.02)
+        assert laid.lower_f == pytest.approx(plain.lower_f - dl, abs=0.02)
+
+    def test_it_runs_longer_than_the_probes_as_read(
+        self, params: HeaterParams
+    ) -> None:
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=110.0, compressor_running=True
+            )
+        )
+        warm = simulate(s, params).simulation.heating[0]
+        read = simulate(
+            s,
+            replace(
+                params,
+                compressor=replace(
+                    params.compressor, running_probes_warm_f=(0.0, 0.0)
+                ),
+            ),
+        ).simulation.heating[0]
+        assert warm.end - read.end > timedelta(minutes=3)
+
+    def test_a_run_starting_there_reads_them_as_read(
+        self, params: HeaterParams
+    ) -> None:
+        # Starting at the start (a recorded start replayed), its probes
+        # are at rest.
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=110.0, compressor_running=True
+            )
+        )
+        first = simulate(s, params, running_starts=True).simulation.points[0]
+        assert (first.upper_f, first.lower_f) == pytest.approx(
+            (128.0, 110.0), abs=0.02
+        )
+        idle = s.state.model_copy(update={"compressor_running": False})
+        first = simulate(
+            s.model_copy(update={"state": idle}), params
+        ).simulation.points[0]
+        assert (first.upper_f, first.lower_f) == pytest.approx(
+            (128.0, 110.0), abs=0.02
+        )
+
+    def test_a_run_ending_now_ends_on_the_water(
+        self, params: HeaterParams
+    ) -> None:
+        # Its probe at the stop, the water under it is not: the walk and
+        # the active cycle both heat on to the water's stop.
+        s = _scenario(
+            state=HeaterState(
+                upper_f=141.0, lower_f=142.2, compressor_running=True
+            )
+        )
+        stop = s.settings.setpoint_f + params.controller.hp_stop_overshoot_f
+        assert s.state.lower_f >= stop
+        cycle = active_cycle(
+            s.state, s.settings, s.environment, params, at=s.start
+        )
+        run = simulate(s, params).simulation.heating[0]
+        assert cycle.remaining_minutes is not None
+        assert cycle.remaining_minutes > 0.0
+        assert run.end - s.start > timedelta(0)
+        dl = params.compressor.running_probes_warm_f[1]
+        past = s.state.model_copy(update={"lower_f": stop + dl})
+        done = active_cycle(past, s.settings, s.environment, params, at=s.start)
+        assert done.remaining_minutes == 0.0
+
+    def test_a_forecast_from_the_water(self, params: HeaterParams) -> None:
+        from nwp500.sim.api import forecast
+
+        state = HeaterState(
+            upper_f=139.0, lower_f=140.5, compressor_running=True
+        )
+        got = forecast(
+            state,
+            Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+            Environment(ambient_f=AMBIENT_F, humidity=48.0),
+            params,
+            at=T0,
+            target_time=T0 + timedelta(hours=1),
+            target_lower_f=140.0,
+            history=History(compressor_stopped_at=at(-2.0)),
+        )
+        assert got.status != "no_heating_required"
+        dl = params.compressor.running_probes_warm_f[1]
+        assert got.lower_f_at_start <= 140.5 - dl + 0.02
+
+    def test_a_walks_end_state_is_its_water_next(
+        self, params: HeaterParams
+    ) -> None:
+        from nwp500.sim.api import next_recovery
+
+        first = simulate(
+            _scenario(
+                horizon=timedelta(minutes=30),
+                state=HeaterState(
+                    upper_f=126.0, lower_f=112.0, compressor_running=True
+                ),
+            ),
+            params,
+        )
+        end = first.end_state
+        assert end is not None and end.compressor_running
+        then = _scenario(start=first.until, state=end)
+        at_rest = replace(
+            params,
+            compressor=replace(
+                params.compressor, running_probes_warm_f=(0.0, 0.0)
+            ),
+        )
+        got = next_recovery(then, params)
+        want = next_recovery(
+            then.model_copy(
+                update={"state": end.model_copy(update={"resume": None})}
+            ),
+            at_rest,
+        )
+        assert got == want

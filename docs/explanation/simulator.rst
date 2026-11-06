@@ -785,6 +785,31 @@ from that start: what it ran at before is not given. A cold-air slope
 under a knee, tried first, read the held-out blocks 18.0 W low
 (:doc:`simulator-tried`).
 
+Over the 29 days, five runs were under way at a day's start, 00:00
+local, on a hot tank, the lower probe at 126 to 141 degF and 22 to 128
+minutes from the stop: 10-03's, 10-22's and 10-25's on days with every
+start placed and no element run, 10-02's on its element day and 10-21's
+on a day with a start missed or false (measured 2026-11-06). The walk
+heated them as the record did, its lower probe within 0.2 degF of the
+record's minute by minute on 10-22 and 0.6 on 10-25, and stopped each
+4.7 to 15.2 minutes early, 8.5 on average; walked from their recorded
+starts, four of them come 3.0 short to 10.2 long. The day's walk starts
+from the record's replay corrected to the probes, and while the
+compressor heats the probes read 0.51 and 0.91 degF over the water
+(:doc:`recovery-speed`), so the walk took that much heat as already in
+it, and near 142 degF the lower probe climbs about 0.1 degF a minute.
+``CompressorParams.running_probes_warm_f`` takes it off a run under way
+at a scenario's start, not starting there nor a walk's end state: the
+five come 2.9 minutes short on average (34.5 against 34 on 10-02, 117.8
+against 128 on 10-03), the 18 days with every start placed and no
+element run carry 3.11 points against 4.36, and the 29 days' electricity
+comes 11.41 % off and 0.72 % low against 12.66 and 2.15, the end of day
+and the day's least upper probe within 0.02 degF. Of the 3.11, the runs'
+minutes carry 2.61, 10-23's run 83 minutes short with 22.8 gal drawn
+during it the most, and the heater's idle draw 0.55. The same warmth
+taken throughout a walk, in its probes, stops and replay, was tried and
+dropped (:doc:`simulator-tried`, 2026-10-28).
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks

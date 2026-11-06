@@ -310,12 +310,36 @@ def _physics(
     )
 
 
-def _tank(physics: TankPhysics, state: HeaterState) -> tuple[Any, list[str]]:
+def _warm(
+    params: HeaterParams, state: HeaterState, *, running_starts: bool = False
+) -> tuple[float, float]:
+    """How much higher the start's probes read than the water at them:
+    ``CompressorParams.running_probes_warm_f`` with a run under way at
+    the start, not started there (``running_starts``) nor a walk's end
+    state (``HeaterState.resume`` given, carried or dropped: its probes
+    are the walk's water); else none."""
+    if state.compressor_running and not running_starts and state.resume is None:
+        return params.compressor.running_probes_warm_f
+    return (0.0, 0.0)
+
+
+def _tank(
+    physics: TankPhysics,
+    state: HeaterState,
+    warm: tuple[float, float] = (0.0, 0.0),
+) -> tuple[Any, list[str]]:
     """The tank at the start: its layers as given, or the physics' of
-    the probes, which says ``tank_profile_estimated``."""
+    the probes, which says ``tank_profile_estimated``; with the probes
+    reading ``warm`` (upper, lower) °F over the water (``_warm``), the
+    water so much cooler at them."""
+    du, dl = warm
     if state.layers_f is not None:
-        return physics.layers(state.layers_f), []
-    return physics.estimate(state.upper_f, state.lower_f), [
+        tank = physics.layers(state.layers_f)
+        if du or dl:
+            u, lo = physics.observe(tank)
+            tank = physics.at_probes(tank, u - du, lo - dl)
+        return tank, []
+    return physics.estimate(state.upper_f - du, state.lower_f - dl), [
         TANK_PROFILE_ESTIMATED
     ]
 
@@ -551,14 +575,18 @@ def simulate(
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
     draws = _pieces(s.loads.draws, params)
-    tank, estimated = _tank(physics, s.state)
+    # A walk's end state, its resume carried or dropped (into Vacation
+    # or Power Off), holds the walk's water, not probes read warm.
+    warm = _warm(params, s.state, running_starts=running_starts)
+    tank, estimated = _tank(physics, s.state, warm)
     reasons += estimated
     sim = walk(
-        # Made of the probes, the engine makes it, and keeps them as read.
+        # Made of the probes, the engine makes it, and keeps them as
+        # read, less their warmth over the water.
         state=None if estimated else tank,
         start=s.start,
-        upper_f=s.state.upper_f,
-        lower_f=s.state.lower_f,
+        upper_f=s.state.upper_f - warm[0],
+        lower_f=s.state.lower_f - warm[1],
         running=s.state.compressor_running,
         until=s.until,
         setpoint_f=setpoint_f,
@@ -1564,6 +1592,8 @@ def next_recovery(
             upper_f=upper,
             lower_f=lower,
             compressor_running=s.state.compressor_running,
+            # A walk's end state's probes are its water (``_warm``).
+            resume=s.state.resume if s.state.compressor_running else None,
         )
         circulating = Loads(circulation=s.loads.circulation)
         answer = forecast(
@@ -2168,7 +2198,9 @@ def forecast(
         not override and energy is not None and energy <= 0 and not counted
     )
     _, disabled = _engine_mode(settings.mode)
-    if (not override and counted) or state.lower_f >= goal:
+    # A run under way: its probes read warm over the water (``_warm``).
+    du, dl = _warm(params, state)
+    if (not override and counted) or state.lower_f - dl >= goal:
         return Forecast(
             status="no_heating_required",
             start_at=origin,
@@ -2180,12 +2212,14 @@ def forecast(
             shortfall_minutes=None,
             physics_estimate_minutes=None,
             estimator="no_heating_required",
-            upper_f_at_start=state.upper_f,
-            lower_f_at_start=state.lower_f,
+            upper_f_at_start=state.upper_f - du,
+            lower_f_at_start=state.lower_f - dl,
             energy_to_setpoint_wh=energy,
             tou_capped=False,
             trajectory=(
-                HeatingPoint(origin, state.upper_f, state.lower_f, 0.0, 0.0),
+                HeatingPoint(
+                    origin, state.upper_f - du, state.lower_f - dl, 0.0, 0.0
+                ),
             ),
             reasons=tuple(_ambient_reasons(environment)),
             defaults_used=tuple(defaults),
@@ -2208,7 +2242,7 @@ def forecast(
     if history.compressor_stopped_at is None and not state.compressor_running:
         defaults.append("compressor_stopped_at=None (the longest start hold)")
 
-    first, estimated = _tank(physics, state)
+    first, estimated = _tank(physics, state, (du, dl))
 
     def coast_to(when: datetime) -> Any:
         """The tank coasted to ``when``."""
@@ -2394,7 +2428,10 @@ def active_cycle(
         defaults.append(f"humidity={environment.humidity}")
     air = _ambient_at(environment, at)
     stop = goal + params.controller.hp_stop_overshoot_f
-    if state.lower_f >= stop:
+    # Its probes read warm over the water (``_warm``): the walk's stop
+    # is the water's.
+    warm = _warm(params, state)
+    if state.lower_f - warm[1] >= stop:
         # The cycle is at its end: the lower zone is past the target by
         # the run-on, and the compressor is about to stop. Nothing is
         # left, as the integrator says (0 minutes).
@@ -2419,7 +2456,7 @@ def active_cycle(
         defaults=[],
     )
     # The cycle is under way: its hold is over and its layers stirred.
-    tank, estimated = _tank(physics, state)
+    tank, estimated = _tank(physics, state, warm)
     served = physics.recover(at, tank, stop, under_way=True)
     if not served.reached:
         raise _refusal(served)

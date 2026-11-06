@@ -86,6 +86,14 @@ SITE_UNDILUTED_SHARE = 0.25
 #: 2026-11-03 on that installation's parameters in use).
 SITE_METER_READS_SINCE = ((datetime(2026, 9, 12, 19, 51, tzinfo=UTC), 0.85),)
 
+#: How much higher one NWP500-65's (upper, lower) probes read than at
+#: rest while its compressor heats, °F
+#: (``CompressorParams.running_probes_warm_f``): their step down in the 5
+#: minutes after 47 quiet stops of runs heating 40 minutes or more,
+#: 2026-04-24 to 2026-10-22, net of the standby trend (measured
+#: 2026-10-28, :doc:`/explanation/recovery-speed`).
+SITE_RUNNING_PROBES_WARM_F = (0.51, 0.91)
+
 #: The mains of the federal rating test for water heaters (10 CFR 430,
 #: Subpart B, Appendix E), °F: colder than most of the year's mains
 #: south of the northern tier, so the draws it prices err the safe way.
@@ -376,7 +384,8 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
     (``SITE_VALVE``, ``SITE_UNDILUTED_GPM``, ``SITE_UNDILUTED_SHARE``),
-    house meter (``SITE_METER_READS_SINCE``) and circulation
+    house meter (``SITE_METER_READS_SINCE``), probes' warmth while its
+    compressor heats (``SITE_RUNNING_PROBES_WARM_F``) and circulation
     (``SITE_CIRCULATION``) included: a
     snapshot of its fit of 2026-10-11, the heat pump's performance map
     fitted on 2026-10-26 and the layered tank's terms on 2026-10-27.
@@ -396,6 +405,10 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
             undiluted_gpm=SITE_UNDILUTED_GPM,
             undiluted_share=SITE_UNDILUTED_SHARE,
             meter_reads_since=SITE_METER_READS_SINCE,
+        ),
+        compressor=replace(
+            valved.compressor,
+            running_probes_warm_f=SITE_RUNNING_PROBES_WARM_F,
         ),
         circulation=SITE_CIRCULATION,
     )

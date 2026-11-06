@@ -813,6 +813,20 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        priced these blocks at 406.9 W against the 418.2 W metered, at
        18.1 W RMS. The runs before 2026-04-16 have no record to replay.
      - 2026-10-29
+   * - ``compressor.running_probes_warm_f``
+     - (0.51, 0.91) degF (``SITE_RUNNING_PROBES_WARM_F``)
+     - How much higher the upper and lower probes read than the water at
+       them while the compressor heats. A scenario that starts with a
+       run under way, not starting there nor a walk's end state, starts
+       from the probes less these. One NWP500-65's probes stepped down
+       0.51 and 0.91 degF in the 5 minutes after 47 quiet stops of runs
+       heating 40 minutes or more, 2026-04-24 to 2026-10-22, net of the
+       standby trend (:doc:`/explanation/recovery-speed`). On the 29
+       held-out days at 0.85 (measured 2026-11-06), the five runs under
+       way at a day's start on a hot tank came 8.5 min short on average
+       as read and 2.9 with the warmth taken off, and the day's
+       electricity 11.41 % off against 12.66.
+     - Measured 2026-10-28
    * - ``compressor.fan_high_below_air_f`` and ``fan_high_w``
      - None and 0: the plane alone
      - A walk's run puts its fan at the high speed from the first

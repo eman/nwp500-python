@@ -1352,7 +1352,8 @@ refitted where it is read, so that offset is gone, and the trial,
 against that older model, does not say how the offset would do now.
 
 **Account.** :doc:`simulator`, "Two errors in a heat-pump recovery
-partly cancel".
+partly cancel". Taken off a run under way at a scenario's start only, it
+is kept (``CompressorParams.running_probes_warm_f``, 2026-11-06).
 
 
 A hold imposed at the compressor's start (2026-10-28)
