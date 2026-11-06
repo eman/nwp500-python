@@ -4,6 +4,7 @@ import asyncio
 import functools
 import json
 import logging
+import math
 import sys
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -1254,6 +1255,15 @@ async def simulate_record(
     await handle_recording(mqtt, device, history, every)
 
 
+def _finite_weeks(
+    ctx: click.Context, param: click.Parameter, value: float
+) -> float:
+    """``--tank-weeks`` as a finite number of weeks."""
+    if not math.isfinite(value):
+        raise click.BadParameter(f"{value} is not a number of weeks")
+    return value
+
+
 @simulate.command("calibrate")  # type: ignore[attr-defined]
 @click.argument("history", type=click.Path(exists=True, dir_okay=False))
 @click.option(
@@ -1302,6 +1312,7 @@ async def simulate_record(
     "--tank-weeks",
     "tank_weeks",
     type=click.FloatRange(min=0.0),
+    callback=_finite_weeks,
     default=7.0,
     show_default=True,
     metavar="WEEKS",

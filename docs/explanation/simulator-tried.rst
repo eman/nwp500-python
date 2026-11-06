@@ -56,7 +56,7 @@ gain did not carry over.
 
 Re-judged the same day with both tanks fitted on the seven weeks before
 2026-09-18 alone (calibration now fits the tank on its last seven weeks
-with the history before as their lead-in, which scored within 0.12 of
+with the history before as their lead-in, its errors within 0.12 of
 that: ``calibrate-simulator``), against the draws at onset fitted so
 (share 0.25, then 0, against onset): the day's electricity 18.6 and 15.3
 % off against 10.2, its end 5.66 and 4.69 degF against 3.09, the probes

@@ -138,7 +138,7 @@ class TestTheFits:
         assert few.tank.fit is None
         assert few.tank.why == (
             "4 quiet windows and draws; 10 needed (16 more events before "
-            "the last 0.571429 weeks: tank_weeks)"
+            "the last 0.571429 weeks, which the tank is fitted on)"
         )
 
     @pytest.mark.parametrize("weeks", [0.0, -1.0, math.nan, math.inf])

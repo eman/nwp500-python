@@ -369,9 +369,11 @@ class TestTheTanksWeeks:
     ) -> None:
         assert self._given(monkeypatch, days, "--tank-weeks", "0") is None
 
-    def test_not_negative(self, days: str) -> None:
+    @pytest.mark.parametrize("weeks", ["-1", "nan", "inf"])
+    def test_a_number_of_weeks(self, days: str, weeks: str) -> None:
         result = CliRunner().invoke(
             cli_main.cli,
-            ["simulate", "calibrate", days, "--tank-weeks", "-1"],
+            ["simulate", "calibrate", days, "--tank-weeks", weeks],
         )
         assert result.exit_code == 2
+        assert "--tank-weeks" in result.output

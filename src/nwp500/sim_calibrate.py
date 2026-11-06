@@ -411,7 +411,7 @@ def _fit_tank(
         if found.n_before:
             why += (
                 f" ({found.n_before} more events before the last "
-                f"{found.weeks:g} weeks: tank_weeks)"
+                f"{found.weeks:g} weeks, which the tank is fitted on)"
             )
         return None, why
     terms = tf.TERMS
