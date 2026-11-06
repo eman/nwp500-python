@@ -1298,6 +1298,17 @@ async def simulate_record(
     help="Fit on the history before DATE (ISO 8601, local time without "
     "an offset) and score the base and the fit on the events from it",
 )
+@click.option(
+    "--tank-weeks",
+    "tank_weeks",
+    type=click.FloatRange(min=0.0),
+    default=7.0,
+    show_default=True,
+    metavar="WEEKS",
+    help="Fit the tank on its events in the last WEEKS of the history "
+    "(before --holdout-from), the history before read as their lead-in; "
+    "0 for the whole history",
+)
 @click.pass_context
 def simulate_calibrate(
     ctx: click.Context,
@@ -1309,12 +1320,15 @@ def simulate_calibrate(
     params: str | None,
     sources: str | None,
     holdout_from: str | None,
+    tank_weeks: float,
 ) -> None:
     """Fit the heater's parameters to its recorded HISTORY.
 
     Prints what each fit found, and why a term kept the base's value.
     With --holdout-from, the fit sees only the history before it, and
     the base and the fit are scored on the recorded events after it.
+    The tank is fitted on the last --tank-weeks of what the fit sees,
+    the heat pump on all of it.
     """
     sim_cli = _simulator()
     from . import calibration as cal_cli
@@ -1340,6 +1354,7 @@ def simulate_calibrate(
             if params is None
             else sim_cli.read_document(params, "parameters"),
             "record": record,
+            "tank_weeks": tank_weeks or None,
         }
         held = None
         if holdout_from is None:

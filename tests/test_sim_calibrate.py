@@ -108,6 +108,29 @@ class TestTheFits:
         assert sides.samples == "12 windows, 0 draws, 0 recoveries"
         assert sides.error.endswith("°F rms")
 
+    def test_the_tank_on_its_last_weeks(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        """The tank's terms are fitted on the events in the history's
+        last ``tank_weeks``, the days before read only as their
+        replay's lead-in; with None, on them all."""
+        readings = days_of_quiet(device_status_dict, [2 * UA] * 8 + [UA] * 12)
+        recent = sc.calibrate(
+            readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=12 / 7
+        )
+        assert recent.tank.n_windows == 12
+        loss = recent.calibration.params.loss
+        assert loss.ua_side_btu_hr_f == pytest.approx(UA, rel=0.1)
+        every = sc.calibrate(
+            readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=None
+        )
+        assert every.tank.n_windows == 20
+        assert every.calibration.params.loss.ua_side_btu_hr_f > 1.1 * UA
+        # Under the default's weeks, the whole history.
+        assert sc.TANK_WEEKS * 7 > 20
+        default = sc.calibrate(readings, ambient=AIR_F, params=_fitted(12.0))
+        assert default.tank.n_windows == 20
+
     def test_the_air_in_the_preferred_unit(
         self, device_status_dict: dict[str, Any]
     ) -> None:
