@@ -127,6 +127,24 @@ writes the fitted parameters, as a ``HeaterParams`` document:
    nwp-cli simulate calibrate history.jsonl --sources sources.toml -o params.json
    nwp-cli simulate run --params params.json
 
+The tank is fitted on its events in the last seven weeks of the history
+(``--tank-weeks``; ``sim_calibrate.TANK_WEEKS``), the history before
+them read only as the layers they start from; the heat pump on the whole
+history, whose range of air its maps need. ``--tank-weeks 0`` fits the
+tank on the whole history.
+
+Over a season the tank's fitted terms move. On one site's record
+(measured 2026-11-06), the tank fitted on its events in the seven weeks
+before 2026-09-18 (59 quiet windows, 63 draws and 28 recoveries, the
+five months read as their lead-in) scored better on the 29 days after
+than fitted on the five months before it (208, 208 and 90): 13.4 against
+16.1 minutes off a recovery, 3.1 against 3.8 °F off the day's end, 10.1
+against 11.5 % off its electricity, 0.82 against 0.79 of the
+compressor's starts placed. The probes after a draw and in standby came
+0.02 to 0.13 °F worse, the day's lowest upper probe 2.5 against 2.2 °F
+off, a recovery's electricity 4.9 against 4.3 %. Recalibrate as the
+season turns.
+
 It refits the 65 gal defaults. For another tank size, start from that
 size's parameters with ``--params``:
 
@@ -466,9 +484,9 @@ Assistant integration, can calibrate the same way:
 Refine an existing fit
 ----------------------
 
-A fit made on months of history should not give way to one made on the
-last ten days unless the new one predicts better. Pass the existing
-fit as ``params`` with ``keep_better=True``:
+A fit should not give way to one made on fewer days unless the new one
+predicts better. Pass the existing fit as ``params`` with
+``keep_better=True``:
 
 .. code-block:: python
 

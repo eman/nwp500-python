@@ -121,11 +121,12 @@ def calibrate(
     humidity: Sequence[Reading] | None = None,
     params: Any = None,
     record: Any = None,
+    tank_weeks: float | None = sc.TANK_WEEKS,
 ) -> Calibrated:
     """``sim_calibrate.calibrate`` with ``params`` a parameters
     document, its errors as ``InputError`` and its notes naming the
     command's options, the tank's fit spread over the machine's
-    processors."""
+    processors. ``tank_weeks`` as for ``sim_calibrate.calibrate``."""
     base = None if params is None else read_params(params, "--params")
     try:
         with ProcessPoolExecutor() as pool:
@@ -137,6 +138,7 @@ def calibrate(
                 params=base,
                 record=record,
                 map_=functools.partial(pool.map, chunksize=_CHUNK),
+                tank_weeks=tank_weeks,
             )
     except sc.CalibrationInputError as e:
         raise InputError(str(e)) from None
@@ -175,9 +177,11 @@ def holdout(
     humidity: Sequence[Reading] | None = None,
     params: Any = None,
     record: Any = None,
+    tank_weeks: float | None = sc.TANK_WEEKS,
 ) -> HeldOutScore:
-    """``calibrate`` on the statuses before ``start``, then the base and
-    the fit scored on the events from it. Raises ``InputError`` when
+    """``calibrate`` on the statuses before ``start``, the tank on its
+    last ``tank_weeks`` before it, then the base and the fit scored on
+    the events from it. Raises ``InputError`` when
     either side of ``start`` holds no status."""
     before = [r for r in readings if r[0] < start]
     if not before or len(before) == len(readings):
@@ -192,6 +196,7 @@ def holdout(
         humidity=humidity,
         params=params,
         record=record,
+        tank_weeks=tank_weeks,
     )
     base = (
         sim.default_params()

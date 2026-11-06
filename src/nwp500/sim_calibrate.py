@@ -34,6 +34,7 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
+import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -110,6 +111,15 @@ MIN_TANK_EVENTS = 10
 MIN_TANK_RECOVERIES = 5
 #: The tank's fit's most trials (``sim.tank_fit.fit``).
 TANK_EVALUATIONS = 300
+#: How far back from a history's end the tank's events are fitted on, weeks
+#: (``calibrate``'s ``tank_weeks``): the history before is their replay's
+#: lead-in. On one site's record (2026-11-06), the tank fitted on its events
+#: in the seven weeks before 2026-09-18 scored better on the next 29 days
+#: than fitted on the five months before it: 13.4 against 16.1 minutes off a
+#: recovery, 3.1 against 3.8 degF off the day's end, 10.1 against 11.5 % off
+#: its electricity, though the probes after a draw and in standby came 0.02
+#: to 0.13 degF worse (``calibrate-simulator``).
+TANK_WEEKS = 7.0
 
 
 class CalibrationInputError(ValueError):
@@ -336,15 +346,23 @@ class _TankEvents:
     draws: list[tf.Coast]
     recoveries: list[tf.Coast]
     why: str = ""
+    #: Events left out as before the last ``tank_weeks``, and those weeks.
+    n_before: int = 0
+    weeks: float | None = None
 
 
 def _tank_events(
-    ready: Prepared, params: HeaterParams, draws: Sequence[MeterDraw]
+    ready: Prepared,
+    params: HeaterParams,
+    draws: Sequence[MeterDraw],
+    tank_weeks: float | None = None,
 ) -> _TankEvents:
     """``ready``'s quiet windows, a meter's ``draws`` and its recoveries
     as the stratified tank's events (``sim_score.layer_coasts``,
     ``layer_recoveries``), on its replay (``sim.tank_fit.tank_record``),
-    which needs the air where the heater stands."""
+    which needs the air where the heater stands; with ``tank_weeks``,
+    only those starting that many weeks before the history's end or
+    later, the replay still reading the history before them."""
     frame = ready.frame
     if "air_f" not in frame.columns:
         return _TankEvents(None, [], [], [], "no air given")
@@ -357,11 +375,36 @@ def _tank_events(
     windows, drawn = ss.layer_coasts(found)
     climbs = ss.layer_recoveries(found, params, record)
 
-    def ordered(coasts: list[tf.Coast]) -> list[tf.Coast]:
-        return sorted(coasts, key=lambda c: c.start)
+    index = cast("pd.DatetimeIndex", frame.index)
+    first, last = cast(datetime, index[0]), cast(datetime, index[-1])
+    # Weeks longer than the history are all of it (and could be past
+    # what a timedelta holds).
+    since = (
+        None
+        if tank_weeks is None
+        or tank_weeks * 7 * 86400 >= (last - first).total_seconds()
+        else last - timedelta(weeks=tank_weeks)
+    )
 
-    return _TankEvents(
-        record, ordered(windows), ordered(drawn), ordered(climbs)
+    def ordered(coasts: list[tf.Coast]) -> list[tf.Coast]:
+        return sorted(
+            (c for c in coasts if since is None or c.start >= since),
+            key=lambda c: c.start,
+        )
+
+    kept = (ordered(windows), ordered(drawn), ordered(climbs))
+    before = len(windows) + len(drawn) + len(climbs) - sum(map(len, kept))
+    return _TankEvents(record, *kept, n_before=before, weeks=tank_weeks)
+
+
+def _before_weeks(found: _TankEvents) -> str:
+    """What ``found`` left out as before its weeks, to follow a note
+    saying its events were too few; empty if none."""
+    if not found.n_before:
+        return ""
+    return (
+        f" ({found.n_before} more events before the last "
+        f"{found.weeks:g} weeks, which the tank is fitted on)"
     )
 
 
@@ -379,9 +422,8 @@ def _fit_tank(
         return None, found.why
     coasts = [*found.windows, *found.draws]
     if len(coasts) < MIN_TANK_EVENTS:
-        return None, (
-            f"{len(coasts)} quiet windows and draws; {MIN_TANK_EVENTS} needed"
-        )
+        why = f"{len(coasts)} quiet windows and draws; {MIN_TANK_EVENTS} needed"
+        return None, why + _before_weeks(found)
     terms = tf.TERMS
     if len(found.recoveries) >= MIN_TANK_RECOVERIES:
         coasts += found.recoveries
@@ -417,6 +459,7 @@ def _keep_better_tank(
     unfitted: set[str],
     judged: list[Judged],
     map_: Callable[..., Iterable[Any]],
+    tank_weeks: float | None = None,
 ) -> tuple[
     HeaterParams, TankCalibration, tuple[tf.Coast, ...], tf.TankRecord | None
 ]:
@@ -428,8 +471,8 @@ def _keep_better_tank(
     unjudged, on every event. Returns the parameters, the fit (its
     counts the events it was fitted on), the events held out and the
     record they start from; ``unfitted`` and ``judged`` are updated in
-    place."""
-    found = _tank_events(ready, base, draws)
+    place. ``tank_weeks`` as for ``_tank_events``."""
+    found = _tank_events(ready, base, draws, tank_weeks)
     open_tank = "tank" in unfitted
     what = "quiet windows, draws and recoveries"
     events = sorted(
@@ -452,6 +495,7 @@ def _keep_better_tank(
     if found.record is not None and not open_tank and not held:
         # Nothing to judge a refit by: not worth the fit's minutes.
         j = _judge("tank", what, 0, None, None)
+        j = replace(j, why=j.why + _before_weeks(found))
         judged.append(j)
         return base, _tank_calibration(None, train, j.why), (), found.record
     fit, why = _fit_tank(base, train, map_)
@@ -495,6 +539,7 @@ def _keep_better(
     base: HeaterParams,
     draws: Sequence[MeterDraw],
     map_: Callable[..., Iterable[Any]],
+    tank_weeks: float | None = None,
 ) -> tuple[cal.Calibration, TankCalibration, tuple[Judged, ...], HeldOut]:
     """The fits in ``calibrate``'s order, the tank's then the heat
     pump's, each group's latest evidence held out of its refit, and the
@@ -504,7 +549,7 @@ def _keep_better(
     unfitted = set(base.unfitted)
     judged: list[Judged] = []
     params, tank, held_tank, record = _keep_better_tank(
-        ready, base, draws, unfitted, judged, map_
+        ready, base, draws, unfitted, judged, map_, tank_weeks
     )
     found = cal.recoveries(frame, air=recovery_air)
     params, pump, held_pump = _keep_better_heat_pump(
@@ -788,11 +833,19 @@ def _begin(
     air: Sequence[Reading] | None,
     ambient: float | None,
     params: HeaterParams | Any,
+    tank_weeks: float | None = None,
 ) -> tuple[HeaterParams, list[str]]:
     """The base to refit and the notes so far; the inputs checked before
     a history is read."""
     if air is not None and ambient is not None:
         raise CalibrationInputError("give air or ambient, not both")
+    if tank_weeks is not None and not (
+        math.isfinite(tank_weeks) and tank_weeks > 0.0
+    ):
+        raise CalibrationInputError(
+            f"tank_weeks {tank_weeks!r} is not a number of weeks over 0 "
+            "(None for the whole history)"
+        )
     if params is None:
         return sim.default_params(), [DEFAULT_BASE_NOTE]
     return _base(params), []
@@ -809,6 +862,7 @@ def calibrate(
     draws: Sequence[MeterDraw] = (),
     keep_better: bool = False,
     map_: Callable[..., Iterable[Any]] = map,
+    tank_weeks: float | None = TANK_WEEKS,
 ) -> Calibrated:
     """``params`` (``HeaterParams`` or a parameters document; default
     the 65 gal defaults) refitted on ``readings``, the statuses the
@@ -830,12 +884,16 @@ def calibrate(
     replay takes them, and its terms are fitted on the hours after them
     too. ``map_(function, a, b, c)`` maps the tank's fit over its
     events: a process pool's ``map`` spreads it (a fit on months of
-    history takes minutes on one).
+    history takes minutes on one). ``tank_weeks``: the tank's events
+    only from that many weeks before the history's end (``TANK_WEEKS``),
+    the history before them their replay's lead-in, or all of them with
+    None. The heat pump is fitted on the whole history, whose range of
+    air its maps need.
 
     Readings further apart than ``max_gap`` of them are a span nobody
     observed, and no fit spans one. Raises ``CalibrationInputError``
     for both ``air`` and ``ambient``, a ``params`` that is not a
-    parameters document, or no readings.
+    parameters document, a ``tank_weeks`` not over 0, or no readings.
 
     ``keep_better``: refine ``params`` without making it worse. Each
     group of terms (``GROUPS``) holds out its latest evidence (the last
@@ -847,7 +905,7 @@ def calibrate(
     a fit of this heater: the defaults are another heater's fit, and
     would be kept wherever the evidence is too little to judge by.
     """
-    base, notes = _begin(air, ambient, params)
+    base, notes = _begin(air, ambient, params, tank_weeks)
     frame = sa.history(readings)
     if frame.empty:
         raise CalibrationInputError("the history holds no statuses")
@@ -862,6 +920,7 @@ def calibrate(
         draws=draws,
         keep_better=keep_better,
         map_=map_,
+        tank_weeks=tank_weeks,
     )
 
 
@@ -878,6 +937,7 @@ def calibrate_changes(
     draws: Sequence[MeterDraw] = (),
     keep_better: bool = False,
     map_: Callable[..., Iterable[Any]] = map,
+    tank_weeks: float | None = TANK_WEEKS,
 ) -> Calibrated:
     """``calibrate`` on a heater's values' changes (``rows``) instead of
     its statuses, with ``observed`` the instants it was heard from
@@ -885,10 +945,10 @@ def calibrate_changes(
     read_heater_history`` reads both from Home Assistant). ``notes``
     open the result's (a reader's). The rows are counted in
     ``n_statuses``. Raises ``CalibrationInputError`` as ``calibrate``
-    does, or for no ``observed`` instants. ``draws``, ``keep_better``
-    and ``map_`` as for ``calibrate``.
+    does, or for no ``observed`` instants. ``draws``, ``keep_better``,
+    ``map_`` and ``tank_weeks`` as for ``calibrate``.
     """
-    base, more = _begin(air, ambient, params)
+    base, more = _begin(air, ambient, params, tank_weeks)
     frame, gaps = _change_frame(rows, observed)
     return _fit(
         frame,
@@ -902,6 +962,7 @@ def calibrate_changes(
         draws=draws,
         keep_better=keep_better,
         map_=map_,
+        tank_weeks=tank_weeks,
     )
 
 
@@ -1025,9 +1086,10 @@ def _fit(
     draws: Sequence[MeterDraw] = (),
     keep_better: bool = False,
     map_: Callable[..., Iterable[Any]] = map,
+    tank_weeks: float | None = TANK_WEEKS,
 ) -> Calibrated:
     """The fits on ``frame`` (``history``'s or ``change_history``'s),
-    prepared (``_prepare``)."""
+    prepared (``_prepare``), the tank's on its last ``tank_weeks``."""
     ready = _prepare(frame, notes, air, ambient, humidity, record, gaps)
     frame, how, recovery_air = ready.frame, ready.air, ready.recovery_air
     gap, n_gaps = ready.max_gap, ready.n_gaps
@@ -1035,9 +1097,11 @@ def _fit(
     judged: tuple[Judged, ...] = ()
     held: HeldOut | None = None
     if keep_better:
-        fitted, tank, judged, held = _keep_better(ready, base, draws, map_)
+        fitted, tank, judged, held = _keep_better(
+            ready, base, draws, map_, tank_weeks
+        )
     else:
-        found = _tank_events(ready, base, draws)
+        found = _tank_events(ready, base, draws, tank_weeks)
         fit, why = _fit_tank(base, found, map_)
         tank = _tank_calibration(fit, found, why)
         start = base if fit is None else fit.params

@@ -326,3 +326,54 @@ class TestHoldout:
     def test_not_a_date(self) -> None:
         with pytest.raises(InputError, match="ISO 8601"):
             cal_cli.parse_instant("next week", "--holdout-from")
+
+
+class TestTheTanksWeeks:
+    """``--tank-weeks``: the tank fitted on the history's last weeks."""
+
+    @pytest.fixture
+    def days(self, tmp_path: Path, device_status_dict: dict[str, Any]) -> str:
+        """A quiet day: the tank coasting from 130 °F."""
+        path = tmp_path / "days.jsonl"
+        path.write_text("\n".join(quiet_lines(device_status_dict)) + "\n")
+        return str(path)
+
+    def _given(
+        self, monkeypatch: pytest.MonkeyPatch, days: str, *more: str
+    ) -> Any:
+        seen: dict[str, Any] = {}
+        real = cal_cli.calibrate
+
+        def calibrate(readings: Any, **kw: Any) -> Any:
+            seen.update(kw)
+            return real(readings, **kw)
+
+        monkeypatch.setattr(cal_cli, "calibrate", calibrate)
+        result = CliRunner().invoke(
+            cli_main.cli,
+            ["simulate", "calibrate", days, "--ambient", str(AIR_F), *more],
+        )
+        assert result.exit_code == 0, result.output
+        return seen["tank_weeks"]
+
+    def test_the_library_s_by_default(
+        self, monkeypatch: pytest.MonkeyPatch, days: str
+    ) -> None:
+        assert self._given(monkeypatch, days) == sc.TANK_WEEKS
+
+    def test_given(self, monkeypatch: pytest.MonkeyPatch, days: str) -> None:
+        assert self._given(monkeypatch, days, "--tank-weeks", "2.5") == 2.5
+
+    def test_none_for_the_whole_history(
+        self, monkeypatch: pytest.MonkeyPatch, days: str
+    ) -> None:
+        assert self._given(monkeypatch, days, "--tank-weeks", "0") is None
+
+    @pytest.mark.parametrize("weeks", ["-1", "nan", "inf"])
+    def test_a_number_of_weeks(self, days: str, weeks: str) -> None:
+        result = CliRunner().invoke(
+            cli_main.cli,
+            ["simulate", "calibrate", days, "--tank-weeks", weeks],
+        )
+        assert result.exit_code == 2
+        assert "--tank-weeks" in result.output

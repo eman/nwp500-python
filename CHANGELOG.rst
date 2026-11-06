@@ -416,6 +416,24 @@ Added
 Changed
 -------
 
+- **The tank is calibrated on the history's last seven weeks.**
+  ``sim_calibrate.calibrate`` and ``calibrate_changes`` fit the tank's
+  terms on the quiet windows, draws and recoveries starting in the last
+  ``tank_weeks`` of the history (``TANK_WEEKS``, 7), the history before
+  them read only as their replay's lead-in; ``tank_weeks=None`` fits on
+  every event, as before. The heat pump is still fitted on the whole
+  history. ``nwp-cli simulate calibrate --tank-weeks WEEKS`` sets it (0
+  for the whole history), counted back from the history's last status
+  (with ``--holdout-from``, the last before it). On one site's record,
+  the tank fitted on its events in the seven weeks before 2026-09-18
+  scored better on the next 29 days than fitted on the five months
+  before: 13.4 against 16.1 minutes off a recovery, 3.1 against 3.8 °F
+  off the day's end, 10.1 against 11.5 % off its electricity, 0.82
+  against 0.79 of the compressor's starts placed; the probes after a
+  draw and in standby 0.02 to 0.13 °F worse, the day's lowest upper
+  probe 2.5 against 2.2 °F off and a recovery's electricity 4.9 against
+  4.3 % (``calibrate-simulator``).
+
 - **The probes' lean stops at 0.75 of the height.** A profile built from
   the two probes (``stratified.estimate``) and the replay's correction
   toward them (``assimilate``) ran linear from the lower probe's height
