@@ -262,7 +262,10 @@ class TestTheRunningCycle:
     def test_a_cycle_past_its_run_on_has_nothing_left(
         self, params: HeaterParams, past: float
     ) -> None:
-        lower = 140.0 + params.controller.hp_stop_overshoot_f + past
+        # Its probe reads warm over the water (``running_probes_warm_f``):
+        # past the run-on is the water's.
+        warm = params.compressor.running_probes_warm_f[1]
+        lower = 140.0 + params.controller.hp_stop_overshoot_f + warm + past
         a = active_cycle(
             HeaterState(upper_f=141.0, lower_f=lower, compressor_running=True),
             SETTINGS,

@@ -1034,3 +1034,79 @@ class TestARunUnderWayAtTheStart:
         assert (first.upper_f, first.lower_f) == pytest.approx(
             (128.0, 110.0), abs=0.02
         )
+
+    def test_a_run_ending_now_ends_on_the_water(
+        self, params: HeaterParams
+    ) -> None:
+        # Its probe at the stop, the water under it is not: the walk and
+        # the active cycle both heat on to the water's stop.
+        s = _scenario(
+            state=HeaterState(
+                upper_f=141.0, lower_f=142.2, compressor_running=True
+            )
+        )
+        stop = s.settings.setpoint_f + params.controller.hp_stop_overshoot_f
+        assert s.state.lower_f >= stop
+        cycle = active_cycle(
+            s.state, s.settings, s.environment, params, at=s.start
+        )
+        run = simulate(s, params).simulation.heating[0]
+        assert cycle.remaining_minutes is not None
+        assert cycle.remaining_minutes > 0.0
+        assert run.end - s.start > timedelta(0)
+        dl = params.compressor.running_probes_warm_f[1]
+        past = s.state.model_copy(update={"lower_f": stop + dl})
+        done = active_cycle(past, s.settings, s.environment, params, at=s.start)
+        assert done.remaining_minutes == 0.0
+
+    def test_a_forecast_from_the_water(self, params: HeaterParams) -> None:
+        from nwp500.sim.api import forecast
+
+        state = HeaterState(
+            upper_f=139.0, lower_f=140.5, compressor_running=True
+        )
+        got = forecast(
+            state,
+            Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+            Environment(ambient_f=AMBIENT_F, humidity=48.0),
+            params,
+            at=T0,
+            target_time=T0 + timedelta(hours=1),
+            target_lower_f=140.0,
+            history=History(compressor_stopped_at=at(-2.0)),
+        )
+        assert got.status != "no_heating_required"
+        dl = params.compressor.running_probes_warm_f[1]
+        assert got.lower_f_at_start <= 140.5 - dl + 0.02
+
+    def test_a_walks_end_state_is_its_water_next(
+        self, params: HeaterParams
+    ) -> None:
+        from nwp500.sim.api import next_recovery
+
+        first = simulate(
+            _scenario(
+                horizon=timedelta(minutes=30),
+                state=HeaterState(
+                    upper_f=126.0, lower_f=112.0, compressor_running=True
+                ),
+            ),
+            params,
+        )
+        end = first.end_state
+        assert end is not None and end.compressor_running
+        then = _scenario(start=first.until, state=end)
+        at_rest = replace(
+            params,
+            compressor=replace(
+                params.compressor, running_probes_warm_f=(0.0, 0.0)
+            ),
+        )
+        got = next_recovery(then, params)
+        want = next_recovery(
+            then.model_copy(
+                update={"state": end.model_copy(update={"resume": None})}
+            ),
+            at_rest,
+        )
+        assert got == want

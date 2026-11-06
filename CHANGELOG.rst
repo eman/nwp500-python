@@ -69,16 +69,19 @@ Added
   not starting there (``running_starts``) nor resumed from a walk's end
   (``HeaterState.resume``), takes its tank as the probes less these, its
   layers given moved so much at the probes (``TankPhysics.at_probes``),
-  in ``simulate``, ``readiness``'s recovery and ``active_cycle``. The
-  values are the probes' step down in the 5 minutes after 47 quiet stops
-  of runs heating 40 minutes or more (measured 2026-10-28,
-  ``recovery-speed``). On the 29 held-out days at
+  in ``simulate``, ``forecast`` (and so ``next_recovery`` and
+  ``readiness``'s recovery) and ``active_cycle``, whose checks of the
+  water at the target are of it too. A walk's end state
+  (``HeaterState.resume`` given, carried or dropped) holds the walk's
+  water and is taken as it is. The values are the probes' step down in
+  the 5 minutes after 47 quiet stops of runs heating 40 minutes or more
+  (measured 2026-10-28, ``recovery-speed``). On the 29 held-out days at
   ``DrawParams.meter_reads`` 0.85 (measured 2026-11-06), the five runs
   under way at a day's start on a hot tank, 22 to 128 minutes from their
   stop, came 4.7 to 15.2 minutes short (8.5 on average), reaching the
   stop on probes read warm, and now 2.9 short on average; walked from
   their recorded starts, four of them come 3.0 short to 10.2 long. The
-  day's electricity comes 11.42 % off and 0.72 % low against 12.66 and
+  day's electricity comes 11.41 % off and 0.72 % low against 12.66 and
   2.15, the tank's metrics within 0.02 degF.
 - **The evaporator fan's high speed in the compressor's power.**
   ``CompressorParams.fan_high_below_air_f`` (None unless set) and
