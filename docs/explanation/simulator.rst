@@ -767,12 +767,13 @@ plane's at 60 to 80 degF of air, a season the air does not account for.
 ``CompressorParams.power_air_knee_f`` with ``power_w_per_air_below_f``
 gives the power a slope of its own under a knee; at 60 degF and +2.94 W
 a degF, fitted on the blocks before 2026-09-18 with the plane kept, the
-winter's blocks under it read 4.1 W low and the 50 held out 18.0, and
-the 29 days' electricity comes 12.69 % off and 2.37 % low against 12.80
-and 2.48. The knee is set where the summer's blocks break, not fitted:
-the fits tried, a flat floor refitted with its plane and the slope over
-knees from 58 to 64 degF, each erred less the higher it went, to the top
-of the range tried (68 and 64 degF), the winter's season pulling them.
+winter's blocks under it, in the fit, read 4.1 W low and the 50 held out
+18.0, and the 29 days' electricity comes 12.69 % off and 2.37 % low
+against 12.80 and 2.48. The knee is set where the summer's blocks break,
+not fitted: the fits tried, a flat floor refitted with its plane and the
+slope over knees from 58 to 64 degF, each erred less the higher it went,
+to the top of the range tried (68 and 64 degF), the winter's season
+pulling them.
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off

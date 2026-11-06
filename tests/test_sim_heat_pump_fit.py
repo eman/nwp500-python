@@ -562,7 +562,7 @@ class TestTheSlopesSigns:
         assert got.air_f[0] < 50.0
         plain = hpf.fit_power_map(rows)
         assert plain is not None
-        assert plain.per_air_below == 0.0
+        assert plain.per_air_below is None
 
     def test_the_fit_reads_the_bases_knee(self) -> None:
         base = replace(default_params().compressor, power_air_knee_f=60.0)
@@ -576,6 +576,37 @@ class TestTheSlopesSigns:
         c = hpf.with_planes(base, None, fit.power)
         assert c.power_w_per_air_below_f == pytest.approx(3.0)
         assert c.power_air_knee_f == 60.0
+
+    def test_the_slope_under_the_knee_is_not_negative(self) -> None:
+        rows = self._kneed(7)
+        rows["power_w"] -= 6.0 * np.maximum(0.0, 60.0 - rows["air_f"])
+        got = hpf.fit_power_map(rows, 60.0)
+        assert got is not None
+        assert got.per_air_below == 0.0
+
+    def test_too_little_over_the_knee_fits_no_plane(self) -> None:
+        rows = self._kneed(8)
+        # Every block over the knee at one water: no plane there.
+        one_water = rows.assign(
+            water_f=rows["water_f"].where(rows["air_f"] < 60.0, 120.0)
+        )
+        assert hpf.fit_power_map(one_water, 60.0) is None
+        # Fewer blocks over the knee than a fit needs.
+        assert hpf.fit_power_map(rows, 88.0) is None
+        assert hpf.fit_power_map(rows) is not None
+
+    def test_no_block_under_the_knee_keeps_the_slope(self) -> None:
+        rows = self._kneed(9)
+        warm = rows.loc[rows["air_f"] >= 60.0].reset_index(drop=True)
+        got = hpf.fit_power_map(warm, 60.0)
+        assert got is not None
+        assert got.per_air_below is None
+        base = replace(
+            default_params().compressor,
+            power_air_knee_f=60.0,
+            power_w_per_air_below_f=2.5,
+        )
+        assert hpf.with_planes(base, None, got).power_w_per_air_below_f == 2.5
 
     def test_the_powers_air_is_free(self) -> None:
         rng = np.random.default_rng(3)

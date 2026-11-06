@@ -663,8 +663,10 @@ class Plane:
     air_f: tuple[float, float] | None = None
     water_f: tuple[float, float] | None = None
     #: The power's slope under its air knee, W per °F under it
-    #: (``CompressorParams.power_w_per_air_below_f``); 0 for the heat.
-    per_air_below: float = 0.0
+    #: (``CompressorParams.power_w_per_air_below_f``); None when not
+    #: fitted (no knee, or no block under it): ``with_planes`` keeps
+    #: the parameters' own.
+    per_air_below: float | None = None
 
 
 #: The sign each map's slope takes, per °F of the air and of the water,
@@ -754,9 +756,11 @@ def fit_power_map(
     air and the water they were read at (``power_blocks``' ``water_f``);
     None with fewer than ``MIN_POWER_BLOCKS``. With an air knee
     (``CompressorParams.power_air_knee_f``) the plane is fitted on the
-    blocks at or over it, when they number ``MIN_POWER_BLOCKS``, and
-    the slope under it on what the plane leaves of the rest, by least
-    squares; the span is every block's."""
+    blocks at or over it, None unless they number ``MIN_POWER_BLOCKS``
+    and place one (a plane through the cold blocks too would take in the
+    slope it is to leave), and the slope under it on what the plane
+    leaves of the rest, by least squares and at least 0, None with no
+    block there; the span is every block's."""
     if len(rows) < MIN_POWER_BLOCKS:
         return None
     air, water, power = _columns(rows, "air_f", "water_f", "power_w")
@@ -765,7 +769,7 @@ def fit_power_map(
         return _fit_plane(air, water, power, ones, POWER_SLOPE_SIGNS)
     over = air >= air_knee_f
     if int(over.sum()) < MIN_POWER_BLOCKS:
-        over = np.ones(len(rows), dtype=bool)
+        return None
     plane = _fit_plane(
         air[over], water[over], power[over], ones[over], POWER_SLOPE_SIGNS
     )
@@ -777,8 +781,12 @@ def fit_power_map(
         + plane.per_air * (air[air < air_knee_f] - MAP_REF_AIR_F)
         + plane.per_water * (water[air < air_knee_f] - MAP_REF_WATER_F)
     )
+    # At least 0: the knee is set where colder air draws more than the
+    # plane carried down, not less.
     below = (
-        float(np.sum(under * left) / np.sum(under**2)) if len(under) else 0.0
+        max(0.0, float(np.sum(under * left) / np.sum(under**2)))
+        if len(under)
+        else None
     )
     return replace(
         plane, air_f=_span(air), water_f=_span(water), per_air_below=below
@@ -841,9 +849,14 @@ def violations(
     ``cop_over_carnot``, ``evaporator_heat_negative``,
     ``power_too_low``; empty when none. The grid holds the envelope's
     corners, where the heat less the power, a plane in each, has its
-    extremes."""
+    extremes, and the power's air knee (``power_air_knee_f``) inside
+    it, where the power, a plane with a slope of its own under the
+    knee, may have its least."""
     found: set[str] = set()
     airs = np.linspace(*air_f, CHECK_POINTS)
+    knee = c.power_air_knee_f
+    if knee is not None and air_f[0] < knee < air_f[1]:
+        airs = np.sort(np.append(airs, knee))
     waters = np.linspace(*water_f, CHECK_POINTS)
     for air in airs:
         for water in waters:
@@ -880,7 +893,11 @@ def with_planes(
             power_w_per_air_f=power.per_air,
             power_w_per_water_f=power.per_water,
             power_w_per_air_water_f=0.0,
-            power_w_per_air_below_f=power.per_air_below,
+            power_w_per_air_below_f=(
+                c.power_w_per_air_below_f
+                if power.per_air_below is None
+                else power.per_air_below
+            ),
             power_domain_air_f=power.air_f or c.power_domain_air_f,
             power_domain_water_f=power.water_f or c.power_domain_water_f,
         )

@@ -1214,6 +1214,7 @@ _GROUP_TERMS = {
         "Power at 65 °F air, 120 °F water (W)",
         "Power per °F of air (W)",
         "Power per °F of water (W)",
+        "Power per °F of air under its knee (W)",
     ),
     "run_on": ("Run-on overshoot (°F)",),
 }
@@ -1231,6 +1232,7 @@ def _values(params: HeaterParams) -> dict[str, str]:
         _num(c.power_w),
         _num(c.power_w_per_air_f),
         _num(c.power_w_per_water_f),
+        _num(c.power_w_per_air_below_f),
         _num(params.controller.hp_stop_overshoot_f),
     )
     names = [n for group in _GROUP_TERMS.values() for n in group]
@@ -1431,7 +1433,12 @@ def report(done: Calibrated) -> list[Term]:
         for i, (name, value) in enumerate(
             zip(
                 _GROUP_TERMS["power_map"],
-                (cp.power_w, cp.power_w_per_air_f, cp.power_w_per_water_f),
+                (
+                    cp.power_w,
+                    cp.power_w_per_air_f,
+                    cp.power_w_per_water_f,
+                    cp.power_w_per_air_below_f,
+                ),
                 strict=True,
             )
         )

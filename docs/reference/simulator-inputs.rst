@@ -824,9 +824,12 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        2026-09-18), and from 60 to 80 degF of air within 3.3 W of the
        meter in each bin of the fit period and the held out (60-62,
        62-65, 65-70, 70-80). A knee at 60 degF with +2.94 W per degF
-       under it, fitted on the blocks before 2026-09-18, takes those to
-       4.1 and 18.0 W low. A fit run with a knee set fits the plane on
-       the blocks at or over it and the slope on the rest.
+       under it, fitted on the blocks before 2026-09-18 with the plane
+       kept, takes those to 4.1 W low (the winter's, in the fit) and
+       18.0 W (the held out's). A calibration with a knee set fits the
+       plane on the blocks at or over it and the slope, at least 0, on
+       the rest; with too few over the knee it keeps the base's map,
+       and with none under it the base's slope.
      - 2026-11-05
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``

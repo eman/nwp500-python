@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
+import numpy as np
 import pytest
 
 from nwp500 import sim
@@ -100,6 +101,28 @@ class TestTheMap:
         assert "evaporator_heat_negative" not in hpf.violations(
             c, (61.0, 113.0)
         )
+
+    def test_the_power_at_its_knee_is_checked(self) -> None:
+        # Steep either side of a knee between two of the grid's airs, the
+        # power is over MIN_POWER_W at every one but under it at the knee.
+        air_f = (40.0, 110.0)
+        airs = np.linspace(*air_f, hpf.CHECK_POINTS)
+        knee = float((airs[3] + airs[4]) / 2)
+        level = hpf.MIN_POWER_W - 1.0 - 60.0 * (knee - 65.0)
+        c = replace(
+            C,
+            power_w=level,
+            power_w_per_air_f=60.0,
+            power_w_per_water_f=0.0,
+            power_w_per_air_water_f=0.0,
+            power_air_knee_f=knee,
+            power_w_per_air_below_f=120.0,
+        )
+        assert hp.power_w(c, knee, 120.0) < hpf.MIN_POWER_W
+        assert all(
+            hp.power_w(c, float(a), 120.0) > hpf.MIN_POWER_W for a in airs
+        )
+        assert "power_too_low" in hpf.violations(c, air_f)
 
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)

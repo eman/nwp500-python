@@ -66,15 +66,18 @@ Added
   electricity is its plane's plus the slope for each degF the air is
   under it (``physics.heat_pump.power_w``); the heat is unchanged.
   ``heat_pump_fit.fit_power_map`` takes the knee (``fit_heat_pump`` the
-  base's) and fits the plane on the blocks at or over it and the slope
-  on the rest (``Plane.per_air_below``). On the site's 10-minute metered
-  climb blocks at the condenser's water (measured 2026-11-05) the plane
-  alone read the 1,807 winter blocks under 60 degF 19.2 W low and the 50
-  held out 26.3 W low; a knee at 60 degF with +2.94 W per degF, fitted
-  on the blocks before 2026-09-18 with the plane kept, reads them 4.1
-  and 18.0 W low. The 29 held-out days at ``DrawParams.meter_reads``
-  0.85, few of them in such air, move only in their electricity: 12.69 %
-  off against 12.80, 2.37 % low against 2.48.
+  base's) and fits the plane on the blocks at or over it and the slope,
+  at least 0, on the rest (``Plane.per_air_below``), fitting no plane
+  with too few over the knee and keeping the base's slope with none
+  under it; the calibration report shows the slope, and ``violations``
+  checks the power at the knee. On the site's 10-minute metered climb
+  blocks at the condenser's water (measured 2026-11-05) the plane alone
+  read the 1,807 winter blocks under 60 degF 19.2 W low and the 50 held
+  out 26.3 W low; a knee at 60 degF with +2.94 W per degF, fitted on the
+  blocks before 2026-09-18 with the plane kept, reads them 4.1 W low (in
+  the fit) and 18.0 W low. The 29 held-out days at
+  ``DrawParams.meter_reads`` 0.85, few of them in such air, move only in
+  their electricity: 12.69 % off against 12.80, 2.37 % low against 2.48.
 - **The house meter's reading of a gallon.** ``DrawParams.meter_reads``
   (1, the meter as it reads, unless set; over 0 and at most 2) takes
   each metered gallon as ``1 / meter_reads`` delivered

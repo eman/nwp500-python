@@ -168,6 +168,7 @@ class TestTheFits:
         power = terms["Power at 65 °F air, 120 °F water (W)"]
         assert not power.fitted
         assert power.why == "4 metered climb blocks; 30 needed"
+        assert "Power per °F of air under its knee (W)" in terms
         assert "Start hold by time off (min)" not in terms
         assert not terms["Run-on overshoot (°F)"].fitted
         claims = replace(
