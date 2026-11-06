@@ -13,6 +13,38 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+A cold-air slope in the compressor's power under a knee (2026-11-05)
+====================================================================
+
+**Tried.** Built (#390): ``CompressorParams.power_air_knee_f`` and
+``power_w_per_air_below_f``, the power map's electricity its plane's
+plus a slope for each degF the air is under a knee, the knee set at 60
+degF and the slope fitted at +2.94 W a degF on the 10-minute metered
+climb blocks at the condenser's water before 2026-09-18 with the plane
+kept. A flat floor on the power's air, refitted with its plane, was
+measured first.
+
+**Found.** The 1,807 winter blocks under 60 degF read 4.1 W low (in the
+fit) against 19.2 with the plane alone, the 50 held out 18.0 against
+26.3, and the 29 held-out days' electricity 12.69 % off against 12.80.
+Every fit of the knee erred less the higher the knee (to 68 degF for the
+floor, 64 for the slope), the winter's blocks at 60 to 80 degF reading 4
+to 9 W over the plane. The evaporator fan's two speeds carry both
+(measured 2026-11-05): its high speed drew 23.7 W more, and a step for
+it at 60.5 degF read the winter's blocks under 60 degF 0.4 W low and the
+held out 7.5, the 29 days' electricity 12.64 % off.
+
+**Why dropped.** The slope stood for a step: the power does not rise
+with the cold under the knee, it rises once, with the fan's speed. The
+fan's step (``CompressorParams.fan_high_below_air_f``, ``fan_high_w``)
+took its place before a release.
+
+**Account.** :doc:`simulator`, "Accuracy", the cold-air power. The
+scripts and scores are kept with the site's
+(``compressor-power-2026-11-05``, ``winter-offset-2026-11-05``;
+``params-site-fit-before-2026-09-18-share-0.25-power-knee60-*``).
+
+
 A 7 gal inlet zone and tank refits, for the early starts (2026-11-05)
 =====================================================================
 

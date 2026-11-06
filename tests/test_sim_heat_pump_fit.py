@@ -534,8 +534,8 @@ class TestTheSlopesSigns:
         assert got.level == pytest.approx(4500.0)
 
     @staticmethod
-    def _kneed(seed: int) -> pd.DataFrame:
-        # 1.2 W per °F of air over 60 °F, and 3 W more for each °F under.
+    def _fanned(seed: int) -> pd.DataFrame:
+        # 1.2 W per °F of air, and the fan's high speed 24 W under 60 °F.
         rng = np.random.default_rng(seed)
         air = rng.uniform(45.0, 90.0, 120)
         water = rng.uniform(70.0, 145.0, 120)
@@ -546,67 +546,67 @@ class TestTheSlopesSigns:
                 "power_w": 400.0
                 + 1.2 * (air - 65.0)
                 + 2.7 * (water - 120.0)
-                + 3.0 * np.maximum(0.0, 60.0 - air),
+                + 24.0 * (air < 60.0),
             }
         )
 
-    def test_the_power_is_fitted_with_its_knee(self) -> None:
-        rows = self._kneed(5)
+    def test_the_power_is_fitted_with_its_fan(self) -> None:
+        rows = self._fanned(5)
         got = hpf.fit_power_map(rows, 60.0)
         assert got is not None
         assert got.per_air == pytest.approx(1.2)
-        assert got.per_air_below == pytest.approx(3.0)
+        assert got.fan_high == pytest.approx(24.0)
         assert got.level == pytest.approx(400.0)
-        # The span is every block's, under the knee too.
+        # The span is every block's, the fan's high speed's too.
         assert got.air_f is not None
         assert got.air_f[0] < 50.0
         plain = hpf.fit_power_map(rows)
         assert plain is not None
-        assert plain.per_air_below is None
+        assert plain.fan_high is None
 
-    def test_the_fit_reads_the_bases_knee(self) -> None:
-        base = replace(default_params().compressor, power_air_knee_f=60.0)
+    def test_the_fit_reads_the_bases_fan(self) -> None:
+        base = replace(default_params().compressor, fan_high_below_air_f=60.0)
         found = hpf.Evidence(
-            heat=pd.DataFrame(), power=self._kneed(6), runs=pd.DataFrame()
+            heat=pd.DataFrame(), power=self._fanned(6), runs=pd.DataFrame()
         )
         fit = hpf.fit_heat_pump(found, base)
         assert fit.power is not None
-        assert fit.power.per_air_below == pytest.approx(3.0)
+        assert fit.power.fan_high == pytest.approx(24.0)
         assert fit.power_error == pytest.approx(0.0, abs=1e-6)
         c = hpf.with_planes(base, None, fit.power)
-        assert c.power_w_per_air_below_f == pytest.approx(3.0)
-        assert c.power_air_knee_f == 60.0
+        assert c.fan_high_w == pytest.approx(24.0)
+        assert c.fan_high_below_air_f == 60.0
 
-    def test_the_slope_under_the_knee_is_not_negative(self) -> None:
-        rows = self._kneed(7)
-        rows["power_w"] -= 6.0 * np.maximum(0.0, 60.0 - rows["air_f"])
+    def test_the_fans_step_is_not_negative(self) -> None:
+        rows = self._fanned(7)
+        rows["power_w"] -= 40.0 * (rows["air_f"] < 60.0)
         got = hpf.fit_power_map(rows, 60.0)
         assert got is not None
-        assert got.per_air_below == 0.0
+        assert got.fan_high == 0.0
 
-    def test_too_little_over_the_knee_fits_no_plane(self) -> None:
-        rows = self._kneed(8)
-        # Every block over the knee at one water: no plane there.
+    def test_too_little_at_the_low_speed_fits_no_plane(self) -> None:
+        rows = self._fanned(8)
+        # Every block at the low speed at one water: no plane there.
         one_water = rows.assign(
             water_f=rows["water_f"].where(rows["air_f"] < 60.0, 120.0)
         )
         assert hpf.fit_power_map(one_water, 60.0) is None
-        # Fewer blocks over the knee than a fit needs.
+        # Fewer blocks at the low speed than a fit needs.
         assert hpf.fit_power_map(rows, 88.0) is None
         assert hpf.fit_power_map(rows) is not None
 
-    def test_no_block_under_the_knee_keeps_the_slope(self) -> None:
-        rows = self._kneed(9)
+    def test_no_block_at_the_high_speed_keeps_the_step(self) -> None:
+        rows = self._fanned(9)
         warm = rows.loc[rows["air_f"] >= 60.0].reset_index(drop=True)
         got = hpf.fit_power_map(warm, 60.0)
         assert got is not None
-        assert got.per_air_below is None
+        assert got.fan_high is None
         base = replace(
             default_params().compressor,
-            power_air_knee_f=60.0,
-            power_w_per_air_below_f=2.5,
+            fan_high_below_air_f=60.0,
+            fan_high_w=18.0,
         )
-        assert hpf.with_planes(base, None, got).power_w_per_air_below_f == 2.5
+        assert hpf.with_planes(base, None, got).fan_high_w == 18.0
 
     def test_the_powers_air_is_free(self) -> None:
         rng = np.random.default_rng(3)

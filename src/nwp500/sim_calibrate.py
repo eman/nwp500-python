@@ -608,13 +608,13 @@ def _keep_better_heat_pump(
         needed: int,
         n_all: int,
         n_fit: int,
-        knee: float | None = None,
+        fan: float | None = None,
     ) -> bool:
         """Whether ``group``'s refit plane is taken. ``n_fit``: the
         ``what`` the refit had; with as many as ``needed`` and still no
-        plane, they were too alike to place one, or with a ``knee``
-        (``CompressorParams.power_air_knee_f``) too few or too alike at
-        or over it."""
+        plane, they were too alike to place one, or with a ``fan`` air
+        (``CompressorParams.fan_high_below_air_f``) too few or too alike
+        at or over it."""
         if fitted is None:
             if term not in unfitted:
                 j = _judge(
@@ -629,9 +629,9 @@ def _keep_better_heat_pump(
                 if n_fit >= needed:
                     where = (
                         ""
-                        if knee is None
-                        else f", too few or too alike at or over the "
-                        f"{knee:g} °F knee"
+                        if fan is None
+                        else f", too few or too alike at or over {fan:g} "
+                        "°F, the fan's low speed"
                     )
                     j = replace(
                         j,
@@ -685,7 +685,7 @@ def _keep_better_heat_pump(
         hpf.MIN_POWER_BLOCKS,
         len(found.power),
         refit.n_power,
-        base.power_air_knee_f,
+        base.fan_high_below_air_f,
     )
     compressor = hpf.with_planes(
         heated, None, refit.power if take_power else None
@@ -1234,7 +1234,7 @@ _GROUP_TERMS = {
         "Power at 65 °F air, 120 °F water (W)",
         "Power per °F of air (W)",
         "Power per °F of water (W)",
-        "Power per °F of air under its knee (W)",
+        "Fan's high speed (W)",
     ),
     "run_on": ("Run-on overshoot (°F)",),
 }
@@ -1252,7 +1252,7 @@ def _values(params: HeaterParams) -> dict[str, str]:
         _num(c.power_w),
         _num(c.power_w_per_air_f),
         _num(c.power_w_per_water_f),
-        _num(c.power_w_per_air_below_f),
+        _num(c.fan_high_w),
         _num(params.controller.hp_stop_overshoot_f),
     )
     names = [n for group in _GROUP_TERMS.values() for n in group]
@@ -1398,17 +1398,18 @@ def report(done: Calibrated) -> list[Term]:
         return f"{air_why}; {why}" if air_why else why
 
     def no_plane(
-        n: int, what: str, needed: int, knee: float | None = None
+        n: int, what: str, needed: int, fan: float | None = None
     ) -> str:
         """Why no plane was fitted: too few ``what``, or with enough
-        they were too alike to place one (and with a ``knee``, too few
-        or too alike at or over it)."""
+        they were too alike to place one (and with a ``fan`` air, too
+        few or too alike at or over it)."""
         if n < needed:
             return needs(n, what, needed)
         where = (
             ""
-            if knee is None
-            else f", too few or too alike at or over the {knee:g} °F knee"
+            if fan is None
+            else f", too few or too alike at or over {fan:g} °F, the "
+            "fan's low speed"
         )
         return f"{n} {what} place no plane{where}"
 
@@ -1421,12 +1422,12 @@ def report(done: Calibrated) -> list[Term]:
             hpf.MIN_HEAT_STRETCHES,
         )
     )
-    knee = cp.power_air_knee_f
+    fan = cp.fan_high_below_air_f
     power_why = claims(pump.power_violations) or (
         ""
         if pump.power is not None
         else no_plane(
-            pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS, knee
+            pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS, fan
         )
     )
     heat_error = (
@@ -1459,21 +1460,19 @@ def report(done: Calibrated) -> list[Term]:
             )
         )
     ]
-    # The slope under the knee is fitted only with a knee and a block
-    # under it; else it is the base's (``heat_pump_fit.with_planes``).
-    below_fitted = (
-        pump.power is not None and pump.power.per_air_below is not None
-    )
-    below_why = (
+    # The fan's step is fitted only with its air set and a block under
+    # it; else it is the base's (``heat_pump_fit.with_planes``).
+    fan_fitted = pump.power is not None and pump.power.fan_high is not None
+    fan_why = (
         power_why
         if not power_ok
         else ""
-        if below_fitted
-        else "no knee set"
-        if knee is None
-        else f"no metered climb block under the {knee:g} °F knee"
+        if fan_fitted
+        else "no fan air set"
+        if fan is None
+        else f"no metered climb block under {fan:g} °F, the fan's high speed"
     )
-    *plane_names, below_name = _GROUP_TERMS["power_map"]
+    *plane_names, fan_name = _GROUP_TERMS["power_map"]
     terms += [
         Term(
             name,
@@ -1493,12 +1492,12 @@ def report(done: Calibrated) -> list[Term]:
     ]
     terms.append(
         Term(
-            below_name,
-            _num(cp.power_w_per_air_below_f),
+            fan_name,
+            _num(cp.fan_high_w),
             f"{pump.n_power} blocks",
             "-",
-            power_ok and below_fitted,
-            below_why,
+            power_ok and fan_fitted,
+            fan_why,
         )
     )
     terms += [
