@@ -815,7 +815,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 2026-10-29
    * - ``compressor.fan_high_below_air_f`` and ``fan_high_w``
      - None and 0: the plane alone
-     - In air under it the electricity is the plane's plus the step. One
+     - A walk's run puts its fan at the high speed from the first
+       instant the air is under the air given to the run's end, and the
+       electricity is the plane's plus the step while it is. One
        NWP500-65's fan (measured 2026-11-05, homedb 2025-12-28 to
        2026-10-26) ran at about 543 rpm or 895; it went to the high
        speed inside a run as the heater's own air reading fell to about
@@ -823,18 +825,20 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        and held it to the run's end (127 of 128 back within 3 min of the
        stop). On the 10-minute metered climb blocks at the condenser's
        water with one speed throughout, the high speed drew 23.7 W more.
-       Read from the air at the heater, as the walk reads it, 60.5 degF
-       and +18.77 W, fitted on the blocks before 2026-09-18 with the
-       plane kept, take the 1,807 winter blocks under 60 degF from 19.2
-       W low to 0.4 (in the fit) and the 50 held out from 26.3 W low to
-       7.5. The winter's blocks at 60 to 80 degF still read 5.1 W low: a
-       third of those at 60 to 65 ran high, and each of the 144 at 60 to
-       80 degF that ran high came after one under 60.5 degF earlier in
-       its run: the fan held at its high speed to the run's end, which
-       the air alone does not place. A calibration with the air set fits
-       the plane on the blocks at or over it and the step, at least 0,
-       on the rest; with too few over it, or too alike to place a plane,
-       it keeps the base's map, and with none under it the base's step.
+       Read from the air at the heater, as the walk reads it, and held
+       to the run's end, 59.5 degF and +20.37 W, fitted on the blocks
+       before 2026-09-18 with the plane kept, take the 1,807 winter
+       blocks under 60 degF from 19.2 W low to 0.9 over (in the fit),
+       the winter's at 60 to 80 degF from 6.4 W low to 1.6, and the 50
+       held out under 60 degF from 26.3 W low to 9.6. The blocks' speed
+       so taken agrees with the fan's measured one on 96.9 % of them;
+       read from each block's air alone, without the hold (60.5 degF,
+       +18.77 W), the winter's at 60 to 80 degF stay 5.1 W low. A
+       calibration with the air set takes the blocks of a run so, fits
+       the plane on the low speed's and the step, at least 0, on the
+       high's; with too few at the low speed, or too alike to place a
+       plane, it keeps the base's map, and with none at the high the
+       base's step.
      - 2026-11-05
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``

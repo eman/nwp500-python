@@ -766,16 +766,20 @@ plane alone the 1,807 winter blocks under 60 degF (2025-12-28 to
 2026-04-16) read 19.2 W low and the 50 held out 26.3, and the winter's
 at 60 to 80 degF 6.4 W low, the fan's high speed in them too, where the
 fit period's and the held out's came within 3.3 W of the meter in each
-bin. ``CompressorParams.fan_high_below_air_f`` with ``fan_high_w`` adds
-the high speed in air under a set air; at 60.5 degF and +18.77 W, fitted
-on the blocks before 2026-09-18 with the plane kept, the winter's blocks
-under 60 degF, in the fit, read 0.4 W low, the 50 held out 7.5, and the
-winter's at 60 to 80 degF 5.1, and the 29 days' electricity comes 12.64
-% off and 2.21 % low against 12.80 and 2.48. Read from the air alone it
-misses the high speed held to a run's end: each of the 144 winter blocks
-at 60 to 80 degF that ran high came after one under 60.5 degF earlier in
-the same run. A cold-air slope under a knee, tried first, read the
-held-out blocks 18.0 W low (:doc:`simulator-tried`).
+bin. ``CompressorParams.fan_high_below_air_f`` with ``fan_high_w`` puts
+a walk's run at the high speed from the first instant the air is under a
+set air to the run's end. Read from the air alone, each block on its
+own, at 60.5 degF and +18.77 W, the winter's blocks at 60 to 80 degF
+still read 5.1 W low: each of the 144 there that ran high came after one
+under 60.5 degF earlier in the same run. Held to the run's end, at 59.5
+degF and +20.37 W, fitted on the blocks before 2026-09-18 with the plane
+kept, the blocks' speed so taken agreed with the fan's measured one on
+96.9 % of them; the winter's blocks under 60 degF, in the fit, read 0.9
+W over, the winter's at 60 to 80 degF 1.6 W low, the 50 held out under
+60 degF 9.6 W low and all the held out 11.01 W RMS against 13.75 with
+the plane alone, and the 29 days' electricity comes 12.67 % off and 2.15
+% low against 12.80 and 2.48. A cold-air slope under a knee, tried
+first, read the held-out blocks 18.0 W low (:doc:`simulator-tried`).
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off

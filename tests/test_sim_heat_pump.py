@@ -58,6 +58,38 @@ class TestTheMap:
         # The heat is not changed: only the electricity.
         assert hp.heat_btu_h(c, 50.0, 120.0) == hp.heat_btu_h(C, 50.0, 120.0)
 
+    def test_a_run_says_its_fans_speed(self) -> None:
+        c = replace(C, fan_high_below_air_f=60.0, fan_high_w=24.0)
+        plain = hp.power_w(c, 70.0, 120.0)
+        assert hp.power_w(c, 70.0, 120.0, fan_high=True) == plain + 24.0
+        assert hp.power_w(c, 50.0, 120.0, fan_high=False) == pytest.approx(
+            hp.power_w(c, 50.0, 120.0) - 24.0
+        )
+        # No fan's air set, no high speed to add.
+        assert hp.power_w(C, 70.0, 120.0, fan_high=True) == hp.power_w(
+            C, 70.0, 120.0
+        )
+
+    def test_a_runs_high_speed_starts_where_the_air_first_is_under(
+        self,
+    ) -> None:
+        t = datetime(2026, 1, 1, tzinfo=UTC)
+        asked: list[tuple[datetime, datetime | None, float]] = []
+
+        def first_under(
+            a: datetime, b: datetime | None, low: float
+        ) -> datetime | None:
+            asked.append((a, b, low))
+            return a + timedelta(minutes=30)
+
+        c = replace(C, fan_high_below_air_f=59.5, fan_high_w=20.0)
+        end = t + timedelta(hours=2)
+        assert hp.fan_high_from(c, t, end, first_under) == t + timedelta(
+            minutes=30
+        )
+        assert asked == [(t, end, 59.5)]
+        assert hp.fan_high_from(C, t, end, first_under) is None
+
     def test_a_document_carries_the_fan(self) -> None:
         p = sim.default_params()
         c = replace(p.compressor, fan_high_below_air_f=61, fan_high_w=18.2)

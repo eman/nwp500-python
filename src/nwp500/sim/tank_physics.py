@@ -58,6 +58,7 @@ from nwp500.sim.params import CirculationParams, CompressorParams, HeaterParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
+    fan_high_from,
     heat_air_outside,
     heat_water_outside,
 )
@@ -438,6 +439,13 @@ class TankPhysics:
                 off_at=c.off_at,
                 scale=c.scale,
                 stirs=c.stirs,
+                fan_high_at=fan_high_from(
+                    self.params.compressor,
+                    c.on_at,
+                    c.off_at,
+                    self.ambient.first_under,
+                ),
+                fan_held=True,
             ),
             elements=tuple(
                 st.Element(
@@ -635,6 +643,13 @@ class TankPhysics:
                     heats_at=heats,
                     scale=scale,
                     stirs=not under_way or hold_minutes > 0.0,
+                    fan_high_at=fan_high_from(
+                        self.params.compressor,
+                        start,
+                        None,
+                        self.ambient.first_under,
+                    ),
+                    fan_held=True,
                 )
             ),
             flowing=self._flows(start, end),

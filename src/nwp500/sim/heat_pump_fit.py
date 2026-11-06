@@ -756,18 +756,19 @@ def fit_power_map(
     air and the water they were read at (``power_blocks``' ``water_f``);
     None with fewer than ``MIN_POWER_BLOCKS``. With the air the fan runs
     high under (``CompressorParams.fan_high_below_air_f``) the plane is
-    fitted on the blocks at or over it, None unless they number
-    ``MIN_POWER_BLOCKS`` and place one (a plane through the cold blocks
-    too would take in the step it is to leave), and the fan's step on
-    what the plane leaves of the rest, their mean and at least 0, None
-    with no block there; the span is every block's."""
+    fitted on the blocks at the low speed (``fan_high``: held to a
+    run's end), None unless they number ``MIN_POWER_BLOCKS`` and place
+    one (a plane through the high speed's too would take in the step it
+    is to leave), and the fan's step on what the plane leaves of the
+    rest, their mean and at least 0, None with no block there; the span
+    is every block's."""
     if len(rows) < MIN_POWER_BLOCKS:
         return None
     air, water, power = _columns(rows, "air_f", "water_f", "power_w")
     ones = np.ones(len(rows))
     if fan_below_f is None:
         return _fit_plane(air, water, power, ones, POWER_SLOPE_SIGNS)
-    over = air >= fan_below_f
+    over = ~fan_high(rows, fan_below_f)
     if int(over.sum()) < MIN_POWER_BLOCKS:
         return None
     plane = _fit_plane(
@@ -800,14 +801,44 @@ def heat_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
     return float(np.sqrt(np.average((got - heat) ** 2, weights=minutes)))
 
 
+def fan_high(rows: pd.DataFrame, below_f: float | None) -> np.ndarray:
+    """Whether each of ``Evidence.power``'s blocks ran its fan at the
+    high speed, as a walk holds it (``heat_pump.fan_high_from``): its
+    air under ``below_f``, or an earlier block's of its run
+    (``cycle``, by ``start``); each block's own air alone without
+    them. All False with no ``below_f``."""
+    air = rows["air_f"].to_numpy(dtype=float)
+    if below_f is None:
+        return np.zeros(len(rows), dtype=bool)
+    under = air < below_f
+    if "cycle" not in rows.columns or "start" not in rows.columns:
+        return under
+    held = (
+        pd.DataFrame(
+            {"cycle": rows["cycle"].to_numpy(), "start": rows["start"]},
+        )
+        .assign(under=under, at=np.arange(len(rows)))
+        .sort_values(["cycle", "start"], kind="stable")
+    )
+    held["held"] = held.groupby("cycle")["under"].cummax()
+    out = np.zeros(len(rows), dtype=bool)
+    out[held["at"].to_numpy()] = held["held"].to_numpy(dtype=bool)
+    return out
+
+
 def power_map_error(rows: pd.DataFrame, c: CompressorParams) -> float | None:
-    """``c``'s power against ``Evidence.power``'s blocks: the RMS
-    error, W; None with none."""
+    """``c``'s power against ``Evidence.power``'s blocks, each fan's
+    speed as a walk holds it (``fan_high``): the RMS error, W; None
+    with none."""
     if rows.empty:
         return None
     air, water, power = _columns(rows, "air_f", "water_f", "power_w")
+    high = fan_high(rows, c.fan_high_below_air_f)
     got = np.array(
-        [hp.power_w(c, a, w) for a, w in zip(air, water, strict=True)]
+        [
+            hp.power_w(c, a, w, fan_high=bool(h))
+            for a, w, h in zip(air, water, high, strict=True)
+        ]
     )
     return float(np.sqrt(np.mean((got - power) ** 2)))
 

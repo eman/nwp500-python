@@ -608,6 +608,35 @@ class TestTheSlopesSigns:
         )
         assert hpf.with_planes(base, None, got).fan_high_w == 18.0
 
+    def test_a_runs_blocks_hold_the_high_speed(self) -> None:
+        t = pd.Timestamp("2026-01-01", tz="UTC")
+        rows = pd.DataFrame(
+            {
+                "cycle": [1, 1, 1, 2, 2],
+                "start": [
+                    t + pd.Timedelta(minutes=m) for m in (20, 0, 10, 0, 10)
+                ],
+                "air_f": [62.0, 61.0, 59.0, 63.0, 59.0],
+            }
+        )
+        # Run 1 by start: 61, 59 (high), then 62 (held high).
+        assert list(hpf.fan_high(rows, 60.0)) == [
+            True,
+            False,
+            True,
+            False,
+            True,
+        ]
+        assert not hpf.fan_high(rows, None).any()
+        bare = rows.drop(columns=["cycle", "start"])
+        assert list(hpf.fan_high(bare, 60.0)) == [
+            False,
+            False,
+            True,
+            False,
+            True,
+        ]
+
     def test_the_powers_air_is_free(self) -> None:
         rng = np.random.default_rng(3)
         air = rng.uniform(50.0, 90.0, 60)

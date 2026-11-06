@@ -7,11 +7,12 @@ instants (``Impulse``); ``AmbientSampler`` reads the air where the
 heater stands at any instant. Every input arrives as a value.
 """
 
+import math
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import numpy as np
 import pandas as pd
@@ -106,6 +107,11 @@ def threshold_crossing(
     return None
 
 
+#: Before and after any series: the ends ``first_under`` holds flat.
+_DAWN = datetime.min.replace(tzinfo=UTC)
+_DUSK = datetime.max.replace(tzinfo=UTC)
+
+
 class AmbientSampler:
     """Ambient temperature (the air at the heater) as a function of
     the clock.
@@ -132,10 +138,15 @@ class AmbientSampler:
     matter and the one no test would catch at a flat ambient.
     """
 
-    __slots__ = ("_base", "_stamps", "_values")
+    __slots__ = ("_base", "_cold", "_stamps", "_values")
 
     def __init__(self, series: pd.DataFrame) -> None:
         self._stamps: np.ndarray | None = None
+        #: ``first_under``'s spans of air under each level asked, with
+        #: their ends: found once over the whole series.
+        self._cold: dict[
+            float, tuple[list[tuple[datetime, datetime]], list[datetime]]
+        ] = {}
         # An absent column is a caller's mistake, not a missing reading:
         # it would coast every projection at the default air unannounced.
         if "ambient_f" not in series.columns:
@@ -229,6 +240,44 @@ class AmbientSampler:
             return float(values[hi])
         weight = (want - stamps[lo]) / span
         return float(values[lo] + weight * (values[hi] - values[lo]))
+
+    def first_under(
+        self, start: datetime, end: datetime | None, low: float
+    ) -> datetime | None:
+        """The first instant of ``[start, end)`` (None: on past the
+        series) with the air under ``low``, None with none: exact on the
+        interpolated series, flat past its ends. The spans under each
+        level are found once, so each answer is a bisection."""
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        if end is not None and end.tzinfo is None:
+            end = end.replace(tzinfo=UTC)
+        if self._stamps is None:
+            return start if low > DEFAULT_AMBIENT_F else None
+        if low not in self._cold:
+            first = cast(datetime, self._base)
+            last = first + timedelta(seconds=float(self._stamps[-1]))
+            spans = (
+                self.outside(first, last, low, math.inf) if last > first else []
+            )
+            # Flat past the ends: under the level there for all time.
+            if self._values[0] < low:
+                if spans and spans[0][0] == first:
+                    spans[0] = (_DAWN, spans[0][1])
+                else:
+                    spans.insert(0, (_DAWN, first))
+            if self._values[-1] < low:
+                if spans and spans[-1][1] == last:
+                    spans[-1] = (spans[-1][0], _DUSK)
+                else:
+                    spans.append((last, _DUSK))
+            self._cold[low] = (spans, [b for _, b in spans])
+        spans, ends = self._cold[low]
+        i = bisect_right(ends, start)
+        if i >= len(spans):
+            return None
+        at = max(spans[i][0], start)
+        return None if end is not None and at >= end else at
 
     def outside(
         self, start: datetime, end: datetime, low: float, high: float
