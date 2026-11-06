@@ -873,6 +873,22 @@ circulation run), not where it went: a tank short of it at the start, or
 the draws inside the runs taking more of it, as the walk's lower probe
 falling deeper suggests, are both open.
 
+Walked instead from 30 minutes before their starts (measured
+2026-11-06), from the tank replayed and corrected to the probes there
+with the compressor off, the start's draw walked whole inside the walk
+and the heater starting on its own trigger, three of the four still ran
+long: 09-22's run 36 minutes, 09-23's 20 and 10-14's 29, against 40, 26
+and 24 walked from their starts. 10-13's came within a minute, its walk
+then stopping before its circulation run. So the gap is not the tank as
+replayed after the draw; it builds through the draw and the run. Walked
+from their starts with no draw left there, the four come 13 to 47
+minutes short: the walk charges the start's draw 39 to 71 minutes of
+heating (10-13's 94 with its circulation run), and the record's runs,
+read as the whole of their gap, a third to two thirds of that. The like
+draws do not settle it: 10-07's and 10-08's runs, walked from 30 minutes
+before in the same way, moved 26 and 9 minutes from their walks from the
+start, as far as the gap itself.
+
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
 draws of 8 gal or more, their hour after, each walked as the score walks
