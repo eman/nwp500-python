@@ -1,6 +1,7 @@
 """``nwp500.sim_calibrate``: a recorded history in, the fitted
 parameters and a report of each fit out."""
 
+import math
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -130,6 +131,20 @@ class TestTheFits:
         assert sc.TANK_WEEKS * 7 > 20
         default = sc.calibrate(readings, ambient=AIR_F, params=_fitted(12.0))
         assert default.tank.n_windows == 20
+        # Too few in the weeks: the note says how many were before them.
+        few = sc.calibrate(
+            readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=4 / 7
+        )
+        assert few.tank.fit is None
+        assert few.tank.why == (
+            "4 quiet windows and draws; 10 needed (16 more events before "
+            "the last 0.571429 weeks: tank_weeks)"
+        )
+
+    @pytest.mark.parametrize("weeks", [0.0, -1.0, math.nan, math.inf])
+    def test_the_tank_s_weeks_over_0(self, history: str, weeks: float) -> None:
+        with pytest.raises(sc.CalibrationInputError, match="tank_weeks"):
+            sc.calibrate(_read(history), ambient=AIR_F, tank_weeks=weeks)
 
     def test_the_air_in_the_preferred_unit(
         self, device_status_dict: dict[str, Any]

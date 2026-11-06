@@ -55,15 +55,16 @@ recoveries with water in use, which it was for, 0.7 minutes closer at
 gain did not carry over.
 
 Re-judged the same day with both tanks fitted on the seven weeks before
-2026-09-18 alone, as calibration now fits the tank
-(``calibrate-simulator``), against the draws at onset fitted so (share
-0.25, then 0, against onset): the day's electricity 18.6 and 15.3 % off
-against 10.2, its end 5.66 and 4.69 degF against 3.09, the probes after
-a draw 0.67 and 0.56 against 0.31 (upper) and 3.29 and 3.32 against 1.74
-(lower), the draw-free recoveries 11.5 and 9.4 minutes off against 3.9
-(12 and 9 short), those with water in use 22.3 and 21.4 against 19.9,
-the starts placed 0.815 and 0.738 against 0.824: worse again
-(``recent-weeks-2026-11-06``).
+2026-09-18 alone (calibration now fits the tank on its last seven weeks
+with the history before as their lead-in, which scored within 0.12 of
+that: ``calibrate-simulator``), against the draws at onset fitted so
+(share 0.25, then 0, against onset): the day's electricity 18.6 and 15.3
+% off against 10.2, its end 5.66 and 4.69 degF against 3.09, the probes
+after a draw 0.67 and 0.56 against 0.31 (upper) and 3.29 and 3.32
+against 1.74 (lower), the draw-free recoveries 11.5 and 9.4 minutes off
+against 3.9 (11 and 9 short), those with water in use 22.3 and 21.4
+against 19.9, the starts placed 0.815 and 0.738 against 0.824: worse
+again (``recent-weeks-2026-11-06``).
 
 **Account.** The scripts, params and scores are kept with the site's
 (``draws-over-span-2026-11-06``, its README naming the two params docs).

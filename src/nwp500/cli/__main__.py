@@ -1306,8 +1306,8 @@ async def simulate_record(
     show_default=True,
     metavar="WEEKS",
     help="Fit the tank on its events in the last WEEKS of the history "
-    "(before --holdout-from), the history before read as their lead-in; "
-    "0 for the whole history",
+    "(to its last status before --holdout-from), the history before read "
+    "as their lead-in; 0 for the whole history",
 )
 @click.pass_context
 def simulate_calibrate(

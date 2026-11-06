@@ -34,6 +34,7 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
+import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -110,14 +111,14 @@ MIN_TANK_EVENTS = 10
 MIN_TANK_RECOVERIES = 5
 #: The tank's fit's most trials (``sim.tank_fit.fit``).
 TANK_EVALUATIONS = 300
-#: How far back from a history's end the tank's events are fitted on,
-#: weeks (``calibrate``'s ``tank_weeks``): the history before is their
-#: replay's lead-in. On one site's record (2026-11-06), the tank fitted
-#: on the seven weeks before 2026-09-18 scored better on the next 29
-#: days than fitted on the five months before it: 13.4 against 16.1
-#: minutes off a recovery, 3.1 against 3.8 degF off the day's end, 10.2
-#: against 11.5 % off its electricity, though the probes after a draw
-#: and in standby came 0.02 to 0.14 degF worse (``calibrate-simulator``).
+#: How far back from a history's end the tank's events are fitted on, weeks
+#: (``calibrate``'s ``tank_weeks``): the history before is their replay's
+#: lead-in. On one site's record (2026-11-06), the tank fitted on its events
+#: in the seven weeks before 2026-09-18 scored better on the next 29 days
+#: than fitted on the five months before it: 13.4 against 16.1 minutes off a
+#: recovery, 3.1 against 3.8 degF off the day's end, 10.1 against 11.5 % off
+#: its electricity, though the probes after a draw and in standby came 0.02
+#: to 0.13 degF worse (``calibrate-simulator``).
 TANK_WEEKS = 7.0
 
 
@@ -345,6 +346,9 @@ class _TankEvents:
     draws: list[tf.Coast]
     recoveries: list[tf.Coast]
     why: str = ""
+    #: Events left out as before the last ``tank_weeks``, and those weeks.
+    n_before: int = 0
+    weeks: float | None = None
 
 
 def _tank_events(
@@ -384,9 +388,9 @@ def _tank_events(
             key=lambda c: c.start,
         )
 
-    return _TankEvents(
-        record, ordered(windows), ordered(drawn), ordered(climbs)
-    )
+    kept = (ordered(windows), ordered(drawn), ordered(climbs))
+    before = len(windows) + len(drawn) + len(climbs) - sum(map(len, kept))
+    return _TankEvents(record, *kept, n_before=before, weeks=tank_weeks)
 
 
 def _fit_tank(
@@ -403,9 +407,13 @@ def _fit_tank(
         return None, found.why
     coasts = [*found.windows, *found.draws]
     if len(coasts) < MIN_TANK_EVENTS:
-        return None, (
-            f"{len(coasts)} quiet windows and draws; {MIN_TANK_EVENTS} needed"
-        )
+        why = f"{len(coasts)} quiet windows and draws; {MIN_TANK_EVENTS} needed"
+        if found.n_before:
+            why += (
+                f" ({found.n_before} more events before the last "
+                f"{found.weeks:g} weeks: tank_weeks)"
+            )
+        return None, why
     terms = tf.TERMS
     if len(found.recoveries) >= MIN_TANK_RECOVERIES:
         coasts += found.recoveries
@@ -814,11 +822,19 @@ def _begin(
     air: Sequence[Reading] | None,
     ambient: float | None,
     params: HeaterParams | Any,
+    tank_weeks: float | None = None,
 ) -> tuple[HeaterParams, list[str]]:
     """The base to refit and the notes so far; the inputs checked before
     a history is read."""
     if air is not None and ambient is not None:
         raise CalibrationInputError("give air or ambient, not both")
+    if tank_weeks is not None and not (
+        math.isfinite(tank_weeks) and tank_weeks > 0.0
+    ):
+        raise CalibrationInputError(
+            f"tank_weeks {tank_weeks!r} is not a number of weeks over 0 "
+            "(None for the whole history)"
+        )
     if params is None:
         return sim.default_params(), [DEFAULT_BASE_NOTE]
     return _base(params), []
@@ -866,7 +882,7 @@ def calibrate(
     Readings further apart than ``max_gap`` of them are a span nobody
     observed, and no fit spans one. Raises ``CalibrationInputError``
     for both ``air`` and ``ambient``, a ``params`` that is not a
-    parameters document, or no readings.
+    parameters document, a ``tank_weeks`` not over 0, or no readings.
 
     ``keep_better``: refine ``params`` without making it worse. Each
     group of terms (``GROUPS``) holds out its latest evidence (the last
@@ -878,7 +894,7 @@ def calibrate(
     a fit of this heater: the defaults are another heater's fit, and
     would be kept wherever the evidence is too little to judge by.
     """
-    base, notes = _begin(air, ambient, params)
+    base, notes = _begin(air, ambient, params, tank_weeks)
     frame = sa.history(readings)
     if frame.empty:
         raise CalibrationInputError("the history holds no statuses")
@@ -921,7 +937,7 @@ def calibrate_changes(
     does, or for no ``observed`` instants. ``draws``, ``keep_better``,
     ``map_`` and ``tank_weeks`` as for ``calibrate``.
     """
-    base, more = _begin(air, ambient, params)
+    base, more = _begin(air, ambient, params, tank_weeks)
     frame, gaps = _change_frame(rows, observed)
     return _fit(
         frame,
