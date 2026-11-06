@@ -886,7 +886,8 @@ def violations(
     the heat less the power has its extremes: the low speed at the air
     the fan runs high under (``fan_high_below_air_f``) and over, the
     high at any air (a run holds it to its end, ``heat_pump.
-    fan_high_from``)."""
+    fan_high_from``) when that air is over the envelope's coldest,
+    where a run can go to it."""
     found: set[str] = set()
     grid = np.linspace(*air_f, CHECK_POINTS)
     fan = c.fan_high_below_air_f
@@ -895,7 +896,9 @@ def violations(
         low = grid[grid >= fan]
         if air_f[0] < fan <= air_f[1]:
             low = np.unique(np.append(low, fan))
-        speeds = [(False, low), (True, grid)]
+        speeds = [(False, low)]
+        if fan > air_f[0]:
+            speeds.append((True, grid))
     waters = np.linspace(*water_f, CHECK_POINTS)
     for high, airs in speeds:
         for air in airs:

@@ -85,12 +85,13 @@ Added
   too alike at the low speed and keeping the base's step with none at
   the high; ``power_map_error`` reads the blocks so; the calibration
   report shows the step, and ``violations`` checks the low speed at the
-  fan's air and over and the high at every air. On one NWP500-65
-  (measured 2026-11-05) the fan ran at about 543 rpm or 895, went to the
-  high speed inside a run as the heater's own air reading fell to about
-  58 degF and held it to the run's end, and its high speed drew 23.7 W
-  more on the 10-minute metered climb blocks with one speed throughout.
-  Read from the air at the heater and held so, at 59.0 degF and +20.68 W
+  fan's air and over and the high at every air, unless the fan's air is
+  at or under the envelope's coldest. On one NWP500-65 (measured
+  2026-11-05) the fan ran at about 543 rpm or 895, went to the high
+  speed inside a run as the heater's own air reading fell to about 58
+  degF and held it to the run's end, and its high speed drew 23.7 W more
+  on the 10-minute metered climb blocks with one speed throughout. Read
+  from the air at the heater and held so, at 59.0 degF and +20.68 W
   fitted on the blocks before 2026-09-18 with the plane kept (the
   blocks' speed so taken agreeing with the fan's measured one on 97.3 %
   of them), the 1,807 winter blocks under 60 degF read 1.1 W over (in

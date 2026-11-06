@@ -223,6 +223,10 @@ class TestTheMap:
         assert "evaporator_heat_negative" in hpf.violations(c, air_f)
         low = replace(c, fan_high_w=0.0)
         assert "evaporator_heat_negative" not in hpf.violations(low, air_f)
+        # With the fan's air at or under the envelope's, no run there
+        # goes to the high speed.
+        cold = replace(c, fan_high_below_air_f=40.0, fan_high_w=5000.0)
+        assert "evaporator_heat_negative" not in hpf.violations(cold, air_f)
 
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)
