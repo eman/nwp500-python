@@ -13,6 +13,32 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The slower draw's share lowered, for runs after a draw (2026-11-06)
+===================================================================
+
+**Tried.** Measured, not built: ``DrawParams.undiluted_share``, the
+share of a slower draw's cold side the tank gives as well, at 0.1 and 0
+rather than 0.25, every held-out recovery walked from its recorded start
+as the score walks it, on the parameters in use (0.85).
+
+**Found.** The four runs longest, each starting with a slower draw of 9
+to 16 gal, came 1.5 to 5.4 minutes shorter, 09-22 17:14 UTC from 40 to
+36 and 34 minutes long; 10-13 13:09 46 minutes shorter at 0 only because
+its walk then stopped before a circulation run it had heated through.
+The free recoveries' mean absolute error went from 4.3 to 4.2 minutes at
+both, the runs with draws' from 23.1 to 22.0 and 18.3.
+
+**Why dropped.** The share is not what the four lack: they run 24 to 40
+minutes long and it moves them a few. The share is fitted on the lower
+probe's fall after the compressor-off draws of 8 gal or more, which
+these runs do not judge.
+
+**Account.** :doc:`simulator`, "Accuracy", the runs with water drawn
+around them. The scripts and tables are kept with the site's
+(``placed-energy-2026-11-06``: ``share.py``, ``share.txt``,
+``startdraws.txt``, ``power60.txt``).
+
+
 More heat from cold water, for the runs after a large draw (2026-11-06)
 =======================================================================
 
