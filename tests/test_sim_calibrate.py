@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from nwp500 import sim, status_history
@@ -140,6 +141,32 @@ class TestTheFits:
         power = terms["Power at 65 °F air, 120 °F water (W)"]
         assert not power.fitted
         assert power.why == "0 metered climb blocks; 30 needed"
+
+    def test_a_knee_that_stops_the_refit_is_named(self) -> None:
+        # Blocks enough, but few over an 88 °F knee: the base is kept,
+        # and not for too few blocks.
+        rng = np.random.default_rng(4)
+        air = rng.uniform(45.0, 90.0, 200)
+        water = rng.uniform(70.0, 145.0, 200)
+        power = pd.DataFrame(
+            {
+                "air_f": air,
+                "water_f": water,
+                "power_w": 400.0 + 1.2 * (air - 65.0) + 2.7 * (water - 120.0),
+            }
+        )
+        found = hpf.Evidence(
+            heat=pd.DataFrame(), power=power, runs=pd.DataFrame()
+        )
+        p = sim.default_params()
+        p = replace(p, compressor=replace(p.compressor, power_air_knee_f=88.0))
+        judged: list[sc.Judged] = []
+        sc._keep_better_heat_pump(found, p, set(), judged)
+        j = next(j for j in judged if j.group == "power_map")
+        assert j.kept == "base"
+        assert "too few metered climb blocks" not in j.why
+        assert "place no plane" in j.why
+        assert "88 °F knee" in j.why
 
     def test_the_knees_slope_reports_whether_it_was_fitted(
         self, history: str

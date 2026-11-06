@@ -607,21 +607,38 @@ def _keep_better_heat_pump(
         candidate: CompressorParams,
         needed: int,
         n_all: int,
+        n_fit: int,
+        knee: float | None = None,
     ) -> bool:
-        """Whether ``group``'s refit plane is taken."""
+        """Whether ``group``'s refit plane is taken. ``n_fit``: the
+        ``what`` the refit had; with as many as ``needed`` and still no
+        plane, they were too alike to place one, or with a ``knee``
+        (``CompressorParams.power_air_knee_f``) too few or too alike at
+        or over it."""
         if fitted is None:
             if term not in unfitted:
-                judged.append(
-                    _judge(
-                        group,
-                        what,
-                        n_held,
-                        error(base),
-                        None,
-                        refit_exists=False,
-                        needed=needed,
-                    )
+                j = _judge(
+                    group,
+                    what,
+                    n_held,
+                    error(base),
+                    None,
+                    refit_exists=False,
+                    needed=needed,
                 )
+                if n_fit >= needed:
+                    where = (
+                        ""
+                        if knee is None
+                        else f", too few or too alike at or over the "
+                        f"{knee:g} °F knee"
+                    )
+                    j = replace(
+                        j,
+                        why=f"kept the base: its {n_fit} {what} place no "
+                        f"plane{where}",
+                    )
+                judged.append(j)
             return False
         claims = hpf.violations(candidate, *envelope)
         found_claims[group] = claims
@@ -654,6 +671,7 @@ def _keep_better_heat_pump(
         hpf.with_planes(base, refit.heat, None),
         hpf.MIN_HEAT_STRETCHES,
         len(found.heat),
+        refit.n_heat,
     )
     heated = hpf.with_planes(base, refit.heat if take_heat else None, None)
     take_power = plane(
@@ -666,6 +684,8 @@ def _keep_better_heat_pump(
         hpf.with_planes(heated, None, refit.power),
         hpf.MIN_POWER_BLOCKS,
         len(found.power),
+        refit.n_power,
+        base.power_air_knee_f,
     )
     compressor = hpf.with_planes(
         heated, None, refit.power if take_power else None
