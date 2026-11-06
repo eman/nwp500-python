@@ -607,21 +607,38 @@ def _keep_better_heat_pump(
         candidate: CompressorParams,
         needed: int,
         n_all: int,
+        n_fit: int,
+        knee: float | None = None,
     ) -> bool:
-        """Whether ``group``'s refit plane is taken."""
+        """Whether ``group``'s refit plane is taken. ``n_fit``: the
+        ``what`` the refit had; with as many as ``needed`` and still no
+        plane, they were too alike to place one, or with a ``knee``
+        (``CompressorParams.power_air_knee_f``) too few or too alike at
+        or over it."""
         if fitted is None:
             if term not in unfitted:
-                judged.append(
-                    _judge(
-                        group,
-                        what,
-                        n_held,
-                        error(base),
-                        None,
-                        refit_exists=False,
-                        needed=needed,
-                    )
+                j = _judge(
+                    group,
+                    what,
+                    n_held,
+                    error(base),
+                    None,
+                    refit_exists=False,
+                    needed=needed,
                 )
+                if n_fit >= needed:
+                    where = (
+                        ""
+                        if knee is None
+                        else f", too few or too alike at or over the "
+                        f"{knee:g} °F knee"
+                    )
+                    j = replace(
+                        j,
+                        why=f"kept the base: its {n_fit} {what} place no "
+                        f"plane{where}",
+                    )
+                judged.append(j)
             return False
         claims = hpf.violations(candidate, *envelope)
         found_claims[group] = claims
@@ -654,6 +671,7 @@ def _keep_better_heat_pump(
         hpf.with_planes(base, refit.heat, None),
         hpf.MIN_HEAT_STRETCHES,
         len(found.heat),
+        refit.n_heat,
     )
     heated = hpf.with_planes(base, refit.heat if take_heat else None, None)
     take_power = plane(
@@ -666,6 +684,8 @@ def _keep_better_heat_pump(
         hpf.with_planes(heated, None, refit.power),
         hpf.MIN_POWER_BLOCKS,
         len(found.power),
+        refit.n_power,
+        base.power_air_knee_f,
     )
     compressor = hpf.with_planes(
         heated, None, refit.power if take_power else None
@@ -1214,6 +1234,7 @@ _GROUP_TERMS = {
         "Power at 65 °F air, 120 °F water (W)",
         "Power per °F of air (W)",
         "Power per °F of water (W)",
+        "Power per °F of air under its knee (W)",
     ),
     "run_on": ("Run-on overshoot (°F)",),
 }
@@ -1231,6 +1252,7 @@ def _values(params: HeaterParams) -> dict[str, str]:
         _num(c.power_w),
         _num(c.power_w_per_air_f),
         _num(c.power_w_per_water_f),
+        _num(c.power_w_per_air_below_f),
         _num(params.controller.hp_stop_overshoot_f),
     )
     names = [n for group in _GROUP_TERMS.values() for n in group]
@@ -1375,19 +1397,37 @@ def report(done: Calibrated) -> list[Term]:
         why = f"{n} {what}; {needed} needed"
         return f"{air_why}; {why}" if air_why else why
 
+    def no_plane(
+        n: int, what: str, needed: int, knee: float | None = None
+    ) -> str:
+        """Why no plane was fitted: too few ``what``, or with enough
+        they were too alike to place one (and with a ``knee``, too few
+        or too alike at or over it)."""
+        if n < needed:
+            return needs(n, what, needed)
+        where = (
+            ""
+            if knee is None
+            else f", too few or too alike at or over the {knee:g} °F knee"
+        )
+        return f"{n} {what} place no plane{where}"
+
     heat_why = claims(pump.heat_violations) or (
         ""
         if pump.heat is not None
-        else needs(
+        else no_plane(
             pump.n_heat,
             "draw-free climbs with the tank mixed",
             hpf.MIN_HEAT_STRETCHES,
         )
     )
+    knee = cp.power_air_knee_f
     power_why = claims(pump.power_violations) or (
         ""
         if pump.power is not None
-        else needs(pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS)
+        else no_plane(
+            pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS, knee
+        )
     )
     heat_error = (
         "-" if pump.heat_error is None else f"{pump.heat_error:.0f} BTU/h rms"
@@ -1419,6 +1459,21 @@ def report(done: Calibrated) -> list[Term]:
             )
         )
     ]
+    # The slope under the knee is fitted only with a knee and a block
+    # under it; else it is the base's (``heat_pump_fit.with_planes``).
+    below_fitted = (
+        pump.power is not None and pump.power.per_air_below is not None
+    )
+    below_why = (
+        power_why
+        if not power_ok
+        else ""
+        if below_fitted
+        else "no knee set"
+        if knee is None
+        else f"no metered climb block under the {knee:g} °F knee"
+    )
+    *plane_names, below_name = _GROUP_TERMS["power_map"]
     terms += [
         Term(
             name,
@@ -1430,12 +1485,22 @@ def report(done: Calibrated) -> list[Term]:
         )
         for i, (name, value) in enumerate(
             zip(
-                _GROUP_TERMS["power_map"],
+                plane_names,
                 (cp.power_w, cp.power_w_per_air_f, cp.power_w_per_water_f),
                 strict=True,
             )
         )
     ]
+    terms.append(
+        Term(
+            below_name,
+            _num(cp.power_w_per_air_below_f),
+            f"{pump.n_power} blocks",
+            "-",
+            power_ok and below_fitted,
+            below_why,
+        )
+    )
     terms += [
         Term(
             "Run-on overshoot (°F)",

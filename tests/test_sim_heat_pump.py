@@ -1,15 +1,22 @@
 """The heat pump as a performance map (``sim.physics.heat_pump``) and
 the run-on past the target."""
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
+import numpy as np
 import pytest
 
 from nwp500 import sim
 from nwp500.sim import heat_pump_fit as hpf
-from nwp500.sim.params import CompressorParams, ControllerParams
+from nwp500.sim.params import (
+    CompressorParams,
+    ControllerParams,
+    params_from_document,
+    params_to_document,
+)
 from nwp500.sim.physics import heat_pump as hp
 from nwp500.sim.units import BTU_PER_WH
 
@@ -39,6 +46,35 @@ class TestTheMap:
             C.power_w + 29.0 * C.power_w_per_water_f
         )
 
+    def test_the_power_takes_its_own_slope_under_the_knee(self) -> None:
+        c = replace(C, power_air_knee_f=60.0, power_w_per_air_below_f=3.0)
+        plain = replace(C, power_air_knee_f=None)
+        assert hp.power_w(c, 70.0, 120.0) == hp.power_w(plain, 70.0, 120.0)
+        assert hp.power_w(c, 60.0, 120.0) == hp.power_w(plain, 60.0, 120.0)
+        assert hp.power_w(c, 50.0, 120.0) == pytest.approx(
+            hp.power_w(plain, 50.0, 120.0) + 30.0
+        )
+        # The heat is not changed: only the electricity.
+        assert hp.heat_btu_h(c, 50.0, 120.0) == hp.heat_btu_h(C, 50.0, 120.0)
+
+    def test_a_document_carries_the_knee(self) -> None:
+        p = sim.default_params()
+        c = replace(
+            p.compressor, power_air_knee_f=60, power_w_per_air_below_f=2.9
+        )
+        doc = json.loads(
+            json.dumps(params_to_document(replace(p, compressor=c)))
+        )
+        got = params_from_document(doc).compressor
+        assert got.power_air_knee_f == 60.0
+        assert isinstance(got.power_air_knee_f, float)
+        assert got.power_w_per_air_below_f == 2.9
+        assert sim.default_params().compressor.power_air_knee_f is None
+        with pytest.raises(ValueError, match="power_air_knee_f"):
+            replace(C, power_air_knee_f=float("nan"))
+        with pytest.raises(ValueError, match="power_w_per_air_below_f"):
+            replace(C, power_w_per_air_below_f=float("inf"))
+
     def test_it_is_quoted_at_its_reference(self) -> None:
         assert hp.heat_btu_h(C, 65.0, 120.0) == C.heat_btu_h
         assert hp.power_w(C, 65.0, 120.0) == C.power_w
@@ -65,6 +101,28 @@ class TestTheMap:
         assert "evaporator_heat_negative" not in hpf.violations(
             c, (61.0, 113.0)
         )
+
+    def test_the_power_at_its_knee_is_checked(self) -> None:
+        # Steep either side of a knee between two of the grid's airs, the
+        # power is over MIN_POWER_W at every one but under it at the knee.
+        air_f = (40.0, 110.0)
+        airs = np.linspace(*air_f, hpf.CHECK_POINTS)
+        knee = float((airs[3] + airs[4]) / 2)
+        level = hpf.MIN_POWER_W - 1.0 - 60.0 * (knee - 65.0)
+        c = replace(
+            C,
+            power_w=level,
+            power_w_per_air_f=60.0,
+            power_w_per_water_f=0.0,
+            power_w_per_air_water_f=0.0,
+            power_air_knee_f=knee,
+            power_w_per_air_below_f=120.0,
+        )
+        assert hp.power_w(c, knee, 120.0) < hpf.MIN_POWER_W
+        assert all(
+            hp.power_w(c, float(a), 120.0) > hpf.MIN_POWER_W for a in airs
+        )
+        assert "power_too_low" in hpf.violations(c, air_f)
 
     def test_carnot_bounds_the_lift(self) -> None:
         assert hp.carnot_cop(65.0, 120.0) == pytest.approx(579.67 / 55.0)

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from nwp500 import sim, status_history
@@ -141,6 +142,81 @@ class TestTheFits:
         assert not power.fitted
         assert power.why == "0 metered climb blocks; 30 needed"
 
+    def test_a_knee_that_stops_the_refit_is_named(self) -> None:
+        # Blocks enough, but few over an 88 °F knee: the base is kept,
+        # and not for too few blocks.
+        rng = np.random.default_rng(4)
+        air = rng.uniform(45.0, 90.0, 200)
+        water = rng.uniform(70.0, 145.0, 200)
+        power = pd.DataFrame(
+            {
+                "air_f": air,
+                "water_f": water,
+                "power_w": 400.0 + 1.2 * (air - 65.0) + 2.7 * (water - 120.0),
+            }
+        )
+        found = hpf.Evidence(
+            heat=pd.DataFrame(), power=power, runs=pd.DataFrame()
+        )
+        p = sim.default_params()
+        p = replace(p, compressor=replace(p.compressor, power_air_knee_f=88.0))
+        judged: list[sc.Judged] = []
+        sc._keep_better_heat_pump(found, p, set(), judged)
+        j = next(j for j in judged if j.group == "power_map")
+        assert j.kept == "base"
+        assert "too few metered climb blocks" not in j.why
+        assert "place no plane" in j.why
+        assert "88 °F knee" in j.why
+
+    def test_the_knees_slope_reports_whether_it_was_fitted(
+        self, history: str
+    ) -> None:
+        done = sc.calibrate(_read(history), ambient=AIR_F)
+        base = done.calibration.params
+        name = "Power per °F of air under its knee (W)"
+
+        def with_fit(
+            power: hpf.Plane | None, knee: float | None, n: int = 400
+        ) -> dict[str, sc.Term]:
+            fit = hpf.HeatPumpFit(
+                heat=None,
+                power=power,
+                overshoot_f=None,
+                n_heat=0,
+                n_power=n,
+                n_runs=0,
+                heat_error=None,
+                power_error=None if power is None else 12.0,
+            )
+            c = replace(base.compressor, power_air_knee_f=knee)
+            params = hpf.with_heat_pump(replace(base, compressor=c), fit)
+            return _terms(
+                replace(
+                    done,
+                    calibration=replace(
+                        done.calibration, params=params, heat_pump=fit
+                    ),
+                )
+            )
+
+        got = with_fit(hpf.Plane(410.0, 1.1, 2.7, per_air_below=2.9), 60.0)
+        assert got[name].fitted and got[name].value == "2.9"
+        got = with_fit(hpf.Plane(410.0, 1.1, 2.7), None)
+        assert not got[name].fitted
+        assert got[name].why == "no knee set"
+        got = with_fit(hpf.Plane(410.0, 1.1, 2.7), 60.0)
+        assert not got[name].fitted
+        assert got[name].why == "no metered climb block under the 60 °F knee"
+        got = with_fit(None, 60.0)
+        why = got["Power at 65 °F air, 120 °F water (W)"].why
+        assert why == (
+            "400 metered climb blocks place no plane, too few or too alike "
+            "at or over the 60 °F knee"
+        )
+        assert not got[name].fitted and got[name].why == why
+        why = with_fit(None, None)["Power at 65 °F air, 120 °F water (W)"].why
+        assert why == "400 metered climb blocks place no plane"
+
     def test_a_heat_pump_fit_reports_its_values_and_errors(
         self, history: str
     ) -> None:
@@ -168,6 +244,7 @@ class TestTheFits:
         power = terms["Power at 65 °F air, 120 °F water (W)"]
         assert not power.fitted
         assert power.why == "4 metered climb blocks; 30 needed"
+        assert "Power per °F of air under its knee (W)" in terms
         assert "Start hold by time off (min)" not in terms
         assert not terms["Run-on overshoot (°F)"].fitted
         claims = replace(
