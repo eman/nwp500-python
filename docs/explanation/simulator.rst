@@ -839,13 +839,14 @@ runs are not overcharged across the four held-out recoveries with
 circulation inside them: walked without them, 10-14 comes 2 minutes long
 (from 24), but 10-06 13:11 69 minutes short (from 10 short) and 10-26
 14:06 37 short (from 16 long). The walk's pipe cools from the last run
-alone (``circulation.cooled_share``), not warmed by a draw; none of the
-four has a run after a draw, so that is not tested here. 10-23 22:48, 43
-minutes short walked from its start (83 in the day's walk above), is the
-known case of a run with draws inside it: 15.4 gal drawn 50 minutes in
-and 6.1 at 2 h 20 min, the record's lower probe fell 15 degF over 30
-minutes and 2 degF after the second, the walk's about 9 degF at once and
-not at all after the second, so it reaches the stop sooner.
+alone (``circulation.cooled_share``), not warmed by a draw; only one run
+of theirs follows a draw (10-06's at 64 minutes, 5.5 gal drawn in the 30
+before), too few to tell. 10-23 22:48, 43 minutes short walked from its
+start (83 in the day's walk above), is the known case of a run with
+draws inside it: 15.4 gal drawn 50 minutes in and 6.1 at 2 h 20 min, the
+record's lower probe fell 15 degF over 30 minutes and 2 degF after the
+second, the walk's about 10 degF at once and not at all after the
+second, so it reaches the stop sooner.
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off
