@@ -1386,10 +1386,18 @@ def report(done: Calibrated) -> list[Term]:
             hpf.MIN_HEAT_STRETCHES,
         )
     )
+    knee = cp.power_air_knee_f
     power_why = claims(pump.power_violations) or (
         ""
         if pump.power is not None
         else needs(pump.n_power, "metered climb blocks", hpf.MIN_POWER_BLOCKS)
+        if knee is None or pump.n_power < hpf.MIN_POWER_BLOCKS
+        # Enough blocks, but not at or over the knee to place a plane.
+        else (
+            f"{pump.n_power} metered climb blocks, too few or too alike "
+            f"at or over the {knee:g} °F knee to place a plane; "
+            f"{hpf.MIN_POWER_BLOCKS} needed there"
+        )
     )
     heat_error = (
         "-" if pump.heat_error is None else f"{pump.heat_error:.0f} BTU/h rms"
@@ -1421,6 +1429,21 @@ def report(done: Calibrated) -> list[Term]:
             )
         )
     ]
+    # The slope under the knee is fitted only with a knee and a block
+    # under it; else it is the base's (``heat_pump_fit.with_planes``).
+    below_fitted = (
+        pump.power is not None and pump.power.per_air_below is not None
+    )
+    below_why = (
+        power_why
+        if not power_ok
+        else ""
+        if below_fitted
+        else "no knee set"
+        if knee is None
+        else f"no metered climb block under the {knee:g} °F knee"
+    )
+    *plane_names, below_name = _GROUP_TERMS["power_map"]
     terms += [
         Term(
             name,
@@ -1432,17 +1455,22 @@ def report(done: Calibrated) -> list[Term]:
         )
         for i, (name, value) in enumerate(
             zip(
-                _GROUP_TERMS["power_map"],
-                (
-                    cp.power_w,
-                    cp.power_w_per_air_f,
-                    cp.power_w_per_water_f,
-                    cp.power_w_per_air_below_f,
-                ),
+                plane_names,
+                (cp.power_w, cp.power_w_per_air_f, cp.power_w_per_water_f),
                 strict=True,
             )
         )
     ]
+    terms.append(
+        Term(
+            below_name,
+            _num(cp.power_w_per_air_below_f),
+            f"{pump.n_power} blocks",
+            "-",
+            power_ok and below_fitted,
+            below_why,
+        )
+    )
     terms += [
         Term(
             "Run-on overshoot (°F)",

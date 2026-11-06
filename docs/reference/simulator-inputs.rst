@@ -828,8 +828,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        kept, takes those to 4.1 W low (the winter's, in the fit) and
        18.0 W (the held out's). A calibration with a knee set fits the
        plane on the blocks at or over it and the slope, at least 0, on
-       the rest; with too few over the knee it keeps the base's map,
-       and with none under it the base's slope.
+       the rest; with too few over the knee, or too alike to place a
+       plane, it keeps the base's map, and with none under it the
+       base's slope.
      - 2026-11-05
    * - ``compressor.heat_domain_air_f``, ``heat_domain_water_f``,
        ``power_domain_air_f``, ``power_domain_water_f``

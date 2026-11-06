@@ -141,6 +141,51 @@ class TestTheFits:
         assert not power.fitted
         assert power.why == "0 metered climb blocks; 30 needed"
 
+    def test_the_knees_slope_reports_whether_it_was_fitted(
+        self, history: str
+    ) -> None:
+        done = sc.calibrate(_read(history), ambient=AIR_F)
+        base = done.calibration.params
+        name = "Power per °F of air under its knee (W)"
+
+        def with_fit(
+            power: hpf.Plane | None, knee: float | None, n: int = 400
+        ) -> dict[str, sc.Term]:
+            fit = hpf.HeatPumpFit(
+                heat=None,
+                power=power,
+                overshoot_f=None,
+                n_heat=0,
+                n_power=n,
+                n_runs=0,
+                heat_error=None,
+                power_error=None if power is None else 12.0,
+            )
+            c = replace(base.compressor, power_air_knee_f=knee)
+            params = hpf.with_heat_pump(replace(base, compressor=c), fit)
+            return _terms(
+                replace(
+                    done,
+                    calibration=replace(
+                        done.calibration, params=params, heat_pump=fit
+                    ),
+                )
+            )
+
+        got = with_fit(hpf.Plane(410.0, 1.1, 2.7, per_air_below=2.9), 60.0)
+        assert got[name].fitted and got[name].value == "2.9"
+        got = with_fit(hpf.Plane(410.0, 1.1, 2.7), None)
+        assert not got[name].fitted
+        assert got[name].why == "no knee set"
+        got = with_fit(hpf.Plane(410.0, 1.1, 2.7), 60.0)
+        assert not got[name].fitted
+        assert got[name].why == "no metered climb block under the 60 °F knee"
+        got = with_fit(None, 60.0)
+        why = got["Power at 65 °F air, 120 °F water (W)"].why
+        assert why.startswith("400 metered climb blocks, too few or too alike")
+        assert "60 °F knee" in why
+        assert not got[name].fitted and got[name].why == why
+
     def test_a_heat_pump_fit_reports_its_values_and_errors(
         self, history: str
     ) -> None:
