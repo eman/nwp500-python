@@ -354,6 +354,15 @@ class TestThePower:
         assert set(got["phase"]) <= set(hpf.PHASES)
         # Read at the lower probe, until a replay places the condenser.
         assert bool((got["water_f"] == got["lower_f"]).all())
+        # The run's least air to each block's end, every minute of it.
+        for n, g in got.groupby("cycle"):
+            run = frame.loc[frame["cycle"] == n].sort_values("at")
+            for start, coldest in zip(
+                g["start"], g["run_air_min_f"], strict=True
+            ):
+                end = start + pd.Timedelta(minutes=hpf.POWER_BLOCK_MINUTES)
+                seen = run.loc[run["at"] < end, "air_f"].min()
+                assert coldest == pytest.approx(seen)
 
 
 @pytest.fixture(scope="module")
@@ -636,6 +645,20 @@ class TestTheSlopesSigns:
             False,
             True,
         ]
+
+    def test_a_runs_unkept_minutes_hold_it_too(self) -> None:
+        # The run's air under the fan's at a minute no block keeps.
+        rows = pd.DataFrame(
+            {
+                "cycle": [1, 1],
+                "start": pd.to_datetime(
+                    ["2026-01-01 00:10", "2026-01-01 00:20"], utc=True
+                ),
+                "air_f": [62.0, 63.0],
+                "run_air_min_f": [62.0, 58.0],
+            }
+        )
+        assert list(hpf.fan_high(rows, 60.0)) == [False, True]
 
     def test_the_powers_air_is_free(self) -> None:
         rng = np.random.default_rng(3)

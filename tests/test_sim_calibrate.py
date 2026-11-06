@@ -143,8 +143,8 @@ class TestTheFits:
         assert power.why == "0 metered climb blocks; 30 needed"
 
     def test_a_fan_air_that_stops_the_refit_is_named(self) -> None:
-        # Blocks enough, but few at or over 88 °F: the base is kept,
-        # and not for too few blocks.
+        # Blocks enough, but few at the low speed (none under 88 °F):
+        # the base is kept, and not for too few blocks.
         rng = np.random.default_rng(4)
         air = rng.uniform(45.0, 90.0, 200)
         water = rng.uniform(70.0, 145.0, 200)
@@ -168,7 +168,7 @@ class TestTheFits:
         assert j.kept == "base"
         assert "too few metered climb blocks" not in j.why
         assert "place no plane" in j.why
-        assert "88 °F, the fan's low speed" in j.why
+        assert "the fan's low speed (none of its run under 88 °F)" in j.why
 
     def test_the_fans_step_reports_whether_it_was_fitted(
         self, history: str
@@ -215,7 +215,7 @@ class TestTheFits:
         why = got["Power at 65 °F air, 120 °F water (W)"].why
         assert why == (
             "400 metered climb blocks place no plane, too few or too alike "
-            "at or over 60 °F, the fan's low speed"
+            "at the fan's low speed (none of its run under 60 °F)"
         )
         assert not got[name].fitted and got[name].why == why
         why = with_fit(None, None)["Power at 65 °F air, 120 °F water (W)"].why

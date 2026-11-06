@@ -771,15 +771,19 @@ a walk's run at the high speed from the first instant the air is under a
 set air to the run's end. Read from the air alone, each block on its
 own, at 60.5 degF and +18.77 W, the winter's blocks at 60 to 80 degF
 still read 5.1 W low: each of the 144 there that ran high came after one
-under 60.5 degF earlier in the same run. Held to the run's end, at 59.5
-degF and +20.37 W, fitted on the blocks before 2026-09-18 with the plane
-kept, the blocks' speed so taken agreed with the fan's measured one on
-96.9 % of them; the winter's blocks under 60 degF, in the fit, read 0.9
-W over, the winter's at 60 to 80 degF 1.6 W low, the 50 held out under
-60 degF 9.6 W low and all the held out 11.01 W RMS against 13.75 with
-the plane alone, and the 29 days' electricity comes 12.67 % off and 2.15
-% low against 12.80 and 2.48. A cold-air slope under a knee, tried
-first, read the held-out blocks 18.0 W low (:doc:`simulator-tried`).
+under 60.5 degF earlier in the same run. Held to the run's end, a block
+high where its run's air was under the fan's at any minute to its end,
+at 59.0 degF and +20.68 W, fitted on the blocks before 2026-09-18 with
+the plane kept, the blocks' speed so taken agreed with the fan's
+measured one on 97.3 % of them; the winter's blocks under 60 degF, in
+the fit, read 1.1 W over, the winter's at 60 to 80 degF 1.6 W low, the
+50 held out under 60 degF 9.3 W low and all the held out 10.98 W RMS
+against 13.75 with the plane alone, and the 29 days' electricity comes
+12.66 % off and 2.15 % low against 12.80 and 2.48. A run under way at a
+scenario's start, not resumed from a walk's end state, reads its fan
+from that start: what it ran at before is not given. A cold-air slope
+under a knee, tried first, read the held-out blocks 18.0 W low
+(:doc:`simulator-tried`).
 
 After a large draw the walk's lower probe falls at once, the record's
 over about ten minutes (measured 2026-11-04 on the clean compressor-off

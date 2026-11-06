@@ -102,13 +102,20 @@ class CompressorRun:
     start's hold over), to ``off_at`` (None: past the walk), its heat
     scaled by ``scale`` (a recovery model's, ``Scaled``). ``stirs``:
     its heating begins at ``heats_at``, with the start's stir; False
-    for a run under way at the walk's start, already heating."""
+    for a run under way at the walk's start, already heating. Its fan
+    goes to the high speed where the air is first under
+    ``CompressorParams.fan_high_below_air_f`` from ``on_at`` and holds
+    it (``TankPhysics.fan_high``), unless known before the walk, as a
+    resumed run's is: ``fan_high_at``, high since; ``fan_low_through``,
+    low until then, so the air is searched from there."""
 
     on_at: datetime
     heats_at: datetime
     off_at: datetime | None = None
     scale: float = 1.0
     stirs: bool = True
+    fan_high_at: datetime | None = None
+    fan_low_through: datetime | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -426,6 +433,20 @@ class TankPhysics:
     def observe(self, state: TankState) -> tuple[float, float]:
         return st.observe(self.layout, _layers(state))
 
+    def fan_high(self, c: CompressorRun) -> datetime | None:
+        """When ``c``'s fan goes to the high speed and holds it to the
+        run's end (``heat_pump.fan_high_from``): ``fan_high_at`` where
+        known, else from ``on_at`` or ``fan_low_through`` on the air;
+        None: never before ``off_at``."""
+        if c.fan_high_at is not None:
+            return c.fan_high_at
+        since = c.on_at
+        if c.fan_low_through is not None:
+            since = max(since, c.fan_low_through)
+        return fan_high_from(
+            self.params.compressor, since, c.off_at, self.ambient.first_under
+        )
+
     def _heating(self, running: Running) -> st.Heating:
         c = running.compressor
         el = self.params.element
@@ -439,12 +460,7 @@ class TankPhysics:
                 off_at=c.off_at,
                 scale=c.scale,
                 stirs=c.stirs,
-                fan_high_at=fan_high_from(
-                    self.params.compressor,
-                    c.on_at,
-                    c.off_at,
-                    self.ambient.first_under,
-                ),
+                fan_high_at=self.fan_high(c),
                 fan_held=True,
             ),
             elements=tuple(
