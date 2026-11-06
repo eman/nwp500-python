@@ -13,6 +13,36 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+More heat from cold water, for the runs after a large draw (2026-11-06)
+=======================================================================
+
+**Tried.** Measured, not built: the heat map's plane steeper below its
+fitted water span, the heat plus K BTU/h for each degF the condenser's
+water is under 114 degF, K at 16, 32 and 64, every held-out recovery
+walked from its recorded start as the score walks it, on the parameters
+in use (0.85).
+
+**Found.** The four runs longest, each starting with 7 to 14 gal drawn
+at its start, shorten: 10-13 13:09 UTC from 66 to 15, 7 and -5 minutes,
+09-22 17:14 from 40 to 33, 27 and 18. The rest go shorter with them. The
+14 free recoveries came a mean 0.2 minutes short as is and 2.3, 4.1 and
+7.2 short (mean absolute error 4.3, 4.6, 5.3, 7.2); the 13 with draws
+7.5 long as is, then 2.8, 9.6 and 20.6 short (23.1, 19.1, 20.7, 26.4),
+the short ones among them shorter (10-01 03:42 from 5 to 20, 33 and 54
+short).
+
+**Why dropped.** It does not tell the runs after a large draw from the
+rest: the free recoveries, from cold tanks too, are already right, and
+the runs with draws that come short go shorter. Most of 10-13's
+shortening is its circulation run after the record's stop, which the
+walk no longer reaches.
+
+**Account.** :doc:`simulator`, "Accuracy", the runs with water drawn
+around them. The scripts and tables are kept with the site's
+(``placed-energy-2026-11-06``: ``coldheat.py``, ``coldheat.txt``,
+``rates.txt``, ``crawl.txt``, ``circ.txt``).
+
+
 A cold-air slope in the compressor's power under a knee (2026-11-05)
 ====================================================================
 
