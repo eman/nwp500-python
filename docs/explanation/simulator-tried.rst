@@ -14,7 +14,7 @@ named there. When a change is tried and dropped, add it here.
 
 
 The joint rebuild: spans, the heat through the layers, the share fitted (2026-11-06)
-===================================================================================
+====================================================================================
 
 **Tried.** Built (``sim/joint-rebuild``, 8873dac, not merged), one
 consolidated change in place of further one-term sweeps, after an
