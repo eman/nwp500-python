@@ -2,8 +2,31 @@
 Changelog
 =========
 
-Unreleased
-==========
+Version 9.13.0 (2026-11-06)
+===========================
+
+This release replaces the simulator's model of the heater
+(``nwp500.sim``, ``nwp500.sim_calibrate`` and ``nwp-cli simulate``).
+The cloud API, the MQTT and BLE clients and their models are unchanged.
+
+- **The tank is stacked layers** (``sim.physics.stratified``), in place
+  of the two-zone tank: draws, losses, circulation and each heat source
+  act on the layers they reach, and the probes read the layers at their
+  heights.
+- **The heat pump is a performance map** fitted on the heater's own
+  runs, its heat and electricity each a plane in the air and the
+  condenser's water, in place of the refrigerant cycle and the heat
+  book.
+- **Calibration fits the layered tank and the map** from a recorded
+  history and writes ``heater-params/2``; a ``heater-params/1``
+  document is refused and must be calibrated again.
+- **Parameters can be scored on recorded days they were not fitted on**
+  (``nwp500.sim_score``), and two parameter sets compared on the same
+  events.
+- **A simulation starts from the layers a history leaves**, and can go
+  on from where another ended (``HeaterState.resume``).
+
+These changes break callers of the simulator: see Upgrading below.
 
 Upgrading
 ---------
