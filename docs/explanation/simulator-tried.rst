@@ -13,6 +13,80 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The joint rebuild: spans, the heat through the layers, the share fitted (2026-11-06)
+===================================================================================
+
+**Tried.** Built (``sim/joint-rebuild``, 8873dac, not merged), one
+consolidated change in place of further one-term sweeps, after an
+assessment of the simulator against its history found its heat map
+fitted as the whole tank's rise but applied to the condenser's layers,
+its draws taken at once and made up for by the inlet zone, the slower
+draw's share and the fitted probe geometry, and its held-out span spent
+by the selections made on it: every draw the detector times walked over
+its span in the replay, the fit and the score ("Every draw over its
+span", below); the heat pump's heat (its level and both slopes, the
+cross term 0) fitted with the tank's terms through the layered walk on
+the recoveries, with 5 or more, the whole-tank climb fit kept only under
+that, the map's domain the recoveries' air and probe-mean range, the
+power still fitted on the metered blocks at the new replay's condenser
+water; the slower draw's share a fitted term where there are draws; the
+lower probe's height free to the correction top (0.74), bound hits
+named; the recoveries from the whole history (their air range), the
+quiet windows and draws from the last seven weeks. The protocol was
+written before any fit ran: fit A to 2026-09-18 from the parameters in
+use, scored on the 29 held-out days after it against main's score of
+those parameters; fit B to 2026-10-27 from the shipped example, scored
+on the seven whole days after it, which no fit or choice had touched,
+against the shipped example's; adopt only if neither span is worse
+beyond the score's interval on the day's electricity, its end, the
+recoveries or the probes after a draw, and a structural target
+(recoveries with water in use, the lower probe after draws, false
+starts) improves; no knob moved after a score.
+
+**Found.** Both fits put the heat about 8 % over the whole-tank fit's,
+with slopes 1.3 and 2 times as steep (A: 4417, +56.3, -16.9 BTU/h to
+4801, +71.9, -36.7; B: 4445, +54.8, -16.7 to 4786, +66.3, -32.4), the
+share at 0.20 and 0.16 against the 0.25 chosen, the lower probe's height
+at 0.50 and 0.48 (not taking its freed bound), the condenser's width on
+its 0.10 floor in A; the events' error on the fit period fell from 2.28
+to 1.75 degF (A) and 2.22 to 1.72 (B). Held out on the 29 days (main's
+score of the parameters in use, then the same parameters on the
+branch's scorer, then fit A): the day's electricity 10.2, 11.6 and 15.1
+% off (bias -2.1, -3.9, -11.0), its end 3.09, 3.87 and 4.74 degF, the
+draw-free recoveries 3.9, 4.8 and 8.9 minutes off (fit A 7.8 short),
+those with water in use 19.9, 23.6 and 26.0, a recovery's electricity
+4.8, 5.0 and 7.0 %, the lower probe after a draw 1.74, 3.46 and 3.40
+degF RMS, the starts placed 0.824, 0.793 and 0.747; the standby upper
+probe 0.251, 0.272 and 0.204. On the seven frozen days (the shipped
+example on main, on the branch, then fit B): the electricity 10.0, 10.1
+and 12.8 % off (bias +10.0, +10.1, -1.0), the day's end 1.84, 1.84 and
+3.65 degF, the five recoveries, all with water in use, 18.0, 18.8 and
+16.9 minutes off (18, 19 and 6 long), the lower probe after a draw 4.84,
+7.70 and 7.86, the day's lowest upper probe 2.42, 2.30 and 1.74 degF
+off.
+
+**Why dropped.** By the rule set before the scores: the held-out span is
+worse beyond the interval on the electricity's bias, the draw-free
+recoveries and a recovery's electricity, and worse within it on the
+day's energy, its end and the recoveries overall; the frozen span is
+mixed, its long recoveries with water in use closer by the same higher
+heat that walks the draw-free ones short. The heat fitted through the
+layers undoes the whole-tank frame's compensation rather than finding
+the recoveries-with-draws error; the spans in the replay and the score
+cost more on the held-out days than the refit returned. The parameters
+in use and the code on main stay.
+
+**Account.** The protocol, fits, scores and compare tables are kept with
+the site's (``joint-rebuild-2026-11-06``: README.txt, RESULTS.txt,
+fit-A.json, fit-B.json, V/ and F/; the params docs
+``params-site-joint-A-8873dac.json`` and ``-B-``). The assessment that
+led to it is not written up apart from this entry. What would make it
+worth another try: a heat fit through the layers judged on held-out
+draw-free recoveries as it is fitted, or the recoveries with water in
+use diagnosed apart from the heat's level (:doc:`simulator`, the
+recoveries with water in use).
+
+
 Every draw over its span, with the tank refit (2026-11-06)
 ==========================================================
 
