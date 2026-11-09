@@ -311,6 +311,28 @@ class TestTimeToReady:
         measured = time_to_ready(s, params, inlet_measured=True)
         assert "inlet_temp_modelled" not in measured.reasons
 
+    def test_a_measured_inlet_holds_through_the_mode_walks(
+        self, params: HeaterParams
+    ) -> None:
+        """A tank short of the bath, with a draw ahead: the mode walks
+        price the draw's cold water at the measured inlet too."""
+        s = _scenario(
+            loads=Loads(draws=(Draw(at=at(1.0), gallons=5.0),)),
+            environment=Environment(
+                ambient_f=68.0, humidity=48.0, inlet_f=58.0
+            ),
+        )
+        modelled = time_to_ready(s, params)
+        assert modelled.bath.by_mode
+        assert "inlet_temp_modelled" in modelled.reasons
+        measured = time_to_ready(s, params, inlet_measured=True)
+        assert measured.bath.by_mode
+        assert "inlet_temp_modelled" not in measured.reasons
+        assert all(
+            "inlet_temp_modelled" not in m.reasons
+            for m in measured.bath.by_mode
+        )
+
     def test_a_colder_inlet_is_fewer_gallons(
         self, params: HeaterParams
     ) -> None:

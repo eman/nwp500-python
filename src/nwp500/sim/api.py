@@ -1798,11 +1798,12 @@ def _mode_walk(
     recovery: RecoveryModel | None,
     *,
     setpoint_f: float | None = None,
+    inlet_measured: bool = False,
 ) -> SimulationResult:
     """``s`` walked for ``horizon`` with ``mode`` written at its start:
     in place of a mode the scenario writes there (its setpoint kept, or
     ``setpoint_f`` written with the mode), and before its later writes,
-    which still take."""
+    which still take. ``inlet_measured`` goes on to ``simulate``."""
     write = Write(at=s.start, mode=_MODE_SETTING[mode], setpoint_f=setpoint_f)
     early = [w for w in s.commands.writes if w.at <= s.start]
     at_start = [
@@ -1816,7 +1817,11 @@ def _mode_walk(
     )
     walked = s.model_copy(update={"commands": commands, "horizon": horizon})
     return simulate(
-        walked, params, recovery=recovery, tou_windows_in_force=windows
+        walked,
+        params,
+        recovery=recovery,
+        tou_windows_in_force=windows,
+        inlet_measured=inlet_measured,
     )
 
 
@@ -1827,15 +1832,25 @@ def _mode_run(
     bath_gal: float,
     windows: Sequence[tuple[datetime, datetime]],
     recovery: RecoveryModel | None,
+    *,
+    inlet_measured: bool = False,
 ) -> ModeRun:
     """The scenario walked with ``mode`` written at its start (the mode's
     entry rule run, as the heater runs it on a write) to the first
     instant its layers deliver ``bath_gal`` (``delivery.deliverable``),
     within ``READY_HORIZON``, under the TOU ``windows``. Its reasons are
     the walk's to that instant, or over the whole horizon when it does
-    not get there."""
+    not get there. ``inlet_measured`` goes on to the walks."""
     try:
-        result = _mode_walk(s, params, mode, READY_HORIZON, windows, recovery)
+        result = _mode_walk(
+            s,
+            params,
+            mode,
+            READY_HORIZON,
+            windows,
+            recovery,
+            inlet_measured=inlet_measured,
+        )
     except SimulationError:
         return ModeRun(mode, None, None, ("time_to_ready_unavailable",))
     wh = 0.0
@@ -1856,7 +1871,13 @@ def _mode_run(
             # What the walk rests on up to the bath, not past it.
             with contextlib.suppress(SimulationError):
                 reasons = _mode_walk(
-                    s, params, mode, span, windows, recovery
+                    s,
+                    params,
+                    mode,
+                    span,
+                    windows,
+                    recovery,
+                    inlet_measured=inlet_measured,
                 ).reasons
         return ModeRun(
             mode,
@@ -1963,7 +1984,15 @@ def time_to_ready(
         if nxt.outcome != "not_scheduled":
             windows, schedule_unknown = _windows(s, s.start + READY_HORIZON)
             walked = [
-                _mode_run(s, params, mode, bath_gal, windows, recovery)
+                _mode_run(
+                    s,
+                    params,
+                    mode,
+                    bath_gal,
+                    windows,
+                    recovery,
+                    inlet_measured=inlet_measured,
+                )
                 for mode in MODES
             ]
             # The heat pump's walk's reasons are the answer's; each
