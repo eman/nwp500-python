@@ -2,6 +2,17 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Fixed
+-----
+
+- **``time_to_ready(..., inlet_measured=True)`` no longer says
+  ``inlet_temp_modelled`` when the scenario has draws.** The mode walks
+  now get the flag, so the heat pump's walk's reasons no longer bring
+  the reason back into the answer.
+
 Version 9.13.0 (2026-11-06)
 ===========================
 
