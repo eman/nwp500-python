@@ -222,3 +222,49 @@ class TestPayloadLogWiring:
             'recv cmd/52/test-client/res {"a":1}',
             "recv cmd/52/test-client/res {bad",
         ]
+
+
+class TestLogPayloadTopicMacs:
+    def _line(
+        self, caplog: pytest.LogCaptureFixture, topic: str, payload: object
+    ) -> str:
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.payloads")
+        log_payload("recv", topic, payload)
+        records = [
+            r for r in caplog.records if r.name == "nwp500.mqtt.payloads"
+        ]
+        assert len(records) == 1
+        return records[0].getMessage()
+
+    def test_mac_named_by_topic_segment_is_redacted_in_body(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        line = self._line(
+            caplog,
+            f"cmd/52/{MAC}/navien-client-x/res",
+            {
+                "clientID": f"navilink-{MAC}",
+                "responseTopic": f"cmd/52/{MAC}/navien-client-x/res",
+                "reservation": "013e061e0478",
+            },
+        )
+        assert MAC not in line
+        assert '"reservation":"013e061e0478"' in line
+
+    def test_mac_in_body_topic_value_is_redacted(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        line = self._line(
+            caplog,
+            "cmd/52/navien-client-x/res",
+            {"requestTopic": f"cmd/52/{MAC}/ctrl", "list": [f"x {MAC}"]},
+        )
+        assert MAC not in line
+
+    def test_unparsed_message_uses_topic_mac(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        line = self._line(
+            caplog, f"cmd/52/navilink-{MAC}/res", f"garbage {MAC}".encode()
+        )
+        assert line == "recv cmd/52/navilink-REDACTED/res garbage REDACTED"

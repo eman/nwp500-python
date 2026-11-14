@@ -125,6 +125,18 @@ _PAYLOAD_REDACT_KEYS = {
 
 
 _MAC_KEYS = {"macAddress", "mac_address"}
+_NAVILINK_MAC = re.compile(r"navilink-([0-9a-fA-F]{12})(?![0-9a-fA-F])")
+_SEGMENT_MAC = re.compile(r"(?:^|/)([0-9a-fA-F]{12})(?=/|$)")
+
+
+def _collect_macs(text: str, macs: set[str]) -> None:
+    """Add the MACs a topic-like string names to ``macs``.
+
+    A MAC is named as ``navilink-<mac>`` or as a 12-hex topic segment.
+    """
+    macs.update(_NAVILINK_MAC.findall(text))
+    if "/" in text:
+        macs.update(_SEGMENT_MAC.findall(text))
 
 
 def _redact_macs(text: str) -> str:
@@ -138,7 +150,8 @@ def _redact_macs(text: str) -> str:
 def _mask_keys(obj: Any, macs: set[str]) -> Any:
     """Mask sensitive keys, leaving every other value whole.
 
-    The values of MAC address keys are added to ``macs``.
+    The values of MAC address keys, and MACs named in topic-like
+    values, are added to ``macs``.
     """
     if isinstance(obj, dict):
         masked: dict[Any, Any] = {}
@@ -152,6 +165,8 @@ def _mask_keys(obj: Any, macs: set[str]) -> Any:
         return masked
     if isinstance(obj, (list, tuple)):
         return [_mask_keys(v, macs) for v in cast(list[Any], obj)]
+    if isinstance(obj, str):
+        _collect_macs(obj, macs)
     return obj
 
 
@@ -160,7 +175,7 @@ def _redact_body(text: str, macs: set[str]) -> str:
 
     Bare 12-hex values are left alone, since packed data such as a
     one-entry reservation is 12 hex characters too; a bare MAC is
-    replaced only where the payload names it under a MAC key.
+    replaced where the topic or the payload names it.
     """
     for mac in macs:
         text = re.sub(re.escape(mac), "REDACTED", text, flags=re.IGNORECASE)
@@ -192,10 +207,12 @@ def log_payload(
     if isinstance(payload, bytes):
         payload = payload.decode("utf-8", errors="replace")
     macs: set[str] = set()
+    _collect_macs(topic, macs)
     if isinstance(payload, str):
         try:
             parsed = json.loads(payload)
         except ValueError:
+            _collect_macs(payload, macs)
             body = payload
         else:
             body = json.dumps(_mask_keys(parsed, macs), separators=(",", ":"))
