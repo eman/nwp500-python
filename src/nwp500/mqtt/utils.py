@@ -170,6 +170,32 @@ def _mask_keys(obj: Any, macs: set[str]) -> Any:
     return obj
 
 
+_RAW_FIELD = re.compile(
+    r'"('
+    + "|".join(re.escape(k) for k in sorted(_PAYLOAD_REDACT_KEYS))
+    + r')"\s*:\s*("(?:[^"\\]|\\.)*"?|[^,}\]\s]*)'
+)
+
+
+def _mask_raw_fields(text: str, macs: set[str]) -> str:
+    """Mask sensitive fields in text that is not valid JSON.
+
+    A truncated or malformed payload cannot be walked by key, so its
+    ``"key": value`` pairs for sensitive keys are masked by pattern.
+    The values of MAC address keys are added to ``macs``.
+    """
+
+    def mask(match: re.Match[str]) -> str:
+        key, value = match.group(1), match.group(2)
+        if key in _MAC_KEYS:
+            mac = value.strip('"')
+            if mac:
+                macs.add(mac)
+        return f'"{key}":"<REDACTED>"'
+
+    return _RAW_FIELD.sub(mask, text)
+
+
 def _redact_body(text: str, macs: set[str]) -> str:
     """Replace MAC addresses in a payload body.
 
@@ -213,7 +239,7 @@ def log_payload(
             parsed = json.loads(payload)
         except ValueError:
             _collect_macs(payload, macs)
-            body = payload
+            body = _mask_raw_fields(payload, macs)
         else:
             body = json.dumps(_mask_keys(parsed, macs), separators=(",", ":"))
     else:

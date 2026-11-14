@@ -268,3 +268,38 @@ class TestLogPayloadTopicMacs:
             caplog, f"cmd/52/navilink-{MAC}/res", f"garbage {MAC}".encode()
         )
         assert line == "recv cmd/52/navilink-REDACTED/res garbage REDACTED"
+
+
+class TestLogPayloadMalformed:
+    def test_truncated_json_masks_sensitive_fields(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.payloads")
+        log_payload(
+            "recv",
+            "cmd/52/navien-client-x/res",
+            b'{"macAddress":"04786332fca0","password":"sample-secret",'
+            b'"note":"seen 04786332fca0","reservation":"013e061e0478',
+        )
+        line = next(
+            r.getMessage()
+            for r in caplog.records
+            if r.name == "nwp500.mqtt.payloads"
+        )
+        assert MAC not in line
+        assert "sample-secret" not in line
+        assert '"macAddress":"<REDACTED>"' in line
+        assert '"password":"<REDACTED>"' in line
+        assert '"reservation":"013e061e0478' in line
+
+    def test_truncated_inside_secret_value(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.payloads")
+        log_payload("recv", "cmd/52/x/res", '{"a":1,"token":"abc\\"de')
+        line = next(
+            r.getMessage()
+            for r in caplog.records
+            if r.name == "nwp500.mqtt.payloads"
+        )
+        assert line == 'recv cmd/52/x/res {"a":1,"token":"<REDACTED>"'
