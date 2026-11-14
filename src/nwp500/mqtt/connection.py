@@ -28,7 +28,7 @@ from .types import (
     to_awscrt_qos,
     to_awscrt_will,
 )
-from .utils import redact_topic
+from .utils import log_payload, redact_topic
 
 if TYPE_CHECKING:
     from ..auth import NavienAuthClient
@@ -482,6 +482,7 @@ class MqttConnection:
         )
         publish_future = publish_future_raw
         packet_id = int(packet_id_raw)
+        log_payload("send", topic, payload, packet_id)
 
         # Shield the operation to prevent cancellation from propagating to
         # the underlying concurrent.futures.Future. This avoids

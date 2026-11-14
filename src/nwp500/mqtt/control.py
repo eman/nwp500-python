@@ -23,6 +23,7 @@ temperature, smart diagnostic, weekly reservation) have no method here.
 """
 
 import logging
+import time
 from collections.abc import (
     Awaitable,
     Callable,
@@ -283,13 +284,15 @@ class MqttDeviceController:
 
         Args:
             client_id: MQTT client ID
-            session_id: Session ID for commands
+            session_id: Session ID for app-connection events; each command
+                envelope gets its own (see :meth:`_next_session_id`)
             publish_func: Function to publish MQTT messages (async callable)
             device_info_cache: Optional device info cache. If not provided,
                 a new cache with 30-minute update interval is created.
         """
         self._client_id = client_id
         self._session_id = session_id
+        self._last_command_ms = 0
         self._publish: Callable[..., Awaitable[int]] = publish_func
         self._device_info_cache = device_info_cache or MqttDeviceInfoCache(
             update_interval_minutes=30
@@ -434,7 +437,7 @@ class MqttDeviceController:
         device_type_str = str(device_type)
         return {
             "clientID": self._client_id,
-            "sessionID": self._session_id,
+            "sessionID": self._next_session_id(),
             "protocolVersion": MQTT_PROTOCOL_VERSION,
             "request": request,
             "requestTopic": MqttTopicBuilder.command_topic(
@@ -444,6 +447,18 @@ class MqttDeviceController:
                 device_type_str, device_id, self._client_id
             ),
         }
+
+    def _next_session_id(self) -> str:
+        """Return a new sessionID for one command envelope.
+
+        The value is the send time in milliseconds, raised by one when
+        two commands fall in the same millisecond, so no two commands
+        from this client share one. Acknowledgements and control
+        failures echo it, which matches a reply to its command.
+        """
+        now_ms = time.time_ns() // 1_000_000
+        self._last_command_ms = max(now_ms, self._last_command_ms + 1)
+        return str(self._last_command_ms)
 
     async def _mode_command(
         self,

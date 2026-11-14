@@ -489,8 +489,9 @@ and emits as the ``control_failed`` event for every device subscription
 ``failCode`` is 2, "DHW control interval exceeded": the previous DHW control (mode, temperature, power) was sent
 too recently, so wait and resend. The message names the client whose
 command failed, so ``event.own_command`` tells your rejections from
-another client's. A command that is neither acknowledged nor rejected was
-most likely never delivered: check the connection drop log above.
+another client's. The acknowledgement is not sent for every command:
+some commands apply with no reply, so read the device status to see
+whether a command took effect.
 
 .. code-block:: python
 
@@ -501,6 +502,38 @@ most likely never delivered: check the connection drop log above.
            print(f"{event.device_mac} rejected the command: {event.reason}")
 
    mqtt.on(MqttClientEvents.CONTROL_FAILED, on_control_failed)
+
+What did the device get?
+------------------------
+
+Set the ``nwp500.mqtt.payloads`` logger to DEBUG to log every payload
+the client sends and receives, one line each:
+
+.. code-block:: text
+
+   send #1910 cmd/52/navilink-REDACTED/ctrl {"clientID":"navien-client-1996271a","sessionID":"1763116258162",...}
+   recv cmd/52/navilink-REDACTED/navien-client-1996271a/res {"clientID":"navilink-REDACTED","sessionID":"1763116258162",...}
+
+A sent line carries the MQTT packet id after ``#``. MAC addresses are
+replaced with ``REDACTED``; ``clientID`` and ``sessionID`` are kept.
+Every command carries its own ``sessionID``, and a reply carries the
+``sessionID`` of the command it answers, so search the log for a
+command's ``sessionID`` to find its reply, or see that none came.
+``clientID`` names the client a message came from.
+
+.. code-block:: python
+
+   import logging
+
+   logging.getLogger("nwp500.mqtt.payloads").setLevel(logging.DEBUG)
+
+In Home Assistant:
+
+.. code-block:: yaml
+
+   logger:
+     logs:
+       nwp500.mqtt.payloads: debug
 
 Integration Examples
 ====================

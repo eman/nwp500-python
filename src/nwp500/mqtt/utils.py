@@ -5,6 +5,9 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
+import contextlib
+import json
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -98,6 +101,62 @@ def redact(obj: Any, keys_to_redact: set[str] | None = None) -> Any:
         return s
     except Exception:
         return "<UNREPRESENTABLE>"
+
+
+payload_logger = logging.getLogger("nwp500.mqtt.payloads")
+"""Logger for every MQTT payload sent and received, at DEBUG."""
+
+# Payload logs keep clientID and sessionID so a reply can be matched to
+# the command it answers and a message's sender can be told apart.
+_PAYLOAD_REDACT_KEYS = {
+    "access_key_id",
+    "secret_access_key",
+    "secret_key",
+    "session_token",
+    "sessionToken",
+    "password",
+    "pushToken",
+    "push_token",
+    "token",
+    "auth",
+    "macAddress",
+    "mac_address",
+    "email",
+}
+
+
+def _redact_macs(text: str) -> str:
+    """Replace MAC addresses in text, leaving other identifiers."""
+    text = _MAC_PATTERNS[0].sub(r"\1REDACTED", text)
+    for pattern in _MAC_PATTERNS[1:]:
+        text = pattern.sub("REDACTED", text)
+    return text
+
+
+def log_payload(
+    direction: str, topic: str, payload: Any, packet_id: int | None = None
+) -> None:
+    """Log one MQTT payload on ``nwp500.mqtt.payloads`` at DEBUG.
+
+    Args:
+        direction: ``"send"`` or ``"recv"``.
+        topic: Topic the payload was published or received on.
+        payload: The payload, a JSON-compatible object or a JSON string.
+        packet_id: MQTT packet id of a publish, logged as ``#<id>``.
+    """
+    if not payload_logger.isEnabledFor(logging.DEBUG):
+        return
+    if isinstance(payload, str):
+        with contextlib.suppress(ValueError):
+            payload = json.loads(payload)
+    body = json.dumps(
+        redact(payload, _PAYLOAD_REDACT_KEYS), separators=(",", ":")
+    )
+    if packet_id is not None:
+        direction = f"{direction} #{packet_id}"
+    payload_logger.debug(
+        "%s %s %s", direction, _redact_macs(topic), _redact_macs(body)
+    )
 
 
 def redact_topic(topic: str) -> str:

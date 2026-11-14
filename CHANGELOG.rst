@@ -5,6 +5,24 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+
+- **Every MQTT payload sent and received can be logged.** Set the
+  ``nwp500.mqtt.payloads`` logger to DEBUG for one line per message:
+  topic, packet id for a send, and the JSON with MAC addresses
+  redacted. See "What did the device get?" in the MQTT diagnostics
+  guide.
+
+Changed
+-------
+
+- **Each command carries its own ``sessionID``**, the send time in
+  milliseconds, in place of one value for the life of the client.
+  Acknowledgements repeat it, so a reply can be matched to its
+  command. App-connection events and the Last-Will keep the client's
+  ``session_id``.
+
 Fixed
 -----
 
