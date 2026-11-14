@@ -45,7 +45,8 @@ class TestMqttCleanSessionResume:
         client = NavienMqttClient(auth_client_with_valid_tokens)
 
         # Mock the components
-        mock_subscription_manager = AsyncMock()
+        # update_connection is synchronous; resubscribe_all is awaited.
+        mock_subscription_manager = MagicMock()
         mock_subscription_manager.resubscribe_all = AsyncMock()
         client._subscription_manager = mock_subscription_manager
 
