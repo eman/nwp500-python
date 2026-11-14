@@ -223,6 +223,7 @@ class MqttSubscriptionManager:
             message = json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             _logger.error(f"Failed to parse message payload: {e}")
+            log_payload("recv", topic, payload)
             return
 
         log_payload("recv", topic, message)

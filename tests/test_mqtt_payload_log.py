@@ -118,3 +118,107 @@ class TestLogPayload:
         assert not [
             r for r in caplog.records if r.name == "nwp500.mqtt.payloads"
         ]
+
+
+class TestLogPayloadKeepsData:
+    def _body(self, caplog: pytest.LogCaptureFixture, payload: object) -> str:
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.payloads")
+        log_payload("recv", "cmd/52/navien-client-1996271a/res", payload)
+        records = [
+            r for r in caplog.records if r.name == "nwp500.mqtt.payloads"
+        ]
+        assert len(records) == 1
+        return records[0].getMessage().split(" ", 2)[2]
+
+    def test_one_entry_reservation_hex_is_kept(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        body = self._body(
+            caplog,
+            {"response": {"macAddress": MAC, "reservation": "013e061e0478"}},
+        )
+        assert json.loads(body)["response"] == {
+            "macAddress": "<REDACTED>",
+            "reservation": "013e061e0478",
+        }
+
+    def test_long_strings_are_not_cut(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        blob = "ab" * 200
+        assert json.loads(self._body(caplog, {"blob": blob}))["blob"] == blob
+
+    def test_named_mac_is_redacted_wherever_it_appears(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        body = self._body(
+            caplog,
+            {
+                "requestTopic": f"cmd/52/{MAC.upper()}/ctrl",
+                "response": {"macAddress": MAC},
+            },
+        )
+        assert MAC not in body.lower()
+        assert json.loads(body)["requestTopic"] == "cmd/52/REDACTED/ctrl"
+
+    def test_raw_text_is_logged_when_not_json(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        body = self._body(caplog, b"\xffnot json navilink-" + MAC.encode())
+        assert body == "�not json navilink-REDACTED"
+
+
+class TestPayloadLogWiring:
+    @pytest.mark.asyncio
+    async def test_publish_logs_with_packet_id(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from concurrent.futures import Future
+
+        from nwp500.mqtt.connection import MqttConnection
+        from nwp500.mqtt.utils import MqttConnectionConfig
+
+        conn = MqttConnection(
+            MqttConnectionConfig(client_id="test-client"), MagicMock()
+        )
+        done: Future[object] = Future()
+        done.set_result(None)
+        conn._connection = MagicMock()
+        conn._connection.publish.return_value = (done, 1910)
+        conn._connected = True
+
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.payloads")
+        await conn.publish("cmd/52/navilink-x/ctrl", {"sessionID": "1"})
+
+        lines = [
+            r.getMessage()
+            for r in caplog.records
+            if r.name == "nwp500.mqtt.payloads"
+        ]
+        assert lines == ['send #1910 cmd/52/navilink-x/ctrl {"sessionID":"1"}']
+
+    @pytest.mark.asyncio
+    async def test_dispatch_logs_parsed_and_unparsed(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from nwp500.mqtt.subscriptions import MqttSubscriptionManager
+
+        manager = MqttSubscriptionManager(
+            connection=MagicMock(),
+            client_id="test-client",
+            event_emitter=MagicMock(),
+            schedule_coroutine=MagicMock(),
+        )
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.payloads")
+        await manager._dispatch_message("cmd/52/test-client/res", b'{"a":1}')
+        await manager._dispatch_message("cmd/52/test-client/res", b"{bad")
+
+        lines = [
+            r.getMessage()
+            for r in caplog.records
+            if r.name == "nwp500.mqtt.payloads"
+        ]
+        assert lines == [
+            'recv cmd/52/test-client/res {"a":1}',
+            "recv cmd/52/test-client/res {bad",
+        ]

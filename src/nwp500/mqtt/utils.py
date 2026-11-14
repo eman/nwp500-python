@@ -5,7 +5,6 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
-import contextlib
 import json
 import logging
 import re
@@ -13,7 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..config import AWS_IOT_ENDPOINT, AWS_REGION
 from .types import QoS
@@ -125,37 +124,87 @@ _PAYLOAD_REDACT_KEYS = {
 }
 
 
+_MAC_KEYS = {"macAddress", "mac_address"}
+
+
 def _redact_macs(text: str) -> str:
-    """Replace MAC addresses in text, leaving other identifiers."""
+    """Replace MAC addresses in a topic, leaving other identifiers."""
     text = _MAC_PATTERNS[0].sub(r"\1REDACTED", text)
     for pattern in _MAC_PATTERNS[1:]:
         text = pattern.sub("REDACTED", text)
     return text
 
 
+def _mask_keys(obj: Any, macs: set[str]) -> Any:
+    """Mask sensitive keys, leaving every other value whole.
+
+    The values of MAC address keys are added to ``macs``.
+    """
+    if isinstance(obj, dict):
+        masked: dict[Any, Any] = {}
+        for key, value in cast(dict[Any, Any], obj).items():
+            if str(key) in _MAC_KEYS and isinstance(value, str) and value:
+                macs.add(value)
+            if str(key) in _PAYLOAD_REDACT_KEYS:
+                masked[key] = "<REDACTED>"
+            else:
+                masked[key] = _mask_keys(value, macs)
+        return masked
+    if isinstance(obj, (list, tuple)):
+        return [_mask_keys(v, macs) for v in cast(list[Any], obj)]
+    return obj
+
+
+def _redact_body(text: str, macs: set[str]) -> str:
+    """Replace MAC addresses in a payload body.
+
+    Bare 12-hex values are left alone, since packed data such as a
+    one-entry reservation is 12 hex characters too; a bare MAC is
+    replaced only where the payload names it under a MAC key.
+    """
+    for mac in macs:
+        text = re.sub(re.escape(mac), "REDACTED", text, flags=re.IGNORECASE)
+    text = _MAC_PATTERNS[0].sub(r"\1REDACTED", text)
+    for pattern in _MAC_PATTERNS[2:]:
+        text = pattern.sub("REDACTED", text)
+    return text
+
+
 def log_payload(
-    direction: str, topic: str, payload: Any, packet_id: int | None = None
+    direction: str,
+    topic: str,
+    payload: Any,
+    packet_id: int | None = None,
 ) -> None:
     """Log one MQTT payload on ``nwp500.mqtt.payloads`` at DEBUG.
+
+    A payload that is not JSON is logged as its raw text.
 
     Args:
         direction: ``"send"`` or ``"recv"``.
         topic: Topic the payload was published or received on.
-        payload: The payload, a JSON-compatible object or a JSON string.
+        payload: The payload: a JSON-compatible object, or the message
+            as a string or bytes.
         packet_id: MQTT packet id of a publish, logged as ``#<id>``.
     """
     if not payload_logger.isEnabledFor(logging.DEBUG):
         return
+    if isinstance(payload, bytes):
+        payload = payload.decode("utf-8", errors="replace")
+    macs: set[str] = set()
     if isinstance(payload, str):
-        with contextlib.suppress(ValueError):
-            payload = json.loads(payload)
-    body = json.dumps(
-        redact(payload, _PAYLOAD_REDACT_KEYS), separators=(",", ":")
-    )
+        try:
+            parsed = json.loads(payload)
+        except ValueError:
+            body = payload
+        else:
+            body = json.dumps(_mask_keys(parsed, macs), separators=(",", ":"))
+    else:
+        body = json.dumps(_mask_keys(payload, macs), separators=(",", ":"))
     if packet_id is not None:
         direction = f"{direction} #{packet_id}"
     payload_logger.debug(
-        "%s %s %s", direction, _redact_macs(topic), _redact_macs(body)
+        "%s %s %s", direction, _redact_macs(topic), _redact_body(body, macs)
     )
 
 
