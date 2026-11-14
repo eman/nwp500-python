@@ -49,6 +49,7 @@ from .state_tracker import DeviceStateTracker
 from .types import QoS, to_awscrt_qos
 from .utils import (
     get_response_data,
+    log_payload,
     redact_mac,
     redact_topic,
     topic_matches_pattern,
@@ -222,7 +223,10 @@ class MqttSubscriptionManager:
             message = json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             _logger.error(f"Failed to parse message payload: {e}")
+            log_payload("recv", topic, payload)
             return
+
+        log_payload("recv", topic, message)
 
         if _logger.isEnabledFor(logging.DEBUG):
             _logger.debug("Received message on topic: %s", redact_topic(topic))

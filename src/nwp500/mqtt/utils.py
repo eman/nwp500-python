@@ -5,12 +5,14 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
+import json
+import logging
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..config import AWS_IOT_ENDPOINT, AWS_REGION
 from .types import QoS
@@ -98,6 +100,155 @@ def redact(obj: Any, keys_to_redact: set[str] | None = None) -> Any:
         return s
     except Exception:
         return "<UNREPRESENTABLE>"
+
+
+payload_logger = logging.getLogger("nwp500.mqtt.payloads")
+"""Logger for every MQTT payload sent and received, at DEBUG."""
+
+# Payload logs keep clientID and sessionID so a reply can be matched to
+# the command it answers and a message's sender can be told apart.
+_PAYLOAD_REDACT_KEYS = {
+    "access_key_id",
+    "secret_access_key",
+    "secret_key",
+    "session_token",
+    "sessionToken",
+    "password",
+    "pushToken",
+    "push_token",
+    "token",
+    "auth",
+    "macAddress",
+    "mac_address",
+    "email",
+}
+
+
+_MAC_KEYS = {"macAddress", "mac_address"}
+_NAVILINK_MAC = re.compile(r"navilink-([0-9a-fA-F]{12})(?![0-9a-fA-F])")
+_SEGMENT_MAC = re.compile(r"(?:^|/)([0-9a-fA-F]{12})(?=/|$)")
+
+
+def _collect_macs(text: str, macs: set[str]) -> None:
+    """Add the MACs a topic-like string names to ``macs``.
+
+    A MAC is named as ``navilink-<mac>`` or as a 12-hex topic segment.
+    """
+    macs.update(_NAVILINK_MAC.findall(text))
+    if "/" in text:
+        macs.update(_SEGMENT_MAC.findall(text))
+
+
+def _redact_macs(text: str) -> str:
+    """Replace MAC addresses in a topic, leaving other identifiers."""
+    text = _MAC_PATTERNS[0].sub(r"\1REDACTED", text)
+    for pattern in _MAC_PATTERNS[1:]:
+        text = pattern.sub("REDACTED", text)
+    return text
+
+
+def _mask_keys(obj: Any, macs: set[str]) -> Any:
+    """Mask sensitive keys, leaving every other value whole.
+
+    The values of MAC address keys, and MACs named in topic-like
+    values, are added to ``macs``.
+    """
+    if isinstance(obj, dict):
+        masked: dict[Any, Any] = {}
+        for key, value in cast(dict[Any, Any], obj).items():
+            if str(key) in _MAC_KEYS and isinstance(value, str) and value:
+                macs.add(value)
+            if str(key) in _PAYLOAD_REDACT_KEYS:
+                masked[key] = "<REDACTED>"
+            else:
+                masked[key] = _mask_keys(value, macs)
+        return masked
+    if isinstance(obj, (list, tuple)):
+        return [_mask_keys(v, macs) for v in cast(list[Any], obj)]
+    if isinstance(obj, str):
+        _collect_macs(obj, macs)
+    return obj
+
+
+_RAW_FIELD = re.compile(
+    r'"('
+    + "|".join(re.escape(k) for k in sorted(_PAYLOAD_REDACT_KEYS))
+    + r')"\s*:\s*("(?:[^"\\]|\\.)*"?|[^,}\]\s]*)'
+)
+
+
+def _mask_raw_fields(text: str, macs: set[str]) -> str:
+    """Mask sensitive fields in text that is not valid JSON.
+
+    A truncated or malformed payload cannot be walked by key, so its
+    ``"key": value`` pairs for sensitive keys are masked by pattern.
+    The values of MAC address keys are added to ``macs``.
+    """
+
+    def mask(match: re.Match[str]) -> str:
+        key, value = match.group(1), match.group(2)
+        if key in _MAC_KEYS:
+            mac = value.strip('"')
+            if mac:
+                macs.add(mac)
+        return f'"{key}":"<REDACTED>"'
+
+    return _RAW_FIELD.sub(mask, text)
+
+
+def _redact_body(text: str, macs: set[str]) -> str:
+    """Replace MAC addresses in a payload body.
+
+    Bare 12-hex values are left alone, since packed data such as a
+    one-entry reservation is 12 hex characters too; a bare MAC is
+    replaced where the topic or the payload names it.
+    """
+    for mac in macs:
+        text = re.sub(re.escape(mac), "REDACTED", text, flags=re.IGNORECASE)
+    text = _MAC_PATTERNS[0].sub(r"\1REDACTED", text)
+    for pattern in _MAC_PATTERNS[2:]:
+        text = pattern.sub("REDACTED", text)
+    return text
+
+
+def log_payload(
+    direction: str,
+    topic: str,
+    payload: Any,
+    packet_id: int | None = None,
+) -> None:
+    """Log one MQTT payload on ``nwp500.mqtt.payloads`` at DEBUG.
+
+    A payload that is not JSON is logged as its raw text.
+
+    Args:
+        direction: ``"send"`` or ``"recv"``.
+        topic: Topic the payload was published or received on.
+        payload: The payload: a JSON-compatible object, or the message
+            as a string or bytes.
+        packet_id: MQTT packet id of a publish, logged as ``#<id>``.
+    """
+    if not payload_logger.isEnabledFor(logging.DEBUG):
+        return
+    if isinstance(payload, bytes):
+        payload = payload.decode("utf-8", errors="replace")
+    macs: set[str] = set()
+    _collect_macs(topic, macs)
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+        except ValueError:
+            _collect_macs(payload, macs)
+            body = _mask_raw_fields(payload, macs)
+        else:
+            body = json.dumps(_mask_keys(parsed, macs), separators=(",", ":"))
+    else:
+        body = json.dumps(_mask_keys(payload, macs), separators=(",", ":"))
+    if packet_id is not None:
+        direction = f"{direction} #{packet_id}"
+    payload_logger.debug(
+        "%s %s %s", direction, _redact_macs(topic), _redact_body(body, macs)
+    )
 
 
 def redact_topic(topic: str) -> str:

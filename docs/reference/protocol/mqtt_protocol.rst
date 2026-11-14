@@ -147,7 +147,7 @@ All MQTT messages are JSON with this structure:
 
    {
      "clientID": "navien-client-1996271a",
-     "sessionID": "session-67890",
+     "sessionID": "1763116258162",
      "requestTopic": "cmd/52/navilink-04786332fca0/ctrl",
      "responseTopic": "cmd/52/navilink-04786332fca0/navien-client-1996271a/res",
      "protocolVersion": 2,
@@ -165,7 +165,8 @@ All MQTT messages are JSON with this structure:
 **Fields:**
 
 * ``clientID``: MQTT client identifier
-* ``sessionID``: Session identifier for tracking
+* ``sessionID``: The send time in milliseconds, a new value per command.
+  The acknowledgement repeats it.
 * ``requestTopic``: Topic the request is published to
 * ``responseTopic``: Topic the reply should be published to
 * ``protocolVersion``: Protocol version (always 2)
@@ -931,7 +932,7 @@ Control commands and ``st`` are acknowledged on
 
    {
      "clientID": "navilink-04786332fca0",
-     "sessionID": "session-67890",
+     "sessionID": "1763116258162",
      "requestTopic": "...",
      "responseTopic": "...",
      "response": {
