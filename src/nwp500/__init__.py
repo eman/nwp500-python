@@ -25,7 +25,7 @@ finally:
 
 # The exports load on first use (PEP 562), so a part of the library
 # imports without the others' dependencies: ``nwp500.sim`` needs neither
-# aiohttp nor awsiotsdk, which the clients load.
+# aiohttp nor awscrt, which the clients load.
 if TYPE_CHECKING:
     from nwp500.api_client import (
         NavienAPIClient,

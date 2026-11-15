@@ -119,7 +119,7 @@ class MqttSubscriptionManager:
 
     def __init__(
         self,
-        connection: Any,  # awsiot.mqtt_connection.Connection
+        connection: Any,  # awscrt.mqtt.Connection
         client_id: str,
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
