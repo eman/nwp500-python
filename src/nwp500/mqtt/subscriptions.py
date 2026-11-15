@@ -514,6 +514,10 @@ class MqttSubscriptionManager:
 
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
+        if callback is None:
+            # Drop the handlers now, so a restoration running while the
+            # UNSUBACK is pending does not subscribe the topic again.
+            self._message_handlers[topic] = []
 
         try:
             # Await the broker acknowledgement with a timeout (see

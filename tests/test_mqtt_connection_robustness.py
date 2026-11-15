@@ -354,3 +354,40 @@ class TestRegistrationRaces:
         await subscribing
 
         assert "cmd/52/a/#" not in manager._subscriptions
+
+    @pytest.mark.asyncio
+    async def test_restore_skips_a_topic_whose_unsubscribe_is_pending(
+        self,
+    ) -> None:
+        manager = _manager({})
+        await manager.subscribe("cmd/52/a/#", _handler)
+        unsuback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+        connection = MagicMock()
+        connection.unsubscribe.return_value = (unsuback, 2)
+        connection.subscribe.return_value = (_future({"qos": 1}), 1)
+        manager._connection = connection
+
+        leaving = asyncio.create_task(manager.unsubscribe("cmd/52/a/#"))
+        await asyncio.sleep(0)
+        await manager.resubscribe_all()
+        unsuback.set_result({})
+        await leaving
+
+        connection.subscribe.assert_not_called()
+        assert "cmd/52/a/#" not in manager._message_handlers
+
+
+class TestAbandonedAckLog:
+    def test_late_rejection_logs_only_the_error_type(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
+        future.set_exception(SubscribeError("cmd/52/navilink-04786332fca0/#"))
+        caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.connection")
+
+        MqttConnection._consume_abandoned_future(  # pyright: ignore[reportPrivateUsage]
+            cast(Any, future), "Subscribe"
+        )
+
+        assert "SubscribeError" in caplog.text
+        assert "04786332fca0" not in caplog.text

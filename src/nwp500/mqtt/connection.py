@@ -131,10 +131,11 @@ class MqttConnection:
             return
         exc = future.exception()
         if exc is not None:
+            # The type only: a late SubscribeError's text is the topic.
             _logger.debug(
                 "%s completed with exception after being abandoned: %s",
                 operation,
-                exc,
+                type(exc).__name__,
             )
 
     async def _await_ack(
