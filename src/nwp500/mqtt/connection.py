@@ -210,10 +210,11 @@ class MqttConnection:
             return
         exc = future.exception()
         if exc is not None:
+            # The type only: a late SubscribeError's text is the topic.
             _logger.debug(
                 "%s completed with exception after being abandoned: %s",
                 operation,
-                exc,
+                type(exc).__name__,
             )
 
     async def _await_ack(
@@ -361,20 +362,31 @@ class MqttConnection:
             raise
 
     def _create_credentials_provider(self) -> Any:
-        """
-        Create AWS credentials provider from auth tokens.
+        """Create the AWS credentials provider for the connection.
+
+        The provider reads the auth client's current tokens each time the
+        connection signs a handshake, so a reconnect after the tokens are
+        refreshed signs with the new ones.
 
         Returns:
             AWS credentials provider for MQTT connection
 
         Raises:
-            ValueError: If tokens are not available
+            MqttCredentialsError: If tokens are not available
         """
-        from awscrt.auth import (
-            AwsCredentialsProvider,
-        )
+        from awscrt.auth import AwsCredentialsProvider
 
-        # Get current tokens from auth client
+        self._current_credentials()
+        return AwsCredentialsProvider.new_delegate(self._current_credentials)
+
+    def _current_credentials(self) -> Any:
+        """The auth client's current AWS credentials.
+
+        Raises:
+            MqttCredentialsError: If tokens are not available
+        """
+        from awscrt.auth import AwsCredentials
+
         auth_tokens = self._auth_client.current_tokens
         if (
             not auth_tokens
@@ -382,8 +394,7 @@ class MqttConnection:
             or not auth_tokens.secret_key
         ):
             raise MqttCredentialsError("AWS credentials not available")
-
-        return AwsCredentialsProvider.new_static(
+        return AwsCredentials(
             access_key_id=auth_tokens.access_key_id,
             secret_access_key=auth_tokens.secret_key,
             session_token=auth_tokens.session_token,
@@ -475,7 +486,7 @@ class MqttConnection:
         if not self._connected or not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        _logger.debug(f"Subscribing to topic: {topic}")
+        _logger.debug(f"Subscribing to topic: {redact_topic(topic)}")
 
         # Convert concurrent.futures.Future to asyncio.Future and await
         # Use shield to prevent cancellation from propagating to
@@ -486,9 +497,13 @@ class MqttConnection:
         subscribe_future = subscribe_future_raw
         packet_id = packet_id_raw
 
-        await self._await_ack(subscribe_future, f"Subscribe to '{topic}'")
+        await self._await_ack(
+            subscribe_future, f"Subscribe to '{redact_topic(topic)}'"
+        )
 
-        _logger.info(f"Subscribed to '{topic}' with packet_id {packet_id}")
+        _logger.info(
+            f"Subscribed to '{redact_topic(topic)}' with packet_id {packet_id}"
+        )
         return (subscribe_future, packet_id)
 
     async def unsubscribe(self, topic: str) -> int:
@@ -507,7 +522,7 @@ class MqttConnection:
         if not self._connected or not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        _logger.debug(f"Unsubscribing from topic: {topic}")
+        _logger.debug(f"Unsubscribing from topic: {redact_topic(topic)}")
 
         # Convert concurrent.futures.Future to asyncio.Future and await
         # Use shield to prevent cancellation from propagating to
@@ -518,9 +533,15 @@ class MqttConnection:
         unsubscribe_future = unsubscribe_future_raw
         packet_id = int(packet_id_raw)
 
-        await self._await_ack(unsubscribe_future, f"Unsubscribe from '{topic}'")
+        await self._await_ack(
+            unsubscribe_future, f"Unsubscribe from '{redact_topic(topic)}'"
+        )
 
-        _logger.info(f"Unsubscribed from '{topic}' with packet_id {packet_id}")
+        _logger.info(
+            "Unsubscribed from '%s' with packet_id %s",
+            redact_topic(topic),
+            packet_id,
+        )
         return packet_id
 
     async def publish(
@@ -547,7 +568,7 @@ class MqttConnection:
         if not self._connected or not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        _logger.debug(f"Publishing to topic: {topic}")
+        _logger.debug(f"Publishing to topic: {redact_topic(topic)}")
 
         # Convert payload to bytes if needed
         if isinstance(payload, dict):
@@ -569,7 +590,9 @@ class MqttConnection:
         # InvalidStateError when AWS CRT tries to set exception on a
         # cancelled future.
         try:
-            await self._await_ack(publish_future, f"Publish to '{topic}'")
+            await self._await_ack(
+                publish_future, f"Publish to '{redact_topic(topic)}'"
+            )
         except AwsCrtError as e:
             # Handle connection destruction during publish
             # This can happen when AWS IoT Core disconnects (e.g., 24-hour
@@ -577,15 +600,18 @@ class MqttConnection:
             error_name = getattr(e, "name", None)
             if error_name == "AWS_ERROR_MQTT_CONNECTION_DESTROYED":
                 _logger.warning(
-                    f"MQTT connection destroyed during publish to '{topic}'. "
+                    "MQTT connection destroyed during publish to '%s'. "
                     "This can occur during AWS-initiated disconnections. "
-                    "Reconnection will be attempted automatically."
+                    "Reconnection will be attempted automatically.",
+                    redact_topic(topic),
                 )
                 # Mark as disconnected so reconnection handler can take over
                 self._connected = False
             raise
 
-        _logger.debug(f"Published to '{topic}' with packet_id {packet_id}")
+        _logger.debug(
+            f"Published to '{redact_topic(topic)}' with packet_id {packet_id}"
+        )
         return packet_id
 
     @property
