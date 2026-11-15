@@ -22,6 +22,10 @@ Changed
   Acknowledgements repeat it, so a reply can be matched to its
   command. App-connection events and the Last-Will keep the client's
   ``session_id``.
+- **The MQTT keep-alive default is 60 seconds**, down from 1200, so a
+  connection that dies without a disconnect is noticed in about a
+  minute and a half instead of about 20 minutes. Set
+  ``MqttConnectionConfig.keep_alive_secs`` to keep the old value.
 
 Fixed
 -----
@@ -62,6 +66,27 @@ Fixed
   connection was down, so the callback came back with the next
   resubscribe. The callback is now removed locally and nothing is sent
   to the broker.
+- **A failed or cancelled resubscribe no longer loses subscriptions.**
+  After a reconnect without a session, a ``TimeoutError`` or a rejected
+  SUBACK stopped the resubscribe, and every topic not yet restored was
+  dropped for good. Topics that fail are tried twice more before the
+  queued commands are sent, and any still not restored stay registered
+  for the next reconnect. An unsubscribe made while they wait, or while
+  a SUBACK is pending, is kept. A rejected SUBACK in ``subscribe()``
+  removes the handler it added, but not a callback that was already
+  registered. ``resubscribe_all()`` returns whether every subscription
+  was restored.
+- **Reconnects sign with the current AWS credentials.** The connection
+  read the credentials once, so the SDK's own reconnect kept signing
+  with expired ones after a token refresh. It now reads the current
+  ones on each attempt.
+- **A late interruption or resumption from a replaced or closed
+  connection is ignored**, instead of changing the connected state.
+- **Topic logs in the MQTT connection redact the MAC address**, and a
+  failed subscribe logs the error type rather than its text, which
+  carries the topic.
+- **A periodic request task that stops on an unexpected error logs
+  it**, instead of ending silently while still listed as running.
 - **``time_to_ready(..., inlet_measured=True)`` no longer says
   ``inlet_temp_modelled`` when the scenario has draws.** The mode walks
   now get the flag, so the heat pump's walk's reasons no longer bring

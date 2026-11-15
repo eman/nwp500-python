@@ -461,13 +461,17 @@ class TestActivelyReconnectingFlag:
 
         client._actively_reconnecting = False  # flag is clear (default)
 
+        # The interruption comes from the connection the client holds.
+        connection = MagicMock()
+        client._connection_manager = MagicMock(connection=connection)
+
         error = AwsCrtError(
             code=0,
             name="AWS_ERROR_MQTT_UNEXPECTED_HANGUP",
             message="hangup",
         )
         client._on_connection_interrupted_internal(
-            connection=MagicMock(), error=error
+            connection=connection, error=error
         )
 
         mock_handler.on_connection_interrupted.assert_called_once_with(error)

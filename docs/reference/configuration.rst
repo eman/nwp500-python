@@ -158,7 +158,7 @@ Basic Example
    config = MqttConnectionConfig(
        # Connection settings
        client_id="my-custom-client",
-       keep_alive_secs=1200,
+       keep_alive_secs=60,
        
        # Enable features (see guides for details)
        auto_reconnect=True,
