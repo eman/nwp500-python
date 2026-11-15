@@ -125,3 +125,19 @@ def test_fractional_dhw_control_code_is_rejected() -> None:
         DeviceFeature.model_validate(
             FEATURE | {"dhwTemperatureSettingUse": 2.9}
         )
+
+
+def test_status_with_unknown_code_pickles(
+    device_status_dict: dict[str, Any],
+) -> None:
+    import copy
+    import pickle
+
+    status = DeviceStatus.model_validate(
+        device_status_dict | {"errorCode": 777}
+    )
+    restored = pickle.loads(pickle.dumps(status))  # noqa: S301
+    assert restored == status
+    assert isinstance(restored.error_code, ErrorCode)
+    assert restored.error_code.name == "UNKNOWN_777"
+    assert copy.deepcopy(status) == status

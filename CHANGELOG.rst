@@ -32,8 +32,8 @@ Fixed
   message failed validation, and the message was discarded, so status
   updates stopped when the heater reported a new fault. An unknown code
   now becomes a pseudo-member named ``UNKNOWN_<code>``: it compares
-  equal to the code, and ``.name`` and ``.value`` work as for any
-  member. The device list's ``connected`` and the feature's
+  equal to the code, ``.name`` and ``.value`` work as for any member,
+  and it survives pickling and copying. The device list's ``connected`` and the feature's
   ``volumeCode`` do the same, through ``converters.enum_validator``.
 - **An unknown ``dhwTemperatureSettingUse`` code does not permit
   temperature writes.** Only the three known enabled control types

@@ -7,6 +7,7 @@ values.
 See docs/reference/protocol/quick_reference.rst for protocol details.
 """
 
+import functools
 from collections.abc import Callable
 from typing import Any
 
@@ -259,4 +260,15 @@ def _unknown_member(enum_class: type[Any], code: int) -> Any:
     member = int.__new__(enum_class, code)
     member._name_ = f"UNKNOWN_{code}"
     member._value_ = code
+    # Enum pickles a member as ``cls(value)``, which raises for a code
+    # the enum does not list; rebuild the pseudo-member instead.
+    member.__reduce_ex__ = functools.partial(
+        _reduce_unknown_member, enum_class, code
+    )
     return member
+
+
+def _reduce_unknown_member(
+    enum_class: type[Any], code: int, protocol: int
+) -> tuple[Any, tuple[type[Any], int]]:
+    return _unknown_member, (enum_class, code)
