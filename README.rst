@@ -14,7 +14,7 @@ A Python library for monitoring and controlling the Navien NWP500 Heat Pump Wate
 
 Features
 ========
-* **REST and MQTT:** The REST API and real-time MQTT (AWS IoT).
+* **REST and MQTT:** The REST API and real-time MQTT.
 * **Monitoring:** Real-time tracking of temperature, power usage, tank charge, and component status.
 * **Control:** Remote control of target temperatures, operation modes, and vacation settings.
 * **Scheduling:** Reservations, time-of-use (TOU) schedules and anti-legionella cycles.

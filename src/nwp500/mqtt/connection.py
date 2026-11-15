@@ -179,6 +179,8 @@ class MqttConnection:
         self._auth_client = auth_client
         self._connection: MqttConnectionHandle | None = None
         self._connected = False
+        #: Whether the last connect resumed the broker's stored session.
+        self.session_present = False
         self._on_connection_interrupted = on_connection_interrupted
         self._on_connection_resumed = on_connection_resumed
         self._will = will
@@ -350,6 +352,7 @@ class MqttConnection:
             connect_result = await self._await_ack(connect_future, "Connect")
 
             self._connected = True
+            self.session_present = bool(connect_result["session_present"])
             _logger.info(
                 f"Connected successfully: "
                 f"session_present={connect_result['session_present']}"
