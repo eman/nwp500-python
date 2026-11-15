@@ -148,7 +148,9 @@ class TestStaleConnectionCallbacks:
         self, auth_client: NavienAuthClient
     ) -> None:
         client = NavienMqttClient(auth_client)
-        client._schedule_coroutine = MagicMock()  # type: ignore[method-assign]
+        client._schedule_coroutine = MagicMock(  # type: ignore[method-assign]
+            side_effect=lambda coro: coro.close()
+        )
         current = MagicMock()
         manager = MagicMock()
         manager.connection = current
@@ -205,3 +207,67 @@ class TestPeriodicTaskStop:
             "stopped" in r.getMessage() and "boom" in r.getMessage()
             for r in caplog.records
         )
+
+
+class TestNoCurrentConnection:
+    def test_callbacks_without_a_current_connection_are_ignored(
+        self, auth_client: NavienAuthClient
+    ) -> None:
+        client = NavienMqttClient(auth_client)
+        manager = MagicMock()
+        manager.connection = None
+        client._connection_manager = manager
+        client._connected = False
+
+        client._on_connection_resumed_internal(MagicMock(), 0, True)
+        assert client._connected is False
+
+
+class TestResubscribeRetry:
+    @pytest.mark.asyncio
+    async def test_a_failed_topic_is_retried_before_returning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import nwp500.mqtt.subscriptions as subscriptions
+
+        monkeypatch.setattr(subscriptions, "_RESUBSCRIBE_DELAYS", (0, 0, 0))
+        manager = _manager({})
+        for topic in TOPICS:
+            await manager.subscribe(topic, _handler)
+
+        calls: dict[str, int] = {}
+        flaky = MagicMock()
+
+        def subscribe(topic: str, qos: Any, callback: Any) -> Any:
+            calls[topic] = calls.get(topic, 0) + 1
+            if topic == "cmd/52/a/#" and calls[topic] == 1:
+                return _future(error=TimeoutError()), 1
+            return _future({"topic": topic, "qos": qos}), 1
+
+        flaky.subscribe.side_effect = subscribe
+        manager._connection = flaky
+
+        assert await manager.resubscribe_all() is True
+        assert calls["cmd/52/a/#"] == 2
+        assert set(manager._subscriptions) == set(TOPICS)
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_a_topic_stays_unrestored(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import nwp500.mqtt.subscriptions as subscriptions
+
+        monkeypatch.setattr(subscriptions, "_RESUBSCRIBE_DELAYS", (0, 0, 0))
+        manager = _manager({})
+        await manager.subscribe("cmd/52/navilink-04786332fca0/#", _handler)
+        manager._connection = _manager(
+            {
+                "cmd/52/navilink-04786332fca0/#": SubscribeError(
+                    "cmd/52/navilink-04786332fca0/#"
+                )
+            }
+        )._connection
+        caplog.set_level(logging.ERROR, logger="nwp500.mqtt.subscriptions")
+
+        assert await manager.resubscribe_all() is False
+        assert "04786332fca0" not in caplog.text

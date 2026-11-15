@@ -63,6 +63,10 @@ __author__ = "Emmanuel Levijarvi"
 
 _logger = logging.getLogger(__name__)
 
+# Pauses before each resubscribe pass: the first pass runs at once, and
+# topics that fail are tried twice more.
+_RESUBSCRIBE_DELAYS = (0.0, 1.0, 3.0)
+
 # Kind tags for handlers registered under the device wildcard topic.
 _KIND_STATUS = "device_status"
 _KIND_FEATURE = "device_feature"
@@ -446,7 +450,9 @@ class MqttSubscriptionManager:
             if (h := self._message_handlers.get(topic)) and callback in h:
                 h.remove(callback)
             _logger.error(
-                f"Failed to subscribe to '{redact_topic(topic)}': {e}"
+                "Failed to subscribe to '%s': %s",
+                redact_topic(topic),
+                type(e).__name__,
             )
             raise
 
@@ -541,7 +547,7 @@ class MqttSubscriptionManager:
             _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
             raise
 
-    async def resubscribe_all(self) -> None:
+    async def resubscribe_all(self) -> bool:
         """
         Re-establish all subscriptions after a connection rebuild.
 
@@ -554,16 +560,19 @@ class MqttSubscriptionManager:
             This is typically called automatically during deep reconnection
             and should not need to be called manually.
 
+        Returns:
+            True if every subscription was restored. Topics that were not
+            stay registered and are tried again on the next reconnection.
+
         Raises:
             RuntimeError: If not connected to MQTT broker
-            Exception: If any subscription fails
         """
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
         if not self._subscriptions:
             _logger.debug("No subscriptions to restore")
-            return
+            return True
 
         subscription_count = len(self._subscriptions)
         _logger.info(f"Re-establishing {subscription_count} subscription(s)...")
@@ -581,33 +590,45 @@ class MqttSubscriptionManager:
         self._message_handlers.clear()
 
         # Re-establish each subscription: one network call per topic,
-        # regardless of how many handlers are registered for it. A topic
-        # that is not restored, because its subscribe failed or the loop
-        # was cancelled, goes back into the internal state so the next
+        # regardless of how many handlers are registered for it. Topics
+        # that fail are tried again after a pause, so a slow SUBACK does
+        # not leave status updates off until the next reconnect. A topic
+        # still not restored, or not reached because the loop was
+        # cancelled, goes back into the internal state so the next
         # reconnection retries it.
         restored: set[str] = set()
         try:
-            for topic, qos in subscriptions_to_restore:
-                handlers = handlers_to_restore.get(topic, [])
-                if not handlers:
+            for attempt, delay in enumerate(_RESUBSCRIBE_DELAYS):
+                pending = [
+                    (topic, qos)
+                    for topic, qos in subscriptions_to_restore
+                    if topic not in restored
+                ]
+                if not pending:
+                    break
+                if attempt:
+                    await asyncio.sleep(delay)
+                for topic, qos in pending:
+                    handlers = handlers_to_restore.get(topic, [])
+                    if not handlers:
+                        restored.add(topic)
+                        continue
+                    try:
+                        # One network subscribe for the first handler
+                        await self.subscribe(topic, handlers[0], qos)
+                    except Exception as e:
+                        _logger.error(
+                            "Failed to re-subscribe to '%s': %s",
+                            redact_topic(topic),
+                            type(e).__name__,
+                        )
+                        continue
                     restored.add(topic)
-                    continue
-                try:
-                    # One network subscribe for the first handler
-                    await self.subscribe(topic, handlers[0], qos)
-                except Exception as e:
-                    _logger.error(
-                        "Failed to re-subscribe to '%s': %r",
-                        redact_topic(topic),
-                        e,
-                    )
-                    continue
-                restored.add(topic)
 
-                # Register remaining handlers without extra network calls
-                for handler in handlers[1:]:
-                    if handler not in self._message_handlers[topic]:
-                        self._message_handlers[topic].append(handler)
+                    # Register remaining handlers without extra calls
+                    for handler in handlers[1:]:
+                        if handler not in self._message_handlers[topic]:
+                            self._message_handlers[topic].append(handler)
         finally:
             unrestored = [
                 (topic, qos)
@@ -627,6 +648,7 @@ class MqttSubscriptionManager:
                 )
             else:
                 _logger.info("All subscriptions re-established successfully")
+        return not unrestored
 
     async def subscribe_device(
         self, device: Device, callback: Callable[[str, dict[str, Any]], None]

@@ -302,16 +302,17 @@ class NavienMqttClient(
     def _is_current_connection(self, connection: MqttConnectionHandle) -> bool:
         """Whether a callback comes from the connection now in use.
 
-        A connection this client has replaced can still report an
-        interruption or resumption late; acting on it would flip
-        ``_connected`` for the new connection.
+        A connection this client has replaced or closed can still report
+        an interruption or resumption late; acting on it would flip
+        ``_connected`` for the new connection, or mark a closed client
+        connected.
         """
         current = (
             self._connection_manager.connection
             if self._connection_manager
             else None
         )
-        return current is None or connection is current
+        return current is not None and connection is current
 
     def _on_connection_interrupted_internal(
         self, connection: MqttConnectionHandle, error: Exception, **kwargs: Any

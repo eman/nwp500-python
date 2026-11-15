@@ -33,16 +33,20 @@ Fixed
 - **A failed or cancelled resubscribe no longer loses subscriptions.**
   After a reconnect without a session, a ``TimeoutError`` or a rejected
   SUBACK stopped the resubscribe, and every topic not yet restored was
-  dropped for good. Topics not restored now stay registered for the
-  next reconnect, and a rejected SUBACK in ``subscribe()`` removes the
-  handler it added.
+  dropped for good. Topics that fail are tried twice more before the
+  queued commands are sent, any still not restored stay registered for
+  the next reconnect, and a rejected SUBACK in ``subscribe()`` removes
+  the handler it added. ``resubscribe_all()`` returns whether every
+  subscription was restored.
 - **Reconnects sign with the current AWS credentials.** The connection
   read the credentials once, so the SDK's own reconnect kept signing
   with expired ones after a token refresh. It now reads the current
   ones on each attempt.
-- **A late interruption or resumption from a replaced connection is
-  ignored**, instead of changing the connected state of the new one.
-- **Topic logs in the MQTT connection redact the MAC address.**
+- **A late interruption or resumption from a replaced or closed
+  connection is ignored**, instead of changing the connected state.
+- **Topic logs in the MQTT connection redact the MAC address**, and a
+  failed subscribe logs the error type rather than its text, which
+  carries the topic.
 - **A periodic request task that stops on an unexpected error logs
   it**, instead of ending silently while still listed as running.
 - **``time_to_ready(..., inlet_measured=True)`` no longer says
