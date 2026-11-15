@@ -141,10 +141,51 @@ async def test_subscribe_during_pending_unsuback_sends_subscribe() -> None:
         manager.unsubscribe_device_status(cast(Device, device), first)
     )
     await asyncio.sleep(0)
-    await manager.subscribe_device_status(cast(Device, device), second)
+    joining = asyncio.create_task(
+        manager.subscribe_device_status(cast(Device, device), second)
+    )
+    await asyncio.sleep(0)
     unsuback.set_result({})
     await pending
+    await joining
 
     assert connection.subscribe.call_count == 2
     assert topic in manager._subscriptions
     assert len(manager._message_handlers[topic]) == 1
+
+
+@pytest.mark.asyncio
+async def test_late_suback_does_not_mark_an_unsubscribed_topic() -> None:
+    """An unsubscribe waits for an in-flight SUBSCRIBE, then removes it."""
+    connection = MagicMock()
+    suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (suback, 1)
+    connection.unsubscribe.return_value = (_resolved({}), 2)
+    manager = MqttSubscriptionManager(
+        connection=connection,
+        client_id="test-client",
+        event_emitter=MagicMock(),
+        schedule_coroutine=lambda coro: coro.close(),
+    )
+    device = MagicMock()
+    device.device_info.mac_address = "04786332fca0"
+    device.device_info.device_type = 52
+    topic = "cmd/52/navilink-04786332fca0/#"
+
+    def first(status: DeviceStatus) -> None: ...
+
+    subscribing = asyncio.create_task(
+        manager.subscribe_device_status(cast(Device, device), first)
+    )
+    await asyncio.sleep(0)
+    leaving = asyncio.create_task(
+        manager.unsubscribe_device_status(cast(Device, device), first)
+    )
+    await asyncio.sleep(0)
+    suback.set_result({"topic": topic, "qos": 1})
+    await subscribing
+    await leaving
+
+    assert connection.unsubscribe.call_count == 1
+    assert topic not in manager._subscriptions
+    assert topic not in manager._message_handlers

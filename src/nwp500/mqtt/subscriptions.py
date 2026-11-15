@@ -163,6 +163,9 @@ class MqttSubscriptionManager:
         # message, however many callbacks receive it.
         self._dispatch_parsed: dict[tuple[Any, ...], Any] | None = None
         self._dispatch_post_parsed: set[tuple[Any, ...]] = set()
+        # Serializes SUBSCRIBE and UNSUBSCRIBE per topic, so a late SUBACK
+        # or UNSUBACK cannot leave the topic's mark out of date.
+        self._topic_locks: dict[str, asyncio.Lock] = {}
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -390,14 +393,25 @@ class MqttSubscriptionManager:
         if callback not in self._message_handlers[topic]:
             self._message_handlers[topic].append(callback)
 
-        # Check if already subscribed to this topic at the broker level
-        if topic in self._subscriptions:
-            # Already subscribed. If requested QoS is higher than current,
-            # we should upgrade, but standard practice is to just return.
-            # Most brokers handle multiple overlapping subscriptions.
-            # Return a synthetic packet ID (0) as we didn't send a request.
-            return 0
+        async with self._topic_lock(topic):
+            # Checked under the lock: an UNSUBSCRIBE that finished while
+            # this call waited has unmarked the topic, so SUBSCRIBE goes
+            # out again.
+            if topic in self._subscriptions:
+                # Already subscribed at the broker; return a synthetic
+                # packet ID (0) as no request is sent.
+                return 0
+            return await self._send_subscribe(topic, callback, qos)
 
+    async def _send_subscribe(
+        self,
+        topic: str,
+        callback: Callable[[str, dict[str, Any]], None],
+        qos: QoS,
+    ) -> int:
+        """Send SUBSCRIBE and await the SUBACK; the topic lock is held."""
+        if not self._connection:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
         _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
         try:
@@ -504,18 +518,22 @@ class MqttSubscriptionManager:
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
 
-        # Unmark the topic before UNSUBSCRIBE goes out. A subscribe()
-        # arriving while the UNSUBACK is pending then sends a fresh
-        # SUBSCRIBE, which the broker applies after the UNSUBSCRIBE, and
-        # a lost UNSUBACK cannot leave a stale mark behind.
-        self._message_handlers[topic] = []
-        self._subscriptions.pop(topic, None)
-        try:
-            return await self._broker_unsubscribe(topic)
-        finally:
-            # Keep handlers that subscribed while the UNSUBACK was pending.
-            if not self._message_handlers.get(topic):
-                self._message_handlers.pop(topic, None)
+        if callback is None:
+            self._message_handlers[topic] = []
+        async with self._topic_lock(topic):
+            if self._message_handlers.get(topic):
+                # A subscriber joined while this call waited for the lock.
+                return 0
+            # Unmark the topic before UNSUBSCRIBE goes out, so a lost
+            # UNSUBACK cannot leave a stale mark and the next subscribe()
+            # sends SUBSCRIBE again.
+            self._subscriptions.pop(topic, None)
+            try:
+                return await self._broker_unsubscribe(topic)
+            finally:
+                # Keep handlers that subscribed while UNSUBACK was pending.
+                if not self._message_handlers.get(topic):
+                    self._message_handlers.pop(topic, None)
 
     async def _broker_unsubscribe(self, topic: str) -> int:
         """Send UNSUBSCRIBE for ``topic`` and await its acknowledgement."""
@@ -703,6 +721,9 @@ class MqttSubscriptionManager:
         await self._unsubscribe_callback(
             self._device_wildcard(device), callback, _KIND_STATUS
         )
+
+    def _topic_lock(self, topic: str) -> asyncio.Lock:
+        return self._topic_locks.setdefault(topic, asyncio.Lock())
 
     def _device_wildcard(self, device: Device) -> str:
         return MqttTopicBuilder.command_topic(

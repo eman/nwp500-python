@@ -40,9 +40,10 @@ Fixed
   subscribed.** When the last callback for a topic was removed and the
   broker's acknowledgement never came, the next subscribe to that topic
   skipped SUBSCRIBE and got no messages if the broker had dropped it.
-  The topic is now unmarked before UNSUBSCRIBE is sent, so the next
-  subscribe sends SUBSCRIBE, including one made while the
-  acknowledgement is pending, and that callback is kept.
+  SUBSCRIBE and UNSUBSCRIBE for a topic now run one at a time and the
+  topic is unmarked before UNSUBSCRIBE is sent, so the next subscribe
+  sends SUBSCRIBE, a subscribe made meanwhile keeps its callback, and a
+  late SUBACK cannot mark a topic that was unsubscribed.
 - **``time_to_ready(..., inlet_measured=True)`` no longer says
   ``inlet_temp_modelled`` when the scenario has draws.** The mode walks
   now get the flag, so the heat pump's walk's reasons no longer bring
