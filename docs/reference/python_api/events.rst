@@ -197,8 +197,8 @@ ModeChangedEvent
 
    **Fields:**
 
-   * ``old_mode`` (:class:`~nwp500.CurrentOperationMode` | int): Previous operating mode.
-   * ``new_mode`` (:class:`~nwp500.CurrentOperationMode` | int): New operating mode.
+   * ``old_mode`` (:class:`~nwp500.CurrentOperationMode`): Previous operating mode.
+   * ``new_mode`` (:class:`~nwp500.CurrentOperationMode`): New operating mode.
 
 PowerChangedEvent
 -----------------
@@ -245,8 +245,7 @@ ErrorDetectedEvent
 
    **Fields:**
 
-   * ``error_code`` (:class:`~nwp500.ErrorCode` | int): Newly detected device
-     error, a plain int for a code the enum does not know.
+   * ``error_code`` (:class:`~nwp500.ErrorCode`): Newly detected device error.
    * ``status`` (:class:`~nwp500.models.DeviceStatus`): Status snapshot that
      contained the error.
 
@@ -259,7 +258,7 @@ ErrorClearedEvent
 
    **Fields:**
 
-   * ``error_code`` (:class:`~nwp500.ErrorCode` | int): Error code that cleared.
+   * ``error_code`` (:class:`~nwp500.ErrorCode`): Error code that cleared.
 
 FeatureReceivedEvent
 --------------------

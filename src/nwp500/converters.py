@@ -213,6 +213,11 @@ def energy_count_to_wh(value: Any) -> float:
 def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
     """Create a validator for converting int/value to Enum.
 
+    A code the enum does not list becomes a pseudo-member named
+    ``UNKNOWN_<code>``, so a value the device sends that the library does
+    not know yet keeps its message parseable. It compares equal to the
+    raw code, and ``.name`` and ``.value`` work as for a member.
+
     Args:
         enum_class: The Enum class to validate against.
 
@@ -220,21 +225,35 @@ def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
         A validator function compatible with Pydantic BeforeValidator.
 
     Example:
-        >>> from enum import Enum
-        >>> class Color(Enum):
+        >>> from enum import IntEnum
+        >>> class Color(IntEnum):
         ...     RED = 1
         ...     BLUE = 2
         >>> validator = enum_validator(Color)
         >>> validator(1)
         <Color.RED: 1>
+        >>> validator(7)
+        <Color.UNKNOWN_7: 7>
     """
 
     def validate(value: Any) -> Any:
         """Validate and convert value to enum."""
         if isinstance(value, enum_class):
             return value
-        if isinstance(value, int):
-            return enum_class(value)
-        return enum_class(int(value))
+        code = value if isinstance(value, int) else int(value)
+        try:
+            return enum_class(code)
+        except ValueError:
+            if not issubclass(enum_class, int):
+                raise
+            return _unknown_member(enum_class, code)
 
     return validate
+
+
+def _unknown_member(enum_class: type[Any], code: int) -> Any:
+    """A pseudo-member of an int enum for a code it does not list."""
+    member = int.__new__(enum_class, code)
+    member._name_ = f"UNKNOWN_{code}"
+    member._value_ = code
+    return member

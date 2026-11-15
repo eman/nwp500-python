@@ -3,7 +3,7 @@ from typing import Annotated
 from pydantic import BeforeValidator, Field, computed_field
 
 from .._base import NavienBaseModel
-from ..converters import device_bool_to_python
+from ..converters import device_bool_to_python, enum_validator
 from ..enums import (
     DHWControlTypeFlag,
     TemperatureType,
@@ -16,11 +16,8 @@ from ..temperature import HalfCelsius
 from ..unit_system import get_unit_system
 
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
-# An unknown code stays an int, so it cannot fail the whole feature message.
 VolumeCodeField = Annotated[
-    VolumeCode | int,
-    Field(union_mode="left_to_right"),
-    BeforeValidator(int),
+    VolumeCode, BeforeValidator(enum_validator(VolumeCode))
 ]
 
 
@@ -41,8 +38,9 @@ class DeviceFeature(NavienBaseModel):
 
     # IMPORTANT: temperature_type must remain the first field so computed
     # temperature properties can fall back to the device's native unit setting.
-    temperature_type: TemperatureType | int = Field(
-        union_mode="left_to_right",
+    temperature_type: Annotated[
+        TemperatureType, BeforeValidator(enum_validator(TemperatureType))
+    ] = Field(
         default=TemperatureType.FAHRENHEIT,
         description=(
             "Default temperature unit preference - "
@@ -163,12 +161,13 @@ class DeviceFeature(NavienBaseModel):
             "primary function of water heater"
         ),
     )
-    dhw_temperature_setting_use: DHWControlTypeFlag | int = Field(
-        union_mode="left_to_right",
+    dhw_temperature_setting_use: Annotated[
+        DHWControlTypeFlag, BeforeValidator(enum_validator(DHWControlTypeFlag))
+    ] = Field(
         description=(
             "DHW temperature control precision setting: "
             "granularity of temperature adjustments available for DHW control"
-        ),
+        )
     )
     smart_diagnostic_use: CapabilityFlag = Field(
         default=False,
@@ -184,8 +183,9 @@ class DeviceFeature(NavienBaseModel):
             "reports signal strength in dBm"
         ),
     )
-    temp_formula_type: TempFormulaType | int = Field(
-        union_mode="left_to_right",
+    temp_formula_type: Annotated[
+        TempFormulaType, BeforeValidator(enum_validator(TempFormulaType))
+    ] = Field(
         default=TempFormulaType.ASYMMETRIC,
         description=(
             "Temperature calculation method identifier "

@@ -5,13 +5,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BeforeValidator, Field
 
 from .._base import NavienBaseModel
+from ..converters import enum_validator
 from ..enums import ConnectionStatus, DeviceType, ErrorCode
 
-# An unknown status stays an int, so it cannot fail the whole device list.
 ConnectionStatusField = Annotated[
-    ConnectionStatus | int,
-    Field(union_mode="left_to_right"),
-    BeforeValidator(int),
+    ConnectionStatus, BeforeValidator(enum_validator(ConnectionStatus))
 ]
 
 
