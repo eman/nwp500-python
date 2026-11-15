@@ -33,7 +33,7 @@ Quick Start
    diagnostics = MqttDiagnosticsCollector(enable_verbose_logging=True)
 
    # Connect with hardened config
-   config = MqttConnectionConfig(keep_alive_secs=60)  # Reduced from 1200
+   config = MqttConnectionConfig(keep_alive_secs=60)
    mqtt_client = NavienMqttClient(auth_client, config=config)
 
    # Hook events
@@ -164,8 +164,8 @@ Start with these hardened settings:
    from nwp500.mqtt_utils import MqttConnectionConfig
 
    config = MqttConnectionConfig(
-       # 1. Reduce keep-alive (prevents NAT idle timeout)
-       keep_alive_secs=60,              # Reduced from 1200
+       # 1. Keep-alive below NAT idle timeouts (the default)
+       keep_alive_secs=60,
        
        # 2. Faster reconnection for transient failures
        initial_reconnect_delay=0.5,     # 500ms (was 1s)
@@ -187,10 +187,10 @@ Start with these hardened settings:
 Why These Settings Matter
 --------------------------
 
-**Keep-Alive (1200s → 60s)**
-   Most NAT devices timeout idle connections after 300-600 seconds. Default
-   1200s keep-alive allows NAT to timeout before keep-alive packets arrive,
-   causing connection to die. At 60s, packets arrive before the timeout.
+**Keep-Alive (60s, the default)**
+   Most NAT devices time out idle connections after 300-600 seconds. A 60s
+   keep-alive sends a ping well before that, and a dead connection is noticed
+   within about a minute and a half.
 
 **Faster Reconnection (1s → 0.5s)**
    Transient network glitches often recover in <1 second. Faster initial retry

@@ -11,6 +11,7 @@ and status up-to-date. Features include:
 
 import asyncio
 import contextlib
+import functools
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -24,6 +25,26 @@ from .utils import PeriodicRequestType
 __author__ = "Emmanuel Levijarvi"
 
 _logger = logging.getLogger(__name__)
+
+
+def _log_unexpected_stop(
+    task: asyncio.Task[None], *, request_type: str, device: str
+) -> None:
+    """Log a periodic task that ended on an error it did not handle.
+
+    The task stays registered after such an error, so without this it
+    would look alive while sending nothing.
+    """
+    if task.cancelled():
+        return
+    if (error := task.exception()) is not None:
+        _logger.error(
+            "Periodic %s requests for %s stopped: %r",
+            request_type,
+            device,
+            error,
+            exc_info=error,
+        )
 
 
 class MqttPeriodicRequestManager:
@@ -241,6 +262,13 @@ class MqttPeriodicRequestManager:
 
         # Create and store the task
         task = asyncio.create_task(periodic_request())
+        task.add_done_callback(
+            functools.partial(
+                _log_unexpected_stop,
+                request_type=request_type.value,
+                device=redacted_device_id,
+            )
+        )
         self._periodic_tasks[task_name] = task
 
         _logger.info(

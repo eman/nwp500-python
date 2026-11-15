@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 from awscrt.exceptions import AwsCrtError
+from awscrt.mqtt import SubscribeError
 from pydantic import ValidationError
 
 from ..events import EventEmitter
@@ -440,7 +441,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except (AwsCrtError, RuntimeError, TimeoutError) as e:
+        except (AwsCrtError, RuntimeError, SubscribeError, TimeoutError) as e:
             # Clean up handler on failure if this was the first one
             if (h := self._message_handlers.get(topic)) and callback in h:
                 h.remove(callback)
@@ -580,44 +581,52 @@ class MqttSubscriptionManager:
         self._message_handlers.clear()
 
         # Re-establish each subscription: one network call per topic,
-        # regardless of how many handlers are registered for it.
-        failed_subscriptions: set[str] = set()
-        for topic, qos in subscriptions_to_restore:
-            handlers = handlers_to_restore.get(topic, [])
-            if not handlers:
-                continue
-            try:
-                # One network subscribe for the first handler
-                await self.subscribe(topic, handlers[0], qos)
-            except (AwsCrtError, RuntimeError) as e:
-                _logger.error(
-                    f"Failed to re-subscribe to '{redact_topic(topic)}': {e}"
-                )
-                failed_subscriptions.add(topic)
-                continue
+        # regardless of how many handlers are registered for it. A topic
+        # that is not restored, because its subscribe failed or the loop
+        # was cancelled, goes back into the internal state so the next
+        # reconnection retries it.
+        restored: set[str] = set()
+        try:
+            for topic, qos in subscriptions_to_restore:
+                handlers = handlers_to_restore.get(topic, [])
+                if not handlers:
+                    restored.add(topic)
+                    continue
+                try:
+                    # One network subscribe for the first handler
+                    await self.subscribe(topic, handlers[0], qos)
+                except Exception as e:
+                    _logger.error(
+                        "Failed to re-subscribe to '%s': %r",
+                        redact_topic(topic),
+                        e,
+                    )
+                    continue
+                restored.add(topic)
 
-            # Register remaining handlers without extra network calls
-            for handler in handlers[1:]:
-                if handler not in self._message_handlers[topic]:
-                    self._message_handlers[topic].append(handler)
-
-        if failed_subscriptions:
-            # Restore failed subscriptions to internal state so they can be
-            # retried on the next reconnection cycle.
-            qos_map = dict(subscriptions_to_restore)
-            for topic in failed_subscriptions:
-                self._subscriptions[topic] = qos_map.get(
-                    topic, QoS.AT_LEAST_ONCE
-                )
+                # Register remaining handlers without extra network calls
+                for handler in handlers[1:]:
+                    if handler not in self._message_handlers[topic]:
+                        self._message_handlers[topic].append(handler)
+        finally:
+            unrestored = [
+                (topic, qos)
+                for topic, qos in subscriptions_to_restore
+                if topic not in restored
+            ]
+            for topic, qos in unrestored:
+                self._subscriptions[topic] = qos
                 self._message_handlers[topic] = handlers_to_restore.get(
                     topic, []
                 )
-            _logger.warning(
-                f"Failed to restore {len(failed_subscriptions)} "
-                "subscription(s); will retry on next reconnection"
-            )
-        else:
-            _logger.info("All subscriptions re-established successfully")
+            if unrestored:
+                _logger.warning(
+                    "Failed to restore %d subscription(s); will retry on "
+                    "next reconnection",
+                    len(unrestored),
+                )
+            else:
+                _logger.info("All subscriptions re-established successfully")
 
     async def subscribe_device(
         self, device: Device, callback: Callable[[str, dict[str, Any]], None]

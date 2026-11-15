@@ -388,7 +388,7 @@ class MqttConnectionConfig:
     region: str = AWS_REGION
     client_id: str | None = None
     clean_session: bool = True
-    keep_alive_secs: int = 1200
+    keep_alive_secs: int = 60
 
     # Reconnection settings
     auto_reconnect: bool = True

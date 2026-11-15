@@ -49,6 +49,7 @@ from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
     redact_mac,
+    redact_topic,
 )
 
 if TYPE_CHECKING:
@@ -298,6 +299,20 @@ class NavienMqttClient(
             # otherwise be stored on the discarded future and vanish.
             future.add_done_callback(_log_scheduled_coroutine_result)
 
+    def _is_current_connection(self, connection: MqttConnectionHandle) -> bool:
+        """Whether a callback comes from the connection now in use.
+
+        A connection this client has replaced can still report an
+        interruption or resumption late; acting on it would flip
+        ``_connected`` for the new connection.
+        """
+        current = (
+            self._connection_manager.connection
+            if self._connection_manager
+            else None
+        )
+        return current is None or connection is current
+
     def _on_connection_interrupted_internal(
         self, connection: MqttConnectionHandle, error: Exception, **kwargs: Any
     ) -> None:
@@ -308,6 +323,9 @@ class NavienMqttClient(
             error: Error that caused the interruption
             **kwargs: Forward-compatibility kwargs from AWS SDK
         """
+        if not self._is_current_connection(connection):
+            _logger.debug("Ignoring interruption of a replaced connection")
+            return
         self._connected = False
 
         # Emit event
@@ -368,6 +386,9 @@ class NavienMqttClient(
             session_present: Whether the previous session was present
             **kwargs: Forward-compatibility kwargs from AWS SDK
         """
+        if not self._is_current_connection(connection):
+            _logger.debug("Ignoring resumption of a replaced connection")
+            return
         _logger.info(
             f"Connection resumed: return_code={return_code}, "
             f"session_present={session_present}"
@@ -846,27 +867,6 @@ class NavienMqttClient(
             _logger.error(f"Failed to recover connection: {e}")
             raise
 
-    def _create_credentials_provider(self) -> Any:
-        """Create AWS credentials provider from auth tokens."""
-        from awscrt.auth import (
-            AwsCredentialsProvider,
-        )
-
-        # Get current tokens from auth client
-        auth_tokens = self._auth_client.current_tokens
-        if (
-            not auth_tokens
-            or not auth_tokens.access_key_id
-            or not auth_tokens.secret_key
-        ):
-            raise MqttCredentialsError("AWS credentials not available")
-
-        return AwsCredentialsProvider.new_static(
-            access_key_id=auth_tokens.access_key_id,
-            secret_access_key=auth_tokens.secret_key,
-            session_token=auth_tokens.session_token,
-        )
-
     async def disconnect(self) -> None:
         """Disconnect from AWS IoT Core and stop all periodic tasks.
 
@@ -1050,7 +1050,8 @@ class NavienMqttClient(
         if not self._connected:
             if self.config.enable_command_queue:
                 _logger.debug(
-                    f"Not connected, queuing command to topic: {topic}"
+                    "Not connected, queuing command to topic: %s",
+                    redact_topic(topic),
                 )
                 self._command_queue.enqueue(topic, payload, qos)
                 return 0  # Return 0 to indicate command was queued
