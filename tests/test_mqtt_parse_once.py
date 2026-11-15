@@ -23,10 +23,13 @@ async def test_two_status_callbacks_share_one_parse_and_one_event(
     device_status_dict: dict[str, Any],
 ) -> None:
     connection = MagicMock()
-    connection.subscribe.side_effect = lambda topic, qos, callback: (
-        _resolved({"topic": topic, "qos": qos}),
-        1,
-    )
+
+    def subscribe(
+        topic: str, qos: Any, callback: Any
+    ) -> tuple[concurrent.futures.Future[Any], int]:
+        return _resolved({"topic": topic, "qos": qos}), 1
+
+    connection.subscribe.side_effect = subscribe
     emitter = MagicMock()
     scheduled: list[Any] = []
 
@@ -66,3 +69,39 @@ async def test_two_status_callbacks_share_one_parse_and_one_event(
         if c.args[0] == MqttClientEvents.STATUS_RECEIVED
     ]
     assert len(status_emits) == 1
+
+
+@pytest.mark.asyncio
+async def test_unacknowledged_unsubscribe_resubscribes_next_time() -> None:
+    """A lost UNSUBACK must not leave the topic marked subscribed."""
+    connection = MagicMock()
+
+    def subscribe(
+        topic: str, qos: Any, callback: Any
+    ) -> tuple[concurrent.futures.Future[Any], int]:
+        return _resolved({"topic": topic, "qos": qos}), 1
+
+    connection.subscribe.side_effect = subscribe
+    never: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.unsubscribe.return_value = (never, 2)
+    manager = MqttSubscriptionManager(
+        connection=connection,
+        client_id="test-client",
+        event_emitter=MagicMock(),
+        schedule_coroutine=lambda coro: coro.close(),
+    )
+    manager._operation_timeout = 0.01
+    device = MagicMock()
+    device.device_info.mac_address = "04786332fca0"
+    device.device_info.device_type = 52
+
+    def first(status: DeviceStatus) -> None: ...
+
+    def second(status: DeviceStatus) -> None: ...
+
+    await manager.subscribe_device_status(cast(Device, device), first)
+    with pytest.raises(TimeoutError):
+        await manager.unsubscribe_device_status(cast(Device, device), first)
+    await manager.subscribe_device_status(cast(Device, device), second)
+
+    assert connection.subscribe.call_count == 2

@@ -108,3 +108,32 @@ async def test_failed_unsubscribe_keeps_the_request_error() -> None:
             AsyncMock(side_effect=RuntimeError("publish failed")),
             timeout=1,
         )
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_subscribe_removes_the_callback() -> None:
+    device = MagicMock()
+    registered: list[Any] = []
+    started = asyncio.Event()
+
+    async def subscribe(device: Any, callback: Any) -> None:
+        # The manager registers the handler before awaiting the SUBACK.
+        registered.append(callback)
+        started.set()
+        await asyncio.Event().wait()
+
+    unsubscribe = AsyncMock()
+    task = asyncio.create_task(
+        _wait_for_response(
+            AsyncMock(side_effect=subscribe),
+            unsubscribe,
+            device,
+            AsyncMock(),
+            timeout=10,
+        )
+    )
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    _assert_removed(unsubscribe, device, registered)

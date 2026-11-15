@@ -505,6 +505,22 @@ class MqttSubscriptionManager:
         _logger.info("Unsubscribing from topic (redacted)")
 
         try:
+            return await self._broker_unsubscribe(topic)
+        except BaseException:
+            # The broker may have applied the UNSUBSCRIBE without its
+            # acknowledgement arriving. With no handlers left, forget the
+            # topic so the next subscribe() sends SUBSCRIBE again instead
+            # of trusting a subscription the broker may have dropped.
+            if not self._message_handlers.get(topic):
+                self._subscriptions.pop(topic, None)
+                self._message_handlers.pop(topic, None)
+            raise
+
+    async def _broker_unsubscribe(self, topic: str) -> int:
+        """Send UNSUBSCRIBE for ``topic`` and await its acknowledgement."""
+        if not self._connection:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+        try:
             # Await the broker acknowledgement with a timeout (see
             # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
@@ -548,7 +564,10 @@ class MqttSubscriptionManager:
             return int(packet_id)
 
         except (AwsCrtError, RuntimeError, TimeoutError) as e:
-            _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
+            _logger.error(
+                "Failed to unsubscribe from topic (redacted): %s",
+                type(e).__name__,
+            )
             raise
 
     async def resubscribe_all(self) -> None:

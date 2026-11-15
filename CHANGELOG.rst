@@ -36,6 +36,11 @@ Fixed
   get each later message again for every earlier request. Over
   Bluetooth the adapter gains the matching
   ``unsubscribe_device_status`` and ``unsubscribe_device_feature``.
+- **An unacknowledged unsubscribe no longer leaves the topic marked
+  subscribed.** When the last callback for a topic was removed and the
+  broker's acknowledgement never came, the next subscribe to that topic
+  skipped SUBSCRIBE and got no messages if the broker had dropped it.
+  The topic is now forgotten, so the next subscribe sends SUBSCRIBE.
 - **``time_to_ready(..., inlet_measured=True)`` no longer says
   ``inlet_temp_modelled`` when the scenario has draws.** The mode walks
   now get the flag, so the heat pump's walk's reasons no longer bring

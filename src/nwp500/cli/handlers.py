@@ -74,8 +74,10 @@ async def _wait_for_response(
         if not future.done():
             future.set_result(res)
 
-    await subscribe_func(device, callback)
     try:
+        # Inside the try: a subscribe cancelled while its acknowledgement
+        # is pending has already registered the callback.
+        await subscribe_func(device, callback)
         _logger.info(f"Requesting {action_name}...")
         await action_func()
         try:

@@ -59,8 +59,8 @@ async def _detect_unit_system(
         if not future.done():
             future.set_result(status)
 
-    await mqtt.subscribe_device_status(device, _on_status)
     try:
+        await mqtt.subscribe_device_status(device, _on_status)
         await mqtt.request_device_status(device)
         status = await asyncio.wait_for(future, timeout=5.0)
         if status.temperature_type == TemperatureType.CELSIUS:
