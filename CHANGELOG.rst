@@ -5,6 +5,14 @@ Changelog
 Unreleased
 ==========
 
+Version 9.13.1 (2026-11-14)
+===========================
+
+This release makes the MQTT connection steadier, drops the
+``awsiotsdk`` dependency for ``awscrt`` directly, keeps a message whose
+enum code the library does not know, and makes a simulated recovery
+with a TOU window ahead much faster.
+
 Added
 -----
 
