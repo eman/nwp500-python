@@ -26,6 +26,11 @@ Changed
   connection that dies without a disconnect is noticed in about a
   minute and a half instead of about 20 minutes. Set
   ``MqttConnectionConfig.keep_alive_secs`` to keep the old value.
+- **The MQTT connection is built with ``awscrt`` directly; the
+  ``awsiotsdk`` dependency is gone.** It was used only to build the
+  signed websocket connection and pinned ``awscrt`` to one release.
+  The library now requires ``awscrt>=0.36.1,<0.39``. The CONNECT
+  packet no longer carries the SDK's name and version in its username.
 
 Fixed
 -----
