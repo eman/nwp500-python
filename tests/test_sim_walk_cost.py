@@ -268,7 +268,11 @@ def test_the_cap_judged_where_it_acts_answers_as_at_each_draw(
     s = _peak_day(True, start_h, setpoint_f)
     deferred = sim.simulate(s, params)
     _judged_at_each_draw(monkeypatch)
-    assert sim.simulate(s, params) == deferred
+    eager = sim.simulate(s, params)
+    assert eager == deferred
+    # The stop a walk hands on, which ``==`` leaves out.
+    assert eager.simulation.resume == deferred.simulation.resume
+    assert eager.end_state == deferred.end_state
 
 
 #: Random walks whose recoveries judge the cap after draws: as a window
@@ -287,9 +291,10 @@ JUDGED_CASES = [
 def test_a_random_walk_answers_as_judged_at_each_draw(
     monkeypatch: pytest.MonkeyPatch, seed: int, spans: tuple[int, ...]
 ) -> None:
-    try:
-        deferred = engine.simulate(**walk_case(seed, spans))
-    except engine.SimulationError as e:
-        pytest.skip(f"the case does not simulate: {e}")
+    deferred = engine.simulate(**walk_case(seed, spans))
     _judged_at_each_draw(monkeypatch)
-    assert engine.simulate(**walk_case(seed, spans)) == deferred
+    eager = engine.simulate(**walk_case(seed, spans))
+    assert eager == deferred
+    # The stop a walk hands on, which ``==`` leaves out.
+    assert eager.resume is not None
+    assert eager.resume == deferred.resume
