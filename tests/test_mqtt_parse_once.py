@@ -8,6 +8,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from awscrt.mqtt import SubscribeError
 
 from nwp500.models import Device, DeviceStatus
 from nwp500.mqtt.subscriptions import MqttSubscriptionManager
@@ -434,3 +435,27 @@ async def test_unhashable_callable_subscribes_and_unsubscribes() -> None:
     assert handler.got == ["cmd/52/a/x"]
     assert "cmd/52/a/#" not in manager._message_handlers
     connection.unsubscribe.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_subscribe_keeps_a_callback_a_later_call_waits_on() -> (
+    None
+):
+    """Two subscribes of one callback; the first SUBACK is rejected."""
+    connection = MagicMock()
+    rejected: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (rejected, 1)
+    manager = _manager(connection)
+
+    first = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    connection.subscribe.return_value = (_resolved({"qos": 1}), 2)
+    rejected.set_exception(SubscribeError("cmd/52/a/#"))
+    with pytest.raises(SubscribeError):
+        await first
+    await second
+
+    assert manager._message_handlers["cmd/52/a/#"] == [_noop]
+    assert "cmd/52/a/#" in manager._subscriptions

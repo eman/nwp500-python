@@ -410,12 +410,13 @@ class MqttSubscriptionManager:
         # Track handler first, with the order of this call: a remove-all
         # unsubscribe takes only handlers subscribed before it was made.
         self._subscribe_seq += 1
+        this_call = self._subscribe_seq
         order = [
             entry
             for entry in self._registered_at.get(topic, [])
             if entry[0] != callback
         ]
-        order.append((callback, self._subscribe_seq))
+        order.append((callback, this_call))
         self._registered_at[topic] = order
         handlers = self._message_handlers.setdefault(topic, [])
         added = callback not in handlers
@@ -438,9 +439,14 @@ class MqttSubscriptionManager:
                 SubscribeError,
                 TimeoutError,
             ) as e:
-                # Remove the handler only if this call added it: a
-                # callback that was already registered keeps it.
-                if added and (h := self._message_handlers.get(topic)):
+                # Remove the handler only if this call added it (a callback
+                # already registered keeps it) and no later subscribe() of
+                # the same callback is waiting to use it.
+                if (
+                    added
+                    and self._subscribed_at(topic, callback) == this_call
+                    and (h := self._message_handlers.get(topic))
+                ):
                     with contextlib.suppress(ValueError):
                         h.remove(callback)
                     self._prune_registered(topic)
