@@ -175,7 +175,7 @@ class RawCelsius(Temperature):
         return float(round(super().to_fahrenheit()))
 
     def to_fahrenheit_with_formula(
-        self, formula_type: TempFormulaType
+        self, formula_type: TempFormulaType | int
     ) -> float:
         """Convert to Fahrenheit using formula-specific rounding.
 

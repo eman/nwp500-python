@@ -113,13 +113,14 @@ class ModeChangedEvent:
 
     Attributes:
         device_mac: MAC address of the origin device
-        old_mode: Previous operation mode
-        new_mode: New operation mode
+        old_mode: Previous operation mode, or the raw int for a mode
+            the library does not know
+        new_mode: New operation mode, or the raw int
     """
 
     device_mac: str
-    old_mode: CurrentOperationMode
-    new_mode: CurrentOperationMode
+    old_mode: CurrentOperationMode | int
+    new_mode: CurrentOperationMode | int
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,12 +170,13 @@ class ErrorDetectedEvent:
 
     Attributes:
         device_mac: MAC address of the origin device
-        error_code: The error code that occurred
+        error_code: The error code that occurred, or the raw int for a
+            code the library does not know
         status: Device status when error was detected
     """
 
     device_mac: str
-    error_code: ErrorCode
+    error_code: ErrorCode | int
     status: DeviceStatus
 
 
@@ -184,11 +186,11 @@ class ErrorClearedEvent:
 
     Attributes:
         device_mac: MAC address of the origin device
-        error_code: The error code that was cleared
+        error_code: The error code that was cleared, or the raw int
     """
 
     device_mac: str
-    error_code: ErrorCode
+    error_code: ErrorCode | int
 
 
 @dataclass(frozen=True, slots=True)
