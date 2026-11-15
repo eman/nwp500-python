@@ -543,6 +543,19 @@ class _Cycle:
     fan_low_through: datetime | None = None
 
 
+@dataclass(frozen=True)
+class _Judged:
+    """The tank a recovery's stop is judged from (``_position``): its
+    instant, layers, lower probe and setpoint, and what heats it from
+    there and from each withheld window's edge ahead."""
+
+    at: datetime
+    state: TankState
+    lower: float
+    setpoint_f: float
+    running: tuple[tuple[datetime, Running], ...]
+
+
 @dataclass
 class _Element:
     """An element running now, on from ``on_at`` (its on-edge), its
@@ -679,6 +692,11 @@ class _Engine:
         self.mode: HeaterMode = heater.mode
         self.mode_writes: list[ModeWrite] = []
         self.cycle: _Cycle | None = None
+        #: The tank a draw left the running recovery at, its stop not
+        #: judged yet (``_position``, ``_settle``); its ``stop_level`` is
+        #: then the cap's level where that is lower, so a walk stops
+        #: where the cap could act.
+        self.pending: _Judged | None = None
         self.element: _Element | None = None
         #: Elements that have stopped, whose heat is still on its way to
         #: the water (``ElementParams.upper_dead_time_min``).
@@ -817,6 +835,9 @@ class _Engine:
         held = self.state.mode.held
         cycle = self.cycle
         el = self.element
+        if cycle is not None and self.pending is not None:
+            # A walk going on from here reads the stop as judged.
+            self._settle(cycle)
         return Resume(
             at=self.t,
             controller=self.state,
@@ -942,20 +963,33 @@ class _Engine:
             stop=stop,
         )
 
-    def _ahead(self, end: datetime, stop: Stop) -> Stretch:
-        """The tank walked from now toward ``end`` under what runs now,
-        credited or not on each side of the withheld windows' edges, to
-        where ``stop`` holds. Nothing is drawn: a look ahead, not the
-        walk."""
+    def _judged(self) -> _Judged:
+        """The tank now, as ``_position`` judges a stop from it."""
+        cycle = self.cycle
+        assert cycle is not None
+        end = self.t + RECOVERY_AHEAD
         edges = sorted(
             {x for w in self.withheld for x in w if self.t < x < end}
         )
-        t, state = self.t, self.tank_state
+        return _Judged(
+            self.t,
+            self.tank_state,
+            self.lower,
+            cycle.setpoint_f,
+            tuple((x, self._running(x)) for x in (self.t, *edges)),
+        )
+
+    def _ahead(self, judged: _Judged, stop: Stop) -> Stretch:
+        """The tank walked from ``judged`` toward ``RECOVERY_AHEAD``
+        under what ran there, credited or not on each side of the
+        withheld windows' edges, to where ``stop`` holds. Nothing is
+        drawn: a look ahead, not the walk."""
+        t, state = judged.at, judged.state
+        ends = [x for x, _ in judged.running[1:]]
+        ends.append(judged.at + RECOVERY_AHEAD)
         points: list[Point] = []
-        for b in (*edges, end):
-            part = self.physics.advance(
-                t, state, b, running=self._running(t), stop=stop
-            )
+        for (_, running), b in zip(judged.running, ends, strict=True):
+            part = self.physics.advance(t, state, b, running=running, stop=stop)
             points += part.points[1:] if points else part.points
             if part.stopped:
                 return Stretch(points, stopped=True)
@@ -1161,7 +1195,7 @@ class _Engine:
     def _withheld_at(self, at: datetime) -> Window | None:
         return window_at(at, self.withheld)
 
-    def _position(self) -> None:
+    def _position(self, *, defer: bool = False) -> None:
         """Where the running recovery stops, from the tank now: the
         lower probe ``hp_stop_overshoot_f`` over its target, at most at
         the top of the heat pump's water range, unless the TOU cap stops
@@ -1173,26 +1207,61 @@ class _Engine:
         ``tou_cap_f``). Reaching the level before the window opens, it
         runs on toward its stop and stops as the window opens; reaching
         it inside the window, it stops there (``controller.cap_outcome``).
+
+        ``defer``, after a draw, keeps the tank and judges the cap only
+        once the walk could meet it (``_settle``): a walk of many small
+        draws would otherwise look 16 hours ahead at each one. Until
+        then the walk stops at the cap's level, so the stop judged later
+        is the one judged here.
         """
         cycle = self.cycle
         assert cycle is not None
-        target = cycle.setpoint_f
-        level = min(
-            target + self.params.hp_stop_overshoot_f,
-            self.params.hp_water_range_f[1],
-        )
+        level = self._stop_level(cycle.setpoint_f)
         cycle.stop_level, cycle.stop_at, cycle.capped = level, None, False
+        self.pending = None
         if self.lower >= level:
             cycle.stop_at = self.t
             return
         ahead = self.t + RECOVERY_AHEAD
         if not any(w0 < ahead and self.t < w1 for w0, w1 in self.windows):
             return
-        full = self._ahead(ahead, lambda _, lower: lower >= level)
+        judged = self._judged()
+        cap_level = cycle.setpoint_f - self.params.tou_cap_f
+        if not defer or (
+            self.lower >= cap_level
+            and window_at(self.t, self.windows) is not None
+        ):
+            # Judged now; after a draw, only at the cap's level inside a
+            # window, where it stops now.
+            self._judge(cycle, judged)
+            return
+        # Otherwise the cap can stop it only as a window opens
+        # (``_heat_until`` judges it there) or, below the level, at the
+        # level, where the walk stops to judge it.
+        self.pending = judged
+        if self.lower < cap_level:
+            cycle.stop_level = min(level, cap_level)
+
+    def _stop_level(self, target: float) -> float:
+        """A recovery's stop, the cap aside: ``hp_stop_overshoot_f``
+        over ``target``, at most the top of the heat pump's range."""
+        return min(
+            target + self.params.hp_stop_overshoot_f,
+            self.params.hp_water_range_f[1],
+        )
+
+    def _judge(self, cycle: _Cycle, judged: _Judged) -> None:
+        """The TOU cap on ``cycle``, judged on its walk ahead from
+        ``judged`` (``_position``)."""
+        target = judged.setpoint_f
+        level = self._stop_level(target)
+        cycle.stop_level, cycle.stop_at, cycle.capped = level, None, False
+        self.pending = None
+        full = self._ahead(judged, lambda _, lower: lower >= level)
         cap = judge_cap(
             full.points,
-            at=self.t,
-            lower_f=self.lower,
+            at=judged.at,
+            lower_f=judged.lower,
             target_f=target,
             windows=self.windows,
             params=self.params,
@@ -1203,17 +1272,30 @@ class _Engine:
         assert window is not None
         if cap.kind == "at_level":
             # Already at the level inside the window: it does not heat.
-            cycle.stop_at, cycle.capped = self.t, True
+            cycle.stop_at, cycle.capped = judged.at, True
         else:
             reaches: datetime | None = None
-            if self.lower < cap.level:
-                walked = self._ahead(ahead, lambda _, lower: lower >= cap.level)
-                reaches = walked.end if walked.stopped else ahead
+            if judged.lower < cap.level:
+                walked = self._ahead(
+                    judged, lambda _, lower: lower >= cap.level
+                )
+                reaches = (
+                    walked.end if walked.stopped else judged.at + RECOVERY_AHEAD
+                )
             outcome = ctl.cap_outcome(reaches, window)
             if outcome == "until_open":
                 cycle.stop_at, cycle.capped = window[0], True
             elif outcome == "to_level":
                 cycle.stop_level, cycle.capped = cap.level, True
+
+    def _settle(self, cycle: _Cycle) -> bool:
+        """Judge the stop a draw left (``_position``); whether the stop
+        a walk took, at the cap's level, is still the stop."""
+        judged = self.pending
+        assert judged is not None
+        walked_to = cycle.stop_level
+        self._judge(cycle, judged)
+        return cycle.stop_level == walked_to
 
     def _begin(self, start: Start, *, hold: float) -> None:
         """The compressor starts (``controller.StartCompressor``),
@@ -1292,6 +1374,7 @@ class _Engine:
         if at_target:
             self.reached.append((at, cycle.setpoint_f))
         self.cycle = None
+        self.pending = None
 
     def _heat_until(self, end: datetime) -> None:
         """Run the cycle to ``end`` or to its own finish: the tank
@@ -1315,7 +1398,7 @@ class _Engine:
                 # range, which stops it.
                 if self._check_availability():
                     continue
-                self._position()
+                self._position(defer=True)
                 self._element_trigger()
                 continue
             if cycle.stop_at is not None and cycle.stop_at <= self.t:
@@ -1326,7 +1409,23 @@ class _Engine:
             later = [] if draw is None or draw >= nxt else [draw]
             later += [x for w in self.withheld for x in w if self.t < x < nxt]
             nxt = min([nxt, *later])
+            if self.pending is not None and any(
+                self.t < w0 <= nxt for w0, _ in self.windows
+            ):
+                # A window opens by the walk's end, where the cap can
+                # stop it.
+                self._settle(cycle)
+                continue
             stretch = self._advance(nxt, stop=self._stop())
+            if (
+                self.pending is not None
+                and stretch.stopped
+                and stretch.points[-1].lower_f >= cycle.stop_level
+                and not self._settle(cycle)
+            ):
+                # The walk stopped at the cap's level, which the stop
+                # judged now is not: walk it again to the stop.
+                continue
             element_at = upper_on_crossing(
                 self.state, self.settings, stretch.points
             )

@@ -35,6 +35,14 @@ Changed
 Fixed
 -----
 
+- **A simulated recovery with a TOU window ahead is no longer slowed
+  by each draw.** A draw during a recovery judged the TOU cap again on
+  a 16-hour walk ahead, so a forecast's small draw every few minutes
+  walked the tank 40 to 50 times the simulated span. The cap is now
+  judged where it can act: as a window opens, at the cap's level, or
+  at the level inside a window. Results are unchanged. A 28-hour day
+  of 10-minute draws with a peak ahead went from 3 to 11 seconds to
+  about half a second, close to the same day without TOU (#409).
 - **A code the library does not know no longer drops the whole
   message.** An unlisted ``errorCode``, ``operationMode``,
   ``currentHeatUse`` or any other enum field in a status or feature

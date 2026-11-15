@@ -3,7 +3,9 @@ the span, and the same answer however far a coast walks at a time.
 
 A coast finds the heater's own start on the walk ahead of it and then
 walks again to there, so how far it walks before it looks bounds what
-a simulation costs (``engine._COAST_AHEAD``).
+a simulation costs (``engine._COAST_AHEAD``). A recovery judges the
+TOU cap on a walk 16 hours ahead; after a draw it judges it only where
+the cap could act (``engine._Engine._position``).
 """
 
 from datetime import UTC, datetime, timedelta
@@ -11,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from sim_cases import PARAMS, days_of_draws, walk_case
+from sim_cases import PARAMS, days_of_draws, peak, walk_case
 
 from nwp500 import sim
 from nwp500.sim import (
@@ -172,3 +174,119 @@ def test_a_piece_answers_as_the_whole_walk(
     whole = answer(timedelta(days=30))
     assert answer(timedelta(hours=3)) == whole
     assert answer(timedelta(minutes=10)) == whole
+
+
+def _peak_day(tou: bool, start_h: int, setpoint_f: float) -> sim.Scenario:
+    """A 28-hour recovery from a part-cooled tank on cool air, a peak
+    from 16:00 to 21:00 UTC: a forecast's 0.35 gal every 10 minutes,
+    five larger draws and a circulation run every 95 minutes."""
+    t0 = datetime(2026, 11, 14, start_h, 0, tzinfo=UTC)
+    span = timedelta(hours=28)
+    small = [
+        sim.Draw(at=t0 + timedelta(minutes=m), gallons=0.35)
+        for m in range(0, 28 * 60, 10)
+    ]
+    events = [
+        sim.Draw(at=t0 + timedelta(hours=h), gallons=g, duration_s=480)
+        for h, g in ((2, 12.0), (11, 18.0), (12, 9.0), (24, 15.0), (26, 6.0))
+    ]
+    runs = tuple(
+        sim.CirculationRun(
+            start=t0 + timedelta(minutes=m),
+            end=t0 + timedelta(minutes=m + 6),
+        )
+        for m in range(30, 28 * 60, 95)
+    )
+    return sim.Scenario(
+        start=t0,
+        horizon=span,
+        tz="UTC",
+        state=sim.HeaterState(
+            upper_f=121.0,
+            lower_f=108.0,
+            layers_f=tuple(100.0 + 2.0 * k for k in range(12)),
+        ),
+        settings=sim.Settings(
+            setpoint_f=setpoint_f,
+            hp_lower_on_f=setpoint_f - 14.0,
+            hp_lower_off_f=setpoint_f,
+        ),
+        environment=sim.Environment(ambient_f=58.0),
+        loads=sim.Loads(
+            draws=tuple(sorted(small + events, key=lambda d: d.at)),
+            circulation=runs,
+        ),
+        schedules=peak(16, 21) if tou else sim.Schedules(),
+    )
+
+
+@pytest.mark.parametrize("start_h", [0, 8, 16])
+def test_a_tou_recovery_through_small_draws_walks_about_its_span(
+    monkeypatch: pytest.MonkeyPatch, start_h: int
+) -> None:
+    """Each draw in a recovery with a window ahead once looked 16 hours
+    ahead to judge the cap: a forecast's draw every 10 minutes walked
+    the tank 40 to 50 times its span."""
+    walked: list[timedelta] = []
+    advance = TankPhysics.advance
+
+    def counted(
+        self: TankPhysics,
+        start: datetime,
+        state: Any,
+        end: datetime,
+        *args: Any,
+        **kw: Any,
+    ) -> Any:
+        out = advance(self, start, state, end, *args, **kw)
+        walked.append(out.points[-1].at - start)
+        return out
+
+    monkeypatch.setattr(TankPhysics, "advance", counted)
+    s = _peak_day(True, start_h, 141.8)
+    result = sim.simulate(s, sim.site_example_params())
+    assert result.simulation.heating, "the day heats"
+    assert sum(walked, timedelta()) < 3 * s.horizon
+
+
+def _judged_at_each_draw(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cap judged at each draw, as it was before it was deferred."""
+    position = engine._Engine._position  # pyright: ignore[reportPrivateUsage]
+
+    def eager(self: Any, *, defer: bool = False) -> None:
+        position(self, defer=False)
+
+    monkeypatch.setattr(engine._Engine, "_position", eager)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("start_h", [0, 8, 16])
+@pytest.mark.parametrize("setpoint_f", [120.2, 141.8])
+def test_the_cap_judged_where_it_acts_answers_as_at_each_draw(
+    monkeypatch: pytest.MonkeyPatch, start_h: int, setpoint_f: float
+) -> None:
+    params = sim.site_example_params()
+    s = _peak_day(True, start_h, setpoint_f)
+    deferred = sim.simulate(s, params)
+    _judged_at_each_draw(monkeypatch)
+    assert sim.simulate(s, params) == deferred
+
+
+#: Random walks whose recoveries judge the cap after draws: as a window
+#: opens, at the cap's level (some walked again to the stop), and
+#: capped.
+JUDGED_CASES = [
+    *((seed, (8, 24)) for seed in (14, 29, 39, 59)),
+    *((seed, (24, 48)) for seed in (7, 9, 13, 33, 41, 45)),
+]
+
+
+@pytest.mark.parametrize(("seed", "spans"), JUDGED_CASES)
+def test_a_random_walk_answers_as_judged_at_each_draw(
+    monkeypatch: pytest.MonkeyPatch, seed: int, spans: tuple[int, ...]
+) -> None:
+    try:
+        deferred = engine.simulate(**walk_case(seed, spans))
+    except engine.SimulationError as e:
+        pytest.skip(f"the case does not simulate: {e}")
+    _judged_at_each_draw(monkeypatch)
+    assert engine.simulate(**walk_case(seed, spans)) == deferred
