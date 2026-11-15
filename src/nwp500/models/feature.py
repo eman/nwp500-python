@@ -38,7 +38,9 @@ class DeviceFeature(NavienBaseModel):
 
     # IMPORTANT: temperature_type must remain the first field so computed
     # temperature properties can fall back to the device's native unit setting.
-    temperature_type: TemperatureType = Field(
+    temperature_type: Annotated[
+        TemperatureType, BeforeValidator(enum_validator(TemperatureType))
+    ] = Field(
         default=TemperatureType.FAHRENHEIT,
         description=(
             "Default temperature unit preference - "
@@ -159,7 +161,9 @@ class DeviceFeature(NavienBaseModel):
             "primary function of water heater"
         ),
     )
-    dhw_temperature_setting_use: DHWControlTypeFlag = Field(
+    dhw_temperature_setting_use: Annotated[
+        DHWControlTypeFlag, BeforeValidator(enum_validator(DHWControlTypeFlag))
+    ] = Field(
         description=(
             "DHW temperature control precision setting: "
             "granularity of temperature adjustments available for DHW control"
@@ -179,7 +183,9 @@ class DeviceFeature(NavienBaseModel):
             "reports signal strength in dBm"
         ),
     )
-    temp_formula_type: TempFormulaType = Field(
+    temp_formula_type: Annotated[
+        TempFormulaType, BeforeValidator(enum_validator(TempFormulaType))
+    ] = Field(
         default=TempFormulaType.ASYMMETRIC,
         description=(
             "Temperature calculation method identifier "

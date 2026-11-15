@@ -124,11 +124,13 @@ class MqttDeviceCapabilityChecker:
 def _check_dhw_temperature_control(features: DeviceFeature) -> bool:
     """Check if device supports DHW temperature control.
 
-    Returns True if temperature control is enabled (not UNKNOWN or DISABLE).
+    Returns True only for a known enabled control type, so a code the
+    library does not know never permits a temperature write.
     """
     from .enums import DHWControlTypeFlag
 
-    return features.dhw_temperature_setting_use not in (
-        DHWControlTypeFlag.UNKNOWN,
-        DHWControlTypeFlag.DISABLE,
+    return features.dhw_temperature_setting_use in (
+        DHWControlTypeFlag.ENABLE_DOT_5_DEGREE,
+        DHWControlTypeFlag.ENABLE_1_DEGREE,
+        DHWControlTypeFlag.ENABLE_3_STAGE,
     )

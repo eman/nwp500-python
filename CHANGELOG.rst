@@ -26,6 +26,19 @@ Changed
 Fixed
 -----
 
+- **A code the library does not know no longer drops the whole
+  message.** An unlisted ``errorCode``, ``operationMode``,
+  ``currentHeatUse`` or any other enum field in a status or feature
+  message failed validation, and the message was discarded, so status
+  updates stopped when the heater reported a new fault. An unknown code
+  now becomes a pseudo-member named ``UNKNOWN_<code>``: it compares
+  equal to the code, ``.name`` and ``.value`` work as for any member,
+  and it survives pickling and copying. The device list's
+  ``connected`` and the feature's ``volumeCode`` do the same, through
+  ``converters.enum_validator``.
+- **An unknown ``dhwTemperatureSettingUse`` code does not permit
+  temperature writes.** Only the three known enabled control types
+  pass the ``dhw_temperature_setting_use`` capability check.
 - **A status or feature message is parsed and announced once.** With
   two callbacks subscribed for one device, each message was validated
   twice and ``status_received`` (or ``feature_received``) was emitted
