@@ -185,6 +185,8 @@ class MqttSubscriptionManager:
         # A list of (handler, order) per topic, matched by equality like
         # the handler list, so a callback need not be hashable.
         self._registered_at: dict[str, list[tuple[Any, int]]] = {}
+        # Handlers whose subscribe() has not succeeded yet, per topic.
+        self._unconfirmed: dict[str, list[Any]] = {}
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -419,9 +421,10 @@ class MqttSubscriptionManager:
         order.append((callback, this_call))
         self._registered_at[topic] = order
         handlers = self._message_handlers.setdefault(topic, [])
-        added = callback not in handlers
-        if added:
+        if callback not in handlers:
             handlers.append(callback)
+            # Not confirmed until a subscribe() of it succeeds.
+            self._unconfirmed.setdefault(topic, []).append(callback)
 
         async with self._topic_lock(topic):
             # Checked under the lock: an UNSUBSCRIBE that finished while
@@ -430,25 +433,28 @@ class MqttSubscriptionManager:
             if topic in self._subscriptions:
                 # Already subscribed at the broker; return a synthetic
                 # packet ID (0) as no request is sent.
+                self._confirm(topic, callback)
                 return 0
             try:
-                return await self._broker_subscribe(topic, qos)
+                packet_id = await self._broker_subscribe(topic, qos)
             except (
                 AwsCrtError,
                 RuntimeError,
                 SubscribeError,
                 TimeoutError,
             ) as e:
-                # Remove the handler only if this call added it (a callback
-                # already registered keeps it) and no later subscribe() of
-                # the same callback is waiting to use it.
+                # Remove the handler only if no subscribe() of it has ever
+                # succeeded (a callback registered before keeps it) and no
+                # later subscribe() of it is waiting to use it.
                 if (
-                    added
+                    callback in self._unconfirmed.get(topic, [])
                     and self._subscribed_at(topic, callback) == this_call
                     and (h := self._message_handlers.get(topic))
                 ):
                     with contextlib.suppress(ValueError):
                         h.remove(callback)
+                    if not h:
+                        self._message_handlers.pop(topic, None)
                     self._prune_registered(topic)
                 _logger.error(
                     "Failed to subscribe to '%s': %s",
@@ -456,6 +462,18 @@ class MqttSubscriptionManager:
                     type(e).__name__,
                 )
                 raise
+            self._confirm(topic, callback)
+            return packet_id
+
+    def _confirm(
+        self, topic: str, callback: Callable[[str, dict[str, Any]], None]
+    ) -> None:
+        """Mark ``callback``'s registration on ``topic`` as confirmed."""
+        pending = self._unconfirmed.get(topic, [])
+        if callback in pending:
+            pending.remove(callback)
+        if not pending:
+            self._unconfirmed.pop(topic, None)
 
     async def _broker_subscribe(self, topic: str, qos: QoS) -> int:
         """Send SUBSCRIBE for ``topic`` and await its acknowledgement.
@@ -847,6 +865,11 @@ class MqttSubscriptionManager:
             self._registered_at[topic] = order
         else:
             self._registered_at.pop(topic, None)
+        pending = [h for h in self._unconfirmed.get(topic, []) if h in handlers]
+        if pending:
+            self._unconfirmed[topic] = pending
+        else:
+            self._unconfirmed.pop(topic, None)
 
     def _subscribed_at(self, topic: str, handler: Any) -> int:
         """Order of ``handler``'s latest subscribe() on ``topic``, or 0."""

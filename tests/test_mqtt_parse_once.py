@@ -459,3 +459,44 @@ async def test_failed_subscribe_keeps_a_callback_a_later_call_waits_on() -> (
 
     assert manager._message_handlers["cmd/52/a/#"] == [_noop]
     assert "cmd/52/a/#" in manager._subscriptions
+
+
+@pytest.mark.asyncio
+async def test_two_failed_subscribes_of_one_callback_remove_it() -> None:
+    connection = MagicMock()
+    first_ack: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (first_ack, 1)
+    manager = _manager(connection)
+
+    first = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    second_ack: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    second_ack.set_exception(SubscribeError("cmd/52/a/#"))
+    connection.subscribe.return_value = (second_ack, 2)
+    first_ack.set_exception(SubscribeError("cmd/52/a/#"))
+    for task in (first, second):
+        with pytest.raises(SubscribeError):
+            await task
+
+    assert "cmd/52/a/#" not in manager._message_handlers
+    assert "cmd/52/a/#" not in manager._unconfirmed
+
+
+@pytest.mark.asyncio
+async def test_failed_resubscribe_keeps_a_confirmed_callback() -> None:
+    connection = MagicMock()
+    connection.subscribe.side_effect = _granted
+    manager = _manager(connection)
+    await manager.subscribe("cmd/52/a/#", _noop)
+    manager._subscriptions.clear()
+    rejected: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    rejected.set_exception(SubscribeError("cmd/52/a/#"))
+    connection.subscribe.side_effect = None
+    connection.subscribe.return_value = (rejected, 2)
+
+    with pytest.raises(SubscribeError):
+        await manager.subscribe("cmd/52/a/#", _noop)
+
+    assert manager._message_handlers["cmd/52/a/#"] == [_noop]

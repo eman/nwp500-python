@@ -106,7 +106,7 @@ class TestSubscribe:
         manager = _manager({"cmd/52/a/#": SubscribeError("cmd/52/a/#")})
         with pytest.raises(SubscribeError):
             await manager.subscribe("cmd/52/a/#", _handler, QoS.AT_LEAST_ONCE)
-        assert manager._message_handlers.get("cmd/52/a/#") == []
+        assert not manager._message_handlers.get("cmd/52/a/#")
         assert "cmd/52/a/#" not in manager._subscriptions
 
 
