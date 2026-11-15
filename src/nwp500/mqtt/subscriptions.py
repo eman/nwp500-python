@@ -408,6 +408,12 @@ class MqttSubscriptionManager:
             handlers.append(callback)
 
         async with self._topic_lock(topic):
+            # A remove-all that held the lock may have taken this callback
+            # with it; register it again.
+            handlers = self._message_handlers.setdefault(topic, [])
+            if callback not in handlers:
+                handlers.append(callback)
+                added = True
             # Checked under the lock: an UNSUBSCRIBE that finished while
             # this call waited has unmarked the topic, so SUBSCRIBE goes
             # out again.

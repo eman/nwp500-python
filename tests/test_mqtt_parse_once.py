@@ -351,3 +351,29 @@ async def test_suback_from_a_replaced_connection_resubscribes() -> None:
     new.subscribe.assert_called_once()
     assert "cmd/52/a/#" in manager._subscriptions
     assert manager._message_handlers["cmd/52/a/#"] == [_noop]
+
+
+@pytest.mark.asyncio
+async def test_resubscribing_a_callback_during_remove_all_keeps_it() -> None:
+    """unsubscribe(topic) waiting, then subscribe() of the same callback."""
+    connection = MagicMock()
+    suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (suback, 1)
+    connection.unsubscribe.return_value = (_resolved({}), 2)
+    manager = _manager(connection)
+
+    first = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    leaving = asyncio.create_task(manager.unsubscribe("cmd/52/a/#"))
+    await asyncio.sleep(0)
+    again = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
+    await first
+    await leaving
+    connection.subscribe.return_value = (_resolved({"qos": 1}), 3)
+    await again
+
+    assert manager._message_handlers["cmd/52/a/#"] == [_noop]
+    assert "cmd/52/a/#" in manager._subscriptions
+    assert connection.subscribe.call_count == 2
