@@ -554,34 +554,42 @@ class MqttSubscriptionManager:
         _logger.info("Unsubscribing from topic (redacted)")
 
         async with self._topic_lock(topic):
-            if self._message_handlers.get(topic):
+            if callback is not None and self._message_handlers.get(topic):
                 # A subscriber joined while this call waited for the lock.
                 return 0
-            # Unmark the topic before UNSUBSCRIBE goes out, so a lost
-            # UNSUBACK cannot leave a stale mark and the next subscribe()
-            # sends SUBSCRIBE again.
-            self._subscriptions.pop(topic, None)
+
+            def sent() -> None:
+                # UNSUBSCRIBE is on its way. Unmark the topic before the
+                # wait, so a lost UNSUBACK cannot leave a stale mark and
+                # the next subscribe() sends SUBSCRIBE again; for a
+                # remove-all, drop the handlers too. A call the SDK
+                # rejects synchronously leaves both in place.
+                self._subscriptions.pop(topic, None)
+                if callback is None:
+                    self._message_handlers[topic] = []
+
             try:
-                return await self._broker_unsubscribe(topic)
+                return await self._broker_unsubscribe(topic, sent)
             finally:
                 # Keep handlers that subscribed while UNSUBACK was pending.
                 if not self._message_handlers.get(topic):
                     self._message_handlers.pop(topic, None)
 
-    async def _broker_unsubscribe(self, topic: str) -> int:
-        """Send UNSUBSCRIBE for ``topic`` and await its acknowledgement."""
+    async def _broker_unsubscribe(
+        self, topic: str, on_sent: Callable[[], None]
+    ) -> int:
+        """Send UNSUBSCRIBE for ``topic`` and await its acknowledgement.
+
+        ``on_sent`` runs once the SDK has accepted the request, before
+        the wait. The caller holds the topic lock.
+        """
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
         try:
             # Await the broker acknowledgement with a timeout (see
             # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
-            if callback is None:
-                # UNSUBSCRIBE is on its way: drop the handlers before
-                # waiting, so a restoration running while the UNSUBACK is
-                # pending does not subscribe the topic again. A call the
-                # SDK rejects synchronously leaves them in place.
-                self._message_handlers[topic] = []
+            on_sent()
             awaitable_future = asyncio.wrap_future(unsubscribe_future)
             try:
                 await asyncio.wait_for(
