@@ -3,6 +3,7 @@
 import asyncio
 import concurrent.futures
 import logging
+from collections.abc import Coroutine
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -148,8 +149,12 @@ class TestStaleConnectionCallbacks:
         self, auth_client: NavienAuthClient
     ) -> None:
         client = NavienMqttClient(auth_client)
+
+        def close(coro: Coroutine[Any, Any, Any]) -> None:
+            coro.close()
+
         client._schedule_coroutine = MagicMock(  # type: ignore[method-assign]
-            side_effect=lambda coro: coro.close()
+            side_effect=close
         )
         current = MagicMock()
         manager = MagicMock()
@@ -271,3 +276,40 @@ class TestResubscribeRetry:
 
         assert await manager.resubscribe_all() is False
         assert "04786332fca0" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_during_backoff_is_not_undone(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import nwp500.mqtt.subscriptions as subscriptions
+
+        monkeypatch.setattr(subscriptions, "_RESUBSCRIBE_DELAYS", (0, 0, 0))
+        manager = _manager({})
+        await manager.subscribe("cmd/52/a/#", _handler)
+
+        calls: list[str] = []
+        flaky = MagicMock()
+
+        def subscribe(topic: str, qos: Any, callback: Any) -> Any:
+            calls.append(topic)
+            return _future(error=TimeoutError()), 1
+
+        flaky.subscribe.side_effect = subscribe
+        flaky.unsubscribe.return_value = (_future({}), 2)
+        manager._connection = flaky
+
+        real_sleep = asyncio.sleep
+
+        async def sleep_then_unsubscribe(delay: float) -> None:
+            # The caller removes its callback while the retry waits.
+            await manager.unsubscribe("cmd/52/a/#", _handler)
+            await real_sleep(0)
+
+        monkeypatch.setattr(
+            subscriptions.asyncio, "sleep", sleep_then_unsubscribe
+        )
+
+        assert await manager.resubscribe_all() is True
+        assert calls == ["cmd/52/a/#"]
+        assert "cmd/52/a/#" not in manager._subscriptions
+        assert "cmd/52/a/#" not in manager._message_handlers
