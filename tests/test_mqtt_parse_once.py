@@ -374,6 +374,33 @@ async def test_resubscribing_a_callback_during_remove_all_keeps_it() -> None:
     connection.subscribe.return_value = (_resolved({"qos": 1}), 3)
     await again
 
+    # The later subscribe wins: the callback stays and the subscription
+    # is kept, with no UNSUBSCRIBE and no second SUBSCRIBE.
     assert manager._message_handlers["cmd/52/a/#"] == [_noop]
     assert "cmd/52/a/#" in manager._subscriptions
-    assert connection.subscribe.call_count == 2
+    connection.unsubscribe.assert_not_called()
+    assert connection.subscribe.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_during_a_queued_subscribe_is_kept() -> None:
+    """A's SUBACK pending; subscribe(B) queues; unsubscribe(B) returns."""
+    connection = MagicMock()
+    suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (suback, 1)
+    manager = _manager(connection)
+
+    def other(topic: str, message: dict[str, Any]) -> None:
+        del topic, message
+
+    first = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    queued = asyncio.create_task(manager.subscribe("cmd/52/a/#", other))
+    await asyncio.sleep(0)
+    await manager.unsubscribe("cmd/52/a/#", other)
+    suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
+    await first
+    await queued
+
+    assert manager._message_handlers["cmd/52/a/#"] == [_noop]
+    assert other not in manager._registered_at.get("cmd/52/a/#", {})

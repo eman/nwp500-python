@@ -179,6 +179,10 @@ class MqttSubscriptionManager:
         self._topic_locks: dict[str, asyncio.Lock] = {}
         # Topics a restoration could not restore; the next one retries.
         self._unrestored: dict[str, QoS] = {}
+        # Order of subscribe() calls per topic and handler, so a remove-all
+        # spares handlers subscribed after it.
+        self._subscribe_seq = 0
+        self._registered_at: dict[str, dict[Any, int]] = {}
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -401,19 +405,18 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        # Track handler first
+        # Track handler first, with the order of this call: a remove-all
+        # unsubscribe takes only handlers subscribed before it was made.
+        self._subscribe_seq += 1
+        self._registered_at.setdefault(topic, {})[callback] = (
+            self._subscribe_seq
+        )
         handlers = self._message_handlers.setdefault(topic, [])
         added = callback not in handlers
         if added:
             handlers.append(callback)
 
         async with self._topic_lock(topic):
-            # A remove-all that held the lock may have taken this callback
-            # with it; register it again.
-            handlers = self._message_handlers.setdefault(topic, [])
-            if callback not in handlers:
-                handlers.append(callback)
-                added = True
             # Checked under the lock: an UNSUBSCRIBE that finished while
             # this call waited has unmarked the topic, so SUBSCRIBE goes
             # out again.
@@ -434,6 +437,7 @@ class MqttSubscriptionManager:
                 if added and (h := self._message_handlers.get(topic)):
                     with contextlib.suppress(ValueError):
                         h.remove(callback)
+                    self._registered_at.get(topic, {}).pop(callback, None)
                 _logger.error(
                     "Failed to subscribe to '%s': %s",
                     redact_topic(topic),
@@ -552,6 +556,7 @@ class MqttSubscriptionManager:
                 handlers.clear()
             elif callback in handlers:
                 handlers.remove(callback)
+            self._prune_registered(topic)
             if not handlers:
                 self._message_handlers.pop(topic, None)
                 self._subscriptions.pop(topic, None)
@@ -561,6 +566,7 @@ class MqttSubscriptionManager:
             # Remove specific handler
             if callback in self._message_handlers[topic]:
                 self._message_handlers[topic].remove(callback)
+            self._prune_registered(topic)
 
             # If handlers still exist, don't unsubscribe from broker yet
             if self._message_handlers[topic]:
@@ -569,20 +575,16 @@ class MqttSubscriptionManager:
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
 
-        # A remove-all removes the handlers registered now, not ones a
-        # subscribe() adds while this call waits for the lock.
-        targets = (
-            list(self._message_handlers.get(topic, []))
-            if callback is None
-            else []
-        )
+        # A remove-all removes the handlers subscribed before it was
+        # made, not ones a subscribe() made while it waits for the lock.
+        cutoff = self._subscribe_seq
 
         def remaining() -> list[Callable[[str, dict[str, Any]], None]]:
-            return [
-                h
-                for h in self._message_handlers.get(topic, [])
-                if h not in targets
-            ]
+            handlers = self._message_handlers.get(topic, [])
+            if callback is not None:
+                return list(handlers)
+            order = self._registered_at.get(topic, {})
+            return [h for h in handlers if order.get(h, 0) > cutoff]
 
         async with self._topic_lock(topic):
             if remaining():
@@ -591,6 +593,7 @@ class MqttSubscriptionManager:
                 # handlers.
                 if callback is None:
                     self._message_handlers[topic] = remaining()
+                    self._prune_registered(topic)
                 return 0
 
             def sent() -> None:
@@ -602,6 +605,7 @@ class MqttSubscriptionManager:
                 self._subscriptions.pop(topic, None)
                 if callback is None:
                     self._message_handlers[topic] = remaining()
+                    self._prune_registered(topic)
 
             try:
                 return await self._broker_unsubscribe(topic, sent)
@@ -817,6 +821,17 @@ class MqttSubscriptionManager:
         await self._unsubscribe_callback(
             self._device_wildcard(device), callback, _KIND_STATUS
         )
+
+    def _prune_registered(self, topic: str) -> None:
+        """Forget the subscribe order of handlers no longer on ``topic``."""
+        handlers = self._message_handlers.get(topic, [])
+        order = self._registered_at.get(topic)
+        if order is None:
+            return
+        for handler in [h for h in order if h not in handlers]:
+            del order[handler]
+        if not order:
+            del self._registered_at[topic]
 
     def _topic_lock(self, topic: str) -> asyncio.Lock:
         return self._topic_locks.setdefault(topic, asyncio.Lock())
