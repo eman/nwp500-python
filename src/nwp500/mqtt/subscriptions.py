@@ -125,7 +125,7 @@ class MqttSubscriptionManager:
 
     def __init__(
         self,
-        connection: Any,  # awsiot.mqtt_connection.Connection
+        connection: Any,  # awscrt.mqtt.Connection
         client_id: str,
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
@@ -552,6 +552,10 @@ class MqttSubscriptionManager:
 
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
+        if callback is None:
+            # Drop the handlers now, so a restoration running while the
+            # UNSUBACK is pending does not subscribe the topic again.
+            self._message_handlers[topic] = []
 
         if callback is None:
             self._message_handlers[topic] = []

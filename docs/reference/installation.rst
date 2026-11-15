@@ -55,7 +55,7 @@ Core Dependencies
 The library requires:
 
 * ``aiohttp>=3.13.5``: Async HTTP client for REST API
-* ``awsiotsdk>=1.29.0``: AWS IoT SDK for MQTT
+* ``awscrt>=0.36.1,<0.39``: AWS Common Runtime, for the MQTT connection
 * ``pydantic>=2.0.0``: Data validation and models
 
 Optional Dependencies
@@ -134,11 +134,11 @@ If you get SSL certificate errors:
 AWS IoT Connection Issues
 --------------------------
 
-The MQTT client requires the AWS IoT SDK:
+The MQTT client requires the AWS Common Runtime:
 
 .. code-block:: bash
 
-   pip install awsiotsdk>=1.29.0
+   pip install "awscrt>=0.36.1,<0.39"
 
 Upgrading
 =========

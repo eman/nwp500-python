@@ -14,8 +14,10 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import awscrt.auth
+import awscrt.io
+import awscrt.mqtt
 from awscrt.exceptions import AwsCrtError
-from awsiot import mqtt_connection_builder
 
 from ..exceptions import (
     MqttCredentialsError,
@@ -37,6 +39,83 @@ if TYPE_CHECKING:
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
+
+
+# AWS IoT signs the websocket upgrade with SigV4 for this service.
+_IOT_SIGNING_SERVICE = "iotdevicegateway"
+
+
+def _sign_websocket_handshake(
+    region: str,
+    credentials_provider: awscrt.auth.AwsCredentialsProvider,
+    transform_args: Any,
+    **kwargs: Any,
+) -> None:
+    """Sign the websocket upgrade request; awscrt waits on ``set_done``."""
+    try:
+        signing_config = awscrt.auth.AwsSigningConfig(
+            algorithm=awscrt.auth.AwsSigningAlgorithm.V4,
+            signature_type=(
+                awscrt.auth.AwsSignatureType.HTTP_REQUEST_QUERY_PARAMS
+            ),
+            credentials_provider=credentials_provider,
+            region=region,
+            service=_IOT_SIGNING_SERVICE,
+            # AWS IoT expects X-Amz-Security-Token outside the signature.
+            omit_session_token=True,
+        )
+        future = awscrt.auth.aws_sign_request(
+            transform_args.http_request, signing_config
+        )
+
+        def _done(done: concurrent.futures.Future[Any]) -> None:
+            transform_args.set_done(done.exception())
+
+        future.add_done_callback(_done)
+    except Exception as e:
+        transform_args.set_done(e)
+
+
+def _build_connection(
+    *,
+    endpoint: str,
+    region: str,
+    credentials_provider: awscrt.auth.AwsCredentialsProvider,
+    client_id: str,
+    clean_session: bool,
+    keep_alive_secs: int,
+    on_connection_interrupted: Callable[..., None] | None,
+    on_connection_resumed: Callable[..., None] | None,
+    will: awscrt.mqtt.Will | None = None,
+) -> awscrt.mqtt.Connection:
+    """Build an MQTT 3.1.1 connection over a SigV4-signed websocket."""
+    tls_options = awscrt.io.TlsContextOptions()
+    if awscrt.io.is_alpn_available():
+        tls_options.alpn_list = ["http/1.1"]
+    socket_options = awscrt.io.SocketOptions()
+    socket_options.connect_timeout_ms = 5000
+    client = awscrt.mqtt.Client(
+        awscrt.io.ClientBootstrap.get_or_create_static_default(),
+        awscrt.io.ClientTlsContext(tls_options),
+    )
+    return awscrt.mqtt.Connection(
+        client=client,
+        host_name=endpoint,
+        port=443,
+        client_id=client_id,
+        clean_session=clean_session,
+        on_connection_interrupted=on_connection_interrupted,
+        on_connection_resumed=on_connection_resumed,
+        keep_alive_secs=keep_alive_secs,
+        will=will,
+        socket_options=socket_options,
+        use_websockets=True,
+        websocket_handshake_transform=functools.partial(
+            _sign_websocket_handshake, region, credentials_provider
+        ),
+        disable_metrics=True,
+    )
+
 
 _logger = logging.getLogger(__name__)
 
@@ -131,10 +210,11 @@ class MqttConnection:
             return
         exc = future.exception()
         if exc is not None:
+            # The type only: a late SubscribeError's text is the topic.
             _logger.debug(
                 "%s completed with exception after being abandoned: %s",
                 operation,
-                exc,
+                type(exc).__name__,
             )
 
     async def _await_ack(
@@ -229,14 +309,15 @@ class MqttConnection:
         _logger.debug(f"Region: {self.config.region}")
 
         try:
-            # Build WebSocket MQTT connection with AWS credentials
-            # Run blocking operations in a thread to avoid blocking the event
-            # loop
-            # The AWS IoT SDK performs synchronous file I/O operations during
-            # connection setup
+            # Build the websocket MQTT connection off the event loop: the
+            # TLS context loads the system trust store synchronously.
             credentials_provider = await asyncio.to_thread(
                 self._create_credentials_provider
             )
+            client_id = self.config.client_id
+            if client_id is None:
+                # MqttConnectionConfig fills it in when it is built.
+                raise RuntimeError("MQTT client ID is not set")
             builder_kwargs: dict[str, Any] = {}
             if self._will is not None:
                 builder_kwargs["will"] = to_awscrt_will(self._will)
@@ -245,11 +326,11 @@ class MqttConnection:
                     redact_topic(self._will.topic),
                 )
             self._connection = await asyncio.to_thread(
-                mqtt_connection_builder.websockets_with_default_aws_signing,
+                _build_connection,
                 endpoint=self.config.endpoint,
                 region=self.config.region,
                 credentials_provider=credentials_provider,
-                client_id=self.config.client_id,
+                client_id=client_id,
                 clean_session=self.config.clean_session,
                 keep_alive_secs=self.config.keep_alive_secs,
                 on_connection_interrupted=self._on_connection_interrupted,
