@@ -120,10 +120,10 @@ class DeviceStatus(NavienBaseModel):
     dr_event_status: Annotated[
         DREvent, BeforeValidator(enum_validator(DREvent))
     ] = Field(
-        default=DREvent.UNKNOWN,
+        default=DREvent.NOT_APPLIED,
         description=(
             "Demand Response (DR) event status from utility (CTA-2045). "
-            "0=UNKNOWN (No event), 1=RUN_NORMAL, 2=SHED (reduce power), "
+            "0=NOT_APPLIED (no event), 1=RUN_NORMAL, 2=SHED (reduce power), "
             "3=LOADUP (pre-heat), 4=LOADUP_ADV (advanced pre-heat), "
             "5=CPE (customer peak event), 6=GRID_EMERGENCY"
         ),
@@ -402,7 +402,7 @@ class DeviceStatus(NavienBaseModel):
     ] = Field(
         description=(
             "Currently active heat source. Indicates which heating "
-            "component(s) are actively running: 0=Unknown/not heating, "
+            "component(s) are actively running: 0=None (not heating), "
             "1=Heat Pump, 2=Electric Element, 3=Both simultaneously"
         )
     )
