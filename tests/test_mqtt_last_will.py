@@ -256,7 +256,7 @@ class TestWillTypes:
 
 
 class TestConnectionBuilderWill:
-    """The will reaches the awsiot connection builder as a CONNECT option."""
+    """The will reaches the connection builder as a CONNECT option."""
 
     @staticmethod
     def _connect_with(will: MqttWill | None) -> dict[str, Any]:
@@ -271,11 +271,7 @@ class TestConnectionBuilderWill:
         builder = MagicMock(return_value=fake)
 
         async def run() -> None:
-            with patch(
-                "nwp500.mqtt.connection.mqtt_connection_builder."
-                "websockets_with_default_aws_signing",
-                builder,
-            ):
+            with patch("nwp500.mqtt.connection._build_connection", builder):
                 assert await connection.connect()
 
         asyncio.run(run())

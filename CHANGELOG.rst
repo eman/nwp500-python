@@ -22,6 +22,11 @@ Changed
   Acknowledgements repeat it, so a reply can be matched to its
   command. App-connection events and the Last-Will keep the client's
   ``session_id``.
+- **The MQTT connection is built with ``awscrt`` directly; the
+  ``awsiotsdk`` dependency is gone.** It was used only to build the
+  signed websocket connection and pinned ``awscrt`` to one release.
+  The library now requires ``awscrt>=0.36.1,<0.39``. The CONNECT
+  packet no longer carries the SDK's name and version in its username.
 
 Fixed
 -----

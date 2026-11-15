@@ -40,7 +40,7 @@ SOURCES = sorted(SIM_ROOT.rglob("*.py"))
 IDS = [p.relative_to(SIM_ROOT).as_posix() for p in SOURCES]
 
 #: Top-level packages the core must never import: the network clients.
-FORBIDDEN = frozenset({"aiohttp", "awscrt", "awsiot"})
+FORBIDDEN = frozenset({"aiohttp", "awscrt"})
 
 #: Per-request state, and logging: the core is the same on every
 #: thread, writes to no handler, and returns what it would warn of.
@@ -218,7 +218,6 @@ def test_the_import_check_sees_a_violation() -> None:
         "nwp500.simulator",
         "aiohttp",
         "awscrt.mqtt",
-        "awsiot.mqtt_connection_builder",
         "contextvars",
         "threading",
         "logging",
@@ -333,7 +332,7 @@ def test_the_simulator_does_not_load_the_clients() -> None:
         "import nwp500.sim, nwp500.sim_adapters, nwp500.sim_live, "
         "nwp500.status_history"
     )
-    clients = {"aiohttp", "awscrt", "awsiot"}
+    clients = {"aiohttp", "awscrt"}
     assert not [m for m in loaded if m.split(".")[0] in clients]
     assert "nwp500.mqtt" not in loaded and "nwp500.auth" not in loaded
 
