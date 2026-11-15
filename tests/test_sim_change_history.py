@@ -549,6 +549,41 @@ class TestTheFirstReview:
         ]
         assert list(got.rows.outages) == [(T0 + 4 * H, T0 + 5 * H)]
 
+    def test_the_heat_sources_state_keys_are_values(self) -> None:
+        rows = [
+            *_heater_rows(),
+            _row("sensor.source", T0, "HEATPUMP"),
+            _row("sensor.source", T0 + H, "none"),
+            _row("sensor.source", T0 + 2 * H, "heat_pump"),
+            _row("sensor.source", T0 + 3 * H, "electric"),
+            _row("sensor.source", T0 + 4 * H, "heat_pump_and_electric"),
+            _row("sensor.source", T0 + 5 * H, "unavailable"),
+            _row("sensor.source", T0 + 6 * H, "none"),
+        ]
+        entities = ha.HeaterEntities(
+            heard=ENTITIES.heard,
+            upper=ENTITIES.upper,
+            lower=ENTITIES.lower,
+            heat_source="sensor.source",
+        )
+        got = asyncio.run(
+            ha.read_heater_history(
+                cast(ha.HomeAssistantClient, WindowedClient(rows, UNITS)),
+                entities,
+                T0,
+                T0 + timedelta(days=1),
+            )
+        )
+        assert got.rows.heat_source == [
+            (T0, HeatSource.HEATPUMP),
+            (T0 + H, HeatSource.NONE),
+            (T0 + 2 * H, HeatSource.HEATPUMP),
+            (T0 + 3 * H, HeatSource.HEATELEMENT),
+            (T0 + 4 * H, HeatSource.HEATPUMP_HEATELEMENT),
+            (T0 + 6 * H, HeatSource.NONE),
+        ]
+        assert list(got.rows.outages) == [(T0 + 5 * H, T0 + 6 * H)]
+
     def test_a_row_recorded_in_no_unit_is_left_out(self) -> None:
         # Today in °F; this row was recorded with no unit at all.
         rows = [*_heater_rows(), _row("sensor.lower", T0 + 5 * H, "20.0")]

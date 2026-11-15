@@ -581,10 +581,12 @@ leave out what your installation does not record. ``read_heater_history``:
 - takes each number from the unit it was recorded in (°F, °C or K; W or
   kW; Wh or kWh), ``on`` and ``off`` from the binary sensors, and the
   heat source, operation mode and error code by their enum names
-  (``HeatSource``, ``CurrentOperationMode``, ``ErrorCode``);
+  (``HeatSource``, ``CurrentOperationMode``, ``ErrorCode``), and the
+  heat source also by the integration's state keys (``none``,
+  ``heat_pump``, ``electric``, ``heat_pump_and_electric``);
 - takes ``unavailable`` or ``unknown`` on any of the entities as an
   outage of the heater, unobserved (an enum's own member name, such as
-  ``NONE`` or ``UNKNOWN``, is a value);
+  ``NONE`` or ``UNKNOWN``, and the heat source's ``none`` are values);
 - takes the heat source as the compressor's state where no compressor
   entity is given;
 - notes a value it could not read, and an entity whose history starts

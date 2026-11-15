@@ -44,6 +44,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from nwp500 import sim_adapters as sa
+from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
 from nwp500.sim.cold_supply import ColdSupply
@@ -1944,14 +1945,36 @@ HISTORY_WINDOW = timedelta(days=1)
 _Read = Callable[[float, str | None], float] | type[enum.Enum] | None
 
 
+#: An enum's states as the integration records them beside its member
+#: names: the heat source's translated keys, ``none`` among them.
+_STATE_KEYS: dict[type[enum.Enum], dict[str, int]] = {
+    HeatSource: {
+        "none": 0,
+        "heat_pump": 1,
+        "electric": 2,
+        "heat_pump_and_electric": 3,
+    },
+}
+
+
+def _member(text: str, read: type[enum.Enum]) -> enum.Enum | None:
+    """The member ``text`` names, by member name or by the integration's
+    state key; None when it names none."""
+    if text in read.__members__:
+        return read[text]
+    code = _STATE_KEYS.get(read, {}).get(text)
+    return None if code is None else read(code)
+
+
 def _missing(state: str, read: _Read) -> bool:
     """Whether ``state`` is Home Assistant's for a value it does not
-    have. An enum's own member name (``NONE``, ``UNKNOWN``) is a value."""
+    have. An enum's own member name or state key (``NONE``, ``UNKNOWN``,
+    the heat source's ``none``) is a value."""
     text = state.strip()
     is_name = (
         isinstance(read, type)
         and issubclass(read, enum.Enum)
-        and text in read.__members__
+        and _member(text, read) is not None
     )
     return not is_name and text.lower() in _NO_VALUE
 
@@ -1963,14 +1986,14 @@ def _value(state: str, read: _Read, unit: str | None) -> Any:
     if read is None:
         return {"on": True, "off": False}.get(text.lower())
     if isinstance(read, type) and issubclass(read, enum.Enum):
+        member = _member(text, read)
+        if member is not None:
+            return member
+        number = _number(text)
         try:
-            return read[text]
-        except KeyError:
-            number = _number(text)
-            try:
-                return None if number is None else read(int(number))
-            except ValueError:
-                return None
+            return None if number is None else read(int(number))
+        except ValueError:
+            return None
     number = _number(text)
     if number is None:
         return None
@@ -2007,8 +2030,6 @@ async def read_heater_history(
     of a heating flag (the compressor, an element, the heat source).
     Raises ``HomeAssistantError`` when a probe cannot be read, or the
     client gives no states (``History.states``)."""
-    from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
-
     if window <= timedelta(0):
         raise ValueError(f"window {window} is not a positive span")
     e = entities
