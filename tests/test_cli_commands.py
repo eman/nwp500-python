@@ -50,6 +50,16 @@ def mock_mqtt() -> MagicMock:
     mqtt.subscribe_device = AsyncMock()
     mqtt.subscribe_device_feature = AsyncMock()
     mqtt.subscribe_device_status = AsyncMock()
+    for name in (
+        "device_status",
+        "device_feature",
+        "energy_usage",
+        "energy_usage_monthly",
+        "diagnostics",
+        "firmware_download_info",
+        "recirculation_schedule_response",
+    ):
+        setattr(mqtt, f"unsubscribe_{name}", AsyncMock())
     return mqtt
 
 

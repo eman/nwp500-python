@@ -59,6 +59,9 @@ async def _wait_for_response(
     subscribe_func: Callable[
         [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
     ],
+    unsubscribe_func: Callable[
+        [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
+    ],
     device: Device,
     action_func: Callable[[], Coroutine[Any, Any, Any]],
     timeout: float = 10.0,
@@ -71,15 +74,40 @@ async def _wait_for_response(
         if not future.done():
             future.set_result(res)
 
-    await subscribe_func(device, callback)
-    _logger.info(f"Requesting {action_name}...")
-    await action_func()
-
     try:
-        return await asyncio.wait_for(future, timeout=timeout)
-    except TimeoutError:
-        _logger.error(f"Timed out waiting for {action_name} response.")
-        raise
+        # Inside the try: a subscribe cancelled while its acknowledgement
+        # is pending has already registered the callback.
+        await subscribe_func(device, callback)
+        _logger.info(f"Requesting {action_name}...")
+        await action_func()
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError:
+            _logger.error(f"Timed out waiting for {action_name} response.")
+            raise
+    finally:
+        await unsubscribe_quietly(unsubscribe_func, device, callback)
+
+
+async def unsubscribe_quietly(
+    unsubscribe_func: Callable[
+        [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
+    ],
+    device: Device,
+    callback: Callable[[Any], None],
+) -> None:
+    """Remove a reply callback without replacing the caller's outcome.
+
+    The callback is removed locally before the broker is asked; a failed
+    or unacknowledged broker unsubscribe is logged, so it can neither
+    hide a reply already received nor replace the request's own error.
+    """
+    try:
+        await unsubscribe_func(device, callback)
+    except Exception as e:
+        _logger.warning(
+            "Failed to unsubscribe a reply callback: %s", type(e).__name__
+        )
 
 
 async def _handle_command_with_status_feedback(
@@ -94,6 +122,7 @@ async def _handle_command_with_status_feedback(
     try:
         status: Any = await _wait_for_response(
             mqtt.subscribe_device_status,
+            mqtt.unsubscribe_device_status,
             device,
             action_func,
             action_name=action_name,
@@ -124,6 +153,7 @@ async def get_controller_serial_number(
     try:
         feature: Any = await _wait_for_response(
             mqtt.subscribe_device_feature,
+            mqtt.unsubscribe_device_feature,
             device,
             lambda: mqtt.request_device_info(device),
             timeout=timeout,
@@ -155,6 +185,9 @@ async def _handle_info_request(
     subscribe_method: Callable[
         [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
     ],
+    unsubscribe_method: Callable[
+        [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
+    ],
     request_method: Callable[[Device], Coroutine[Any, Any, Any]],
     data_key: str,
     action_name: str,
@@ -166,6 +199,7 @@ async def _handle_info_request(
         if not raw:
             res = await _wait_for_response(
                 subscribe_method,
+                unsubscribe_method,
                 device,
                 lambda: request_method(device),
                 action_name=action_name,
@@ -199,6 +233,7 @@ async def handle_status_request(
         mqtt,
         device,
         mqtt.subscribe_device_status,
+        mqtt.unsubscribe_device_status,
         mqtt.request_device_status,
         "status",
         "device status",
@@ -215,6 +250,7 @@ async def handle_device_info_request(
         mqtt,
         device,
         mqtt.subscribe_device_feature,
+        mqtt.unsubscribe_device_feature,
         mqtt.request_device_info,
         "feature",
         "device information",
@@ -888,6 +924,7 @@ async def handle_get_energy_request(
     try:
         res: Any = await _wait_for_response(
             mqtt.subscribe_energy_usage,
+            mqtt.unsubscribe_energy_usage,
             device,
             lambda: mqtt.request_energy_usage(device, year, months),
             action_name="energy usage",
@@ -913,6 +950,7 @@ async def handle_get_energy_monthly_request(
     try:
         res: Any = await _wait_for_response(
             mqtt.subscribe_energy_usage_monthly,
+            mqtt.unsubscribe_energy_usage_monthly,
             device,
             lambda: mqtt.request_energy_usage_monthly(device, years),
             action_name="monthly energy usage",
@@ -937,6 +975,7 @@ async def handle_diagnostics_request(
     try:
         diagnostics: Any = await _wait_for_response(
             mqtt.subscribe_diagnostics,
+            mqtt.unsubscribe_diagnostics,
             device,
             lambda: mqtt.request_diagnostics(device),
             action_name="diagnostics",
@@ -962,6 +1001,7 @@ async def handle_firmware_download_info_request(
     try:
         info: Any = await _wait_for_response(
             mqtt.subscribe_firmware_download_info,
+            mqtt.unsubscribe_firmware_download_info,
             device,
             lambda: mqtt.request_firmware_download_info(device),
             action_name="firmware download info",
@@ -986,6 +1026,7 @@ async def handle_get_recirculation_schedule_request(
     try:
         schedule: Any = await _wait_for_response(
             mqtt.subscribe_recirculation_schedule_response,
+            mqtt.unsubscribe_recirculation_schedule_response,
             device,
             lambda: mqtt.request_recirculation_schedule(device),
             action_name="recirculation schedule",

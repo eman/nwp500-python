@@ -48,6 +48,29 @@ Fixed
 - **An unknown ``dhwTemperatureSettingUse`` code does not permit
   temperature writes.** Only the three known enabled control types
   pass the ``dhw_temperature_setting_use`` capability check.
+- **A status or feature message is parsed and announced once.** With
+  two callbacks subscribed for one device, each message was validated
+  twice and ``status_received`` (or ``feature_received``) was emitted
+  twice. Callbacks for the same device now share one parsed object,
+  and the event and state tracking run once per message.
+- **The CLI unsubscribes the callbacks it registers to wait for a
+  reply**, so ``monitor`` and other long-running commands no longer
+  get each later message again for every earlier request. Over
+  Bluetooth the adapter gains the matching
+  ``unsubscribe_device_status`` and ``unsubscribe_device_feature``.
+- **An unacknowledged unsubscribe no longer leaves the topic marked
+  subscribed.** When the last callback for a topic was removed and the
+  broker's acknowledgement never came, the next subscribe to that topic
+  skipped SUBSCRIBE and got no messages if the broker had dropped it.
+  SUBSCRIBE and UNSUBSCRIBE for a topic now run one at a time and the
+  topic is unmarked before UNSUBSCRIBE is sent, so the next subscribe
+  sends SUBSCRIBE, a subscribe made meanwhile keeps its callback, and a
+  late SUBACK cannot mark a topic that was unsubscribed.
+- **Unsubscribing while disconnected removes the callback.** The
+  ``unsubscribe_*`` methods returned without doing anything while the
+  connection was down, so the callback came back with the next
+  resubscribe. The callback is now removed locally and nothing is sent
+  to the broker.
 - **A failed or cancelled resubscribe no longer loses subscriptions.**
   After a reconnect without a session, a ``TimeoutError`` or a rejected
   SUBACK stopped the resubscribe, and every topic not yet restored was

@@ -419,6 +419,7 @@ class TestClientMixin:
             device, callback
         )
 
+        # Disconnected, the manager still removes the callback (locally).
         client._connected = False
         await client.unsubscribe_control_fail_response(device, callback)
-        assert manager.unsubscribe_control_fail_response.await_count == 1
+        assert manager.unsubscribe_control_fail_response.await_count == 2

@@ -75,7 +75,9 @@ class TestResubscribeAll:
         manager._connection = _manager({"cmd/52/a/#": error})._connection
         await manager.resubscribe_all()
 
-        assert set(manager._subscriptions) == set(TOPICS)
+        # The failed topic is kept for the next reconnection, unmarked.
+        assert set(manager._subscriptions) == set(TOPICS) - {"cmd/52/a/#"}
+        assert set(manager._unrestored) == {"cmd/52/a/#"}
         assert all(manager._message_handlers[t] == [_handler] for t in TOPICS)
 
     @pytest.mark.asyncio
@@ -95,7 +97,7 @@ class TestResubscribeAll:
         with pytest.raises(asyncio.CancelledError):
             await task
 
-        assert set(manager._subscriptions) == set(TOPICS)
+        assert set(manager._unrestored) == set(TOPICS)
 
 
 class TestSubscribe:
@@ -104,7 +106,7 @@ class TestSubscribe:
         manager = _manager({"cmd/52/a/#": SubscribeError("cmd/52/a/#")})
         with pytest.raises(SubscribeError):
             await manager.subscribe("cmd/52/a/#", _handler, QoS.AT_LEAST_ONCE)
-        assert manager._message_handlers.get("cmd/52/a/#") == []
+        assert not manager._message_handlers.get("cmd/52/a/#")
         assert "cmd/52/a/#" not in manager._subscriptions
 
 
@@ -349,9 +351,15 @@ class TestRegistrationRaces:
             manager.subscribe("cmd/52/a/#", _handler)
         )
         await asyncio.sleep(0)
-        await manager.unsubscribe("cmd/52/a/#", _handler)
+        # The unsubscribe waits for the in-flight SUBSCRIBE, then sends
+        # UNSUBSCRIBE.
+        leaving = asyncio.create_task(
+            manager.unsubscribe("cmd/52/a/#", _handler)
+        )
+        await asyncio.sleep(0)
         suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
         await subscribing
+        await leaving
 
         assert "cmd/52/a/#" not in manager._subscriptions
 
@@ -407,3 +415,32 @@ class TestAbandonedAckLog:
 
         assert manager._message_handlers["cmd/52/a/#"] == [_handler]
         assert "cmd/52/a/#" in manager._subscriptions
+
+    @pytest.mark.asyncio
+    async def test_subscribe_after_a_failed_restore_sends_subscribe(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import nwp500.mqtt.subscriptions as subscriptions
+
+        monkeypatch.setattr(subscriptions, "_RESUBSCRIBE_DELAYS", (0, 0, 0))
+        manager = _manager({})
+        await manager.subscribe("cmd/52/a/#", _handler)
+        manager._connection = _manager(
+            {"cmd/52/a/#": TimeoutError()}
+        )._connection
+        assert await manager.resubscribe_all() is False
+
+        def other(topic: str, message: dict[str, Any]) -> None:
+            del topic, message
+
+        working = MagicMock()
+        working.subscribe.return_value = (_future({"qos": 1}), 1)
+        manager._connection = working
+        await manager.subscribe("cmd/52/a/#", other)
+
+        working.subscribe.assert_called_once()
+        assert "cmd/52/a/#" in manager._subscriptions
+        assert "cmd/52/a/#" not in manager._unrestored
+        # The next reconnection restores it once.
+        assert await manager.resubscribe_all() is True
+        assert working.subscribe.call_count == 2

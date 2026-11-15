@@ -131,6 +131,7 @@ class MqttSubscriptionManager:
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
         operation_timeout: float = 30.0,
+        is_online: Callable[[], bool] | None = None,
     ):
         """
         Initialize subscription manager.
@@ -144,7 +145,11 @@ class MqttSubscriptionManager:
                 features
             operation_timeout: Maximum seconds to wait for broker
                 acknowledgement of subscribe/unsubscribe operations
+            is_online: Whether the broker can be reached now; while it
+                cannot, an unsubscribe removes the callback locally
+                and sends nothing
         """
+        self._is_online = is_online or (lambda: True)
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
@@ -164,6 +169,24 @@ class MqttSubscriptionManager:
         # Devices passed to any subscription, keyed by MAC. disconnect()
         # sends each one an st/end.
         self._devices: dict[str, Device] = {}
+        # Set for the duration of one _dispatch_message call: each model
+        # parse and each post_parse side effect then runs once per
+        # message, however many callbacks receive it.
+        self._dispatch_parsed: dict[tuple[Any, ...], Any] | None = None
+        self._dispatch_post_parsed: set[tuple[Any, ...]] = set()
+        # Serializes SUBSCRIBE and UNSUBSCRIBE per topic, so a late SUBACK
+        # or UNSUBACK cannot leave the topic's mark out of date.
+        self._topic_locks: dict[str, asyncio.Lock] = {}
+        # Topics a restoration could not restore; the next one retries.
+        self._unrestored: dict[str, QoS] = {}
+        # Order of subscribe() calls per topic and handler, so a remove-all
+        # spares handlers subscribed after it.
+        self._subscribe_seq = 0
+        # A list of (handler, order) per topic, matched by equality like
+        # the handler list, so a callback need not be hashable.
+        self._registered_at: dict[str, list[tuple[Any, int]]] = {}
+        # Handlers whose subscribe() has not succeeded yet, per topic.
+        self._unconfirmed: dict[str, list[Any]] = {}
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -250,20 +273,26 @@ class MqttSubscriptionManager:
         # Call registered handlers that match this topic.
         # Iterate over snapshots so handlers can subscribe/unsubscribe
         # (mutating the registries) during dispatch.
-        for subscription_pattern, handlers in list(
-            self._message_handlers.items()
-        ):
-            if topic_matches_pattern(topic, subscription_pattern):
-                for handler in list(handlers):
-                    try:
-                        handler(topic, message)
-                    except Exception:
-                        # One bad handler must not abort delivery to the
-                        # remaining handlers for this message.
-                        _logger.exception(
-                            "Error in message handler for %s",
-                            redact_topic(topic),
-                        )
+        self._dispatch_parsed = {}
+        self._dispatch_post_parsed = set()
+        try:
+            for subscription_pattern, handlers in list(
+                self._message_handlers.items()
+            ):
+                if topic_matches_pattern(topic, subscription_pattern):
+                    for handler in list(handlers):
+                        try:
+                            handler(topic, message)
+                        except Exception:
+                            # One bad handler must not abort delivery to
+                            # the remaining handlers for this message.
+                            _logger.exception(
+                                "Error in message handler for %s",
+                                redact_topic(topic),
+                            )
+        finally:
+            self._dispatch_parsed = None
+            self._dispatch_post_parsed = set()
 
     def _emit_control_failed(self, topic: str, message: dict[str, Any]) -> None:
         """Parse a ``res/ctrl-fail`` message and emit ``control_failed``.
@@ -380,39 +409,77 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        # Track handler first
+        # Track handler first, with the order of this call: a remove-all
+        # unsubscribe takes only handlers subscribed before it was made.
+        self._subscribe_seq += 1
+        this_call = self._subscribe_seq
+        order = [
+            entry
+            for entry in self._registered_at.get(topic, [])
+            if entry[0] != callback
+        ]
+        order.append((callback, this_call))
+        self._registered_at[topic] = order
         handlers = self._message_handlers.setdefault(topic, [])
-        added = callback not in handlers
-        if added:
+        if callback not in handlers:
             handlers.append(callback)
+            # Not confirmed until a subscribe() of it succeeds.
+            self._unconfirmed.setdefault(topic, []).append(callback)
 
-        # Check if already subscribed to this topic at the broker level
-        if topic in self._subscriptions:
-            # Already subscribed. If requested QoS is higher than current,
-            # we should upgrade, but standard practice is to just return.
-            # Most brokers handle multiple overlapping subscriptions.
-            # Return a synthetic packet ID (0) as we didn't send a request.
-            return 0
+        async with self._topic_lock(topic):
+            # Checked under the lock: an UNSUBSCRIBE that finished while
+            # this call waited has unmarked the topic, so SUBSCRIBE goes
+            # out again.
+            if topic in self._subscriptions:
+                # Already subscribed at the broker; return a synthetic
+                # packet ID (0) as no request is sent.
+                self._confirm(topic, callback)
+                return 0
+            try:
+                packet_id = await self._broker_subscribe(topic, qos)
+            except (
+                AwsCrtError,
+                RuntimeError,
+                SubscribeError,
+                TimeoutError,
+            ) as e:
+                # Remove the handler only if no subscribe() of it has ever
+                # succeeded (a callback registered before keeps it) and no
+                # later subscribe() of it is waiting to use it.
+                if (
+                    callback in self._unconfirmed.get(topic, [])
+                    and self._subscribed_at(topic, callback) == this_call
+                    and (h := self._message_handlers.get(topic))
+                ):
+                    with contextlib.suppress(ValueError):
+                        h.remove(callback)
+                    if not h:
+                        self._message_handlers.pop(topic, None)
+                    self._prune_registered(topic)
+                _logger.error(
+                    "Failed to subscribe to '%s': %s",
+                    redact_topic(topic),
+                    type(e).__name__,
+                )
+                raise
+            self._confirm(topic, callback)
+            return packet_id
 
-        try:
-            return await self._broker_subscribe(topic, qos)
-        except (AwsCrtError, RuntimeError, SubscribeError, TimeoutError) as e:
-            # Remove the handler only if this call added it: a callback
-            # that was already registered keeps its registration.
-            if added and (h := self._message_handlers.get(topic)):
-                with contextlib.suppress(ValueError):
-                    h.remove(callback)
-            _logger.error(
-                "Failed to subscribe to '%s': %s",
-                redact_topic(topic),
-                type(e).__name__,
-            )
-            raise
+    def _confirm(
+        self, topic: str, callback: Callable[[str, dict[str, Any]], None]
+    ) -> None:
+        """Mark ``callback``'s registration on ``topic`` as confirmed."""
+        pending = self._unconfirmed.get(topic, [])
+        if callback in pending:
+            pending.remove(callback)
+        if not pending:
+            self._unconfirmed.pop(topic, None)
 
     async def _broker_subscribe(self, topic: str, qos: QoS) -> int:
         """Send SUBSCRIBE for ``topic`` and await its acknowledgement.
 
         Marks the topic subscribed on success; handlers are not touched.
+        The caller holds the topic lock.
         """
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
@@ -422,7 +489,8 @@ class MqttSubscriptionManager:
         # SDK future so a timeout/cancel never propagates into AWS CRT
         # callbacks (avoids InvalidStateError); the underlying
         # subscribe completes independently.
-        subscribe_future, packet_id = self._connection.subscribe(
+        connection = self._connection
+        subscribe_future, packet_id = connection.subscribe(
             topic=topic,
             qos=to_awscrt_qos(qos),
             callback=self._on_message_received,
@@ -465,9 +533,16 @@ class MqttSubscriptionManager:
 
         # Mark the topic only if it still has handlers: an unsubscribe
         # that finished while the SUBACK was pending has sent UNSUBSCRIBE
-        # after this SUBSCRIBE, so the broker ends up without it.
-        if self._message_handlers.get(topic):
-            self._subscriptions[topic] = qos
+        # after it.
+        if not self._message_handlers.get(topic):
+            return int(packet_id)
+        if self._connection is not connection:
+            # The connection was replaced while the SUBACK was pending,
+            # and restoration skipped this unmarked topic: subscribe on
+            # the current connection.
+            return await self._broker_subscribe(topic, qos)
+        self._subscriptions[topic] = qos
+        self._unrestored.pop(topic, None)
 
         return int(packet_id)
 
@@ -493,20 +568,35 @@ class MqttSubscriptionManager:
         Returns:
             Unsubscribe packet ID (or 0 if no broker call was made)
 
-        Raises:
-            RuntimeError: If not connected to MQTT broker
-            Exception: If unsubscribe fails
-        """
-        if not self._connection:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
+        While the broker cannot be reached the callback is removed
+        locally and nothing is sent.
 
+        Raises:
+            Exception: If the broker unsubscribe fails
+        """
         if topic not in self._message_handlers:
+            return 0
+
+        if not self._connection or not self._is_online():
+            # Offline: remove the callback here so it does not come back
+            # with the next resubscribe. With none left the topic is
+            # forgotten, and a later subscribe() sends SUBSCRIBE again.
+            handlers = self._message_handlers[topic]
+            if callback is None:
+                handlers.clear()
+            elif callback in handlers:
+                handlers.remove(callback)
+            self._prune_registered(topic)
+            if not handlers:
+                self._message_handlers.pop(topic, None)
+                self._subscriptions.pop(topic, None)
             return 0
 
         if callback is not None:
             # Remove specific handler
             if callback in self._message_handlers[topic]:
                 self._message_handlers[topic].remove(callback)
+            self._prune_registered(topic)
 
             # If handlers still exist, don't unsubscribe from broker yet
             if self._message_handlers[topic]:
@@ -515,16 +605,61 @@ class MqttSubscriptionManager:
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
 
+        # A remove-all removes the handlers subscribed before it was
+        # made, not ones a subscribe() made while it waits for the lock.
+        cutoff = self._subscribe_seq
+
+        def remaining() -> list[Callable[[str, dict[str, Any]], None]]:
+            handlers = self._message_handlers.get(topic, [])
+            if callback is not None:
+                return list(handlers)
+            return [
+                h for h in handlers if self._subscribed_at(topic, h) > cutoff
+            ]
+
+        async with self._topic_lock(topic):
+            if remaining():
+                # A subscriber joined while this call waited for the lock:
+                # keep the subscription and remove only this call's
+                # handlers.
+                if callback is None:
+                    self._message_handlers[topic] = remaining()
+                    self._prune_registered(topic)
+                return 0
+
+            def sent() -> None:
+                # UNSUBSCRIBE is on its way. Unmark the topic before the
+                # wait, so a lost UNSUBACK cannot leave a stale mark and
+                # the next subscribe() sends SUBSCRIBE again; for a
+                # remove-all, drop its handlers too. A call the SDK
+                # rejects synchronously leaves both in place.
+                self._subscriptions.pop(topic, None)
+                if callback is None:
+                    self._message_handlers[topic] = remaining()
+                    self._prune_registered(topic)
+
+            try:
+                return await self._broker_unsubscribe(topic, sent)
+            finally:
+                # Keep handlers that subscribed while UNSUBACK was pending.
+                if not self._message_handlers.get(topic):
+                    self._message_handlers.pop(topic, None)
+
+    async def _broker_unsubscribe(
+        self, topic: str, on_sent: Callable[[], None]
+    ) -> int:
+        """Send UNSUBSCRIBE for ``topic`` and await its acknowledgement.
+
+        ``on_sent`` runs once the SDK has accepted the request, before
+        the wait. The caller holds the topic lock.
+        """
+        if not self._connection:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
         try:
             # Await the broker acknowledgement with a timeout (see
             # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
-            if callback is None:
-                # UNSUBSCRIBE is on its way: drop the handlers before
-                # waiting, so a restoration running while the UNSUBACK is
-                # pending does not subscribe the topic again. A call the
-                # SDK rejects synchronously leaves them in place.
-                self._message_handlers[topic] = []
+            on_sent()
             awaitable_future = asyncio.wrap_future(unsubscribe_future)
             try:
                 await asyncio.wait_for(
@@ -556,16 +691,15 @@ class MqttSubscriptionManager:
                 )
                 raise
 
-            # Remove from tracking
-            self._subscriptions.pop(topic, None)
-            self._message_handlers.pop(topic, None)
-
             _logger.info("Unsubscribed from topic (redacted)")
 
             return int(packet_id)
 
         except (AwsCrtError, RuntimeError, TimeoutError) as e:
-            _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
+            _logger.error(
+                "Failed to unsubscribe from topic (redacted): %s",
+                type(e).__name__,
+            )
             raise
 
     async def resubscribe_all(self) -> bool:
@@ -591,17 +725,21 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        if not self._subscriptions:
-            _logger.debug("No subscriptions to restore")
-            return True
-
-        subscription_count = len(self._subscriptions)
-        _logger.info(f"Re-establishing {subscription_count} subscription(s)...")
-
         # The broker forgot every subscription; handlers stay registered
         # so an unsubscribe made while restoration runs still applies.
-        subscriptions_to_restore = list(self._subscriptions.items())
+        # Topics an earlier restoration could not restore come along.
+        subscriptions_to_restore = list(
+            ({**self._unrestored, **self._subscriptions}).items()
+        )
         self._subscriptions.clear()
+        self._unrestored.clear()
+        if not subscriptions_to_restore:
+            _logger.debug("No subscriptions to restore")
+            return True
+        _logger.info(
+            "Re-establishing %d subscription(s)...",
+            len(subscriptions_to_restore),
+        )
 
         # Re-establish each subscription: one network call per topic,
         # regardless of how many handlers are registered for it. Topics
@@ -617,25 +755,25 @@ class MqttSubscriptionManager:
                 if attempt:
                     await asyncio.sleep(delay)
                 for topic, qos in pending:
-                    if not self._pending_restore([(topic, qos)]):
-                        # Subscribed or unsubscribed while an earlier
-                        # topic waited for its SUBACK.
-                        continue
-                    try:
-                        await self._broker_subscribe(topic, qos)
-                    except Exception as e:
-                        _logger.error(
-                            "Failed to re-subscribe to '%s': %s",
-                            redact_topic(topic),
-                            type(e).__name__,
-                        )
+                    async with self._topic_lock(topic):
+                        if not self._pending_restore([(topic, qos)]):
+                            # Subscribed or unsubscribed while an earlier
+                            # topic waited for its SUBACK.
+                            continue
+                        try:
+                            await self._broker_subscribe(topic, qos)
+                        except Exception as e:
+                            _logger.error(
+                                "Failed to re-subscribe to '%s': %s",
+                                redact_topic(topic),
+                                type(e).__name__,
+                            )
         finally:
             # A topic still not restored, or not reached because the loop
-            # was cancelled, is marked again so the next reconnection
-            # retries it.
+            # was cancelled, is kept for the next reconnection. It is not
+            # marked subscribed, so a subscribe() meanwhile sends SUBSCRIBE.
             unrestored = self._pending_restore(subscriptions_to_restore)
-            for topic, qos in unrestored:
-                self._subscriptions[topic] = qos
+            self._unrestored.update(unrestored)
             if unrestored:
                 _logger.warning(
                     "Failed to restore %d subscription(s); will retry on "
@@ -714,6 +852,34 @@ class MqttSubscriptionManager:
         await self._unsubscribe_callback(
             self._device_wildcard(device), callback, _KIND_STATUS
         )
+
+    def _prune_registered(self, topic: str) -> None:
+        """Forget the subscribe order of handlers no longer on ``topic``."""
+        handlers = self._message_handlers.get(topic, [])
+        order = [
+            entry
+            for entry in self._registered_at.get(topic, [])
+            if entry[0] in handlers
+        ]
+        if order:
+            self._registered_at[topic] = order
+        else:
+            self._registered_at.pop(topic, None)
+        pending = [h for h in self._unconfirmed.get(topic, []) if h in handlers]
+        if pending:
+            self._unconfirmed[topic] = pending
+        else:
+            self._unconfirmed.pop(topic, None)
+
+    def _subscribed_at(self, topic: str, handler: Any) -> int:
+        """Order of ``handler``'s latest subscribe() on ``topic``, or 0."""
+        for entry, seq in self._registered_at.get(topic, []):
+            if entry == handler:
+                return seq
+        return 0
+
+    def _topic_lock(self, topic: str) -> asyncio.Lock:
+        return self._topic_locks.setdefault(topic, asyncio.Lock())
 
     def _device_wildcard(self, device: Device) -> str:
         return MqttTopicBuilder.command_topic(
@@ -809,11 +975,24 @@ class MqttSubscriptionManager:
                         )
                     return
 
-                parsed = parse(data) if parse else model.model_validate(data)
-                if device_mac and hasattr(parsed, "mac_address"):
-                    parsed.mac_address = device_mac
+                # Handlers that parse the same data the same way share one
+                # parse per message, and each post_parse runs once.
+                cache_key = (model, key, whole_message, parse, device_mac)
+                cache = self._dispatch_parsed
+                if cache is not None and cache_key in cache:
+                    parsed = cache[cache_key]
+                else:
+                    parsed = (
+                        parse(data) if parse else model.model_validate(data)
+                    )
+                    if device_mac and hasattr(parsed, "mac_address"):
+                        parsed.mac_address = device_mac
+                    if cache is not None:
+                        cache[cache_key] = parsed
 
-                if post_parse:
+                if post_parse and cache_key not in self._dispatch_post_parsed:
+                    if cache is not None:
+                        self._dispatch_post_parsed.add(cache_key)
                     post_parse(parsed)
                 callback(parsed)
             except (

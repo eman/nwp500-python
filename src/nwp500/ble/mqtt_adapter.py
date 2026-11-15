@@ -11,6 +11,7 @@ adapter maps.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -155,6 +156,12 @@ class BleMqttAdapter:
         self._feature_callbacks.append(callback)
         return 0
 
+    async def unsubscribe_device_feature(
+        self, device: Any, callback: FeatureCallback
+    ) -> None:
+        with contextlib.suppress(ValueError):
+            self._feature_callbacks.remove(callback)
+
     async def request_device_info(self, device: Any) -> int:
         """Read the blocks and deliver a :class:`BleDeviceFeature`.
 
@@ -179,6 +186,12 @@ class BleMqttAdapter:
     ) -> int:
         self._status_callbacks.append(callback)
         return 0
+
+    async def unsubscribe_device_status(
+        self, device: Any, callback: StatusCallback
+    ) -> None:
+        with contextlib.suppress(ValueError):
+            self._status_callbacks.remove(callback)
 
     async def request_device_status(self, device: Any) -> int:
         """Deliver the next :class:`~nwp500.ble.RealTimeStatus` block.
