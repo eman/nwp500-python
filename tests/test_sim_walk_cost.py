@@ -277,6 +277,9 @@ def test_the_cap_judged_where_it_acts_answers_as_at_each_draw(
 JUDGED_CASES = [
     *((seed, (8, 24)) for seed in (14, 29, 39, 59)),
     *((seed, (24, 48)) for seed in (7, 9, 13, 33, 41, 45)),
+    # An upper element and the compressor both running: the look ahead
+    # ran the element on without its off point, to NaN layers.
+    (219, (24, 48)),
 ]
 
 

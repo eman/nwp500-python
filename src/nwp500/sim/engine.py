@@ -554,6 +554,9 @@ class _Judged:
     lower: float
     setpoint_f: float
     running: tuple[tuple[datetime, Running], ...]
+    #: The element running there, its zone and its off point (the
+    #: setpoint while the controller has not set one yet).
+    element: tuple[ElementRun, float] | None = None
 
 
 @dataclass
@@ -971,29 +974,73 @@ class _Engine:
         edges = sorted(
             {x for w in self.withheld for x in w if self.t < x < end}
         )
+        el = self.element
         return _Judged(
             self.t,
             self.tank_state,
             self.lower,
             cycle.setpoint_f,
             tuple((x, self._running(x)) for x in (self.t, *edges)),
+            None
+            if el is None
+            else (
+                ElementRun(zone=el.zone, on_at=el.on_at),
+                self.sp if el.off is None else el.off,
+            ),
         )
 
     def _ahead(self, judged: _Judged, stop: Stop) -> Stretch:
         """The tank walked from ``judged`` toward ``RECOVERY_AHEAD``
         under what ran there, credited or not on each side of the
         withheld windows' edges, to where ``stop`` holds. Nothing is
-        drawn: a look ahead, not the walk."""
+        drawn: a look ahead, not the walk. An element running there
+        stops at its off point, as on the walk, its heat on its way
+        still reaching the water: run on, it would heat the tank
+        without bound over the 16 hours."""
         t, state = judged.at, judged.state
         ends = [x for x, _ in judged.running[1:]]
         ends.append(judged.at + RECOVERY_AHEAD)
         points: list[Point] = []
+        element = judged.element
+        off_at: datetime | None = None
+
+        def element_done(upper: float, lower: float) -> bool:
+            assert element is not None
+            run, off = element
+            z = upper if run.zone == "upper" else lower
+            return z >= off - ELEMENT_DONE_F
+
         for (_, running), b in zip(judged.running, ends, strict=True):
-            part = self.physics.advance(t, state, b, running=running, stop=stop)
-            points += part.points[1:] if points else part.points
-            if part.stopped:
-                return Stretch(points, stopped=True)
-            t, state = part.end, part.state
+            while True:
+                if element is not None and off_at is not None:
+                    running = replace(
+                        running,
+                        elements=(
+                            *(e for e in running.elements if e != element[0]),
+                            replace(element[0], off_at=off_at),
+                        ),
+                    )
+                on = element is not None and off_at is None
+                part = self.physics.advance(
+                    t,
+                    state,
+                    b,
+                    running=running,
+                    stop=(
+                        (lambda u, lo: stop(u, lo) or element_done(u, lo))
+                        if on
+                        else stop
+                    ),
+                )
+                points += part.points[1:] if points else part.points
+                t, state = part.end, part.state
+                if not part.stopped:
+                    break
+                last = part.points[-1]
+                if not on or stop(last.upper_f, last.lower_f):
+                    return Stretch(points, stopped=True)
+                # The element at its off point: it stops there.
+                off_at = t
         return Stretch(points)
 
     # ── the controller ──
