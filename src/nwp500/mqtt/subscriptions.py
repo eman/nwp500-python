@@ -553,20 +553,39 @@ class MqttSubscriptionManager:
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
 
+        # A remove-all removes the handlers registered now, not ones a
+        # subscribe() adds while this call waits for the lock.
+        targets = (
+            list(self._message_handlers.get(topic, []))
+            if callback is None
+            else []
+        )
+
+        def remaining() -> list[Callable[[str, dict[str, Any]], None]]:
+            return [
+                h
+                for h in self._message_handlers.get(topic, [])
+                if h not in targets
+            ]
+
         async with self._topic_lock(topic):
-            if callback is not None and self._message_handlers.get(topic):
-                # A subscriber joined while this call waited for the lock.
+            if remaining():
+                # A subscriber joined while this call waited for the lock:
+                # keep the subscription and remove only this call's
+                # handlers.
+                if callback is None:
+                    self._message_handlers[topic] = remaining()
                 return 0
 
             def sent() -> None:
                 # UNSUBSCRIBE is on its way. Unmark the topic before the
                 # wait, so a lost UNSUBACK cannot leave a stale mark and
                 # the next subscribe() sends SUBSCRIBE again; for a
-                # remove-all, drop the handlers too. A call the SDK
+                # remove-all, drop its handlers too. A call the SDK
                 # rejects synchronously leaves both in place.
                 self._subscriptions.pop(topic, None)
                 if callback is None:
-                    self._message_handlers[topic] = []
+                    self._message_handlers[topic] = remaining()
 
             try:
                 return await self._broker_unsubscribe(topic, sent)

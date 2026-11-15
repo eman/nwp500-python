@@ -301,3 +301,31 @@ async def test_late_suback_after_offline_removal_leaves_no_mark() -> None:
     connection.subscribe.side_effect = _granted
     await manager.subscribe("cmd/52/a/#", _noop)
     connection.subscribe.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_remove_all_keeps_a_callback_added_while_it_waited() -> None:
+    """SUBACK pending, then unsubscribe(topic), then a new subscribe()."""
+    connection = MagicMock()
+    suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (suback, 1)
+    connection.unsubscribe.return_value = (_resolved({}), 2)
+    manager = _manager(connection)
+
+    def newcomer(topic: str, message: dict[str, Any]) -> None:
+        del topic, message
+
+    subscribing = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    leaving = asyncio.create_task(manager.unsubscribe("cmd/52/a/#"))
+    await asyncio.sleep(0)
+    joining = asyncio.create_task(manager.subscribe("cmd/52/a/#", newcomer))
+    await asyncio.sleep(0)
+    suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
+    await subscribing
+    await leaving
+    await joining
+
+    assert manager._message_handlers["cmd/52/a/#"] == [newcomer]
+    assert "cmd/52/a/#" in manager._subscriptions
+    connection.unsubscribe.assert_not_called()
