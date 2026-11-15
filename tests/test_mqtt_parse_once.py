@@ -329,3 +329,24 @@ async def test_remove_all_keeps_a_callback_added_while_it_waited() -> None:
     assert manager._message_handlers["cmd/52/a/#"] == [newcomer]
     assert "cmd/52/a/#" in manager._subscriptions
     connection.unsubscribe.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_suback_from_a_replaced_connection_leaves_no_mark() -> None:
+    old = MagicMock()
+    suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    old.subscribe.return_value = (suback, 1)
+    manager = _manager(old)
+
+    subscribing = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    new = MagicMock()
+    new.subscribe.side_effect = _granted
+    manager.update_connection(new)
+    suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
+    await subscribing
+
+    assert "cmd/52/a/#" not in manager._subscriptions
+    # The next subscriber subscribes on the new connection.
+    await manager.subscribe("cmd/52/a/#", _noop)
+    new.subscribe.assert_called_once()

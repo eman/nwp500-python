@@ -447,7 +447,8 @@ class MqttSubscriptionManager:
         # SDK future so a timeout/cancel never propagates into AWS CRT
         # callbacks (avoids InvalidStateError); the underlying
         # subscribe completes independently.
-        subscribe_future, packet_id = self._connection.subscribe(
+        connection = self._connection
+        subscribe_future, packet_id = connection.subscribe(
             topic=topic,
             qos=to_awscrt_qos(qos),
             callback=self._on_message_received,
@@ -488,10 +489,11 @@ class MqttSubscriptionManager:
             f"{subscribe_result['qos']}"
         )
 
-        # Mark the topic only if it still has handlers: an unsubscribe
-        # that finished while the SUBACK was pending has sent UNSUBSCRIBE
-        # after this SUBSCRIBE, so the broker ends up without it.
-        if self._message_handlers.get(topic):
+        # Mark the topic only if it still has handlers, and only for the
+        # connection that sent SUBSCRIBE. An unsubscribe that finished
+        # while the SUBACK was pending has sent UNSUBSCRIBE after it; a
+        # connection replaced meanwhile says nothing about the new one.
+        if self._message_handlers.get(topic) and self._connection is connection:
             self._subscriptions[topic] = qos
 
         return int(packet_id)
