@@ -177,6 +177,8 @@ class MqttSubscriptionManager:
         # Serializes SUBSCRIBE and UNSUBSCRIBE per topic, so a late SUBACK
         # or UNSUBACK cannot leave the topic's mark out of date.
         self._topic_locks: dict[str, asyncio.Lock] = {}
+        # Topics a restoration could not restore; the next one retries.
+        self._unrestored: dict[str, QoS] = {}
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -500,6 +502,7 @@ class MqttSubscriptionManager:
             # the current connection.
             return await self._broker_subscribe(topic, qos)
         self._subscriptions[topic] = qos
+        self._unrestored.pop(topic, None)
 
         return int(packet_id)
 
@@ -681,17 +684,21 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        if not self._subscriptions:
-            _logger.debug("No subscriptions to restore")
-            return True
-
-        subscription_count = len(self._subscriptions)
-        _logger.info(f"Re-establishing {subscription_count} subscription(s)...")
-
         # The broker forgot every subscription; handlers stay registered
         # so an unsubscribe made while restoration runs still applies.
-        subscriptions_to_restore = list(self._subscriptions.items())
+        # Topics an earlier restoration could not restore come along.
+        subscriptions_to_restore = list(
+            ({**self._unrestored, **self._subscriptions}).items()
+        )
         self._subscriptions.clear()
+        self._unrestored.clear()
+        if not subscriptions_to_restore:
+            _logger.debug("No subscriptions to restore")
+            return True
+        _logger.info(
+            "Re-establishing %d subscription(s)...",
+            len(subscriptions_to_restore),
+        )
 
         # Re-establish each subscription: one network call per topic,
         # regardless of how many handlers are registered for it. Topics
@@ -722,11 +729,10 @@ class MqttSubscriptionManager:
                             )
         finally:
             # A topic still not restored, or not reached because the loop
-            # was cancelled, is marked again so the next reconnection
-            # retries it.
+            # was cancelled, is kept for the next reconnection. It is not
+            # marked subscribed, so a subscribe() meanwhile sends SUBSCRIBE.
             unrestored = self._pending_restore(subscriptions_to_restore)
-            for topic, qos in unrestored:
-                self._subscriptions[topic] = qos
+            self._unrestored.update(unrestored)
             if unrestored:
                 _logger.warning(
                     "Failed to restore %d subscription(s); will retry on "
