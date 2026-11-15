@@ -189,3 +189,42 @@ async def test_late_suback_does_not_mark_an_unsubscribed_topic() -> None:
     assert connection.unsubscribe.call_count == 1
     assert topic not in manager._subscriptions
     assert topic not in manager._message_handlers
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_while_offline_removes_the_callback() -> None:
+    """Offline, the callback is removed without a broker call."""
+    connection = MagicMock()
+
+    def subscribe(
+        topic: str, qos: Any, callback: Any
+    ) -> tuple[concurrent.futures.Future[Any], int]:
+        return _resolved({"topic": topic, "qos": qos}), 1
+
+    connection.subscribe.side_effect = subscribe
+    online = [True]
+    manager = MqttSubscriptionManager(
+        connection=connection,
+        client_id="test-client",
+        event_emitter=MagicMock(),
+        schedule_coroutine=lambda coro: coro.close(),
+        is_online=lambda: online[0],
+    )
+    device = MagicMock()
+    device.device_info.mac_address = "04786332fca0"
+    device.device_info.device_type = 52
+    topic = "cmd/52/navilink-04786332fca0/#"
+
+    def first(status: DeviceStatus) -> None: ...
+
+    await manager.subscribe_device_status(cast(Device, device), first)
+    online[0] = False
+    await manager.unsubscribe_device_status(cast(Device, device), first)
+
+    connection.unsubscribe.assert_not_called()
+    assert topic not in manager._message_handlers
+    assert topic not in manager._subscriptions
+    # Nothing is left for the next reconnect to restore.
+    online[0] = True
+    await manager.resubscribe_all()
+    assert connection.subscribe.call_count == 1

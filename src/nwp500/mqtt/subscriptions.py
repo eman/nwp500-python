@@ -125,6 +125,7 @@ class MqttSubscriptionManager:
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
         operation_timeout: float = 30.0,
+        is_online: Callable[[], bool] | None = None,
     ):
         """
         Initialize subscription manager.
@@ -138,7 +139,11 @@ class MqttSubscriptionManager:
                 features
             operation_timeout: Maximum seconds to wait for broker
                 acknowledgement of subscribe/unsubscribe operations
+            is_online: Whether the broker can be reached now; while it
+                cannot, an unsubscribe removes the callback locally
+                and sends nothing
         """
+        self._is_online = is_online or (lambda: True)
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
@@ -496,14 +501,27 @@ class MqttSubscriptionManager:
         Returns:
             Unsubscribe packet ID (or 0 if no broker call was made)
 
-        Raises:
-            RuntimeError: If not connected to MQTT broker
-            Exception: If unsubscribe fails
-        """
-        if not self._connection:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
+        While the broker cannot be reached the callback is removed
+        locally and nothing is sent.
 
+        Raises:
+            Exception: If the broker unsubscribe fails
+        """
         if topic not in self._message_handlers:
+            return 0
+
+        if not self._connection or not self._is_online():
+            # Offline: remove the callback here so it does not come back
+            # with the next resubscribe. With none left the topic is
+            # forgotten, and a later subscribe() sends SUBSCRIBE again.
+            handlers = self._message_handlers[topic]
+            if callback is None:
+                handlers.clear()
+            elif callback in handlers:
+                handlers.remove(callback)
+            if not handlers:
+                self._message_handlers.pop(topic, None)
+                self._subscriptions.pop(topic, None)
             return 0
 
         if callback is not None:

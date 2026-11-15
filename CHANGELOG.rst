@@ -44,6 +44,11 @@ Fixed
   topic is unmarked before UNSUBSCRIBE is sent, so the next subscribe
   sends SUBSCRIBE, a subscribe made meanwhile keeps its callback, and a
   late SUBACK cannot mark a topic that was unsubscribed.
+- **Unsubscribing while disconnected removes the callback.** The
+  ``unsubscribe_*`` methods returned without doing anything while the
+  connection was down, so the callback came back with the next
+  resubscribe. The callback is now removed locally and nothing is sent
+  to the broker.
 - **``time_to_ready(..., inlet_measured=True)`` no longer says
   ``inlet_temp_modelled`` when the scenario has draws.** The mode walks
   now get the flag, so the heat pump's walk's reasons no longer bring

@@ -748,6 +748,7 @@ class NavienMqttClient(
                     schedule_coroutine=self._schedule_coroutine,
                     device_info_cache=device_info_cache,
                     operation_timeout=self.config.operation_timeout,
+                    is_online=lambda: self._connected,
                 )
 
                 # Update device controller cache
