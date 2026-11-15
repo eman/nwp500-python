@@ -8,6 +8,7 @@ from ..converters import (
     device_tristate_to_python,
     div_10,
     energy_count_to_wh,
+    enum_validator,
     tou_override_to_python,
 )
 from ..enums import (
@@ -61,7 +62,9 @@ class DeviceStatus(NavienBaseModel):
 
     # CRITICAL: temperature_type must remain the first field so computed
     # temperature properties can fall back to the device's native unit setting.
-    temperature_type: TemperatureType = Field(
+    temperature_type: Annotated[
+        TemperatureType, BeforeValidator(enum_validator(TemperatureType))
+    ] = Field(
         default=TemperatureType.FAHRENHEIT,
         description=(
             "Type of temperature unit (1=Celsius, 2=Fahrenheit). "
@@ -84,7 +87,9 @@ class DeviceStatus(NavienBaseModel):
             "(e.g., freeze protection, anti-seize operations)"
         )
     )
-    error_code: ErrorCode = Field(
+    error_code: Annotated[
+        ErrorCode, BeforeValidator(enum_validator(ErrorCode))
+    ] = Field(
         default=ErrorCode.NO_ERROR,
         description="Error code if any fault is detected",
     )
@@ -112,7 +117,9 @@ class DeviceStatus(NavienBaseModel):
         ),
         json_schema_extra={"unit_of_measurement": "%"},
     )
-    dr_event_status: DREvent = Field(
+    dr_event_status: Annotated[
+        DREvent, BeforeValidator(enum_validator(DREvent))
+    ] = Field(
         default=DREvent.UNKNOWN,
         description=(
             "Demand Response (DR) event status from utility (CTA-2045). "
@@ -145,9 +152,9 @@ class DeviceStatus(NavienBaseModel):
     program_reservation_type: int = Field(
         description="Type of program reservation"
     )
-    temp_formula_type: TempFormulaType = Field(
-        description="Temperature formula type"
-    )
+    temp_formula_type: Annotated[
+        TempFormulaType, BeforeValidator(enum_validator(TempFormulaType))
+    ] = Field(description="Temperature formula type")
     outside_temperature_raw: int = temperature_field(
         "Outdoor/ambient temperature", alias="outsideTemperature"
     )
@@ -275,9 +282,9 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "energy",
         },
     )
-    recirc_operation_mode: RecirculationMode = Field(
-        description="Recirculation operation mode"
-    )
+    recirc_operation_mode: Annotated[
+        RecirculationMode, BeforeValidator(enum_validator(RecirculationMode))
+    ] = Field(description="Recirculation operation mode")
     recirc_pump_operation_status: int = Field(
         description="Recirculation pump operation status"
     )
@@ -390,7 +397,9 @@ class DeviceStatus(NavienBaseModel):
     error_buzzer_use: DeviceBool = Field(
         description="Whether the error buzzer is enabled"
     )
-    current_heat_use: HeatSource = Field(
+    current_heat_use: Annotated[
+        HeatSource, BeforeValidator(enum_validator(HeatSource))
+    ] = Field(
         description=(
             "Currently active heat source. Indicates which heating "
             "component(s) are actively running: 0=Unknown/not heating, "
@@ -632,11 +641,17 @@ class DeviceStatus(NavienBaseModel):
     )
 
     # Enum fields
-    operation_mode: CurrentOperationMode = Field(
+    operation_mode: Annotated[
+        CurrentOperationMode,
+        BeforeValidator(enum_validator(CurrentOperationMode)),
+    ] = Field(
         default=CurrentOperationMode.STANDBY,
         description="The current actual operational state of the device",
     )
-    dhw_operation_setting: DhwOperationSetting = Field(
+    dhw_operation_setting: Annotated[
+        DhwOperationSetting,
+        BeforeValidator(enum_validator(DhwOperationSetting)),
+    ] = Field(
         default=DhwOperationSetting.ENERGY_SAVER,
         description=(
             "User's configured DHW operation mode preference. 0 (STANDBY) "

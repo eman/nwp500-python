@@ -434,11 +434,26 @@ class TestEnumValidator:
         vac = DhwOperationSetting.VACATION
         assert validator(vac) == vac
 
-    def test_invalid_enum_value(self) -> None:
-        """Invalid enum value should raise."""
+    def test_unknown_code_becomes_pseudo_member(self) -> None:
+        """A code the enum does not list is kept as UNKNOWN_<code>."""
         validator = enum_validator(OnOffFlag)
-        with pytest.raises((ValueError, KeyError)):
-            validator(99)
+        result = validator(99)
+        assert isinstance(result, OnOffFlag)
+        assert result == 99
+        assert result.name == "UNKNOWN_99"
+
+    def test_fractional_code_raises(self) -> None:
+        """A fractional code is rejected, not truncated to a member."""
+        validator = enum_validator(OnOffFlag)
+        with pytest.raises(ValueError):
+            validator(2.9)
+        assert validator(2.0) is OnOffFlag(2)
+
+    def test_non_numeric_value_raises(self) -> None:
+        """A value that is not a code at all still raises."""
+        validator = enum_validator(OnOffFlag)
+        with pytest.raises(ValueError):
+            validator("on")
 
     def test_enum_pass_through(self) -> None:
         """Passing enum object returns same enum."""
