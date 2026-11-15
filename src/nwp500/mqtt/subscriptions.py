@@ -504,17 +504,18 @@ class MqttSubscriptionManager:
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
 
+        # Unmark the topic before UNSUBSCRIBE goes out. A subscribe()
+        # arriving while the UNSUBACK is pending then sends a fresh
+        # SUBSCRIBE, which the broker applies after the UNSUBSCRIBE, and
+        # a lost UNSUBACK cannot leave a stale mark behind.
+        self._message_handlers[topic] = []
+        self._subscriptions.pop(topic, None)
         try:
             return await self._broker_unsubscribe(topic)
-        except BaseException:
-            # The broker may have applied the UNSUBSCRIBE without its
-            # acknowledgement arriving. With no handlers left, forget the
-            # topic so the next subscribe() sends SUBSCRIBE again instead
-            # of trusting a subscription the broker may have dropped.
+        finally:
+            # Keep handlers that subscribed while the UNSUBACK was pending.
             if not self._message_handlers.get(topic):
-                self._subscriptions.pop(topic, None)
                 self._message_handlers.pop(topic, None)
-            raise
 
     async def _broker_unsubscribe(self, topic: str) -> int:
         """Send UNSUBSCRIBE for ``topic`` and await its acknowledgement."""
@@ -554,10 +555,6 @@ class MqttSubscriptionManager:
                     )
                 )
                 raise
-
-            # Remove from tracking
-            self._subscriptions.pop(topic, None)
-            self._message_handlers.pop(topic, None)
 
             _logger.info("Unsubscribed from topic (redacted)")
 

@@ -1,5 +1,6 @@
 """Each message is parsed and announced once, however many callbacks."""
 
+import asyncio
 import concurrent.futures
 import json
 from typing import Any, cast
@@ -105,3 +106,45 @@ async def test_unacknowledged_unsubscribe_resubscribes_next_time() -> None:
     await manager.subscribe_device_status(cast(Device, device), second)
 
     assert connection.subscribe.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_subscribe_during_pending_unsuback_sends_subscribe() -> None:
+    """A handler added while UNSUBACK is pending gets its own SUBSCRIBE."""
+    connection = MagicMock()
+
+    def subscribe(
+        topic: str, qos: Any, callback: Any
+    ) -> tuple[concurrent.futures.Future[Any], int]:
+        return _resolved({"topic": topic, "qos": qos}), 1
+
+    connection.subscribe.side_effect = subscribe
+    unsuback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.unsubscribe.return_value = (unsuback, 2)
+    manager = MqttSubscriptionManager(
+        connection=connection,
+        client_id="test-client",
+        event_emitter=MagicMock(),
+        schedule_coroutine=lambda coro: coro.close(),
+    )
+    device = MagicMock()
+    device.device_info.mac_address = "04786332fca0"
+    device.device_info.device_type = 52
+    topic = "cmd/52/navilink-04786332fca0/#"
+
+    def first(status: DeviceStatus) -> None: ...
+
+    def second(status: DeviceStatus) -> None: ...
+
+    await manager.subscribe_device_status(cast(Device, device), first)
+    pending = asyncio.create_task(
+        manager.unsubscribe_device_status(cast(Device, device), first)
+    )
+    await asyncio.sleep(0)
+    await manager.subscribe_device_status(cast(Device, device), second)
+    unsuback.set_result({})
+    await pending
+
+    assert connection.subscribe.call_count == 2
+    assert topic in manager._subscriptions
+    assert len(manager._message_handlers[topic]) == 1
