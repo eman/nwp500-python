@@ -391,3 +391,19 @@ class TestAbandonedAckLog:
 
         assert "SubscribeError" in caplog.text
         assert "04786332fca0" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_synchronous_unsubscribe_rejection_keeps_handlers(
+        self,
+    ) -> None:
+        manager = _manager({})
+        await manager.subscribe("cmd/52/a/#", _handler)
+        connection = MagicMock()
+        connection.unsubscribe.side_effect = RuntimeError("not connected")
+        manager._connection = connection
+
+        with pytest.raises(RuntimeError):
+            await manager.unsubscribe("cmd/52/a/#")
+
+        assert manager._message_handlers["cmd/52/a/#"] == [_handler]
+        assert "cmd/52/a/#" in manager._subscriptions

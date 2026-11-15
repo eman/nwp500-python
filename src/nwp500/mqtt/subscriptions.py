@@ -514,15 +514,17 @@ class MqttSubscriptionManager:
 
         # No callback provided or no handlers left: unsubscribe from broker
         _logger.info("Unsubscribing from topic (redacted)")
-        if callback is None:
-            # Drop the handlers now, so a restoration running while the
-            # UNSUBACK is pending does not subscribe the topic again.
-            self._message_handlers[topic] = []
 
         try:
             # Await the broker acknowledgement with a timeout (see
             # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
+            if callback is None:
+                # UNSUBSCRIBE is on its way: drop the handlers before
+                # waiting, so a restoration running while the UNSUBACK is
+                # pending does not subscribe the topic again. A call the
+                # SDK rejects synchronously leaves them in place.
+                self._message_handlers[topic] = []
             awaitable_future = asyncio.wrap_future(unsubscribe_future)
             try:
                 await asyncio.wait_for(
