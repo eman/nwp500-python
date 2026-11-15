@@ -10,6 +10,7 @@ This module handles all subscription-related operations including:
 """
 
 import asyncio
+import contextlib
 import functools
 import json
 import logging
@@ -380,10 +381,10 @@ class MqttSubscriptionManager:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Track handler first
-        if topic not in self._message_handlers:
-            self._message_handlers[topic] = []
-        if callback not in self._message_handlers[topic]:
-            self._message_handlers[topic].append(callback)
+        handlers = self._message_handlers.setdefault(topic, [])
+        added = callback not in handlers
+        if added:
+            handlers.append(callback)
 
         # Check if already subscribed to this topic at the broker level
         if topic in self._subscriptions:
@@ -396,9 +397,11 @@ class MqttSubscriptionManager:
         try:
             return await self._broker_subscribe(topic, qos)
         except (AwsCrtError, RuntimeError, SubscribeError, TimeoutError) as e:
-            # Clean up handler on failure if this was the first one
-            if (h := self._message_handlers.get(topic)) and callback in h:
-                h.remove(callback)
+            # Remove the handler only if this call added it: a callback
+            # that was already registered keeps its registration.
+            if added and (h := self._message_handlers.get(topic)):
+                with contextlib.suppress(ValueError):
+                    h.remove(callback)
             _logger.error(
                 "Failed to subscribe to '%s': %s",
                 redact_topic(topic),
@@ -460,8 +463,11 @@ class MqttSubscriptionManager:
             f"{subscribe_result['qos']}"
         )
 
-        # Store subscription
-        self._subscriptions[topic] = qos
+        # Mark the topic only if it still has handlers: an unsubscribe
+        # that finished while the SUBACK was pending has sent UNSUBSCRIBE
+        # after this SUBSCRIBE, so the broker ends up without it.
+        if self._message_handlers.get(topic):
+            self._subscriptions[topic] = qos
 
         return int(packet_id)
 

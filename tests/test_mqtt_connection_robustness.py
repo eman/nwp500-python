@@ -313,3 +313,44 @@ class TestResubscribeRetry:
         assert calls == ["cmd/52/a/#"]
         assert "cmd/52/a/#" not in manager._subscriptions
         assert "cmd/52/a/#" not in manager._message_handlers
+
+
+class TestRegistrationRaces:
+    @pytest.mark.asyncio
+    async def test_failed_reregistration_keeps_the_existing_callback(
+        self,
+    ) -> None:
+        manager = _manager({})
+        await manager.subscribe("cmd/52/a/#", _handler)
+        # The broker forgot the topic; a re-registration of the same
+        # callback is rejected.
+        manager._subscriptions.clear()
+        manager._connection = _manager(
+            {"cmd/52/a/#": SubscribeError("cmd/52/a/#")}
+        )._connection
+
+        with pytest.raises(SubscribeError):
+            await manager.subscribe("cmd/52/a/#", _handler)
+
+        assert manager._message_handlers["cmd/52/a/#"] == [_handler]
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_during_pending_suback_leaves_topic_unmarked(
+        self,
+    ) -> None:
+        manager = _manager({})
+        suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+        connection = MagicMock()
+        connection.subscribe.return_value = (suback, 1)
+        connection.unsubscribe.return_value = (_future({}), 2)
+        manager._connection = connection
+
+        subscribing = asyncio.create_task(
+            manager.subscribe("cmd/52/a/#", _handler)
+        )
+        await asyncio.sleep(0)
+        await manager.unsubscribe("cmd/52/a/#", _handler)
+        suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
+        await subscribing
+
+        assert "cmd/52/a/#" not in manager._subscriptions
