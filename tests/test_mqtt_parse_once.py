@@ -228,3 +228,76 @@ async def test_unsubscribe_while_offline_removes_the_callback() -> None:
     online[0] = True
     await manager.resubscribe_all()
     assert connection.subscribe.call_count == 1
+
+
+def _manager(connection: Any, **kw: Any) -> MqttSubscriptionManager:
+    return MqttSubscriptionManager(
+        connection=connection,
+        client_id="test-client",
+        event_emitter=MagicMock(),
+        schedule_coroutine=lambda coro: coro.close(),
+        **kw,
+    )
+
+
+def _granted(
+    topic: str, qos: Any, callback: Any
+) -> tuple[concurrent.futures.Future[Any], int]:
+    return _resolved({"topic": topic, "qos": qos}), 1
+
+
+def _noop(topic: str, message: dict[str, Any]) -> None:
+    del topic, message
+
+
+@pytest.mark.asyncio
+async def test_reconnect_keeps_a_subscriber_joining_during_unsuback() -> None:
+    """Pending UNSUBACK, a joining subscriber and another active topic."""
+    connection = MagicMock()
+    connection.subscribe.side_effect = _granted
+    unsuback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.unsubscribe.return_value = (unsuback, 2)
+    manager = _manager(connection)
+    await manager.subscribe("cmd/52/a/#", _noop)
+    await manager.subscribe("cmd/52/b/#", _noop)
+
+    def joiner(topic: str, message: dict[str, Any]) -> None:
+        del topic, message
+
+    leaving = asyncio.create_task(manager.unsubscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    joining = asyncio.create_task(manager.subscribe("cmd/52/a/#", joiner))
+    await asyncio.sleep(0)
+    # Reconnect while the UNSUBACK is pending; b is still active.
+    await manager.resubscribe_all()
+    unsuback.set_result({})
+    await leaving
+    await joining
+
+    assert manager._message_handlers["cmd/52/a/#"] == [joiner]
+    assert "cmd/52/a/#" in manager._subscriptions
+
+
+@pytest.mark.asyncio
+async def test_late_suback_after_offline_removal_leaves_no_mark() -> None:
+    """Offline removal of the last callback; the SUBACK lands later."""
+    connection = MagicMock()
+    suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    connection.subscribe.return_value = (suback, 1)
+    online = [True]
+    manager = _manager(connection, is_online=lambda: online[0])
+
+    subscribing = asyncio.create_task(manager.subscribe("cmd/52/a/#", _noop))
+    await asyncio.sleep(0)
+    online[0] = False
+    await manager.unsubscribe("cmd/52/a/#", _noop)
+    suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
+    await subscribing
+
+    assert "cmd/52/a/#" not in manager._subscriptions
+    # On the rebuilt connection the next subscriber sends SUBSCRIBE.
+    online[0] = True
+    connection.subscribe.reset_mock()
+    connection.subscribe.side_effect = _granted
+    await manager.subscribe("cmd/52/a/#", _noop)
+    connection.subscribe.assert_called_once()

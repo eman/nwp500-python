@@ -349,9 +349,15 @@ class TestRegistrationRaces:
             manager.subscribe("cmd/52/a/#", _handler)
         )
         await asyncio.sleep(0)
-        await manager.unsubscribe("cmd/52/a/#", _handler)
+        # The unsubscribe waits for the in-flight SUBSCRIBE, then sends
+        # UNSUBSCRIBE.
+        leaving = asyncio.create_task(
+            manager.unsubscribe("cmd/52/a/#", _handler)
+        )
+        await asyncio.sleep(0)
         suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
         await subscribing
+        await leaving
 
         assert "cmd/52/a/#" not in manager._subscriptions
 

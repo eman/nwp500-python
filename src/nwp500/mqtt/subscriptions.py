@@ -557,8 +557,6 @@ class MqttSubscriptionManager:
             # UNSUBACK is pending does not subscribe the topic again.
             self._message_handlers[topic] = []
 
-        if callback is None:
-            self._message_handlers[topic] = []
         async with self._topic_lock(topic):
             if self._message_handlers.get(topic):
                 # A subscriber joined while this call waited for the lock.
