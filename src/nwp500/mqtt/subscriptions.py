@@ -182,7 +182,9 @@ class MqttSubscriptionManager:
         # Order of subscribe() calls per topic and handler, so a remove-all
         # spares handlers subscribed after it.
         self._subscribe_seq = 0
-        self._registered_at: dict[str, dict[Any, int]] = {}
+        # A list of (handler, order) per topic, matched by equality like
+        # the handler list, so a callback need not be hashable.
+        self._registered_at: dict[str, list[tuple[Any, int]]] = {}
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -408,9 +410,13 @@ class MqttSubscriptionManager:
         # Track handler first, with the order of this call: a remove-all
         # unsubscribe takes only handlers subscribed before it was made.
         self._subscribe_seq += 1
-        self._registered_at.setdefault(topic, {})[callback] = (
-            self._subscribe_seq
-        )
+        order = [
+            entry
+            for entry in self._registered_at.get(topic, [])
+            if entry[0] != callback
+        ]
+        order.append((callback, self._subscribe_seq))
+        self._registered_at[topic] = order
         handlers = self._message_handlers.setdefault(topic, [])
         added = callback not in handlers
         if added:
@@ -437,7 +443,7 @@ class MqttSubscriptionManager:
                 if added and (h := self._message_handlers.get(topic)):
                     with contextlib.suppress(ValueError):
                         h.remove(callback)
-                    self._registered_at.get(topic, {}).pop(callback, None)
+                    self._prune_registered(topic)
                 _logger.error(
                     "Failed to subscribe to '%s': %s",
                     redact_topic(topic),
@@ -583,8 +589,9 @@ class MqttSubscriptionManager:
             handlers = self._message_handlers.get(topic, [])
             if callback is not None:
                 return list(handlers)
-            order = self._registered_at.get(topic, {})
-            return [h for h in handlers if order.get(h, 0) > cutoff]
+            return [
+                h for h in handlers if self._subscribed_at(topic, h) > cutoff
+            ]
 
         async with self._topic_lock(topic):
             if remaining():
@@ -825,13 +832,22 @@ class MqttSubscriptionManager:
     def _prune_registered(self, topic: str) -> None:
         """Forget the subscribe order of handlers no longer on ``topic``."""
         handlers = self._message_handlers.get(topic, [])
-        order = self._registered_at.get(topic)
-        if order is None:
-            return
-        for handler in [h for h in order if h not in handlers]:
-            del order[handler]
-        if not order:
-            del self._registered_at[topic]
+        order = [
+            entry
+            for entry in self._registered_at.get(topic, [])
+            if entry[0] in handlers
+        ]
+        if order:
+            self._registered_at[topic] = order
+        else:
+            self._registered_at.pop(topic, None)
+
+    def _subscribed_at(self, topic: str, handler: Any) -> int:
+        """Order of ``handler``'s latest subscribe() on ``topic``, or 0."""
+        for entry, seq in self._registered_at.get(topic, []):
+            if entry == handler:
+                return seq
+        return 0
 
     def _topic_lock(self, topic: str) -> asyncio.Lock:
         return self._topic_locks.setdefault(topic, asyncio.Lock())

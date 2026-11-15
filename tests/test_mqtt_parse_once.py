@@ -2,6 +2,7 @@
 
 import asyncio
 import concurrent.futures
+import dataclasses
 import json
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -403,4 +404,33 @@ async def test_unsubscribe_during_a_queued_subscribe_is_kept() -> None:
     await queued
 
     assert manager._message_handlers["cmd/52/a/#"] == [_noop]
-    assert other not in manager._registered_at.get("cmd/52/a/#", {})
+    assert manager._subscribed_at("cmd/52/a/#", other) == 0
+
+
+@dataclasses.dataclass
+class _UnhashableHandler:
+    """A callable dataclass: ``eq=True`` without ``frozen`` is unhashable."""
+
+    got: list[str] = dataclasses.field(default_factory=list)
+
+    def __call__(self, topic: str, message: dict[str, Any]) -> None:
+        self.got.append(topic)
+
+
+@pytest.mark.asyncio
+async def test_unhashable_callable_subscribes_and_unsubscribes() -> None:
+    connection = MagicMock()
+    connection.subscribe.side_effect = _granted
+    connection.unsubscribe.return_value = (_resolved({}), 2)
+    manager = _manager(connection)
+    handler = _UnhashableHandler()
+    with pytest.raises(TypeError):
+        hash(handler)
+
+    await manager.subscribe("cmd/52/a/#", handler)
+    await manager._dispatch_message("cmd/52/a/x", b'{"k": 1}')
+    await manager.unsubscribe("cmd/52/a/#")
+
+    assert handler.got == ["cmd/52/a/x"]
+    assert "cmd/52/a/#" not in manager._message_handlers
+    connection.unsubscribe.assert_called_once()
