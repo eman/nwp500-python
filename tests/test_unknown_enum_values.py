@@ -116,3 +116,12 @@ def test_status_with_unknown_code_dumps_and_compares(
     assert status.model_dump()["error_code"] == "UNKNOWN_777"
     assert '"errorCode":777' in status.model_dump_json(by_alias=True)
     assert status.error_code != ErrorCode.NO_ERROR
+
+
+def test_fractional_dhw_control_code_is_rejected() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        DeviceFeature.model_validate(
+            FEATURE | {"dhwTemperatureSettingUse": 2.9}
+        )

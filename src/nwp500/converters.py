@@ -240,6 +240,9 @@ def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
         """Validate and convert value to enum."""
         if isinstance(value, enum_class):
             return value
+        if isinstance(value, float) and not value.is_integer():
+            # int() would truncate 2.9 to a known code such as 2.
+            raise ValueError(f"{value!r} is not a whole-number code")
         code = value if isinstance(value, int) else int(value)
         try:
             return enum_class(code)
