@@ -1946,7 +1946,7 @@ _Read = Callable[[float, str | None], float] | type[enum.Enum] | None
 
 def _missing(state: str, read: _Read) -> bool:
     """Whether ``state`` is Home Assistant's for a value it does not
-    have. An enum's own ``UNKNOWN`` is a value."""
+    have. An enum's own member name (``NONE``, ``UNKNOWN``) is a value."""
     text = state.strip()
     is_name = (
         isinstance(read, type)

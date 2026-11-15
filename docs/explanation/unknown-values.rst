@@ -20,7 +20,7 @@ Enum-coded flags: zero is a sentinel
 
 Many status fields are enum-coded, and in most of them zero is reserved
 for "unknown". The generic on/off flag is 0 unknown, 1 off, 2 on
-(:class:`~nwp500.enums.OnOffFlag`): real values start at 1. Eight
+(:class:`~nwp500.enums.OnOffFlag`): real values start at 1. Six
 families do this:
 
 .. list-table::
@@ -30,10 +30,6 @@ families do this:
    * - Values
      - Zero
    * - On/off flags (:class:`~nwp500.enums.OnOffFlag`)
-     - ``UNKNOWN``
-   * - Heat source (:class:`~nwp500.enums.HeatSource`)
-     - ``UNKNOWN``
-   * - Demand Response event (:class:`~nwp500.enums.DREvent`)
      - ``UNKNOWN``
    * - Recirculation mode (:class:`~nwp500.enums.RecirculationMode`)
      - ``UNKNOWN``
@@ -61,11 +57,21 @@ The rule is not global, and this is where a blanket converter goes wrong:
    * - Current operation mode
        (:class:`~nwp500.enums.CurrentOperationMode`)
      - ``STANDBY``, a real, common state
+   * - Heat source (:class:`~nwp500.enums.HeatSource`)
+     - ``NONE``: no heat source is running
+   * - Demand Response event (:class:`~nwp500.enums.DREvent`)
+     - ``NOT_APPLIED``: no DR event is running
    * - Filter change (:class:`~nwp500.enums.FilterChange`)
      - ``NORMAL``: the filter is fine
 
-A device sitting in standby reports 0 constantly. Treating that as
-"unknown" would blank the operating mode most of the time.
+A device sitting in standby reports 0 constantly, in the operation
+mode and the heat source both, and a unit outside a DR program reports
+0 for the DR event all the time. Treating those as "unknown" would blank
+the fields most of the time.
+
+``HeatSource.UNKNOWN`` and ``DREvent.UNKNOWN`` remain as aliases of
+``NONE`` and ``NOT_APPLIED``, so code written against the earlier names
+keeps working; ``.name`` gives the new names.
 
 
 What this library does

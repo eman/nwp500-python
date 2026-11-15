@@ -8,8 +8,11 @@ from test_device_rest_models import DEVICE_LIST_ENTRY
 from test_models import TestDeviceFeatureWireAliases
 
 from nwp500.enums import (
+    DR_EVENT_TEXT,
+    HEAT_SOURCE_TEXT,
     ConnectionStatus,
     CurrentOperationMode,
+    DREvent,
     ErrorCode,
     HeatSource,
     VolumeCode,
@@ -55,6 +58,28 @@ def test_status_known_codes_are_members(
     assert status.error_code is ErrorCode.NO_ERROR
     assert status.operation_mode is CurrentOperationMode.STANDBY
     assert status.current_heat_use is HeatSource(1)
+
+
+def test_zero_heat_source_and_dr_event_are_named_values(
+    device_status_dict: dict[str, Any],
+) -> None:
+    """0 is an idle heater and no DR event, not an unrecognised code."""
+    status = DeviceStatus.model_validate(
+        device_status_dict | {"currentHeatUse": 0, "drEventStatus": 0}
+    )
+    assert status.current_heat_use is HeatSource.NONE
+    assert status.current_heat_use.name == "NONE"
+    assert HEAT_SOURCE_TEXT[status.current_heat_use] == "None"
+    assert status.dr_event_status is DREvent.NOT_APPLIED
+    assert status.dr_event_status.name == "NOT_APPLIED"
+    assert DR_EVENT_TEXT[status.dr_event_status] == "Not Applied"
+
+
+def test_zero_heat_source_and_dr_event_keep_earlier_name() -> None:
+    assert HeatSource.UNKNOWN is HeatSource.NONE
+    assert HeatSource["UNKNOWN"] is HeatSource.NONE
+    assert DREvent.UNKNOWN is DREvent.NOT_APPLIED
+    assert DREvent["UNKNOWN"] is DREvent.NOT_APPLIED
 
 
 @pytest.mark.parametrize(

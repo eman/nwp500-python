@@ -469,7 +469,7 @@ class TestTheFirstReview:
             upper_f=[(T0, 130.0)],
             lower_f=[(T0, 120.0)],
             heat_source=[
-                (T0, HeatSource.UNKNOWN),
+                (T0, HeatSource.NONE),
                 (T0 + H, HeatSource.HEATPUMP),
                 (T0 + 2 * H, HeatSource.HEATPUMP_HEATELEMENT),
                 (T0 + 3 * H, HeatSource.HEATELEMENT),
@@ -544,7 +544,7 @@ class TestTheFirstReview:
         )
         assert got.rows.heat_source == [
             (T0, HeatSource.HEATPUMP),
-            (T0 + 2 * H, HeatSource.UNKNOWN),
+            (T0 + 2 * H, HeatSource.NONE),
             (T0 + 5 * H, HeatSource.HEATPUMP),
         ]
         assert list(got.rows.outages) == [(T0 + 4 * H, T0 + 5 * H)]

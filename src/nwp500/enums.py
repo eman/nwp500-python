@@ -92,10 +92,12 @@ class HeatSource(IntEnum):
 
     This reflects what the device is currently using, not what mode
     it's set to. In Hybrid mode, this field shows which source(s)
-    are active at any given moment.
+    are active at any given moment. ``NONE`` (0) means no heat source is
+    running. ``UNKNOWN`` is kept as an alias of ``NONE`` (earlier name).
     """
 
-    UNKNOWN = 0
+    NONE = 0  # No heat source running
+    UNKNOWN = 0  # Alias of NONE (earlier name)
     HEATPUMP = 1
     HEATELEMENT = 2
     HEATPUMP_HEATELEMENT = 3
@@ -108,10 +110,13 @@ class DREvent(IntEnum):
     to reduce consumption (shed) or pre-heat (load up) before peak periods.
 
     In ``drEventStatus``, raw 5 is "CPE" and raw 6 is "Grid Emergency".
-    The members here follow the raw values.
+    The members here follow the raw values. ``NOT_APPLIED`` (0) means no
+    DR event is running. ``UNKNOWN`` is kept as an alias of
+    ``NOT_APPLIED`` (earlier name).
     """
 
-    UNKNOWN = 0  # Not Applied
+    NOT_APPLIED = 0  # No DR event running
+    UNKNOWN = 0  # Alias of NOT_APPLIED (earlier name)
     RUN_NORMAL = 1  # Normal operation during DR event
     SHED = 2  # Load shedding - reduce power
     LOADUP = 3  # Pre-heat before expected high demand
@@ -469,14 +474,14 @@ CURRENT_OPERATION_MODE_TEXT = {
 }
 
 HEAT_SOURCE_TEXT = {
-    HeatSource.UNKNOWN: "Unknown",
+    HeatSource.NONE: "None",
     HeatSource.HEATPUMP: "Heat Pump",
     HeatSource.HEATELEMENT: "Heat Element",
     HeatSource.HEATPUMP_HEATELEMENT: "Heat Pump & Heat Element",
 }
 
 DR_EVENT_TEXT = {
-    DREvent.UNKNOWN: "Not Applied",
+    DREvent.NOT_APPLIED: "Not Applied",
     DREvent.RUN_NORMAL: "Run Normal",
     DREvent.SHED: "Shed",
     DREvent.LOADUP: "Load Up",

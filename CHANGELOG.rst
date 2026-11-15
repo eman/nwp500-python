@@ -5,6 +5,19 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+
+- **A heat source or DR event of 0 is named for what it means.**
+  ``HeatSource.UNKNOWN`` is now ``HeatSource.NONE`` (no heat source is
+  running, as on every idle poll) and ``DREvent.UNKNOWN`` is now
+  ``DREvent.NOT_APPLIED`` (no DR event is running). Since 9.13.1 an
+  unrecognised code reads ``UNKNOWN_<code>``, and an idle heater's
+  ``UNKNOWN`` read like one. ``UNKNOWN`` stays as an alias of each, so
+  existing code keeps working, but ``.name`` gives the new name and
+  ``HEAT_SOURCE_TEXT`` says "None". See "Enums where zero is a value"
+  in :doc:`/explanation/unknown-values`.
+
 Version 9.13.2 (2026-11-15)
 ===========================
 
