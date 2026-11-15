@@ -26,6 +26,16 @@ Changed
 Fixed
 -----
 
+- **A status or feature message is parsed and announced once.** With
+  two callbacks subscribed for one device, each message was validated
+  twice and ``status_received`` (or ``feature_received``) was emitted
+  twice. Callbacks for the same device now share one parsed object,
+  and the event and state tracking run once per message.
+- **The CLI unsubscribes the callbacks it registers to wait for a
+  reply**, so ``monitor`` and other long-running commands no longer
+  get each later message again for every earlier request. Over
+  Bluetooth the adapter gains the matching
+  ``unsubscribe_device_status`` and ``unsubscribe_device_feature``.
 - **``time_to_ready(..., inlet_measured=True)`` no longer says
   ``inlet_temp_modelled`` when the scenario has draws.** The mode walks
   now get the flag, so the heat pump's walk's reasons no longer bring

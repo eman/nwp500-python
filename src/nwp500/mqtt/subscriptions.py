@@ -158,6 +158,11 @@ class MqttSubscriptionManager:
         # Devices passed to any subscription, keyed by MAC. disconnect()
         # sends each one an st/end.
         self._devices: dict[str, Device] = {}
+        # Set for the duration of one _dispatch_message call: each model
+        # parse and each post_parse side effect then runs once per
+        # message, however many callbacks receive it.
+        self._dispatch_parsed: dict[tuple[Any, ...], Any] | None = None
+        self._dispatch_post_parsed: set[tuple[Any, ...]] = set()
 
     @property
     def subscriptions(self) -> dict[str, QoS]:
@@ -244,20 +249,26 @@ class MqttSubscriptionManager:
         # Call registered handlers that match this topic.
         # Iterate over snapshots so handlers can subscribe/unsubscribe
         # (mutating the registries) during dispatch.
-        for subscription_pattern, handlers in list(
-            self._message_handlers.items()
-        ):
-            if topic_matches_pattern(topic, subscription_pattern):
-                for handler in list(handlers):
-                    try:
-                        handler(topic, message)
-                    except Exception:
-                        # One bad handler must not abort delivery to the
-                        # remaining handlers for this message.
-                        _logger.exception(
-                            "Error in message handler for %s",
-                            redact_topic(topic),
-                        )
+        self._dispatch_parsed = {}
+        self._dispatch_post_parsed = set()
+        try:
+            for subscription_pattern, handlers in list(
+                self._message_handlers.items()
+            ):
+                if topic_matches_pattern(topic, subscription_pattern):
+                    for handler in list(handlers):
+                        try:
+                            handler(topic, message)
+                        except Exception:
+                            # One bad handler must not abort delivery to
+                            # the remaining handlers for this message.
+                            _logger.exception(
+                                "Error in message handler for %s",
+                                redact_topic(topic),
+                            )
+        finally:
+            self._dispatch_parsed = None
+            self._dispatch_post_parsed = set()
 
     def _emit_control_failed(self, topic: str, message: dict[str, Any]) -> None:
         """Parse a ``res/ctrl-fail`` message and emit ``control_failed``.
@@ -771,11 +782,24 @@ class MqttSubscriptionManager:
                         )
                     return
 
-                parsed = parse(data) if parse else model.model_validate(data)
-                if device_mac and hasattr(parsed, "mac_address"):
-                    parsed.mac_address = device_mac
+                # Handlers that parse the same data the same way share one
+                # parse per message, and each post_parse runs once.
+                cache_key = (model, key, whole_message, parse, device_mac)
+                cache = self._dispatch_parsed
+                if cache is not None and cache_key in cache:
+                    parsed = cache[cache_key]
+                else:
+                    parsed = (
+                        parse(data) if parse else model.model_validate(data)
+                    )
+                    if device_mac and hasattr(parsed, "mac_address"):
+                        parsed.mac_address = device_mac
+                    if cache is not None:
+                        cache[cache_key] = parsed
 
-                if post_parse:
+                if post_parse and cache_key not in self._dispatch_post_parsed:
+                    if cache is not None:
+                        self._dispatch_post_parsed.add(cache_key)
                     post_parse(parsed)
                 callback(parsed)
             except (

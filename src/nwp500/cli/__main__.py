@@ -60,8 +60,8 @@ async def _detect_unit_system(
             future.set_result(status)
 
     await mqtt.subscribe_device_status(device, _on_status)
-    await mqtt.request_device_status(device)
     try:
+        await mqtt.request_device_status(device)
         status = await asyncio.wait_for(future, timeout=5.0)
         if status.temperature_type == TemperatureType.CELSIUS:
             _logger.info("Auto-detected metric unit system from device")
@@ -73,6 +73,8 @@ async def _detect_unit_system(
             "Timed out detecting unit system, defaulting to us_customary"
         )
         return "us_customary"
+    finally:
+        await mqtt.unsubscribe_device_status(device, _on_status)
 
 
 def _parse_filter_hours(
