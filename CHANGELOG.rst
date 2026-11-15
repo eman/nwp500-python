@@ -30,15 +30,29 @@ Changed
 Fixed
 -----
 
+- **A code the library does not know no longer drops the whole
+  message.** An unlisted ``errorCode``, ``operationMode``,
+  ``currentHeatUse`` or any other enum field in a status or feature
+  message failed validation, and the message was discarded, so status
+  updates stopped when the heater reported a new fault. An unknown code
+  now becomes a pseudo-member named ``UNKNOWN_<code>``: it compares
+  equal to the code, ``.name`` and ``.value`` work as for any member,
+  and it survives pickling and copying. The device list's
+  ``connected`` and the feature's ``volumeCode`` do the same, through
+  ``converters.enum_validator``.
+- **An unknown ``dhwTemperatureSettingUse`` code does not permit
+  temperature writes.** Only the three known enabled control types
+  pass the ``dhw_temperature_setting_use`` capability check.
 - **A failed or cancelled resubscribe no longer loses subscriptions.**
   After a reconnect without a session, a ``TimeoutError`` or a rejected
   SUBACK stopped the resubscribe, and every topic not yet restored was
   dropped for good. Topics that fail are tried twice more before the
-  queued commands are sent, an unsubscribe made while they wait (or
-  while a SUBACK is pending) is kept, a rejected re-registration of a
-  callback already registered no longer removes it, any still not restored stay registered for the next reconnect, and a rejected SUBACK in ``subscribe()`` removes
-  the handler it added. ``resubscribe_all()`` returns whether every
-  subscription was restored.
+  queued commands are sent, and any still not restored stay registered
+  for the next reconnect. An unsubscribe made while they wait, or while
+  a SUBACK is pending, is kept. A rejected SUBACK in ``subscribe()``
+  removes the handler it added, but not a callback that was already
+  registered. ``resubscribe_all()`` returns whether every subscription
+  was restored.
 - **Reconnects sign with the current AWS credentials.** The connection
   read the credentials once, so the SDK's own reconnect kept signing
   with expired ones after a token refresh. It now reads the current
