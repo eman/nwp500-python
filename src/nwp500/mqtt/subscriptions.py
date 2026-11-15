@@ -489,12 +489,17 @@ class MqttSubscriptionManager:
             f"{subscribe_result['qos']}"
         )
 
-        # Mark the topic only if it still has handlers, and only for the
-        # connection that sent SUBSCRIBE. An unsubscribe that finished
-        # while the SUBACK was pending has sent UNSUBSCRIBE after it; a
-        # connection replaced meanwhile says nothing about the new one.
-        if self._message_handlers.get(topic) and self._connection is connection:
-            self._subscriptions[topic] = qos
+        # Mark the topic only if it still has handlers: an unsubscribe
+        # that finished while the SUBACK was pending has sent UNSUBSCRIBE
+        # after it.
+        if not self._message_handlers.get(topic):
+            return int(packet_id)
+        if self._connection is not connection:
+            # The connection was replaced while the SUBACK was pending,
+            # and restoration skipped this unmarked topic: subscribe on
+            # the current connection.
+            return await self._broker_subscribe(topic, qos)
+        self._subscriptions[topic] = qos
 
         return int(packet_id)
 

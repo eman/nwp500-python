@@ -332,7 +332,7 @@ async def test_remove_all_keeps_a_callback_added_while_it_waited() -> None:
 
 
 @pytest.mark.asyncio
-async def test_suback_from_a_replaced_connection_leaves_no_mark() -> None:
+async def test_suback_from_a_replaced_connection_resubscribes() -> None:
     old = MagicMock()
     suback: concurrent.futures.Future[Any] = concurrent.futures.Future()
     old.subscribe.return_value = (suback, 1)
@@ -346,7 +346,8 @@ async def test_suback_from_a_replaced_connection_leaves_no_mark() -> None:
     suback.set_result({"topic": "cmd/52/a/#", "qos": 1})
     await subscribing
 
-    assert "cmd/52/a/#" not in manager._subscriptions
-    # The next subscriber subscribes on the new connection.
-    await manager.subscribe("cmd/52/a/#", _noop)
+    # The pending subscribe is redone on the new connection, with no
+    # other caller subscribing.
     new.subscribe.assert_called_once()
+    assert "cmd/52/a/#" in manager._subscriptions
+    assert manager._message_handlers["cmd/52/a/#"] == [_noop]
