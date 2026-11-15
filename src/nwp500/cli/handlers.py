@@ -84,7 +84,28 @@ async def _wait_for_response(
             _logger.error(f"Timed out waiting for {action_name} response.")
             raise
     finally:
+        await unsubscribe_quietly(unsubscribe_func, device, callback)
+
+
+async def unsubscribe_quietly(
+    unsubscribe_func: Callable[
+        [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
+    ],
+    device: Device,
+    callback: Callable[[Any], None],
+) -> None:
+    """Remove a reply callback without replacing the caller's outcome.
+
+    The callback is removed locally before the broker is asked; a failed
+    or unacknowledged broker unsubscribe is logged, so it can neither
+    hide a reply already received nor replace the request's own error.
+    """
+    try:
         await unsubscribe_func(device, callback)
+    except Exception as e:
+        _logger.warning(
+            "Failed to unsubscribe a reply callback: %s", type(e).__name__
+        )
 
 
 async def _handle_command_with_status_feedback(

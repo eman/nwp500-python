@@ -74,7 +74,9 @@ async def _detect_unit_system(
         )
         return "us_customary"
     finally:
-        await mqtt.unsubscribe_device_status(device, _on_status)
+        await handlers.unsubscribe_quietly(
+            mqtt.unsubscribe_device_status, device, _on_status
+        )
 
 
 def _parse_filter_hours(
