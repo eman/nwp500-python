@@ -5,6 +5,21 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+
+- **A resumed session no longer hands on lists the broker kept while
+  the client was away.** With ``clean_session=False``, a reconnect that
+  resumes the broker's session gets the QoS 1 messages queued during the
+  gap, and a reservation list read by another client 20 minutes earlier
+  was delivered after the answer to a fresh read, as if it were the
+  heater's current list. A message the cloud stamped more than 10
+  seconds before the resumed connection (reservation, recirculation and
+  TOU lists, and the cloud's copies of other clients' requests) is now
+  dropped. Status replies carry no time and are still delivered. See
+  "Why did old messages arrive after a reconnect?" in the MQTT
+  diagnostics guide.
+
 Version 9.13.1 (2026-11-14)
 ===========================
 

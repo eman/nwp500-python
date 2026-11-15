@@ -535,6 +535,29 @@ In Home Assistant:
      logs:
        nwp500.mqtt.payloads: debug
 
+Why did old messages arrive after a reconnect?
+----------------------------------------------
+
+With ``clean_session=False`` and a fixed ``client_id``, a reconnect can
+resume the session the broker kept (``session_present=True`` in the
+log). The broker then delivers the QoS 1 messages it kept for that
+session while the client was away, mixed in with the answers to what
+the client asks now, for up to several seconds.
+
+The client drops those it can date: a message the cloud stamped more
+than 10 seconds before the connection that resumed the session. These
+are the reservation, recirculation and TOU lists (a ``clientID`` such as
+``response-reservation-<ms>``) and the cloud's copies of other clients'
+requests (a ``registerAt`` field). Each drop is logged at DEBUG on
+``nwp500.mqtt.subscriptions``: "made N s before this connection resumed
+its session".
+
+Status replies and other clients' plain requests carry no time, so they
+are still delivered as they come. Read the device's status again after a
+resumed connection rather than taking the first status that arrives. With
+the default ``clean_session=True`` the broker keeps nothing, so nothing
+is replayed.
+
 Integration Examples
 ====================
 

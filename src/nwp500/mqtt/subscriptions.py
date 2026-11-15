@@ -14,6 +14,7 @@ import contextlib
 import functools
 import json
 import logging
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
@@ -79,6 +80,30 @@ _KIND_APP_CONNECTION = "app_connection"
 _CONTROL_FAIL_TAIL = f"/res/{CONTROL_FAIL_SUFFIX}"
 _APP_CONNECTION_TAIL = f"/{APP_CONNECTION_SUFFIX}"
 
+#: The ``clientID`` the cloud gives a reply it converts (a reservation,
+#: recirculation or TOU list) or a write it relays: its kind and the
+#: time it was made, in milliseconds.
+_STAMPED_CLIENT_ID = re.compile(r"(?:response|control)-[a-z-]+-(\d{13})")
+#: How much earlier than a resumed connection a stamped message must be
+#: to count as one the broker kept while the client was away: allowance
+#: for the cloud's clock and this host's disagreeing.
+_REPLAY_ALLOWANCE_S = 10.0
+
+
+def _sent_at(message: dict[str, Any]) -> float | None:
+    """When the cloud made ``message``, in seconds since the epoch, from
+    its ``registerAt`` or its ``clientID``; None when it carries
+    neither, as a status reply or a client's own request does."""
+    at = message.get("registerAt")
+    if isinstance(at, int) and not isinstance(at, bool):
+        return at / 1000.0
+    client_id = message.get("clientID")
+    if isinstance(client_id, str):
+        stamp = _STAMPED_CLIENT_ID.fullmatch(client_id)
+        if stamp:
+            return int(stamp.group(1)) / 1000.0
+    return None
+
 
 def _validation_summary(e: ValidationError) -> str:
     """Describe a validation failure without echoing the input values."""
@@ -132,6 +157,7 @@ class MqttSubscriptionManager:
         device_info_cache: MqttDeviceInfoCache | None = None,
         operation_timeout: float = 30.0,
         is_online: Callable[[], bool] | None = None,
+        resumed_session_at: Callable[[], float | None] | None = None,
     ):
         """
         Initialize subscription manager.
@@ -148,8 +174,14 @@ class MqttSubscriptionManager:
             is_online: Whether the broker can be reached now; while it
                 cannot, an unsubscribe removes the callback locally
                 and sends nothing
+            resumed_session_at: When the current connection resumed the
+                broker's stored session (seconds since the epoch), or
+                None for a clean one. The broker then replays what it
+                kept while the client was away; a message the cloud
+                stamped before then is dropped.
         """
         self._is_online = is_online or (lambda: True)
+        self._resumed_session_at = resumed_session_at or (lambda: None)
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
@@ -259,6 +291,9 @@ class MqttSubscriptionManager:
 
         if _logger.isEnabledFor(logging.DEBUG):
             _logger.debug("Received message on topic: %s", redact_topic(topic))
+
+        if self._replayed(topic, message):
+            return
 
         # A rejected control command is announced on the device wildcard,
         # which every device subscription covers, so the event is raised
@@ -887,6 +922,28 @@ class MqttSubscriptionManager:
             device.device_info.mac_address,
             "#",
         )
+
+    def _replayed(self, topic: str, message: dict[str, Any]) -> bool:
+        """Whether ``message`` is one the broker kept for a stored session
+        while the client was away: stamped before the connection that
+        resumed it. A list read then (a reservation, recirculation or
+        TOU list) may no longer be the heater's, and arrives after the
+        answer to a read made now as often as before it."""
+        resumed = self._resumed_session_at()
+        if resumed is None:
+            return False
+        sent = _sent_at(message)
+        if sent is None or sent >= resumed - _REPLAY_ALLOWANCE_S:
+            return False
+        if _logger.isEnabledFor(logging.DEBUG):
+            _logger.debug(
+                "Ignoring a message on %s: made %.0f s before this "
+                "connection resumed its session, kept by the broker while "
+                "the client was away",
+                redact_topic(topic),
+                resumed - sent,
+            )
+        return True
 
     def _make_handler(
         self,

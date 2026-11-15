@@ -12,6 +12,7 @@ the authentication flow.
 import asyncio
 import concurrent.futures
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -254,6 +255,9 @@ class NavienMqttClient(
         # Connection state (simpler than checking _connection_manager)
         self._connection: MqttConnectionHandle | None = None
         self._connected = False
+        # When the current connection resumed a stored session: the
+        # broker then replays what it kept while the client was away.
+        self._resumed_session_at: float | None = None
         # Guards _active_reconnect / _deep_reconnect against re-entrancy.
         # While True, _on_connection_interrupted_internal will not forward
         # events to the reconnection handler, preventing the intentional
@@ -395,6 +399,7 @@ class NavienMqttClient(
             f"session_present={session_present}"
         )
         self._connected = True
+        self._note_session(bool(session_present))
 
         # Emit event
         self._schedule_coroutine(
@@ -438,6 +443,10 @@ class NavienMqttClient(
             self._schedule_coroutine(self._handle_clean_session_resume())
         elif self.config.enable_command_queue and self._command_queue:
             self._schedule_coroutine(self._send_queued_commands_internal())
+
+    def _note_session(self, session_present: bool) -> None:
+        """Record whether the connection just made resumed a session."""
+        self._resumed_session_at = time.time() if session_present else None
 
     def _create_connection_manager(self) -> MqttConnection:
         """Build a connection manager wired to this client's callbacks.
@@ -545,8 +554,8 @@ class NavienMqttClient(
 
                 # Try to connect
                 success = await self._connection_manager.connect()
-
                 if success:
+                    self._note_session(self._connection_manager.session_present)
                     # Update connection references
                     self._connection = self._connection_manager.connection
                     self._connected = True
@@ -668,8 +677,8 @@ class NavienMqttClient(
 
             # Step 4: Attempt connection
             success = await self._connection_manager.connect()
-
             if success:
+                self._note_session(self._connection_manager.session_present)
                 # Update connection references
                 self._connection = self._connection_manager.connection
                 self._connected = True
@@ -737,8 +746,8 @@ class NavienMqttClient(
 
             # Delegate connection to connection manager
             success = await self._connection_manager.connect()
-
             if success:
+                self._note_session(self._connection_manager.session_present)
                 # Update connection state
                 self._connection = self._connection_manager.connection
                 self._connected = True
@@ -771,6 +780,7 @@ class NavienMqttClient(
                     device_info_cache=device_info_cache,
                     operation_timeout=self.config.operation_timeout,
                     is_online=lambda: self._connected,
+                    resumed_session_at=lambda: self._resumed_session_at,
                 )
 
                 # Update device controller cache
