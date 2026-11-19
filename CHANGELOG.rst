@@ -5,9 +5,6 @@ Changelog
 Unreleased
 ==========
 
-Unreleased
-==========
-
 Fixed
 -----
 
