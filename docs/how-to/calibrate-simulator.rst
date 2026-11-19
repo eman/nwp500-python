@@ -472,9 +472,11 @@ Assistant integration, can calibrate the same way:
 2. Read the air beside the heater and its humidity over the same span
    with ``sim_home_assistant.record_inputs(client, entities, start,
    end)``, and pass the result as ``record=``. It also brings the
-   household's draws and the circulation's runs. Any client with the same
-   ``read_history`` as ``HomeAssistantClient`` works. The recorder's
-   retention limits the air, as above.
+   household's draws and the circulation's runs. The client can be any
+   ``sim_home_assistant.HistoryClient``: an object with
+   ``HomeAssistantClient``'s ``state`` and ``read_history``, such as one
+   that reads Home Assistant in process. The recorder's retention limits
+   the air, as above.
 3. Call ``sim_calibrate.calibrate`` in a worker thread. It takes the
    gaps from the statuses' own spacing: a span longer than 4 times
    their usual spacing, and at least 5 minutes, is unobserved.

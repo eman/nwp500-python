@@ -398,6 +398,37 @@ class FakeClient:
         return self.outdoor
 
 
+class TestClientProtocols:
+    def test_the_rest_client_is_both(self) -> None:
+        rest = ha.HomeAssistantClient("http://ha.local:8123", "token")
+        weather: ha.WeatherClient = rest
+        history: ha.HistoryClient = rest
+        assert weather is history
+
+    @pytest.mark.asyncio
+    async def test_a_history_client_needs_two_methods(self) -> None:
+        """A client with ``state`` and ``read_history`` alone reads the
+        heater's history, typed without a cast."""
+
+        class Minimal:
+            async def state(self, entity: str) -> ha.State:
+                return ha.State(entity, 120.0, "°F", NOW)
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                names = list(entities)
+                return ha.History(
+                    {n: [(start, 120.0)] for n in names},
+                    {n: [] for n in names},
+                    states={n: [(start, "120.0")] for n in names},
+                )
+
+        client: ha.HistoryClient = Minimal()
+        got = await client.read_history(["sensor.x"], NOW, NOW)
+        assert got.readings == {"sensor.x": [(NOW, 120.0)]}
+
+
 def _numeric(row: tuple[datetime, Any]) -> bool:
     return not isinstance(row[1], str)
 
@@ -417,7 +448,7 @@ def _source(
     **entities: Any,
 ) -> Any:
     return ha.HomeAssistantEnvironment(
-        client,  # pyright: ignore[reportArgumentType]
+        client,
         ha.Entities(**entities),
         start=NOW,
         until=NOW + timedelta(hours=6),
@@ -658,7 +689,7 @@ class TestTheRecord:
             "sensor.rh": _s("sensor.rh", 40.0, "%"),
         }
         got = await ha.record_inputs(
-            FakeClient(states, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            FakeClient(states, series),
             ha.Entities(
                 air="sensor.air",
                 humidity="sensor.rh",
@@ -678,7 +709,7 @@ class TestTheRecord:
     async def test_coverage_and_missing_parts_are_noted(self) -> None:
         late = NOW - timedelta(hours=10)
         got = await ha.record_inputs(
-            FakeClient(  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            FakeClient(
                 {
                     "sensor.air": _s("sensor.air", 60.0, "°F"),
                     "sensor.pump": _s("sensor.pump", 0.0, "rpm"),
@@ -700,7 +731,7 @@ class TestTheRecord:
     async def test_a_failed_read_is_noted(self) -> None:
         client = FakeClient()
         got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -721,7 +752,7 @@ class TestTheRecord:
                 raise ha.HomeAssistantError("GET /api/history: HTTP 502")
 
         got = await ha.record_inputs(
-            Down(),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            Down(),
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -777,7 +808,7 @@ class TestReviewRegressionsLive:
             {"sensor.rh": [(self.START, 40.0), (NOW, 140.0)]},
         )
         got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(humidity="sensor.rh"),
             self.START,
             NOW,
@@ -789,7 +820,7 @@ class TestReviewRegressionsLive:
             {"sensor.rh": [(self.START, 4.0)]},
         )
         got = await ha.record_inputs(
-            wrong,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            wrong,
             ha.Entities(humidity="sensor.rh"),
             self.START,
             NOW,
@@ -803,7 +834,7 @@ class TestReviewRegressionsLive:
         series["sensor.pump"] = [(late, 0.0)]
         client = FakeClient(UNITS, series)
         got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(demand=DEMAND, circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -833,7 +864,7 @@ class TestReviewRegressionsLive:
                 return ha.History({}, {})
 
         got = await ha.record_inputs(
-            Omits({"sensor.air": _s("sensor.air", 60.0, "°F")}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            Omits({"sensor.air": _s("sensor.air", 60.0, "°F")}),
             ha.Entities(air="sensor.air", circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -911,7 +942,7 @@ class TestTheSecondReviewLive:
         assert (await source.read()).inlet_f is None
         assert any("not a rotational speed unit" in n for n in source.notes)
         got = await ha.record_inputs(
-            FakeClient(states, {"sensor.pump": [(self.START, 0.0)]}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            FakeClient(states, {"sensor.pump": [(self.START, 0.0)]}),
             ha.Entities(circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -953,7 +984,7 @@ class TestTheSecondReviewLive:
             outages={"sensor.pump": [gap]},
         )
         got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(demand=DEMAND, circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -997,7 +1028,7 @@ class TestTheThirdReview:
             outages={"sensor.air": [gap], "sensor.rh": [gap]},
         )
         got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(air="sensor.air", humidity="sensor.rh"),
             self.START,
             NOW,
@@ -1203,7 +1234,7 @@ class TestRecordedUnitsLive:
                 )
 
         got = await ha.record_inputs(
-            Changed({"sensor.air": _s("sensor.air", 21.0, "°C")}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            Changed({"sensor.air": _s("sensor.air", 21.0, "°C")}),
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -1261,7 +1292,7 @@ class TestTheThirteenthReview:
             ]
         ]
         got = await ha.record_inputs(
-            _history_client(doc, {"sensor.air": _s("sensor.air", 80.0, "°F")}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            _history_client(doc, {"sensor.air": _s("sensor.air", 80.0, "°F")}),
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -1276,7 +1307,7 @@ class TestTheThirteenthReview:
         assert not ha.covers_start([(late, 0.0)], self.START)
         assert ha.covers_start([(self.START, 0.0)], self.START)
         got = await ha.record_inputs(
-            FakeClient(UNITS, {"sensor.pump": [(late, 0.0)]}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            FakeClient(UNITS, {"sensor.pump": [(late, 0.0)]}),
             ha.Entities(circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -1313,7 +1344,7 @@ async def test_the_inlet_looks_back_elapsed_time_across_a_clock_change() -> (
     for now in (local, local.astimezone(UTC)):
         client = FakeClient(UNITS, {})
         await ha.HomeAssistantEnvironment(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(**INLET),
             start=now,
             until=now + timedelta(hours=6),
@@ -1403,7 +1434,7 @@ def _fitting(
     client: Any, heater: ha.HeaterEntities | None = None, **entities: Any
 ) -> Any:
     return ha.HomeAssistantEnvironment(
-        client,  # pyright: ignore[reportArgumentType]
+        client,
         ha.Entities(weather="weather.home", **entities),
         start=NOW,
         until=NOW + timedelta(hours=6),
@@ -1910,7 +1941,7 @@ class TestTheFitCarried:
     async def test_fit_location_air_on_its_own(self) -> None:
         client = _heater_client(outdoor=OUTDOOR_HISTORY)
         fitted, notes = await ha.fit_location_air(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home"),
             now=NOW,
             heater=HEATER,
@@ -1921,7 +1952,7 @@ class TestTheFitCarried:
 
     async def test_without_a_weather_entity_there_is_none(self) -> None:
         fitted, notes = await ha.fit_location_air(
-            FakeClient(),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            FakeClient(),
             ha.Entities(),
             now=NOW,
         )
@@ -1932,7 +1963,7 @@ class TestTheFitCarried:
         fitted = FittedLocationAir(MODEL, 0.91, 400)
         client = _heater_client(outdoor=OUTDOOR_HISTORY)
         source = ha.HomeAssistantEnvironment(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home"),
             start=NOW,
             until=NOW + timedelta(hours=6),
@@ -1958,7 +1989,7 @@ class TestTheFitCarried:
         running reading, not only a read that fits."""
         client = _heater_client()
         source = ha.HomeAssistantEnvironment(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home"),
             start=NOW,
             until=NOW + timedelta(hours=6),
@@ -1994,7 +2025,7 @@ class TestTheFitCarried:
             forecast=OUTDOOR,
         )
         source = ha.HomeAssistantEnvironment(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home"),
             start=NOW,
             until=NOW + timedelta(hours=6),
@@ -2043,7 +2074,7 @@ class TestTheFitCarried:
             forecast=OUTDOOR,
         )
         source = ha.HomeAssistantEnvironment(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home"),
             start=NOW,
             until=NOW + timedelta(hours=6),
@@ -2076,13 +2107,13 @@ class TestTheWorkOffTheLoop:
     async def test_the_fit_goes_through_run(self) -> None:
         run = _Recorder()
         inline, _ = await ha.fit_location_air(
-            _heater_client(outdoor=OUTDOOR_HISTORY),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            _heater_client(outdoor=OUTDOOR_HISTORY),
             ha.Entities(weather="weather.home"),
             now=NOW,
             heater=HEATER,
         )
         threaded, notes = await ha.fit_location_air(
-            _heater_client(outdoor=OUTDOOR_HISTORY),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            _heater_client(outdoor=OUTDOOR_HISTORY),
             ha.Entities(weather="weather.home"),
             now=NOW,
             heater=HEATER,
@@ -2107,7 +2138,7 @@ class TestTheWorkOffTheLoop:
             forecast=OUTDOOR,
         )
         source = ha.HomeAssistantEnvironment(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home", **INLET),
             start=NOW,
             until=NOW + timedelta(hours=6),
@@ -2130,7 +2161,7 @@ class TestTheAirEntityFallsBack:
 
     async def _fit(self, client: FakeClient) -> tuple[Any, list[str]]:
         return await ha.fit_location_air(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            client,
             ha.Entities(weather="weather.home", air="sensor.air"),
             now=NOW,
             heater=HEATER,
