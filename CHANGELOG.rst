@@ -13,7 +13,7 @@ Added
   heatings (``sim.Heating``): an interval starting within a minute of
   the end of the one reaching furthest before it joins it, such as
   Electric's lower element after its upper. Each says when it starts
-  and ends, why it ends, its electricity, and whether the tank is at
+  (its earliest interval's start) and ends, why it ends, its electricity, and whether the tank is at
   temperature then. ``SimulationResult.fully_heated_at`` is the end of
   the first heating that ends at temperature, and the result document
   carries it. See "Run it and read the answer" in
@@ -21,7 +21,9 @@ Added
 - **Whole baths on the readiness answer.** ``Readiness.bath`` has
   ``ready_for_whole``, as ``Readiness.showers`` has: none unless the
   bath is ready, else each whole bath's worth of the deliverable
-  gallons, at least the one (``sim.ready.whole_baths``). See "Ask when
+  gallons, at least the one (``sim.ready.whole_baths``).
+  ``time_to_ready`` raises ``ValueError`` for a bath that rounds to
+  0.0 gal delivered, or a shower that is not positive. See "Ask when
   a bath will be ready" in :doc:`/how-to/simulate-heater`.
 - **A mixing valve given as the temperature it delivers.**
   ``with_valve(params, 120.0)`` sets a valve that delivers 120 degF, or
@@ -31,10 +33,21 @@ Added
 - **The heater's tank layers laid on where they apply.**
   ``sim_live.with_layers`` lays the heater's layers on a scenario only
   when it is the heater's tank now (the heater's start, parameters and
-  state apart from the layers), keeps a document's own ``layers_f``, and
-  adds a note when the walk reads the tank from a document's own layers
+  state apart from the layers), keeps the ``layers_f`` a document,
+  ``replace=`` or ``over=`` names (``Built.layers_given``), and adds a
+  note when the walk reads the tank from a document's own layers
   (``OWN_LAYERS_NOTE``) or leaves the heater's off
   (``LAYERS_NOT_USED_NOTE``). See "Fetch what the heater reports" in
+  :doc:`/how-to/simulate-heater`.
+
+Fixed
+-----
+
+- **A scenario's null layers start ``nwp-cli simulate`` from the
+  probes.** With the Home Assistant draw flow configured, a scenario
+  document whose state gives ``layers_f`` as null was walked from the
+  tank's history layers anyway; it now starts from the two probes, as
+  a list of its own is kept. See "From the command line" in
   :doc:`/how-to/simulate-heater`.
 
 Version 9.13.3 (2026-11-15)

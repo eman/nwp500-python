@@ -11,6 +11,7 @@ This module needs the ``sim`` extra; ``__main__`` imports it only when a
 """
 
 import csv
+import dataclasses
 import json
 import logging
 import os
@@ -218,7 +219,7 @@ def build(
     except ValueError as e:
         raise InputError(str(e)) from None
     notes = tuple(_OPTION_NOTES.get(n, n) for n in built.notes)
-    return Built(built.scenario, built.params, notes)
+    return dataclasses.replace(built, notes=notes)
 
 
 def read_params(doc: Any, what: str) -> sim.HeaterParams:
@@ -305,11 +306,11 @@ def layered(
     """``built`` starting from the tank's layers its history leaves
     (``HomeAssistantTank.layers``), the scenario's probes laid over
     them: only for a scenario that starts ``now``, whose state is the
-    heater's now, and gives no layers of its own. Without them, ``built``
-    as it is, which the simulator starts from the two probes. The notes
-    are logged."""
+    heater's now, and names no layers of its own (``layers_f`` null walks
+    from the probes). Without them, ``built`` as it is, which the
+    simulator starts from the two probes. The notes are logged."""
     state = built.scenario.state
-    if keeper is None or state.layers_f is not None:
+    if keeper is None or state.layers_f is not None or built.layers_given:
         return built
     if built.scenario.start != now:
         _logger.warning(
@@ -329,7 +330,7 @@ def layered(
     scenario = built.scenario.model_copy(
         update={"state": state.model_copy(update={"layers_f": answer.layers_f})}
     )
-    return Built(scenario, built.params, built.notes)
+    return dataclasses.replace(built, scenario=scenario)
 
 
 def window(inputs: Inputs, now: datetime) -> tuple[datetime, timedelta]:
@@ -429,7 +430,7 @@ def hot_water_lines(
             bath_gal=bath_gal,
             shower_gal=shower_gal,
         )
-    except SimulationError as e:
+    except (SimulationError, ValueError) as e:
         return [f"Bath and showers: not computed ({e})"]
     bath = r.bath
     if bath.ready:

@@ -424,6 +424,10 @@ class Built:
     params: HeaterParams
     #: What was assumed, for the user to see.
     notes: tuple[str, ...] = ()
+    #: Whether a part ``overlay`` laid on named the state's
+    #: ``layers_f``: a list, or null to walk from the two probes.
+    #: ``with_layers`` keeps them.
+    layers_given: bool = False
 
 
 def zone_name(name: str) -> str:
@@ -434,6 +438,15 @@ def zone_name(name: str) -> str:
     except ZoneInfoNotFoundError, ValueError:
         raise ValueError(f"unknown time zone {name!r}") from None
     return name
+
+
+def _names_layers(*layers: Mapping[str, Any] | None) -> bool:
+    """Whether any of ``layers`` names the state's ``layers_f``."""
+    for layer in layers:
+        state = None if layer is None else layer.get("state")
+        if isinstance(state, Mapping) and "layers_f" in state:
+            return True
+    return False
 
 
 def _air_without_its_source(*layers: Mapping[str, Any] | None) -> bool:
@@ -530,38 +543,34 @@ def overlay(
     if params is None:
         params = default_params()
         notes.append(DEFAULT_PARAMS_NOTE)
-    return Built(built, params, tuple(notes))
+    return Built(
+        built,
+        params,
+        tuple(notes),
+        layers_given=_names_layers(given, replace, over),
+    )
 
 
 def with_layers(
     built: Built,
     heater: Built | None,
     layers_f: Sequence[float] | None,
-    doc: Mapping[str, Any] | None = None,
 ) -> Built:
     """``built`` starting from the heater's tank layers ``layers_f``
     (``HeaterState.layers_f``, as its history leaves them), when they
     are its tank: ``built`` starts when ``heater`` does, walks with its
     parameters, and its state is the heater's apart from the layers.
     ``heater`` is the heater's own scenario and parameters as ``built``
-    was laid over (``overlay``), without the layers; ``doc`` the
-    scenario document laid over it, if any.
+    was laid over (``overlay``), without the layers.
 
-    A document whose state names ``layers_f`` gives its own: a list, or
-    null to walk from the two probes, and the heater's are not laid on.
-    Its own list, unless it is the heater's on the heater's scenario,
-    adds ``OWN_LAYERS_NOTE`` to the notes: the walk reads the tank from
-    the layers, not from the probes beside them. The heater's layers
-    left off a scenario that is not the heater's add
-    ``LAYERS_NOT_USED_NOTE``. For the heater's own scenario, pass it
-    as both ``built`` and ``heater``."""
-    given = None if doc is None else doc.get("scenario")
-    state_doc = (
-        cast(Mapping[str, Any], given).get("state")
-        if isinstance(given, Mapping)
-        else None
-    )
-    names_layers = isinstance(state_doc, Mapping) and "layers_f" in state_doc
+    Layers named by a part laid on (``Built.layers_given``: a list, or
+    null to walk from the two probes) are kept, and the heater's are not
+    laid on. Their own list, unless it is the heater's on the heater's
+    scenario, adds ``OWN_LAYERS_NOTE`` to the notes: the walk reads the
+    tank from the layers, not from the probes beside them. The heater's
+    layers left off a scenario that is not the heater's add
+    ``LAYERS_NOT_USED_NOTE``. For the heater's own scenario, pass it as
+    both ``built`` and ``heater``."""
     heater_layers = None if layers_f is None else tuple(map(float, layers_f))
     scenario = built.scenario
     own = scenario.state.layers_f
@@ -575,7 +584,7 @@ def with_layers(
     note: str | None = None
     if own is not None and not (heaters_now and own == heater_layers):
         note = OWN_LAYERS_NOTE
-    if heater_layers is not None and not names_layers:
+    if heater_layers is not None and not built.layers_given:
         if heaters_now:
             scenario = scenario.model_copy(
                 update={
@@ -587,4 +596,4 @@ def with_layers(
         else:
             note = LAYERS_NOT_USED_NOTE
     notes = built.notes if note is None else (*built.notes, note)
-    return Built(scenario, built.params, notes)
+    return Built(scenario, built.params, notes, built.layers_given)

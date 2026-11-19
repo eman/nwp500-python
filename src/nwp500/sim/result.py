@@ -58,7 +58,7 @@ class Heating:
     first; the heating ends with the interval that reaches furthest
     (``last``)."""
 
-    #: Its intervals, in the walk's order.
+    #: Its intervals, the earliest start first.
     intervals: tuple[HeatingInterval, ...]
     #: The interval that reaches furthest: its end is the heating's, and
     #: its ``stop`` why it ends.
@@ -69,7 +69,7 @@ class Heating:
 
     @property
     def start(self) -> datetime:
-        """When its first interval starts."""
+        """When its earliest interval starts."""
         return self.intervals[0].start.at
 
     @property
@@ -97,6 +97,9 @@ class Heating:
 def heatings(simulation: Simulation) -> tuple[Heating, ...]:
     """``simulation``'s heating intervals chained into heatings
     (``Heating``)."""
+    # In the walk's order, which is by start but for the two a resumed
+    # walk carries on, listed compressor first: both run at the walk's
+    # start, so they chain either way.
     chains: list[tuple[list[HeatingInterval], HeatingInterval]] = []
     for interval in simulation.heating:
         if chains and interval.start.at <= chains[-1][1].end + CHAINED:
@@ -108,7 +111,7 @@ def heatings(simulation: Simulation) -> tuple[Heating, ...]:
             chains.append(([interval], interval))
     return tuple(
         Heating(
-            intervals=tuple(chain),
+            intervals=tuple(sorted(chain, key=lambda h: h.start.at)),
             last=last,
             at_temperature=at_temperature(simulation, last),
         )

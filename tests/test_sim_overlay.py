@@ -235,7 +235,7 @@ def _over(heater: sim_live.Built | None, doc: dict[str, Any]) -> sim_live.Built:
     live = None if heater is None else _live()
     built = sim_live.overlay(live, doc, now=NOW)
     return sim_live.with_layers(
-        built, heater, None if heater is None else LAYERS, doc
+        built, heater, None if heater is None else LAYERS
     )
 
 
@@ -345,3 +345,41 @@ class TestWithLayers:
         )
         got = sim_live.with_layers(built, heater, LAYERS)
         assert got.notes == ("an overlay's note", sim_live.LAYERS_NOT_USED_NOTE)
+
+    @pytest.mark.parametrize("by", ["replace", "over"])
+    def test_layers_named_by_replace_or_over_are_kept(self, by: str) -> None:
+        """Null walks from the probes, a list is the caller's; the
+        heater's are laid on neither."""
+        heater = _heater()
+        own = [100.0 + i for i in range(12)]
+        state = scenario_to_document(_live().scenario)["scenario"]["state"]
+        for layers in (None, own):
+            built = (
+                sim_live.overlay(
+                    _live(),
+                    now=NOW,
+                    replace={"state": {**state, "layers_f": layers}},
+                )
+                if by == "replace"
+                else sim_live.overlay(
+                    _live(), now=NOW, over={"state": {"layers_f": layers}}
+                )
+            )
+            assert built.layers_given
+            got = sim_live.with_layers(built, heater, LAYERS)
+            expected = None if layers is None else tuple(layers)
+            assert got.scenario.state.layers_f == expected
+            assert got.notes == (
+                () if layers is None else (sim_live.OWN_LAYERS_NOTE,)
+            )
+
+    def test_a_part_naming_no_layers_leaves_them_to_the_heater(self) -> None:
+        """The heater's own scenario with its measured inlet laid on."""
+        built = sim_live.overlay(
+            _live(), now=NOW, over={"environment": {"inlet_f": 55.0}}
+        )
+        assert not built.layers_given
+        assert not _heater().layers_given
+        got = sim_live.with_layers(built, built, LAYERS)
+        assert got.scenario.state.layers_f == LAYERS
+        assert got.notes == ()

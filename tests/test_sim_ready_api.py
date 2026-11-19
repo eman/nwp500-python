@@ -1026,3 +1026,29 @@ class TestCirculationWithoutItsTerms:
             loads=Loads(circulation=runs, circulation_known_until=at(2.0))
         )
         assert "circulation_unknown" in simulate(s, default_params()).reasons
+
+
+@pytest.mark.parametrize(
+    ("bath", "shower", "what"),
+    [
+        (0.04, None, "bath_gal"),
+        (0.0, None, "bath_gal"),
+        (None, 0.0, "shower_gal"),
+    ],
+)
+def test_a_bath_or_shower_of_nothing_is_refused(
+    params: HeaterParams, bath: float | None, shower: float | None, what: str
+) -> None:
+    """A bath judged and reported to a tenth of a gallon: one under
+    0.05 gal is no bath to count."""
+    with pytest.raises(ValueError, match=what):
+        time_to_ready(_scenario(), params, bath_gal=bath, shower_gal=shower)
+
+
+def test_a_small_bath_counts(params: HeaterParams) -> None:
+    r = time_to_ready(_scenario(), params, bath_gal=0.2)
+    assert r.bath.volume_gal > 0.0
+    assert r.bath.ready
+    assert r.bath.ready_for_whole == int(
+        r.deliverable_gal / r.bath.volume_gal + 1e-9
+    )

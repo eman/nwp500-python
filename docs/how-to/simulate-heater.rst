@@ -200,7 +200,8 @@ give:
   them, or for a scenario that doesn't start now, it starts from the
   profile the two probes stand for, "deliverable now" says
   ``probes``, ``reasons`` says ``tank_profile_estimated``, and a
-  warning says why.
+  warning says why. A scenario whose state names ``layers_f`` keeps
+  its own: a list, or null to start from the two probes.
 
 Under "deliverable now", the table gives the bath and the showers the
 tank is ready for (``sim.time_to_ready``): the bath ready with its
@@ -347,13 +348,13 @@ one the document was laid over:
 
    heater = sim_live.overlay(composed, now=now)
    built = sim_live.with_layers(
-       sim_live.overlay(composed, doc, now=now), heater, layers_f, doc
+       sim_live.overlay(composed, doc, now=now), heater, layers_f
    )
 
 For the heater's own scenario, pass it as both:
-``sim_live.with_layers(heater, heater, layers_f)``. A document whose
-state names ``layers_f`` keeps its own: a list, or null to walk from the
-two probes. ``built.notes`` gets ``sim_live.OWN_LAYERS_NOTE`` when the
+``sim_live.with_layers(heater, heater, layers_f)``. A document, or
+``replace=`` or ``over=``, whose state names ``layers_f`` keeps its own
+(``built.layers_given``): a list, or null to walk from the two probes. ``built.notes`` gets ``sim_live.OWN_LAYERS_NOTE`` when the
 walk reads the tank from a document's own layers rather than the probes
 beside them, and ``sim_live.LAYERS_NOT_USED_NOTE`` when the heater's
 layers are left off a scenario that isn't the heater's.
@@ -996,7 +997,9 @@ still take. An element mode's row carries the reasons its walk adds to
 the answer's. An element mode is not reachable inside a TOU
 window, nor anything while heating is disabled. The bath defaults to
 ``ReadinessParams.bath_gal`` (28.7 gal, one household's), the shower to
-12 gal; ``defaults_used`` says when they were used.
+12 gal; ``defaults_used`` says when they were used. The bath is judged
+to a tenth of a gallon delivered, so one that rounds to 0.0 gal raises
+``ValueError``, as a shower of 0 gal or less does.
 
 The recovery is the core's physics alone. It runs short on long
 recoveries (:doc:`/explanation/simulator`), so a long time to ready is

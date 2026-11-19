@@ -160,3 +160,65 @@ def test_electrics_upper_then_lower_element_is_one_heating() -> None:
     assert result_to_document(result)["fully_heated_at"] == (
         first.end.isoformat()
     )
+
+
+def test_a_heating_starts_with_its_earliest_interval() -> None:
+    """Listed compressor first though the element started first, as a
+    resumed walk lists the two it carries on: one heating, from the
+    element's start."""
+    compressor = _interval(10, 120, "target")
+    element = _interval(0, 30, "target", source="element")
+
+    (h,) = heatings(_walk(compressor, element))
+
+    assert h.intervals == (element, compressor)
+    assert h.start == element.start.at
+    assert h.last is compressor
+
+
+def test_a_resumed_walk_carrying_an_element_and_a_compressor() -> None:
+    """High Demand: the upper element starts 35 min in and the
+    compressor at 37. A walk resumed at 40 min carries both on, listed
+    compressor first; its first heating starts at the element's start."""
+    base = days_of_draws(1).model_copy(
+        update={
+            "horizon": timedelta(hours=12),
+            "state": sim.HeaterState(upper_f=130.0, lower_f=110.0),
+            "settings": sim.Settings(
+                setpoint_f=140.0, mode=4, hp_lower_on_f=105.0
+            ),
+        }
+    )
+    params = sim.site_example_params()
+    cut = base.start + timedelta(minutes=40)
+    draws = base.loads.draws
+    first = sim.simulate(
+        base.model_copy(
+            update={
+                "horizon": cut - base.start,
+                "loads": Loads(draws=tuple(d for d in draws if d.at < cut)),
+            }
+        ),
+        params,
+    )
+    second = sim.simulate(
+        base.model_copy(
+            update={
+                "start": cut,
+                "horizon": base.until - cut,
+                "state": first.end_state,
+                "history": first.end_history,
+                "settings": first.end_settings,
+                "loads": Loads(draws=tuple(d for d in draws if d.at >= cut)),
+            }
+        ),
+        params,
+    )
+    compressor, element = second.heating[:2]
+    assert (compressor.source, element.source) == ("compressor", "element")
+    assert element.start.at < compressor.start.at < cut
+
+    h = second.heatings[0]
+
+    assert h.intervals[:2] == (element, compressor)
+    assert h.start == element.start.at
