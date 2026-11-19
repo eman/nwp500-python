@@ -64,6 +64,7 @@ from nwp500.sim.inputs import (
     HEAT_PUMP,
     HIGH_DEMAND,
     POWER_OFF,
+    VACATION,
     Draw,
     Environment,
     HeaterState,
@@ -128,6 +129,10 @@ ENGINE_MODE: Mapping[int, HeaterMode] = MappingProxyType(
         HIGH_DEMAND: "high_demand",
     }
 )
+
+#: Vacation hands back to the mode before it this long before its days
+#: are up, and heats to the setpoint (the user's manual, 3.4.5).
+VACATION_RETURNS_EARLY = timedelta(hours=9)
 
 #: The ambient grid's spacing, and how far it reaches either side of
 #: the span (a recovery that starts near the end runs past it).
@@ -351,6 +356,49 @@ def _engine_mode(mode: int) -> tuple[HeaterMode, bool]:
     return (named, False) if named is not None else ("heat_pump", True)
 
 
+def _commanded(s: Scenario) -> tuple[int, list[str]]:
+    """The mode the scenario's commands leave the heater in at its
+    start (a ``DhwOperationSetting`` value), and a reason for each
+    command the simulation does not model. Taken in the order a plan
+    serves them (``profile.COMMANDS``), each on the mode the one before
+    left:
+
+    - ``vacation``: Vacation, when the span ends by its return, its days
+      less ``VACATION_RETURNS_EARLY`` from the start; else
+      ``vacation_not_modelled``, since the walk holds no rule for
+      leaving Vacation. On a heater powered off, also not modelled.
+    - ``power``: off is Power Off. On is no change on a heater that is
+      on; on one powered off it returns to the mode it had, which the
+      scenario does not hold: ``power_not_modelled``.
+    - ``anti_legionella`` and ``demand_response``: off is the walk as it
+      runs, which runs no cycle and takes no utility event; on is
+      ``anti_legionella_not_modelled`` or
+      ``demand_response_not_modelled``.
+
+    ``tou`` is ``tou_enabled``, walked as the switch is."""
+    c = s.commands
+    mode = s.settings.mode
+    reasons: list[str] = []
+    if c.vacation is not None:
+        returns = (
+            s.start + timedelta(days=c.vacation.days) - VACATION_RETURNS_EARLY
+        )
+        if mode == POWER_OFF or s.until > returns:
+            reasons.append("vacation_not_modelled")
+        else:
+            mode = VACATION
+    if c.power is not None:
+        if not c.power.on:
+            mode = POWER_OFF
+        elif mode == POWER_OFF:
+            reasons.append("power_not_modelled")
+    if c.anti_legionella is not None and c.anti_legionella.enabled:
+        reasons.append("anti_legionella_not_modelled")
+    if c.demand_response is not None and c.demand_response.enabled:
+        reasons.append("demand_response_not_modelled")
+    return mode, reasons
+
+
 def _history_defaults(
     state: HeaterState, history: History, defaults: list[str]
 ) -> None:
@@ -500,7 +548,14 @@ def simulate(
         if s.state.resume is None
         else Resume.from_document(json.loads(s.state.resume))
     )
-    reasons: list[str] = []
+    commanded, reasons = _commanded(s)
+    if commanded != s.settings.mode:
+        # Set at the start, as the heater's own settings.
+        s = s.model_copy(
+            update={
+                "settings": s.settings.model_copy(update={"mode": commanded})
+            }
+        )
     mode, disabled = _engine_mode(s.settings.mode)
     if resume is not None:
         resume.check_from(s.start)
@@ -1384,7 +1439,7 @@ def element_mode(
     unpriced = any(
         h.source == "compressor" and h.input_wh is None for h in heating
     )
-    _, disabled = _engine_mode(s.settings.mode)
+    _, disabled = _engine_mode(_commanded(s)[0])
     reason: str | None = None
     # The heater's own marker decides, at its own setpoint; unknown
     # counts as in force.
@@ -1548,7 +1603,7 @@ def next_recovery(
     ``not_scheduled`` while heating is disabled; ``unavailable`` when
     it cannot be computed."""
     s = scenario
-    mode, disabled = _engine_mode(s.settings.mode)
+    mode, disabled = _engine_mode(_commanded(s)[0])
     if disabled:
         return Recovery("not_scheduled")
     now = s.start

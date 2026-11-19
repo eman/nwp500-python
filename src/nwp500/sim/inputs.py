@@ -21,8 +21,10 @@ Units:
 """
 
 import math
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Self
+from types import MappingProxyType
+from typing import Annotated, Any, Self, cast
 from zoneinfo import ZoneInfo
 
 from pydantic import (
@@ -31,6 +33,8 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
+    StrictInt,
     field_validator,
     model_validator,
 )
@@ -128,8 +132,74 @@ class History(_Value):
     compressor_stopped_at: Instant | None = None
 
 
+#: A reservation entry's fields as the device names them (the library's
+#: ``nwp500.models.ReservationEntry``, the entries
+#: ``update_reservations`` writes), in the device's order, each with
+#: the simulator's name for it. The values are the same but
+#: ``enable``'s: the device's 2 (on) or 1 (off) for ``enabled``, any
+#: value other than 2 read as off.
+DEVICE_ENTRY_FIELDS: Mapping[str, str] = MappingProxyType(
+    {
+        "enable": "enabled",
+        "week": "week",
+        "hour": "hour",
+        "min": "minute",
+        "mode": "mode",
+        "param": "setpoint_half_c",
+    }
+)
+#: The device's ``enable`` values.
+DEVICE_ON = 2
+DEVICE_OFF = 1
+#: The fields only one of the two forms names.
+_DEVICE_ONLY = frozenset(DEVICE_ENTRY_FIELDS) - set(
+    DEVICE_ENTRY_FIELDS.values()
+)
+_SIM_ONLY = frozenset(DEVICE_ENTRY_FIELDS.values()) - set(DEVICE_ENTRY_FIELDS)
+
+
+def _device_enabled(enable: object) -> bool:
+    """The device's ``enable`` as ``enabled``: 2 is on and any other
+    whole number off, as the library reads it (the device writes 1). A
+    bool is refused: ``True`` is 1, which reads as off."""
+    if isinstance(enable, bool) or not isinstance(enable, int):
+        raise ValueError(
+            f"enable is the device's {DEVICE_ON} (on) or {DEVICE_OFF} (off), "
+            f"got {enable!r}"
+        )
+    return enable == DEVICE_ON
+
+
+def _from_device(fields: Mapping[str, Any]) -> dict[str, Any]:
+    """A device entry's fields in the simulator's names."""
+    missing = [k for k in DEVICE_ENTRY_FIELDS if k not in fields]
+    if missing:
+        raise ValueError(
+            "a device entry has "
+            + ", ".join(DEVICE_ENTRY_FIELDS)
+            + "; missing "
+            + ", ".join(missing)
+        )
+    both = sorted(_SIM_ONLY & set(fields))
+    if both:
+        raise ValueError(
+            "an entry is in the device's fields or the simulator's, not "
+            f"both: {', '.join(both)} given with enable, min and param"
+        )
+    out = {DEVICE_ENTRY_FIELDS.get(k, k): v for k, v in fields.items()}
+    out["enabled"] = _device_enabled(fields["enable"])
+    return out
+
+
 class ReservationEntry(_Value):
-    """One weekly reservation, as the device stores it."""
+    """One weekly reservation, as the device stores it.
+
+    It takes the simulator's fields or the device's (``enable``,
+    ``week``, ``hour``, ``min``, ``mode``, ``param``, all six), as a
+    mapping or as the library's ``nwp500.models.ReservationEntry``:
+    :data:`DEVICE_ENTRY_FIELDS` maps one to the other.
+    :meth:`from_device` reads the device's form and :meth:`to_device`
+    gives it back."""
 
     enabled: bool = True
     #: The days it fires on: the device's week mask (Sunday bit 7,
@@ -141,6 +211,57 @@ class ReservationEntry(_Value):
     #: The setpoint it writes, half-degrees Celsius (the device's
     #: ``param``).
     setpoint_half_c: int
+
+    @model_validator(mode="before")
+    @classmethod
+    def _device_form(cls, data: Any) -> Any:
+        """An entry in the device's fields, read into the simulator's."""
+        if isinstance(data, Mapping):
+            fields = cast(Mapping[str, Any], data)
+            if _DEVICE_ONLY.isdisjoint(fields):
+                return fields
+            return _from_device(fields)
+        if not isinstance(data, BaseModel) or isinstance(data, cls):
+            return data
+        if all(hasattr(data, k) for k in DEVICE_ENTRY_FIELDS):
+            return _from_device(
+                {k: getattr(data, k) for k in DEVICE_ENTRY_FIELDS}
+            )
+        return data
+
+    @classmethod
+    def from_device(cls, entry: Mapping[str, Any] | BaseModel) -> Self:
+        """The entry the device holds as ``entry``: a mapping of its six
+        fields (``enable``, ``week``, ``hour``, ``min``, ``mode``,
+        ``param``), as the device reports an entry and
+        ``update_reservations`` writes one, or the library's
+        ``nwp500.models.ReservationEntry``. ``enable`` 2 is on and any
+        other whole number off; the rest are taken as they are
+        (``DEVICE_ENTRY_FIELDS``). Raises ``ValueError`` for an entry
+        missing one of the six, an ``enable`` that is not a whole number,
+        or a field out of its range."""
+        if isinstance(entry, Mapping):
+            fields: Mapping[str, Any] = entry
+        else:
+            fields = {
+                k: getattr(entry, k)
+                for k in DEVICE_ENTRY_FIELDS
+                if hasattr(entry, k)
+            }
+        return cls.model_validate(_from_device(fields))
+
+    def to_device(self) -> dict[str, int]:
+        """The entry in the device's fields, as ``update_reservations``
+        writes it: ``enable`` 2 (on) or 1 (off), ``week``, ``hour``,
+        ``min``, ``mode`` and ``param``."""
+        return {
+            "enable": DEVICE_ON if self.enabled else DEVICE_OFF,
+            "week": self.week,
+            "hour": self.hour,
+            "min": self.minute,
+            "mode": self.mode,
+            "param": self.setpoint_half_c,
+        }
 
 
 class TouPeriod(_Value):
@@ -357,8 +478,52 @@ class Write(_Value):
         return self
 
 
+class VacationCommand(_Value):
+    """Vacation for ``days`` days, set at the start (a plan's
+    ``vacation`` command)."""
+
+    #: 1-99, as the device takes them.
+    days: Annotated[StrictInt, Field(ge=1, le=99)]
+
+
+class PowerCommand(_Value):
+    """The heater turned on or off at the start (a plan's ``power``
+    command)."""
+
+    on: StrictBool
+
+
+class AntiLegionellaCommand(_Value):
+    """The anti-legionella cycle switched on or off at the start (a
+    plan's ``anti_legionella`` command)."""
+
+    enabled: StrictBool
+    #: Days between cycles, 1-30, as the device takes them; given only
+    #: with ``enabled``.
+    period_days: Annotated[StrictInt, Field(ge=1, le=30)] | None = None
+
+    @model_validator(mode="after")
+    def _period_when_enabled(self) -> Self:
+        if self.period_days is not None and not self.enabled:
+            raise ValueError("period_days is given only with enabled true")
+        return self
+
+
+class DemandResponseCommand(_Value):
+    """Demand response switched on or off at the start (a plan's
+    ``demand_response`` command)."""
+
+    enabled: StrictBool
+
+
 class Commands(_Value):
-    """Device commands under evaluation."""
+    """Device commands under evaluation.
+
+    Besides ``writes``, each is set at the start. A plan's commands
+    (``sim.profile.COMMAND_KEYS``) are taken as they are: ``tou``
+    (``{"enabled": ...}``) is ``tou_enabled``. The result's ``reasons``
+    name each command the simulation does not model
+    (:doc:`/reference/simulator-inputs`)."""
 
     #: Setpoint and mode writes, at their instants.
     writes: tuple[Write, ...] = ()
@@ -367,6 +532,38 @@ class Commands(_Value):
     reservations: tuple[ReservationEntry, ...] | None = None
     #: The TOU switch, set at the start. None keeps the heater's.
     tou_enabled: bool | None = None
+    #: Vacation from the start. None: no vacation command.
+    vacation: VacationCommand | None = None
+    #: The heater turned on or off at the start. None: no power command.
+    power: PowerCommand | None = None
+    #: The anti-legionella cycle switched at the start. None: no command.
+    anti_legionella: AntiLegionellaCommand | None = None
+    #: Demand response switched at the start. None: no command.
+    demand_response: DemandResponseCommand | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _plan_tou(cls, data: Any) -> Any:
+        """A plan's ``tou`` command, ``{"enabled": ...}``, as
+        ``tou_enabled``."""
+        if not isinstance(data, Mapping):
+            return data
+        fields = dict(cast(Mapping[str, Any], data))
+        if "tou" not in fields:
+            return fields
+        tou = fields.pop("tou")
+        if fields.get("tou_enabled") is not None:
+            raise ValueError("give tou or tou_enabled, not both")
+        shape: Mapping[str, Any] = (
+            cast(Mapping[str, Any], tou) if isinstance(tou, Mapping) else {}
+        )
+        enabled: object = (
+            shape.get("enabled") if set(shape) == {"enabled"} else None
+        )
+        if not isinstance(enabled, bool):
+            raise ValueError('tou is {"enabled": true} or {"enabled": false}')
+        fields["tou_enabled"] = enabled
+        return fields
 
 
 class Scenario(_Value):

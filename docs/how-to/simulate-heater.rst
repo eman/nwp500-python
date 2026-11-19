@@ -569,6 +569,42 @@ is not modelled: it is left out, and ``reasons`` says so (``write_mode_not_model
 ``reservation_mode_not_modelled``). ``input_wh`` is None when an
 interval's energy could not be priced.
 
+Reservation entries can be given as the device holds them. Pass the
+list read with ``request_reservations`` (``schedule.reservation``), or
+entries in the device's six fields, and the simulator reads them:
+
+.. code-block:: python
+
+   device_entries = [
+       {"enable": 2, "week": 124, "hour": 5, "min": 30,
+        "mode": 4, "param": 120},   # weekdays 05:30, High Demand, 60 degC
+   ]
+   as_read = scenario.model_copy(update={"commands": sim.Commands(
+       reservations=device_entries,
+   )})
+   # And back to the form update_reservations writes:
+   [e.to_device() for e in as_read.commands.reservations]
+
+A plan's other commands are taken in the keys the heater profile lists
+(``sim.profile.COMMAND_KEYS``), each set at the start:
+
+.. code-block:: python
+
+   away = scenario.model_copy(update={"commands": sim.Commands.model_validate({
+       "vacation": {"days": 3},
+       "tou": {"enabled": True},
+       "anti_legionella": {"enabled": False},
+   })})
+   result = sim.simulate(away, params)
+
+``power`` off and a vacation that lasts the whole span are walked: the
+heater starts no heating, as it does when it starts in Power Off or
+Vacation. A command the walk cannot follow (a vacation whose return
+falls inside the span, power on from Power Off, anti-legionella or
+demand response turned on) is left out and named in ``reasons``, such
+as ``vacation_not_modelled``. :doc:`/reference/simulator-inputs` gives
+each command's rule.
+
 
 Weigh what a change leaves behind
 =================================
@@ -1529,8 +1565,10 @@ It lists the modes and the energy each one uses, the setpoint range
 and step, the depletion threshold and the tank's volume, all as the
 simulation runs them. ``profile.revision`` changes only when one of
 those facts changes, so re-read the profile when the revision moves.
-Express a plan as reservation entries (``Commands.reservations``) and
-writes (``Commands.writes``).
+Express a plan as reservation entries (``Commands.reservations``, in
+the simulator's form or the device's), writes (``Commands.writes``) and
+the profile's commands (``Commands.vacation``, ``power``,
+``anti_legionella``, ``tou``, ``demand_response``).
 
 To keep a ``next_recovery`` answer and reuse it later, age it with
 ``sim.recovery_as_of(rec, computed_at, now)``. Otherwise its start

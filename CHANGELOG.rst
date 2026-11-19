@@ -5,6 +5,28 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+
+- **A scenario takes reservation entries as the device holds them.**
+  ``Schedules.reservations`` and ``Commands.reservations`` read an entry
+  in the device's six fields (``enable``, ``week``, ``hour``, ``min``,
+  ``mode``, ``param``), as a mapping or as the library's
+  ``ReservationEntry``, so a list read with ``request_reservations``
+  goes in as it is. ``sim.ReservationEntry.from_device`` and
+  ``to_device`` convert one entry either way, and
+  ``sim.inputs.DEVICE_ENTRY_FIELDS`` maps the field names. See the
+  reservation entry table in :doc:`/reference/simulator-inputs`.
+- **A scenario's commands take every command a plan carries.**
+  ``Commands`` takes ``vacation``, ``power``, ``anti_legionella`` and
+  ``demand_response`` in the keys of ``sim.profile.COMMAND_KEYS``, and
+  ``tou`` in place of ``tou_enabled``. Power off, and a vacation that
+  lasts the whole span, are walked as Power Off and Vacation; the
+  others the walk cannot follow are left out and named in ``reasons``
+  (``vacation_not_modelled``, ``power_not_modelled``,
+  ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
+  See "Commands" in :doc:`/reference/simulator-inputs`.
+
 Version 9.13.3 (2026-11-15)
 ===========================
 

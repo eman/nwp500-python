@@ -46,19 +46,23 @@ from nwp500.sim.defaults import (
 )
 from nwp500.sim.delivery import Deliverable, DrawWindowResult
 from nwp500.sim.inputs import (
+    AntiLegionellaCommand,
     CirculationRun,
     Commands,
+    DemandResponseCommand,
     Draw,
     DrawWindow,
     Environment,
     HeaterState,
     History,
     Loads,
+    PowerCommand,
     ReservationEntry,
     Scenario,
     Schedules,
     Settings,
     TouPeriod,
+    VacationCommand,
     Write,
 )
 from nwp500.sim.margins import StartMargin, start_margins
@@ -85,6 +89,7 @@ from nwp500.sim.result import (
 )
 
 __all__ = (
+    "AntiLegionellaCommand",
     "CirculationParams",
     "CirculationRun",
     "NO_VALVE",
@@ -95,6 +100,7 @@ __all__ = (
     "BathReady",
     "Carried",
     "Deliverable",
+    "DemandResponseCommand",
     "Draw",
     "DrawWindow",
     "DrawWindowResult",
@@ -106,6 +112,7 @@ __all__ = (
     "History",
     "Loads",
     "ModeReady",
+    "PowerCommand",
     "Commands",
     "Readiness",
     "ReadinessParams",
@@ -121,6 +128,7 @@ __all__ = (
     "StartMargin",
     "TouPeriod",
     "Trace",
+    "VacationCommand",
     "Write",
     "carry_on",
     "default_params",
