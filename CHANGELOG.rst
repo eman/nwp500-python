@@ -42,6 +42,17 @@ Changed
   :doc:`/reference/python_api/heater` and "Plan with the heater
   profile" in :doc:`/how-to/simulate-heater`.
 
+Fixed
+-----
+
+- **The CLI's day counts take the device's ranges.** ``vacation-duration``
+  refused 31 to 99 days, which the device and the MQTT client accept;
+  ``vacation``, ``anti-legionella enable --period`` and
+  ``anti-legionella set-period`` now check the same ranges as the MQTT
+  client (``nwp500.heater.VACATION_DAYS`` and
+  ``ANTI_LEGIONELLA_PERIOD_DAYS``) before connecting. See
+  :doc:`/reference/python_api/cli`.
+
 Version 9.13.3 (2026-11-15)
 ===========================
 

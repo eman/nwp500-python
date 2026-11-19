@@ -33,6 +33,7 @@ from nwp500.exceptions import (
     TokenRefreshError,
     ValidationError,
 )
+from nwp500.heater import ANTI_LEGIONELLA_PERIOD_DAYS, VACATION_DAYS
 from nwp500.mqtt.control import MAX_ENERGY_YEAR, MIN_ENERGY_YEAR
 from nwp500.unit_system import UnitSystemType
 
@@ -483,7 +484,7 @@ async def temp(mqtt: NavienMqttClient, device: Any, value: float) -> None:
 
 
 @cli.command()  # type: ignore[attr-defined]
-@click.argument("days", type=int)
+@click.argument("days", type=click.IntRange(*VACATION_DAYS))
 @async_command
 async def vacation(mqtt: NavienMqttClient, device: Any, days: int) -> None:
     """Enable vacation mode for N days."""
@@ -491,7 +492,7 @@ async def vacation(mqtt: NavienMqttClient, device: Any, days: int) -> None:
 
 
 @cli.command()  # type: ignore[attr-defined]
-@click.argument("days", type=click.IntRange(1, 30))
+@click.argument("days", type=click.IntRange(*VACATION_DAYS))
 @async_command
 async def vacation_duration(
     mqtt: NavienMqttClient, device: Any, days: int
@@ -665,9 +666,9 @@ def anti_legionella() -> None:
 @anti_legionella.command("enable")  # type: ignore[attr-defined]
 @click.option(
     "--period",
-    type=int,
+    type=click.IntRange(*ANTI_LEGIONELLA_PERIOD_DAYS),
     required=True,
-    help="Cycle period in days (1-30)",
+    help="Cycle period in days",
 )
 @async_command
 async def anti_legionella_enable(
@@ -692,12 +693,12 @@ async def anti_legionella_status(mqtt: NavienMqttClient, device: Any) -> None:
 
 
 @anti_legionella.command("set-period")  # type: ignore[attr-defined]
-@click.argument("days", type=int)
+@click.argument("days", type=click.IntRange(*ANTI_LEGIONELLA_PERIOD_DAYS))
 @async_command
 async def anti_legionella_set_period(
     mqtt: NavienMqttClient, device: Any, days: int
 ) -> None:
-    """Set Anti-Legionella period in days (1-30) without changing state."""
+    """Set Anti-Legionella period in days without changing state."""
     await handlers.handle_set_anti_legionella_period_request(mqtt, device, days)
 
 
