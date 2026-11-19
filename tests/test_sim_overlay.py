@@ -212,3 +212,136 @@ class TestTheCabinetFlag:
         assert replayed.environment.ambient_cabinet
         over_live = sim_live.overlay(live, snapshot, now=NOW).scenario
         assert over_live.environment.ambient_cabinet
+
+
+#: The heater's tank layers, bottom first, as its history leaves them.
+LAYERS = tuple(120.0 + i for i in range(12))
+
+
+def _heater() -> sim_live.Built:
+    """The heater's own scenario and parameters, without the layers."""
+    return sim_live.overlay(_live(), now=NOW)
+
+
+def _sent_back(heater: sim_live.Built) -> dict[str, Any]:
+    """The heater's scenario with its layers, as a document: what a
+    caller is given to edit and send back."""
+    laid = sim_live.with_layers(heater, heater, LAYERS)
+    return scenario_to_document(laid.scenario, laid.params)
+
+
+def _over(heater: sim_live.Built | None, doc: dict[str, Any]) -> sim_live.Built:
+    """``doc`` laid over the heater, then its layers where they apply."""
+    live = None if heater is None else _live()
+    built = sim_live.overlay(live, doc, now=NOW)
+    return sim_live.with_layers(
+        built, heater, None if heater is None else LAYERS, doc
+    )
+
+
+class TestWithLayers:
+    def test_the_heaters_own_scenario_starts_from_its_layers(self) -> None:
+        heater = _heater()
+        laid = sim_live.with_layers(heater, heater, list(LAYERS))
+        assert laid.scenario.state.layers_f == LAYERS
+        assert laid.scenario.state.upper_f == heater.scenario.state.upper_f
+        assert laid.params == heater.params
+        assert laid.notes == ()
+
+    def test_no_layers_leave_the_scenario_as_it_is(self) -> None:
+        heater = _heater()
+        assert sim_live.with_layers(heater, heater, None) == heater
+
+    def test_another_start_is_not_the_heaters_tank(self) -> None:
+        heater = _heater()
+        later = sim_live.overlay(
+            _live(),
+            _doc({"start": (NOW + timedelta(hours=1)).isoformat()}),
+            now=NOW,
+        )
+        got = sim_live.with_layers(later, heater, LAYERS)
+        assert got.scenario.state.layers_f is None
+        assert got.notes == (sim_live.LAYERS_NOT_USED_NOTE,)
+
+    def test_other_parameters_or_state_are_not_the_heaters(self) -> None:
+        heater = _heater()
+        other = sim_live.Built(heater.scenario, sim.default_params(3))
+        warmer = sim_live.overlay(
+            _live(), _doc({"state": {"upper_f": 100.0}}), now=NOW
+        )
+        for built in (other, warmer):
+            got = sim_live.with_layers(built, heater, LAYERS)
+            assert got.scenario.state.layers_f is None
+            assert got.notes == (sim_live.LAYERS_NOT_USED_NOTE,)
+
+    def test_a_setting_changed_keeps_the_heaters_tank(self) -> None:
+        heater = _heater()
+        doc = _doc({"settings": {"setpoint_f": 125.0}})
+        got = _over(heater, doc)
+        assert got.scenario.settings.setpoint_f == 125.0
+        assert got.scenario.state.layers_f == LAYERS
+        assert got.notes == ()
+
+    def test_a_valve_on_both_keeps_the_heaters_layers(self) -> None:
+        heater = _heater()
+        valved = sim_live.Built(
+            heater.scenario, sim.with_valve(heater.params, 120.0)
+        )
+        got = sim_live.with_layers(valved, valved, LAYERS)
+        assert got.params.draw.delivery_intercept_f == 120.0
+        assert got.scenario.state.layers_f == LAYERS
+
+    def test_the_document_sent_back_unchanged_is_the_heaters(self) -> None:
+        heater = _heater()
+        doc = _sent_back(heater)
+        assert doc["scenario"]["state"]["layers_f"] == list(LAYERS)
+        got = _over(heater, doc)
+        assert got.scenario.state.layers_f == LAYERS
+        assert got.notes == ()
+
+    def test_a_document_with_its_own_layers_says_so(self) -> None:
+        """Sent back later, alone, with its probes edited, or with its
+        layers edited: the document's layers, and the walk reads the tank
+        from them, not from the probes beside them."""
+        heater = _heater()
+        doc = _sent_back(heater)
+        earlier = merge(
+            doc,
+            {"scenario": {"start": (NOW - timedelta(minutes=5)).isoformat()}},
+        )
+        warmer = merge(doc, {"scenario": {"state": {"upper_f": 100.0}}})
+        edited_layers = [v - 1.0 for v in LAYERS]
+        edited = merge(
+            warmer, {"scenario": {"state": {"layers_f": edited_layers}}}
+        )
+        for built, layers in (
+            (_over(heater, earlier), LAYERS),
+            (_over(None, earlier), LAYERS),
+            (_over(heater, warmer), LAYERS),
+            (_over(heater, edited), tuple(edited_layers)),
+        ):
+            assert built.scenario.state.layers_f == layers
+            assert built.notes == (sim_live.OWN_LAYERS_NOTE,)
+        assert _over(heater, warmer).scenario.state.upper_f == 100.0
+
+    def test_a_document_gives_its_own_layers_or_none(self) -> None:
+        heater = _heater()
+        probes = _over(heater, _doc({"state": {"layers_f": None}}))
+        assert probes.scenario.state.layers_f is None
+        assert probes.notes == ()
+        own = [100.0 + i for i in range(12)]
+        given = _over(heater, _doc({"state": {"layers_f": own}}))
+        assert given.scenario.state.layers_f == tuple(own)
+        assert given.notes == (sim_live.OWN_LAYERS_NOTE,)
+
+    def test_the_notes_go_after_the_overlays(self) -> None:
+        heater = _heater()
+        built = sim_live.Built(
+            heater.scenario.model_copy(
+                update={"start": NOW + timedelta(hours=1)}
+            ),
+            heater.params,
+            ("an overlay's note",),
+        )
+        got = sim_live.with_layers(built, heater, LAYERS)
+        assert got.notes == ("an overlay's note", sim_live.LAYERS_NOT_USED_NOTE)

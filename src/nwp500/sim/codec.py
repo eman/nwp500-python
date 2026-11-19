@@ -8,9 +8,10 @@ their offset, the horizon an ISO 8601 duration. Parsing takes a
 
 A result document holds what the walk answered: the path, the heating
 intervals, the writes and mode writes, the modes, the delivery
-temperature along the path, the draw windows, the reasons and the
-defaults used, with instants as ISO 8601 strings and floats as they
-are.
+temperature along the path, the draw windows, the reasons, the
+defaults used and when the tank is first at temperature
+(``SimulationResult.fully_heated_at``), with instants as ISO 8601
+strings and floats as they are.
 
 The simulator's other answers (``time_to_ready``'s ``Readiness``,
 ``forecast``'s ``Forecast`` and the rest in ``DOCUMENT_KINDS``) are
@@ -127,6 +128,7 @@ def result_to_document(result: SimulationResult) -> dict[str, Any]:
         "windows": [_plain(dataclasses.asdict(w)) for w in result.windows],
         "reasons": list(result.reasons),
         "defaults_used": list(result.defaults_used),
+        "fully_heated_at": _plain(result.fully_heated_at),
         # Where the walk left the heater: a scenario from ``until`` takes
         # them as its state, history and settings.
         **{

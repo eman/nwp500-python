@@ -335,6 +335,29 @@ document's, then the heater's, then the 65 gal defaults (with a note in
 scenario's, and ``over=`` parts laid on after them. A document that
 doesn't make a scenario raises ``ValueError``.
 
+With the heater's tank layers in hand (``HeaterState.layers_f``, as
+its history leaves them, such as the ``layers_f`` of
+``HomeAssistantTank.layers``), lay them on with ``with_layers``. It
+lays them only on the heater's tank now: a scenario that starts when
+the heater's does, with its parameters and its state apart from the
+layers. ``heater`` is the heater's own ``Built``, the
+one the document was laid over:
+
+.. code-block:: python
+
+   heater = sim_live.overlay(composed, now=now)
+   built = sim_live.with_layers(
+       sim_live.overlay(composed, doc, now=now), heater, layers_f, doc
+   )
+
+For the heater's own scenario, pass it as both:
+``sim_live.with_layers(heater, heater, layers_f)``. A document whose
+state names ``layers_f`` keeps its own: a list, or null to walk from the
+two probes. ``built.notes`` gets ``sim_live.OWN_LAYERS_NOTE`` when the
+walk reads the tank from a document's own layers rather than the probes
+beside them, and ``sim_live.LAYERS_NOT_USED_NOTE`` when the heater's
+layers are left off a scenario that isn't the heater's.
+
 To have the models themselves, read them directly. Each MQTT read is a
 request answered on a subscription:
 
@@ -494,6 +517,20 @@ What a result holds:
    ``heat_pump`` (an element heating in the heat pump's place, which the
    heat pump took back), ``envelope`` (the heat pump left its operating
    range) or ``horizon``. ``input_wh`` is its electricity.
+``result.heatings``
+   The intervals as heatings: an interval starting within a minute
+   (``sim.result.CHAINED``) of the end of the one reaching furthest
+   before it joins it, such as Electric's lower element after its upper,
+   or an element run inside a longer compressor run. Each ``Heating``
+   has its ``intervals``, its ``start``, the ``end`` and ``stop`` of the
+   interval reaching furthest (``last``), its ``input_wh``, and
+   ``at_temperature``: whether it ends with the tank at temperature (at
+   its target, at the TOU cap's, or ended by a setpoint write the tank
+   had already reached).
+``result.fully_heated_at``
+   When the tank is first at temperature within the walk: the end of
+   the first heating that ends at temperature, or None. The result
+   document carries it as ``fully_heated_at``.
 ``result.points``
    The tank along the walk, in degF: ``upper_f``, ``lower_f``, the
    setpoint, the mode, and whether it is heating. ``sa.path(result)``
@@ -937,10 +974,14 @@ showers it is ready for.
    for m in r.bath.by_mode:
        print(f"{m.mode:<12} {m.ready_in_minutes} min, {m.energy_kwh} kWh"
              f"{'' if m.reachable_now else ' (not reachable now)'}")
-   print(r.showers.ready_for_whole, "showers;", r.reasons)
+   print(r.bath.ready_for_whole, "baths,", r.showers.ready_for_whole,
+         "showers;", r.reasons)
 
 The gallons now are ``readiness``'s, from the scenario's state (its
-``layers_f`` when given) at its inlet. When the bath isn't ready, each
+``layers_f`` when given) at its inlet. ``r.bath.ready_for_whole`` is the
+whole baths they make: none unless ``r.bath.ready``, else each whole
+bath's worth, at least the one, as ``r.showers.ready_for_whole`` counts
+whole showers. When the bath isn't ready, each
 mode's time is the scenario walked with that mode written at its start,
 as the heater takes a mode write (an element mode runs its entry rule),
 for up to 24 hours (``READY_HORIZON``), to the first instant its layers

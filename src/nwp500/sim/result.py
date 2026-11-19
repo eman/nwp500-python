@@ -1,5 +1,5 @@
 """What the simulator answers: ``SimulationResult``, ``RecoveryResult``
-and ``Trace``.
+and ``Trace``, and the heatings a walk's intervals make (``Heating``).
 
 Each carries the engine's own values (``nwp500.sim.engine``'s path
 points, heating intervals, writes and modes) with the reasons the walk
@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from nwp500.sim.controller import StopReason
 from nwp500.sim.delivery import DrawWindowResult
 from nwp500.sim.engine import (
     HeatingInterval,
@@ -26,6 +27,100 @@ from nwp500.sim.inputs import HeaterState, History, Settings
 from nwp500.sim.margins import StartMargin
 from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import Point
+
+#: Heating intervals one starting within this of another's end are one
+#: heating (``heatings``): Electric's lower element after its upper,
+#: which the walk ends at its target. A compressor can't restart that
+#: soon (its lockout).
+CHAINED = timedelta(minutes=1)
+
+
+def at_temperature(simulation: Simulation, interval: HeatingInterval) -> bool:
+    """Whether ``interval`` ends with the tank at temperature: at its
+    target (``stop`` ``target``), at the TOU cap's (``cap``: inside a
+    TOU period the heater's own target is its cap short of the
+    setpoint), or ended by a setpoint write with the tank already at the
+    new one (``write`` at an instant of ``simulation.reached``). Not
+    when a mode change, the heat pump taking back its place, its
+    operating range or the horizon ends it."""
+    if interval.stop in ("target", "cap"):
+        return True
+    return interval.stop == "write" and any(
+        at == interval.end for at, _ in simulation.reached
+    )
+
+
+@dataclass(frozen=True)
+class Heating:
+    """One heating: its intervals one after another, each starting
+    within ``CHAINED`` of the end of the one reaching furthest before
+    it. An element can run inside a longer compressor run and end
+    first; the heating ends with the interval that reaches furthest
+    (``last``)."""
+
+    #: Its intervals, in the walk's order.
+    intervals: tuple[HeatingInterval, ...]
+    #: The interval that reaches furthest: its end is the heating's, and
+    #: its ``stop`` why it ends.
+    last: HeatingInterval
+    #: Whether it ends with the tank at temperature (``at_temperature``
+    #: on ``last``).
+    at_temperature: bool
+
+    @property
+    def start(self) -> datetime:
+        """When its first interval starts."""
+        return self.intervals[0].start.at
+
+    @property
+    def end(self) -> datetime:
+        """When it ends: ``last``'s end."""
+        return self.last.end
+
+    @property
+    def stop(self) -> StopReason:
+        """Why it ends: ``last``'s ``stop``."""
+        return self.last.stop
+
+    @property
+    def input_wh(self) -> float | None:
+        """The electricity over its intervals, Wh; None when one of them
+        could not be priced."""
+        total = 0.0
+        for interval in self.intervals:
+            if interval.input_wh is None:
+                return None
+            total += interval.input_wh
+        return total
+
+
+def heatings(simulation: Simulation) -> tuple[Heating, ...]:
+    """``simulation``'s heating intervals chained into heatings
+    (``Heating``)."""
+    chains: list[tuple[list[HeatingInterval], HeatingInterval]] = []
+    for interval in simulation.heating:
+        if chains and interval.start.at <= chains[-1][1].end + CHAINED:
+            chain, last = chains[-1]
+            chain.append(interval)
+            if interval.end >= last.end:
+                chains[-1] = (chain, interval)
+        else:
+            chains.append(([interval], interval))
+    return tuple(
+        Heating(
+            intervals=tuple(chain),
+            last=last,
+            at_temperature=at_temperature(simulation, last),
+        )
+        for chain, last in chains
+    )
+
+
+def fully_heated_at(simulation: Simulation) -> datetime | None:
+    """When the tank is first at temperature within ``simulation``: the
+    end of its first heating that ends at temperature (``heatings``);
+    None when none does."""
+    return next((h.end for h in heatings(simulation) if h.at_temperature), None)
 
 
 @dataclass(frozen=True)
@@ -109,6 +204,21 @@ class SimulationResult:
                 return None
             total += h.input_wh
         return total
+
+    @property
+    def heatings(self) -> tuple[Heating, ...]:
+        """The walk's heatings: ``heating``'s intervals one after
+        another (``CHAINED``) as one, each with when it ends, why, and
+        whether the tank is at temperature then (``Heating``)."""
+        return heatings(self.simulation)
+
+    @property
+    def fully_heated_at(self) -> datetime | None:
+        """When the tank is first at temperature within the walk: the
+        end of the first heating that ends at its target, at the TOU
+        cap's, or at a written setpoint the tank had already reached
+        (``Heating.at_temperature``). None when none does."""
+        return fully_heated_at(self.simulation)
 
     def energy_by_slot(
         self, slot: timedelta = timedelta(hours=1)

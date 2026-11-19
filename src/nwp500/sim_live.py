@@ -14,7 +14,9 @@ caller. This module is that driver's part:
   inputs with ``nwp500.sim_adapters``;
 - ``compose()``, which awaits the sources into a ``Scenario``;
 - ``overlay()``, which lays a scenario document over a composed
-  scenario, as ``nwp-cli simulate`` does.
+  scenario, as ``nwp-cli simulate`` does;
+- ``with_layers()``, which starts a scenario from the heater's tank
+  layers when the scenario is the heater's now.
 
 An override is ``scenario.model_copy(update=...)`` on the result, so
 scenario data can always stand in for the device's current state.
@@ -49,7 +51,7 @@ Example::
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
@@ -98,6 +100,16 @@ DEFAULT_TIMEOUT = 10.0
 DEFAULT_HORIZON = timedelta(hours=24)
 #: ``overlay``'s note when no part gives the parameters.
 DEFAULT_PARAMS_NOTE = "the tank size is unknown: using the 65 gal defaults"
+#: ``with_layers``' note when the scenario's state gives its own layers.
+OWN_LAYERS_NOTE = (
+    "layers: the document's own; the walk reads the tank from them, not "
+    "from its probes (layers_f null walks from the probes)"
+)
+#: ``with_layers``' note when the heater's layers are left off.
+LAYERS_NOT_USED_NOTE = (
+    "layers: not used; the scenario's start, state or parameters are "
+    "not the heater's"
+)
 
 
 class LiveReadError(Nwp500Error):
@@ -519,3 +531,60 @@ def overlay(
         params = default_params()
         notes.append(DEFAULT_PARAMS_NOTE)
     return Built(built, params, tuple(notes))
+
+
+def with_layers(
+    built: Built,
+    heater: Built | None,
+    layers_f: Sequence[float] | None,
+    doc: Mapping[str, Any] | None = None,
+) -> Built:
+    """``built`` starting from the heater's tank layers ``layers_f``
+    (``HeaterState.layers_f``, as its history leaves them), when they
+    are its tank: ``built`` starts when ``heater`` does, walks with its
+    parameters, and its state is the heater's apart from the layers.
+    ``heater`` is the heater's own scenario and parameters as ``built``
+    was laid over (``overlay``), without the layers; ``doc`` the
+    scenario document laid over it, if any.
+
+    A document whose state names ``layers_f`` gives its own: a list, or
+    null to walk from the two probes, and the heater's are not laid on.
+    Its own list, unless it is the heater's on the heater's scenario,
+    adds ``OWN_LAYERS_NOTE`` to the notes: the walk reads the tank from
+    the layers, not from the probes beside them. The heater's layers
+    left off a scenario that is not the heater's add
+    ``LAYERS_NOT_USED_NOTE``. For the heater's own scenario, pass it
+    as both ``built`` and ``heater``."""
+    given = None if doc is None else doc.get("scenario")
+    state_doc = (
+        cast(Mapping[str, Any], given).get("state")
+        if isinstance(given, Mapping)
+        else None
+    )
+    names_layers = isinstance(state_doc, Mapping) and "layers_f" in state_doc
+    heater_layers = None if layers_f is None else tuple(map(float, layers_f))
+    scenario = built.scenario
+    own = scenario.state.layers_f
+    heaters_now = (
+        heater is not None
+        and scenario.start == heater.scenario.start
+        and built.params == heater.params
+        and scenario.state.model_copy(update={"layers_f": None})
+        == heater.scenario.state.model_copy(update={"layers_f": None})
+    )
+    note: str | None = None
+    if own is not None and not (heaters_now and own == heater_layers):
+        note = OWN_LAYERS_NOTE
+    if heater_layers is not None and not names_layers:
+        if heaters_now:
+            scenario = scenario.model_copy(
+                update={
+                    "state": scenario.state.model_copy(
+                        update={"layers_f": heater_layers}
+                    )
+                }
+            )
+        else:
+            note = LAYERS_NOT_USED_NOTE
+    notes = built.notes if note is None else (*built.notes, note)
+    return Built(scenario, built.params, notes)

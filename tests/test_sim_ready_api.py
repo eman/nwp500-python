@@ -248,6 +248,8 @@ class TestTimeToReady:
         assert {m.ready_in_minutes for m in r.bath.by_mode} == {0.0}
         assert r.defaults_used == ("bath_gal=28.7", "shower_gal=12.0")
         assert r.showers.ready_for_whole == int(r.deliverable_gal // 12.0)
+        assert r.bath.ready_for_whole == int(r.deliverable_gal // 28.7)
+        assert r.bath.ready_for_whole >= 1
 
     def test_a_short_tank_has_a_time_in_each_mode(
         self, params: HeaterParams

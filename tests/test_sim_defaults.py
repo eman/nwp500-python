@@ -249,6 +249,23 @@ def test_the_default_is_the_site_without_its_mixing_valve() -> None:
     )
 
 
+def test_a_valve_set_to_a_temperature_delivers_it_flat() -> None:
+    """A valve set to deliver 120 degF: that temperature from any warmer
+    tank, the tank's own water from a cooler one."""
+    from nwp500.sim.delivery import delivery_f
+
+    d = default_params()
+    valved = with_valve(d, 120)
+    draw = valved.draw
+    assert (draw.delivery_intercept_f, draw.delivery_slope) == (120.0, 0.0)
+    assert valved == with_valve(d, (120.0, 0.0))
+    assert replace(valved, draw=d.draw) == d
+    assert delivery_f(valved, 140.0) == 120.0
+    assert delivery_f(valved, 110.0) == 110.0
+    with pytest.raises(ValueError, match="temperature"):
+        with_valve(d, float("nan"))
+
+
 def test_another_installations_mains_are_the_rating_tests_all_year() -> None:
     """No climate, so the rating's 58 degF on any day; the site's move
     with its own climate's season."""
