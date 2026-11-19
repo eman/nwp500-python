@@ -266,6 +266,23 @@ def test_a_valve_set_to_a_temperature_delivers_it_flat() -> None:
         with_valve(d, float("nan"))
 
 
+@pytest.mark.parametrize("inlet", [120.0, 125.0])
+def test_a_valve_set_to_the_mains_or_under_delivers_without_end(
+    inlet: float,
+) -> None:
+    """A 140 degF tank behind a valve set to 120 degF, the mains at or
+    above it: the valve takes nothing from the tank, and the tap never
+    runs under the line."""
+    from nwp500 import sim
+
+    params = with_valve(default_params(), 120.0)
+    state = sim.HeaterState(upper_f=140.0, lower_f=140.0)
+    settings = sim.Settings(setpoint_f=140.0)
+    assert sim.readiness(state, settings, params, inlet_f=inlet).gal == (
+        float("inf")
+    )
+
+
 def test_another_installations_mains_are_the_rating_tests_all_year() -> None:
     """No climate, so the rating's 58 degF on any day; the site's move
     with its own climate's season."""

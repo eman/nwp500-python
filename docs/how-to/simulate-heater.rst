@@ -354,10 +354,11 @@ one the document was laid over:
 For the heater's own scenario, pass it as both:
 ``sim_live.with_layers(heater, heater, layers_f)``. A document, or
 ``replace=`` or ``over=``, whose state names ``layers_f`` keeps its own
-(``built.layers_given``): a list, or null to walk from the two probes. ``built.notes`` gets ``sim_live.OWN_LAYERS_NOTE`` when the
-walk reads the tank from a document's own layers rather than the probes
-beside them, and ``sim_live.LAYERS_NOT_USED_NOTE`` when the heater's
-layers are left off a scenario that isn't the heater's.
+(``built.layers_given``): a list, or null to walk from the two probes.
+``built.notes`` gets ``sim_live.OWN_LAYERS_NOTE`` when the walk reads
+the tank from a document's own layers rather than the probes beside
+them, and ``sim_live.LAYERS_NOT_USED_NOTE`` when the heater's layers
+are left off a scenario that isn't the heater's.
 
 To have the models themselves, read them directly. Each MQTT read is a
 request answered on a subscription:
@@ -950,8 +951,10 @@ after the probe crosses the line. ``inlet_f`` is the mains the draw
 meets, else the parameters' mains on the day ``on``
 (``DrawParams.mains_on``), else ``DrawParams.inlet_temp_f``: through a
 valve, a colder
-inlet takes more tank water a gallon. The water standing in your pipe is
-not in them. ``delivery.within_resolution`` says whether a probe error
+inlet takes more tank water a gallon. Mains at the line, or a valve
+that delivers the line from mains no colder than its setting, never run
+the tap under it: the gallons are unlimited (``math.inf``). The water
+standing in your pipe is not in them. ``delivery.within_resolution`` says whether a probe error
 of ``ReadinessParams.probe_resolution_f`` would take the answer across a
 volume.
 

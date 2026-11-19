@@ -111,6 +111,14 @@ Fixed
   tank's history layers anyway; it now starts from the two probes, as
   a list of its own is kept. See "From the command line" in
   :doc:`/how-to/simulate-heater`.
+- **A mixing valve set no warmer than the mains no longer divides by
+  zero.** With the valve delivering the line from its cold side alone,
+  as a valve set to 120 degF does with 120 degF mains or warmer, or the
+  site's line once its delivery falls to the mains, the tank's
+  deliverable gallons (``readiness``, ``time_to_ready``, a draw
+  window's ``deliverable_gal``) raised ``ZeroDivisionError``. They are
+  now unlimited, as for mains at the line. See "Ask how much hot water
+  is left" in :doc:`/how-to/simulate-heater`.
 
 Version 9.13.3 (2026-11-15)
 ===========================
