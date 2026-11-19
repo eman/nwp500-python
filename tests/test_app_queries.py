@@ -406,6 +406,59 @@ class TestTypedSubscriptions:
         assert received[0].download_sw_info[0].component_name == "Controller"
 
     @pytest.mark.asyncio
+    async def test_reservation_list_on_either_topic(self) -> None:
+        """The cloud sometimes relays the rsv/rd list on the device's own
+        topic; the typed subscription takes it from there too, and not
+        the hex form on res/rsv or another device's list."""
+        manager = _manager()
+        received: list[Any] = []
+        device = _device()
+
+        await manager.subscribe_reservation_response(device, received.append)
+
+        assert set(manager.subscriptions) == {
+            "cmd/52/test-client/res/rsv/rd",
+            "cmd/52/navilink-04786332fca0/#",
+        }
+        listed = {
+            "response": {
+                "deviceType": 52,
+                "macAddress": "04786332fca0",
+                "reservationUse": 2,
+                "reservation": [
+                    {
+                        "enable": 1,
+                        "week": 62,
+                        "hour": 6,
+                        "min": 0,
+                        "mode": 2,
+                        "param": 120,
+                    }
+                ],
+            }
+        }
+        await _deliver(manager, "cmd/52/test-client/res/rsv/rd", listed)
+        await _deliver(
+            manager, "cmd/52/navilink-04786332fca0/res/rsv/rd", listed
+        )
+        assert [s.reservation[0].hour for s in received] == [6, 6]
+
+        await _deliver(
+            manager,
+            "cmd/52/navilink-04786332fca0/res/recirc-rsv/rd",
+            listed,
+        )
+        other = json.loads(json.dumps(listed))
+        other["response"]["macAddress"] = "bbbbbbbbbbbb"
+        await _deliver(
+            manager, "cmd/52/navilink-04786332fca0/res/rsv/rd", other
+        )
+        assert len(received) == 2
+
+        await manager.unsubscribe_reservation_response(device, received.append)
+        assert manager.subscriptions == {}
+
+    @pytest.mark.asyncio
     async def test_subscribe_device_tracks_devices(self) -> None:
         manager = _manager()
         assert manager.subscribed_devices == []

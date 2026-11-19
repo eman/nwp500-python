@@ -249,7 +249,10 @@ def recovery_frame(
                     "water": minute_wet,
                     "draw_free": c.draw_free,
                     "start_clean": start_clean,
-                    "minutes_off": off,
+                    # An array, so a NaN is a float column: a scalar NaN
+                    # makes an object column that pandas 2 warns about
+                    # concatenating.
+                    "minutes_off": np.full(len(at), off),
                 },
                 columns=list(_FRAME_COLUMNS),
             )

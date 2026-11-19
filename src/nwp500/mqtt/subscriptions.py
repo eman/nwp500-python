@@ -75,6 +75,9 @@ _KIND_FEATURE = "device_feature"
 _KIND_FIRMWARE = "firmware_download_info"
 _KIND_CONTROL_FAIL = "control_fail_response"
 _KIND_APP_CONNECTION = "app_connection"
+_KIND_RESERVATION_DEVICE = "reservation_device_keyed"
+#: A reservation list reply relayed on the heater's own topic.
+_RESERVATION_DEVICE_TAIL = "/res/rsv/rd"
 
 #: Topic tail of a control failure, under the device wildcard.
 _CONTROL_FAIL_TAIL = f"/res/{CONTROL_FAIL_SUFFIX}"
@@ -1459,21 +1462,33 @@ class MqttSubscriptionManager:
     ) -> int:
         """Subscribe to reservation read responses with automatic parsing.
 
-        Subscribes to the ``rsv/rd`` response topic for the given device.
-        The callback receives a fully-parsed
+        Subscribes to the ``rsv/rd`` response topic for the given device,
+        and takes the lists relayed on the device's own topic
+        (``cmd/{deviceType}/navilink-{mac}/res/rsv/rd``) from the device
+        wildcard subscription. The callback receives a fully-parsed
         :class:`~nwp500.models.ReservationSchedule` whenever the device
-        responds to a reservation read request.
+        responds to a reservation read request, on either topic.
 
         Args:
             device: Device whose reservation responses to receive.
             callback: Called with the parsed schedule on each response.
 
         Returns:
-            Publish packet ID from the MQTT subscribe call.
+            Publish packet ID from the MQTT subscribe call on the
+            client-keyed topic.
         """
-        return await self._subscribe_response(
+        packet_id = await self._subscribe_response(
             device, "rsv/rd", ReservationSchedule, callback
         )
+        handler = self._make_handler(
+            ReservationSchedule,
+            callback,
+            topic_suffix=_RESERVATION_DEVICE_TAIL,
+            kind=_KIND_RESERVATION_DEVICE,
+            only_mac=device.device_info.mac_address,
+        )
+        await self.subscribe_device(device=device, callback=handler)
+        return packet_id
 
     async def unsubscribe_reservation_response(
         self,
@@ -1482,6 +1497,9 @@ class MqttSubscriptionManager:
     ) -> None:
         """Unsubscribe a specific reservation response callback."""
         await self._unsubscribe_response(device, "rsv/rd", callback)
+        await self._unsubscribe_callback(
+            self._device_wildcard(device), callback, _KIND_RESERVATION_DEVICE
+        )
 
     async def subscribe_recirculation_schedule_response(
         self,
