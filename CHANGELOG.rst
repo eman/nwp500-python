@@ -35,6 +35,37 @@ Added
   given only with another; the profile's document states both under
   ``command_keys``. The MQTT client checks the same ranges. See
   "Commands" in :doc:`/reference/python_api/heater`.
+- **A walk's heatings, and when the tank is first at temperature.**
+  ``SimulationResult.heatings`` chains the heating intervals into
+  heatings (``sim.Heating``): an interval starting within a minute of
+  the end of the one reaching furthest before it joins it, such as
+  Electric's lower element after its upper. Each says when it starts
+  (its earliest interval's start) and ends, why it ends, its electricity, and whether the tank is at
+  temperature then. ``SimulationResult.fully_heated_at`` is the end of
+  the first heating that ends at temperature, and the result document
+  carries it. See "Run it and read the answer" in
+  :doc:`/how-to/simulate-heater`.
+- **Whole baths on the readiness answer.** ``Readiness.bath`` has
+  ``ready_for_whole``, as ``Readiness.showers`` has: none unless the
+  bath is ready, else each whole bath's worth of the deliverable
+  gallons, at least the one (``sim.ready.whole_baths``).
+  ``time_to_ready`` raises ``ValueError`` for a bath that rounds to
+  0.0 gal delivered, or a shower that is not positive. See "Ask when
+  a bath will be ready" in :doc:`/how-to/simulate-heater`.
+- **A mixing valve given as the temperature it delivers.**
+  ``with_valve(params, 120.0)`` sets a valve that delivers 120 degF, or
+  the tank's own water while the tank is cooler, beside
+  ``with_valve(params, (intercept_f, slope))`` for a measured line. See
+  "Parameters: HeaterParams" in :doc:`/reference/simulator-inputs`.
+- **The heater's tank layers laid on where they apply.**
+  ``sim_live.with_layers`` lays the heater's layers on a scenario only
+  when it is the heater's tank now (the heater's start, parameters and
+  state apart from the layers), keeps the ``layers_f`` a document,
+  ``replace=`` or ``over=`` names (``Built.layers_given``), and adds a
+  note when the walk reads the tank from a document's own layers
+  (``OWN_LAYERS_NOTE``) or leaves the heater's off
+  (``LAYERS_NOT_USED_NOTE``). See "Fetch what the heater reports" in
+  :doc:`/how-to/simulate-heater`.
 - **A scenario takes reservation entries as the device holds them.**
   ``Schedules.reservations`` and ``Commands.reservations`` read an entry
   in the device's six fields (``enable``, ``week``, ``hour``, ``min``,
@@ -96,6 +127,20 @@ Fixed
   pump fit's recovery frame held the first run's ``minutes_off`` (NaN)
   as an object column, and pandas 2 warned on concatenating it on every
   calibration. The column is a float column now.
+- **A scenario's null layers start ``nwp-cli simulate`` from the
+  probes.** With the Home Assistant draw flow configured, a scenario
+  document whose state gives ``layers_f`` as null was walked from the
+  tank's history layers anyway; it now starts from the two probes, as
+  a list of its own is kept. See "From the command line" in
+  :doc:`/how-to/simulate-heater`.
+- **A mixing valve set no warmer than the mains no longer divides by
+  zero.** With the valve delivering the line from its cold side alone,
+  as a valve set to 120 degF does with 120 degF mains or warmer, or the
+  site's line once its delivery falls to the mains, the tank's
+  deliverable gallons (``readiness``, ``time_to_ready``, a draw
+  window's ``deliverable_gal``) raised ``ZeroDivisionError``. They are
+  now unlimited, as for mains at the line. See "Ask how much hot water
+  is left" in :doc:`/how-to/simulate-heater`.
 - **A simulation that starts in Vacation or Power Off stops what was
   running.** A scenario whose state has the compressor or an element
   running, with its settings in Vacation or Power Off (as a tail

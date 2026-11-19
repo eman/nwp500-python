@@ -2052,7 +2052,9 @@ def time_to_ready(
     ``inlet_temp_modelled``.
 
     Raises ``ValueError`` for a setpoint written outside the heater's
-    range, as ``simulate`` does.
+    range, as ``simulate`` does, and for a bath that is not positive at
+    its reported tenth of a gallon delivered, or a shower that is not
+    positive.
     """
     s = scenario
     _check_setpoints(s)
@@ -2071,8 +2073,17 @@ def time_to_ready(
         shower_source = "default"
         defaults.append(f"shower_gal={shower_gal}")
     # The meter's gallons, as a draw's (``DrawParams.meter_reads``).
+    asked = bath_gal
     bath_gal = round(params.draw.delivered_gal(bath_gal, s.start), 1)
     shower_gal = params.draw.delivered_gal(shower_gal, s.start)
+    # Judged and reported to a tenth: a bath under it is no bath.
+    if not bath_gal > 0.0:
+        raise ValueError(
+            f"bath_gal must round to at least 0.1 gal delivered: {asked!r} "
+            f"rounds to {bath_gal} gal"
+        )
+    if not shower_gal > 0.0:
+        raise ValueError(f"shower_gal must be positive: {shower_gal!r}")
     # In a TOU window now: the heater's own marker. Unknown counts as in
     # force, as for the counter test and for ``element_mode``: the
     # conservative direction is "it may not heat".
