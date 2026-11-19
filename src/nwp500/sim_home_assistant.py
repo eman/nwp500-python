@@ -10,6 +10,10 @@ this module, a ``sim_live`` source:
   ``/api/states/<entity>`` for the value now, ``/api/history/period``
   for recent history, and the ``weather.get_forecasts`` service for the
   outdoor forecast.
+- ``HistoryClient`` and ``WeatherClient`` are the methods the readers
+  call on a client, as ``typing.Protocol`` classes: a client that reads
+  Home Assistant another way (in process, or from its own record) is
+  passed in its place.
 - ``HomeAssistantEnvironment`` is an ``EnvironmentSource`` for
   ``sim_live.compose()``:
 
@@ -41,7 +45,7 @@ from bisect import bisect_right
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from nwp500 import sim_adapters as sa
 from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
@@ -890,6 +894,43 @@ def pump_runs(
 # ── the client ──────────────────────────────────────────────────────
 
 
+class HistoryClient(Protocol):
+    """What the history readers call on a client: an entity's value
+    now and its recorded changes. ``HomeAssistantClient`` is one; so is
+    any object with these two methods, such as a client that reads Home
+    Assistant in process or from its own record."""
+
+    async def state(self, entity: str) -> State:
+        """``entity``'s value now."""
+        ...
+
+    async def read_history(
+        self, entities: Iterable[str], start: datetime, end: datetime
+    ) -> History:
+        """Each of ``entities``' changes from ``start`` to ``end``, the
+        first the value in force at ``start``, with the spans each was
+        unavailable (``HomeAssistantClient.read_history``)."""
+        ...
+
+
+class WeatherClient(HistoryClient, Protocol):
+    """A ``HistoryClient`` that also reads a weather entity: what
+    ``HomeAssistantEnvironment`` and ``fit_location_air`` call.
+    ``HomeAssistantClient`` is one."""
+
+    async def forecast(self, entity: str) -> tuple[list[Reading], str | None]:
+        """``entity``'s hourly forecast and its unit
+        (``HomeAssistantClient.forecast``)."""
+        ...
+
+    async def outdoor_history(
+        self, entity: str, start: datetime, end: datetime
+    ) -> list[Reading]:
+        """A weather entity's outdoor air from ``start`` to ``end``, °F
+        (``HomeAssistantClient.outdoor_history``)."""
+        ...
+
+
 class HomeAssistantClient:
     """Home Assistant's REST API. Use it as an async context
     manager, or pass a ``session`` the caller owns."""
@@ -1214,7 +1255,7 @@ def _while_running(
 
 
 async def fit_location_air(
-    client: HomeAssistantClient,
+    client: WeatherClient,
     entities: Entities,
     *,
     now: datetime,
@@ -1255,7 +1296,7 @@ async def fit_location_air(
 
 
 async def _try_fit(
-    client: HomeAssistantClient,
+    client: WeatherClient,
     entities: Entities,
     heater: HeaterEntities | None,
     weather: str,
@@ -1271,7 +1312,7 @@ async def _try_fit(
 
 
 async def _fit(
-    client: HomeAssistantClient,
+    client: WeatherClient,
     entities: Entities,
     heater: HeaterEntities | None,
     weather: str,
@@ -1367,7 +1408,7 @@ def _spans_a_day(
 
 
 async def _air_readings(
-    client: HomeAssistantClient,
+    client: HistoryClient,
     entities: Entities,
     heater: HeaterEntities | None,
     since: datetime,
@@ -1399,7 +1440,7 @@ async def _air_readings(
 
 
 async def _heater_air(
-    client: HomeAssistantClient,
+    client: HistoryClient,
     heater: HeaterEntities | None,
     since: datetime,
     now: datetime,
@@ -1454,7 +1495,7 @@ class HomeAssistantEnvironment:
 
     def __init__(
         self,
-        client: HomeAssistantClient,
+        client: WeatherClient,
         entities: Entities,
         *,
         start: datetime,
@@ -1719,7 +1760,7 @@ class RecordInputs:
 
 
 async def record_inputs(
-    client: HomeAssistantClient,
+    client: HistoryClient,
     entities: Entities,
     start: datetime,
     end: datetime,
@@ -2012,7 +2053,7 @@ _HEATING = frozenset(
 
 
 async def read_heater_history(
-    client: HomeAssistantClient,
+    client: HistoryClient,
     entities: HeaterEntities,
     start: datetime,
     end: datetime,
@@ -2283,7 +2324,7 @@ class HomeAssistantTank:
 
     def __init__(
         self,
-        client: HomeAssistantClient,
+        client: HistoryClient,
         heater: HeaterEntities,
         flow: str,
         entities: Entities | None = None,
