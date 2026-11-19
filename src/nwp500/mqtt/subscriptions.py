@@ -1487,7 +1487,19 @@ class MqttSubscriptionManager:
             kind=_KIND_RESERVATION_DEVICE,
             only_mac=device.device_info.mac_address,
         )
-        await self.subscribe_device(device=device, callback=handler)
+        try:
+            await self.subscribe_device(device=device, callback=handler)
+        except BaseException:
+            # Neither topic or both: take back the client-keyed handler
+            # this call registered, and raise the wildcard's error.
+            try:
+                await self._unsubscribe_response(device, "rsv/rd", callback)
+            except Exception as e:
+                _logger.debug(
+                    "Rolling back the rsv/rd subscription failed: %s",
+                    type(e).__name__,
+                )
+            raise
         return packet_id
 
     async def unsubscribe_reservation_response(
@@ -1495,11 +1507,17 @@ class MqttSubscriptionManager:
         device: Device,
         callback: Callable[[ReservationSchedule], None],
     ) -> None:
-        """Unsubscribe a specific reservation response callback."""
-        await self._unsubscribe_response(device, "rsv/rd", callback)
-        await self._unsubscribe_callback(
-            self._device_wildcard(device), callback, _KIND_RESERVATION_DEVICE
-        )
+        """Unsubscribe a specific reservation response callback, on the
+        client-keyed topic and the device wildcard. The wildcard handler
+        is removed even when the first unsubscribe fails."""
+        try:
+            await self._unsubscribe_response(device, "rsv/rd", callback)
+        finally:
+            await self._unsubscribe_callback(
+                self._device_wildcard(device),
+                callback,
+                _KIND_RESERVATION_DEVICE,
+            )
 
     async def subscribe_recirculation_schedule_response(
         self,
