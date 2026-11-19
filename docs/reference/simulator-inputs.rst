@@ -213,8 +213,10 @@ Built by ``sim_adapters.settings(status)``.
      - mode
      - 1
      - ``DeviceStatus.dhw_operation_setting``. In Vacation (5) or Power
-       Off (6) the heater starts no heating. A status in Standby (0) is
-       refused by ``sim_adapters.settings``.
+       Off (6) the heater starts no heating, and a compressor or element
+       running at the start stops there: the restart lockout runs from
+       the start, and ``end_history`` holds the stop. A status in
+       Standby (0) is refused by ``sim_adapters.settings``.
    * - ``hp_lower_on_f``
      - degF
      - None
@@ -507,11 +509,16 @@ heater does on its own.
        walks as Vacation (5): no heating, and each entry skipped. A
        span the return falls inside, or a heater in Power Off, is not
        modelled: the command is left out and ``reasons`` says
-       ``vacation_not_modelled``.
+       ``vacation_not_modelled``. ``element_mode``, ``time_to_ready``
+       and ``next_recovery`` judge it over their 24-hour look ahead,
+       whatever the scenario's horizon. A ``carry_on`` tail inside the
+       vacation is not shown going on alike when walking it on passes
+       the return (``Carried.heating_alike`` is False).
    * - ``power``
      - None
-     - ``{"on": false}`` walks as Power Off (6) from the start: no
-       heating until a reservation entry turns the heater on.
+     - ``{"on": false}`` walks as Power Off (6) from the start: heating
+       running there stops (`Settings: Settings`_), and none starts
+       until a reservation entry turns the heater on.
        ``{"on": true}`` is no change on a heater that is on; on one in
        Power Off it returns the heater to the mode it had before, which
        the scenario does not hold, so it is left out with

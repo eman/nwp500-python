@@ -27,6 +27,18 @@ Added
   ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
   See "Commands" in :doc:`/reference/simulator-inputs`.
 
+Fixed
+-----
+
+- **A simulation that starts in Vacation or Power Off stops what was
+  running.** A scenario whose state has the compressor or an element
+  running, with its settings in Vacation or Power Off (as a tail
+  carried on from a walk that ended heating can be), now stops them at
+  the start: the restart lockout runs from there and ``end_history``
+  holds the stop. Before, no stop was recorded, a reservation entry
+  could restart the compressor at once, and the history given was
+  lost. See the ``mode`` row in :doc:`/reference/simulator-inputs`.
+
 Version 9.13.3 (2026-11-15)
 ===========================
 

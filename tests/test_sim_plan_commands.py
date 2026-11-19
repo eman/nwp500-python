@@ -2,6 +2,7 @@
 command a plan carries (``sim.profile.COMMAND_KEYS``), walking those the
 simulation models and naming the rest in ``reasons``."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -25,10 +26,12 @@ from nwp500.sim import (
     Schedules,
     Settings,
     VacationCommand,
+    carry_on,
     default_params,
     element_mode,
     next_recovery,
     simulate,
+    time_to_ready,
 )
 from nwp500.sim.api import VACATION_RETURNS_EARLY
 from nwp500.sim.codec import scenario_from_document, scenario_to_document
@@ -400,3 +403,163 @@ class TestCyclesAndUtilityEvents:
         base = simulate(_scenario(), params)
         assert got.simulation == base.simulation
         assert got.reasons == base.reasons
+
+
+def _running(**kw: Any) -> Scenario:
+    """The compressor running at the start, warm above its lower
+    trigger."""
+    return _scenario(
+        state=HeaterState(upper_f=110.0, lower_f=95.0, compressor_running=True),
+        **kw,
+    )
+
+
+class TestAStartWithHeatingDisabledStopsIt:
+    """Vacation or Power Off at the start, by the settings or a command,
+    stops what is running there: the compressor's stop is the start."""
+
+    ENTRY = ReservationEntry(
+        week=EVERY_DAY, hour=19, minute=2, mode=1, setpoint_half_c=124
+    )
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            Commands(power=PowerCommand(on=False)),
+            Commands(vacation=VacationCommand(days=2)),
+        ],
+    )
+    def test_the_stop_is_the_start(
+        self, params: HeaterParams, command: Commands
+    ) -> None:
+        got = simulate(_running(commands=command), params)
+        assert got.end_history is not None
+        assert got.end_history.compressor_stopped_at == T0
+        assert not got.heating
+        assert not got.simulation.points[0].heating
+
+    def test_an_entry_soon_after_waits_out_the_lockout(
+        self, params: HeaterParams
+    ) -> None:
+        """Powered off with the compressor running, an entry 2 minutes
+        later turns the heater on; the compressor restarts no sooner
+        than the restart lockout from the start allows."""
+        s = _running(
+            commands=Commands(power=PowerCommand(on=False)),
+            schedules=Schedules(reservations=(self.ENTRY,)),
+        )
+        got = simulate(s, params)
+        assert got.heating
+        lockout = params.controller.restart_lockout
+        assert got.heating[0].start.at >= T0 + lockout
+
+    def test_the_command_walks_as_the_settings_do(
+        self, params: HeaterParams
+    ) -> None:
+        schedules = Schedules(reservations=(self.ENTRY,))
+        command = _running(
+            commands=Commands(power=PowerCommand(on=False)),
+            schedules=schedules,
+        )
+        settings = _with_mode(_running(schedules=schedules), POWER_OFF)
+        got = simulate(command, params)
+        assert got.simulation == simulate(settings, params).simulation
+        assert got.end_history == simulate(settings, params).end_history
+
+    def test_the_probes_keep_their_warmth_over_the_water(
+        self, params: HeaterParams
+    ) -> None:
+        """Read while the compressor ran, the probes read warm over the
+        water: the tank at the start is the water's, as for a run."""
+        du, dl = params.compressor.running_probes_warm_f
+        off = simulate(
+            _running(commands=Commands(power=PowerCommand(on=False))), params
+        )
+        first = off.simulation.points[0]
+        assert first.upper_f == pytest.approx(110.0 - du)
+        assert first.lower_f == pytest.approx(95.0 - dl)
+
+    def test_a_running_resume_dropped_stops_at_the_start(
+        self, params: HeaterParams
+    ) -> None:
+        walk = simulate(_scenario(horizon=timedelta(minutes=30)), params)
+        assert walk.end_state is not None
+        assert walk.end_state.compressor_running
+        assert walk.end_history is not None
+        assert walk.end_settings is not None
+        on = _scenario(
+            start=walk.until,
+            state=walk.end_state,
+            history=walk.end_history,
+            settings=walk.end_settings,
+            commands=Commands(power=PowerCommand(on=False)),
+        )
+        got = simulate(on, params)
+        assert "resume_dropped_heating_disabled_changed" in got.reasons
+        assert got.end_history is not None
+        assert got.end_history.compressor_stopped_at == walk.until
+        assert not got.heating
+
+
+class TestEveryWalkJudgesTheCommandsAlike:
+    """An answer that walks a scenario over spans of different lengths
+    judges its commands over the farthest: a one-day vacation returns
+    15 hours in, inside a 24-hour look ahead though not a 12-hour
+    scenario."""
+
+    ONE_DAY = Commands(vacation=VacationCommand(days=1))
+
+    def test_element_mode(self, params: HeaterParams) -> None:
+        away = element_mode(_scenario(commands=self.ONE_DAY), params, mode=4)
+        home = element_mode(_scenario(), params, mode=4)
+        assert "vacation_not_modelled" in away.reasons
+        # Left out of the reachability test too.
+        assert away.unreachable_reason != "heating_disabled"
+        assert replace(away, reasons=home.reasons) == home
+
+    def test_element_mode_over_a_vacation_it_covers(
+        self, params: HeaterParams
+    ) -> None:
+        away = element_mode(
+            _scenario(commands=Commands(vacation=VacationCommand(days=2))),
+            params,
+            mode=4,
+        )
+        assert not away.reachable
+        assert away.unreachable_reason == "heating_disabled"
+        assert "vacation_not_modelled" not in away.reasons
+
+    def test_next_recovery(self, params: HeaterParams) -> None:
+        away = next_recovery(_scenario(commands=self.ONE_DAY), params)
+        assert away == next_recovery(_scenario(), params)
+        assert away.outcome != "not_scheduled"
+        two = Commands(vacation=VacationCommand(days=2))
+        assert next_recovery(_scenario(commands=two), params).outcome == (
+            "not_scheduled"
+        )
+
+    def test_time_to_ready(self, params: HeaterParams) -> None:
+        away = time_to_ready(_scenario(commands=self.ONE_DAY), params)
+        home = time_to_ready(_scenario(), params)
+        assert "vacation_not_modelled" in away.reasons
+        assert away.bath == home.bath
+        assert away.recovery == home.recovery
+
+    def test_carry_on_does_not_go_on_past_the_return(
+        self, params: HeaterParams
+    ) -> None:
+        """A tail inside the vacation walks it; walked on past the
+        return, which no walk follows, it is not shown going on
+        alike."""
+        walk = simulate(_scenario(), params)
+        tail = _scenario(
+            start=walk.until,
+            horizon=timedelta(days=1)
+            - VACATION_RETURNS_EARLY
+            - timedelta(seconds=30),
+            commands=self.ONE_DAY,
+        )
+        [c] = carry_on([walk], tail, params)
+        assert "vacation_not_modelled" not in c.tail.reasons
+        assert not c.tail.heating
+        assert not c.heating_alike
