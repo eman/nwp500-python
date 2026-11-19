@@ -66,6 +66,28 @@ Added
   (``OWN_LAYERS_NOTE``) or leaves the heater's off
   (``LAYERS_NOT_USED_NOTE``). See "Fetch what the heater reports" in
   :doc:`/how-to/simulate-heater`.
+- **A scenario takes reservation entries as the device holds them.**
+  ``Schedules.reservations`` and ``Commands.reservations`` read an entry
+  in the device's six fields (``enable``, ``week``, ``hour``, ``min``,
+  ``mode``, ``param``), as a mapping or as the library's
+  ``ReservationEntry``, so a list read with ``request_reservations``
+  goes in as it is. ``sim.ReservationEntry.from_device`` and
+  ``to_device`` convert one entry either way, and
+  ``sim.inputs.DEVICE_ENTRY_FIELDS`` maps the field names. See the
+  reservation entry table in :doc:`/reference/simulator-inputs`.
+- **A scenario's commands take every command a plan carries.**
+  ``Commands`` takes ``vacation``, ``power``, ``anti_legionella`` and
+  ``demand_response`` in the keys of ``sim.profile.COMMAND_KEYS``, and
+  ``tou`` in place of ``tou_enabled``. Power off, and a vacation that
+  lasts the whole span, are walked as Power Off and Vacation; the
+  others the walk cannot follow are left out and named in ``reasons``
+  (``vacation_not_modelled``, ``power_not_modelled``,
+  ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
+  ``time_to_ready`` names them whether or not it walks a mode, and
+  ``next_recovery``'s ``Recovery`` has ``reasons`` for them.
+  ``sim_live.overlay`` reads each layer's ``tou`` as ``tou_enabled``
+  before laying it on. See "Commands" in
+  :doc:`/reference/simulator-inputs`.
 
 Changed
 -------
@@ -119,6 +141,17 @@ Fixed
   window's ``deliverable_gal``) raised ``ZeroDivisionError``. They are
   now unlimited, as for mains at the line. See "Ask how much hot water
   is left" in :doc:`/how-to/simulate-heater`.
+- **A simulation that starts in Vacation or Power Off stops what was
+  running.** A scenario whose state has the compressor or an element
+  running, with its settings in Vacation or Power Off (as a tail
+  carried on from a walk that ended heating can be), now stops them at
+  the start: the restart lockout runs from there and ``end_history``
+  holds the stop. Before, no stop was recorded, a reservation entry
+  could restart the compressor at once, and the history given was
+  lost. ``time_to_ready`` with the bath ready now also gave every mode
+  as reachable on a heater in Vacation or Power Off; it now gives none,
+  and its recovery as ``not_scheduled``. See the ``mode`` row in
+  :doc:`/reference/simulator-inputs`.
 
 Version 9.13.3 (2026-11-15)
 ===========================

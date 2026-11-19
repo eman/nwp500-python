@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from nwp500.sim.api import ENGINE_MODE, simulate
+from nwp500.sim.api import ENGINE_MODE, VACATION_NOT_MODELLED, simulate
 from nwp500.sim.circulation import RUN_GAP, Circulation
 from nwp500.sim.engine import RECOVERY_AHEAD, Resume
 from nwp500.sim.extensions import RecoveryModel
@@ -92,7 +92,9 @@ class Carried:
     #: heat one is still to pay for; a lockout with no start wanted in
     #: it is none. False for every walk, the first included, when that
     #: is more than ``GO_ON_MAX`` past the end: walked on no farther,
-    #: the tails are not shown going on alike.
+    #: the tails are not shown going on alike. False too when the
+    #: tail's ``vacation`` command, walked over the tail, returns on the
+    #: way, which no walk follows (``vacation_not_modelled``).
     heating_alike: bool
 
     @property
@@ -302,7 +304,9 @@ def _go_on(
     (None, unpriced), and the layers it ends with; and whether that
     reached past every instant and close, within ``GO_ON_MAX``. Walked
     on no farther, none is walked on: each is given as its tail
-    ended, unpriced."""
+    ended, unpriced. So is a tail whose vacation, walked over the tail,
+    returns on the way (``vacation_not_modelled`` in the walk on, not
+    in the tail)."""
     until = scenarios[0].until
     given = options.get("tou_windows_in_force")
     due = [t for r in tails for t in _due(r, params)]
@@ -332,6 +336,13 @@ def _go_on(
             params,
             **options,
         )
+        if VACATION_NOT_MODELLED in on.reasons and (
+            VACATION_NOT_MODELLED not in r.reasons
+        ):
+            # The tail's vacation returns on the way, which the walk
+            # holds no rule for: not walked on alike.
+            out.append((None, _layers(r)))
+            continue
         wh = (
             None
             if on.input_wh is None or r.input_wh is None

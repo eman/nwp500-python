@@ -7,7 +7,7 @@ state, its schedules, the air where it sits and the hot water drawn from
 it, it predicts the tank's two thermistors over time, when and why the
 heater starts heating and with which source, the electricity it uses,
 how much hot water the tank can deliver, and whether a draw runs cold. It also evaluates commands before they are sent: setpoint and mode
-writes, a new reservation schedule, TOU on or off.
+writes, a new reservation schedule, TOU on or off, vacation and power.
 
 :doc:`/how-to/simulate-heater` walks through using it, from fetching
 the heater's data to evaluating a change,
@@ -205,8 +205,9 @@ A ``Scenario`` is a frozen value made of parts:
    * - ``loads``
      - Draws: an onset, delivered gallons and how long they run.
    * - ``commands``
-     - Setpoint and mode writes at instants, a reservation schedule
-       written at the start, and the TOU switch set at the start.
+     - Setpoint and mode writes at instants, and, set at the start, a
+       reservation schedule, the TOU switch, vacation, power,
+       anti-legionella and demand response.
 
 The simulator's fields are in degF and US gallons, the units the
 physics were fitted in; schedules keep the device's units.

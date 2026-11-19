@@ -76,6 +76,18 @@ Scenario
 .. autoclass:: nwp500.sim.Write
    :members:
 
+.. autoclass:: nwp500.sim.VacationCommand
+   :members:
+
+.. autoclass:: nwp500.sim.PowerCommand
+   :members:
+
+.. autoclass:: nwp500.sim.AntiLegionellaCommand
+   :members:
+
+.. autoclass:: nwp500.sim.DemandResponseCommand
+   :members:
+
 .. autoclass:: nwp500.sim.CirculationRun
    :members:
 

@@ -27,13 +27,13 @@ import math
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
 from nwp500.heater import HeaterProfile
 from nwp500.sim.delivery import Deliverable
-from nwp500.sim.inputs import Scenario
+from nwp500.sim.inputs import Scenario, commands_in_simulator_names
 from nwp500.sim.params import (
     HeaterParams,
     params_from_document,
@@ -70,6 +70,21 @@ def scenario_to_document(
     if params is not None:
         doc["params"] = params_to_document(params)
     return doc
+
+
+def in_simulator_names(scenario: Mapping[str, Any]) -> dict[str, Any]:
+    """A scenario document's ``scenario`` object (or a layer laid over
+    one) with its commands in the simulator's names
+    (``inputs.commands_in_simulator_names``): what to put each layer in
+    before ``merge``, so a plan's ``tou`` in one replaces a
+    ``tou_enabled`` under it."""
+    out = dict(scenario)
+    commands = out.get("commands")
+    if isinstance(commands, Mapping):
+        out["commands"] = commands_in_simulator_names(
+            cast(Mapping[str, Any], commands)
+        )
+    return out
 
 
 def merge(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
