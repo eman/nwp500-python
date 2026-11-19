@@ -1487,18 +1487,24 @@ class MqttSubscriptionManager:
             kind=_KIND_RESERVATION_DEVICE,
             only_mac=device.device_info.mac_address,
         )
+        wildcard = self._device_wildcard(device)
         try:
             await self.subscribe_device(device=device, callback=handler)
         except BaseException:
-            # Neither topic or both: take back the client-keyed handler
-            # this call registered, and raise the wildcard's error.
-            try:
-                await self._unsubscribe_response(device, "rsv/rd", callback)
-            except Exception as e:
-                _logger.debug(
-                    "Rolling back the rsv/rd subscription failed: %s",
-                    type(e).__name__,
-                )
+            # Neither topic or both: take back the handlers this call
+            # registered (subscribe() keeps its own on a cancel), and
+            # raise the wildcard's error.
+            for rollback in (
+                lambda: self.unsubscribe(wildcard, handler),
+                lambda: self._unsubscribe_response(device, "rsv/rd", callback),
+            ):
+                try:
+                    await rollback()
+                except Exception as e:
+                    _logger.debug(
+                        "Rolling back the rsv/rd subscription failed: %s",
+                        type(e).__name__,
+                    )
             raise
         return packet_id
 

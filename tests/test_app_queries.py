@@ -484,6 +484,35 @@ class TestTypedSubscriptions:
         assert cast(Any, manager)._message_handlers == {}
 
     @pytest.mark.asyncio
+    async def test_reservation_subscribe_cancelled_rolls_back(self) -> None:
+        """Cancelled while the wildcard's SUBACK is pending: neither
+        handler stays registered."""
+        manager = _manager()
+        connection = cast(Any, manager)._connection
+        plain = connection.subscribe.side_effect
+        pending: concurrent.futures.Future[dict[str, Any]] = (
+            concurrent.futures.Future()
+        )
+
+        def hold_wildcard(topic: str, qos: Any, callback: Any) -> Any:
+            if topic.endswith("/#"):
+                return pending, 3
+            return plain(topic, qos, callback)
+
+        connection.subscribe.side_effect = hold_wildcard
+        task = asyncio.create_task(
+            manager.subscribe_reservation_response(
+                _device(), lambda schedule: None
+            )
+        )
+        for _ in range(20):
+            await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert cast(Any, manager)._message_handlers == {}
+
+    @pytest.mark.asyncio
     async def test_reservation_unsubscribe_clears_the_wildcard(
         self,
     ) -> None:
