@@ -211,7 +211,11 @@ Hot water and calibration
    :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
 
 .. automodule:: nwp500.sim.profile
-   :members: HeaterProfile, heater_profile, check, COMMAND_KEYS
+   :members: heater_profile, mode_sources
+
+``nwp500.sim.profile`` re-exports the device facts of
+:doc:`heater` (``HeaterProfile``, ``check``, ``COMMAND_KEYS``,
+``COMMAND_RANGES``, ``MODES`` and the rest).
 
 .. automodule:: nwp500.sim.draw_forecast
    :members: ForecastSlot, check_issue, covers, shifted, draw_profile,

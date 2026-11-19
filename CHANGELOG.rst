@@ -18,6 +18,23 @@ Added
   ``WeatherClient``. ``HomeAssistantClient`` is both, and a client that
   reads Home Assistant another way type-checks without a cast. See
   "Home Assistant sources" in :doc:`/reference/python_api/sim`.
+- **The heater's description in the core library.** ``nwp500.heater``
+  holds the device facts a scheduler plans with: every mode with its
+  code, its energy sources and whether the simulation models it, the
+  setpoint range and step, and the device commands with their keys.
+  ``HeaterProfile`` and ``check`` moved there from ``sim.profile``,
+  which re-exports them, and ``device_profile(feature)`` builds a
+  device's profile. See :doc:`/reference/python_api/heater`.
+- **A device's own setpoint range.** ``device_profile(feature)`` and
+  ``sim.profile.heater_profile(..., feature=feature)`` take the range
+  from a ``DeviceFeature``; without one it stays 104.9 to 149.9 degF.
+  See :doc:`/reference/python_api/heater`.
+- **Command value ranges.** ``COMMAND_RANGES`` gives each whole-number
+  command key's range (vacation ``days`` 1 to 99, anti-Legionella
+  ``period_days`` 1 to 30) and ``COMMAND_KEYS_ONLY_WITH`` the keys
+  given only with another; the profile's document states both under
+  ``command_keys``. The MQTT client checks the same ranges. See
+  "Commands" in :doc:`/reference/python_api/heater`.
 - **A scenario takes reservation entries as the device holds them.**
   ``Schedules.reservations`` and ``Commands.reservations`` read an entry
   in the device's six fields (``enable``, ``week``, ``hour``, ``min``,
@@ -37,9 +54,44 @@ Added
   ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
   See "Commands" in :doc:`/reference/simulator-inputs`.
 
+Changed
+-------
+
+- **The profile lists every mode.** ``HeaterProfile.modes`` holds
+  ``ProfileMode`` entries for all six modes, Vacation and Power Off
+  with no sources and ``modelled`` false, so ``name_of`` names them and
+  ``sim_adapters.observe`` reports them by name. ``modelled_names``
+  gives the modes the simulation runs. The ``revision`` moves with the
+  new facts. See "Modes" in :doc:`/reference/python_api/heater`.
+- **A profile document is its facts and its revision.**
+  ``HeaterProfile.document()`` and ``codec.to_document(profile)`` give
+  ``facts()`` with ``revision``, in place of the dataclass's fields.
+  See "The profile as a document" in
+  :doc:`/reference/python_api/heater` and "Plan with the heater
+  profile" in :doc:`/how-to/simulate-heater`.
+
 Fixed
 -----
 
+- **The CLI's day counts take the device's ranges.** ``vacation-duration``
+  refused 31 to 99 days, which the device and the MQTT client accept;
+  ``vacation``, ``anti-legionella enable --period`` and
+  ``anti-legionella set-period`` now check the same ranges as the MQTT
+  client (``nwp500.heater.VACATION_DAYS`` and
+  ``ANTI_LEGIONELLA_PERIOD_DAYS``) before connecting. See
+  :doc:`/reference/python_api/cli`.
+- **Reservation lists relayed on the heater's own topic are read.**
+  The cloud sometimes republishes a reservation read's ``rsv/rd`` list
+  on ``cmd/52/navilink-<mac>/res/rsv/rd`` instead of the reader's
+  response topic. ``subscribe_reservation_response`` listened only on
+  the client-keyed topic, so ``fetch_reservations`` and
+  ``update_reservations_confirmed`` timed out. It now takes the list from
+  the device-keyed topic too. See "Reservation and Recirculation Schedule
+  Responses" in :doc:`/reference/protocol/mqtt_protocol`.
+- **Calibration no longer raises a pandas FutureWarning.** The heat
+  pump fit's recovery frame held the first run's ``minutes_off`` (NaN)
+  as an object column, and pandas 2 warned on concatenating it on every
+  calibration. The column is a float column now.
 - **A simulation that starts in Vacation or Power Off stops what was
   running.** A scenario whose state has the compressor or an element
   running, with its settings in Vacation or Power Off (as a tail

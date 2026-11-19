@@ -282,7 +282,7 @@ class TestTheProfile:
         assert [(m.start, m.end, m.name, m.effective) for m in o.modes] == [
             (at(0), at(30), "heat_pump", True),
             (at(30), at(60), "electric", True),
-            (at(60), at(90), None, None),
+            (at(60), at(90), "vacation", None),
         ]
 
     def test_a_mode_the_profile_does_not_list_has_no_name(self) -> None:
@@ -292,10 +292,10 @@ class TestTheProfile:
 
         base = heater_profile()
         narrow = replace(
-            base, modes=tuple(m for m in base.modes if m[0] != "electric")
+            base, modes=tuple(m for m in base.modes if m.name != "electric")
         )
         o = observe(self.REC, at(0), at(90), now=at(600), profile=narrow)
-        assert [m.name for m in o.modes] == ["heat_pump", None]
+        assert [m.name for m in o.modes] == ["heat_pump", None, "vacation"]
 
     def test_no_mode_is_named_before_the_revision(self) -> None:
         o = observe(self.REC, at(0), at(90), now=at(600), revision_since=at(10))
@@ -303,7 +303,7 @@ class TestTheProfile:
             (at(0), at(10), None),
             (at(10), at(30), "heat_pump"),
             (at(30), at(60), "electric"),
-            (at(60), at(90), None),
+            (at(60), at(90), "vacation"),
         ]
 
 

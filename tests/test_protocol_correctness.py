@@ -481,6 +481,20 @@ class TestControlPayloads:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [0, 31])
+    async def test_anti_legionella_period_range(
+        self, mock_device: Device, days: int
+    ) -> None:
+        """1-30 days, the range ``nwp500.heater`` publishes."""
+        controller, publish = _make_controller()
+        with pytest.raises(RangeValidationError):
+            await controller.enable_anti_legionella(mock_device, days)
+        publish.assert_not_awaited()
+        await controller.enable_anti_legionella(mock_device, 30)
+        _topic, command = cast(Any, publish.await_args).args
+        assert command["request"]["param"] == [30]
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("mode_id", [0, 7, -1])
     async def test_dhw_mode_range(
         self, mock_device: Device, mode_id: int
