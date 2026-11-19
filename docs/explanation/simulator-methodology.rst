@@ -492,23 +492,41 @@ it), and may decline, in which case the physics is served.
 The elements
 ============
 
-An element puts its power, 5,148 W, into its layer: the upper's at 0.72
-of the volume from the bottom (17.7 gal of the 63.2 above it), the
-lower's at 0.15. The upper's heat reaches the water 1.21 minutes after
-it starts, and goes on as long after it stops. The heat rises from its
-layer as the layers turn over, so the upper element heats the water
-above it and the lower the whole tank. The height therefore acts in
-whole layers: the upper's layer and those above it hold 21.1 gal, so
-its heat climbs the upper probe 1.59 degF/min, where the record's clean
-runs climb it 2.01 (the next layer up, 15.8 gal, gives 2.00). More
-layers do not close it (the layer count, above). The
-record's element runs mostly come with water drawn or the compressor
-running, and replayed they read the upper probe closer from the lower
-layer (4.4 degF RMS on 24 runs against 4.7, measured 2026-11-02 on the
-installation's fitted parameters), so that one is kept. The replay
+An element puts its power, 5,148 W, into the water at its height: the
+upper's at 0.72 of the volume from the bottom (17.7 gal of the 63.2
+above it), the lower's at 0.15. The upper's heat reaches the water 1.21
+minutes after it starts, and goes on as long after it stops.
+
+The lower element's heat goes into its layer and rises as the layers
+turn over, so it heats the whole tank. The upper element's rises as a
+plume (``TankParams.upper_plume_gpm``, 2 gal/min): the water it heats
+leaves the element's layer that much hotter, rises past the water
+cooler than it and mixes in under the first that is as warm, while the
+water it passed sinks to take its place. Into a cold zone, after a
+draw has spent the top, a run heats a hot top over the water above the
+element, not the whole 21.1 gal above it at once. Into a mixed zone
+the plume reaches the top and the zone fills from there.
+
+Turning the upper's layer over instead, the height acts in whole
+layers: its layer and those above it hold 21.1 gal, so its heat climbs
+the upper probe 1.59 degF/min, where the record's clean runs climb it
+2.01 (the next layer up, 15.8 gal, gives 2.00), and more layers do not
+close it (the layer count, above). Over the record's 36 upper-element
+runs of 2 minutes or more from 2026-02-26, each walked from its
+replayed layers with the record's heating, draws and circulation and no
+correction after its start, through 30 minutes after it, the plume
+reads the upper probe to 6.97 degF RMS against 7.84 for the layer
+turned over: 3.68 against 3.91 on the 14 that start mixed, 7.15
+against 8.08 on the 16 stratified ones, and 11.10 against 12.62 on the
+6 that start with the upper probe under 115 degF. On the 14 with no
+draw the probe climbs 2.04 degF/min against the record's 1.96. The
+lower element's 10 runs from 2026-02-02 read closer with its layer
+turned over, so the plume is the upper element's alone
+(``TankParams.upper_plume_gpm`` gives the flows tried). The replay
 heats the lower element's minutes of an element run in the lower
 element's layer (``TankRecord.lower_element``); with every minute in
-the upper's, as before 2026-11-02, the same runs read 8.2 against 10.7.
+the upper's, as before 2026-11-02, the record's 24 element runs from
+2026-04-16 read 8.2 degF RMS against 10.7.
 It runs to its off point (the setpoint; Energy Saver's upper element
 stops 1.62 degF short, and its heat still in transit lands after). Its
 heat is walked with whatever else the tank is doing: a coast with its

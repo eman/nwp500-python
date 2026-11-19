@@ -63,10 +63,12 @@ def test_two_days_in_electric_keep_the_upper_zone_in_its_band(
     ]
     assert len(later) >= 4
     assert all(h.source == "element" for h in got.heating)
-    # Past the first stint, the band holds to the probe's step.
+    # Past the first stint, the band holds to the probe's step, and over
+    # the setpoint to the coast: the heat in transit when the element
+    # stops lands in the top the plume heats (``upper_plume_gpm``).
     settled = got.points[len(got.points) // 4 :]
     assert min(p.upper_f for p in settled) >= RESTARTS_AT - 0.1
-    assert max(p.upper_f for p in settled) <= SETPOINT + 2.5
+    assert max(p.upper_f for p in settled) <= SETPOINT + 3.5
     assert min(p.lower_f for p in settled) >= 111.0 - 0.1
     assert ELECTRIC_LATER_STARTS_UNVERIFIED in got.reasons
     assert "element_later_starts_not_modelled" not in got.reasons

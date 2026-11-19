@@ -13,6 +13,32 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The lower element's heat as a plume (2026-11-18)
+================================================
+
+**Tried.** The lower element's heat rising as a plume at 2 gal/min, as
+the upper element's now does (``TankParams.upper_plume_gpm``), instead
+of into its layer, which turns over into the cooler layers above it.
+
+**Found.** The record's 10 lower-element runs of 3 minutes or more from
+2026-02-02, each walked from its replayed layers with the record's
+heating and draws and no correction after its start, on the
+installation's fitted parameters, read closer with the layer turned
+over. With the plume the heat lands high: on 2026-09-20 05:16 UTC the
+upper probe ended the run 5.6 degF over the record and the lower 5.5
+under it, against 2.2 and 1.3 under with the layer turned over; on
+2026-04-16 22:23, 5.1 over and 3.7 under against 0.8 over and 0.4
+under. Two days in Electric from a
+mixed 128/118 degF tank took the upper probe to 137.8 degF on a
+130 degF setpoint and the lower under the heater's 111 degF threshold.
+A plume from the bottom rises through some 40 gal of cooler water
+before it meets the warm zone, and takes most of it in on the way.
+
+**Why dropped.** Worse on the lower element's runs as they happen.
+
+**Account.** :doc:`simulator-methodology`, "The elements".
+
+
 The joint rebuild: spans, the heat through the layers, the share fitted (2026-11-06)
 ====================================================================================
 

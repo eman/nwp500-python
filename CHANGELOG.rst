@@ -5,6 +5,23 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+
+- **The upper element's heat rises as a plume.** The water it heats
+  leaves the element's layer and rises to where the column is as warm,
+  and the water it passes sinks to take its place
+  (``physics.stratified.rise``, ``TankParams.upper_plume_gpm``, 2
+  gal/min). Before, its heat went into its layer and turned over into
+  every cooler layer above, so a short run after a depleting draw warmed
+  21 gal a little where the tank heats a hot top. Over the record's 36
+  upper-element runs, walked with their recorded heating, the upper
+  probe reads 6.97 degF RMS against 7.84, and climbs 2.04 degF/min on
+  the draw-free ones against the record's 1.96 (1.55 before). The lower
+  element keeps its layer. ``upper_plume_gpm=0`` gives the old
+  behaviour. See "The elements" in
+  :doc:`/explanation/simulator-methodology`.
+
 Version 9.13.3 (2026-11-15)
 ===========================
 
