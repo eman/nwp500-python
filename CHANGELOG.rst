@@ -8,6 +8,34 @@ Unreleased
 Added
 -----
 
+- **Protocols for the Home Assistant client.**
+  ``sim_home_assistant.HistoryClient`` (``state`` and ``read_history``)
+  and ``WeatherClient`` (those, ``forecast`` and ``outdoor_history``)
+  are the methods the Home Assistant readers call, as
+  ``typing.Protocol`` classes. ``read_heater_history``,
+  ``record_inputs`` and ``HomeAssistantTank`` take a ``HistoryClient``;
+  ``HomeAssistantEnvironment`` and ``fit_location_air`` a
+  ``WeatherClient``. ``HomeAssistantClient`` is both, and a client that
+  reads Home Assistant another way type-checks without a cast. See
+  "Home Assistant sources" in :doc:`/reference/python_api/sim`.
+- **The heater's description in the core library.** ``nwp500.heater``
+  holds the device facts a scheduler plans with: every mode with its
+  code, its energy sources and whether the simulation models it, the
+  setpoint range and step, and the device commands with their keys.
+  ``HeaterProfile`` and ``check`` moved there from ``sim.profile``,
+  which re-exports them, and ``device_profile(feature)`` builds a
+  device's profile. See :doc:`/reference/python_api/heater`.
+- **A device's own setpoint range.** ``device_profile(feature)`` and
+  ``sim.profile.heater_profile(..., feature=feature)`` take the range
+  from a ``DeviceFeature``; without one it stays 104.9 to 149.9 degF.
+  See :doc:`/reference/python_api/heater`.
+- **Command value ranges.** ``COMMAND_RANGES`` gives each whole-number
+  command key's range (vacation ``days`` 1 to 99, anti-Legionella
+  ``period_days`` 1 to 30) and ``COMMAND_KEYS_ONLY_WITH`` the keys
+  given only with another; the profile's document states both under
+  ``command_keys``. The MQTT client checks the same ranges. See
+  "Commands" in :doc:`/reference/python_api/heater`.
+
 Changed
 -------
 
