@@ -64,6 +64,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from typing import Any, Literal
 
+from nwp500.heater import SETPOINT_MAX_F, SETPOINT_MIN_F, SETPOINT_STEP
 from nwp500.sim import controller as ctl
 from nwp500.sim.controller import (
     ELEMENT_DONE_F,
@@ -104,12 +105,12 @@ from nwp500.sim.tou_triggers import Window
 Draw = Delivered
 
 #: The heater's setpoint range as the model knows it: the NWP500's
-#: 104.9-149.9 °F. No plan declaration carries its own bounds; the
-#: heater and this library enforce the device's real limits. A caller
-#: rejects a plan with a setpoint outside it: the simulation cannot run
-#: it.
-HEATER_SETPOINT_MIN_F = 104.9
-HEATER_SETPOINT_MAX_F = 149.9
+#: 104.9-149.9 °F (``nwp500.heater``). No plan declaration carries its
+#: own bounds; the heater and this library enforce the device's real
+#: limits. A caller rejects a plan with a setpoint outside it: the
+#: simulation cannot run it.
+HEATER_SETPOINT_MIN_F = SETPOINT_MIN_F
+HEATER_SETPOINT_MAX_F = SETPOINT_MAX_F
 
 #: The smallest step the engine takes: "at this instant", for draws.
 _INSTANT = timedelta(microseconds=1)
@@ -473,8 +474,9 @@ def _layers_of(state: object) -> tuple[float, ...] | None:
 
 
 #: The heater's setpoint resolution, °C: the NWP500 holds a setpoint in
-#: half degrees Celsius, so 146 °F is held as 146.3 (2026-09-20).
-SETPOINT_RESOLUTION_C = 0.5
+#: half degrees Celsius, so 146 °F is held as 146.3 (2026-09-20;
+#: ``nwp500.heater.SETPOINT_STEP``).
+SETPOINT_RESOLUTION_C = SETPOINT_STEP
 
 
 def _onset(draw: Draw) -> datetime:

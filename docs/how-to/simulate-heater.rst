@@ -1524,11 +1524,27 @@ below the setpoint the upper element starts.
 Plan with the heater profile
 ============================
 
-A scheduler plans with ``sim.profile.heater_profile(params.tank)``.
-It lists the modes and the energy each one uses, the setpoint range
-and step, the depletion threshold and the tank's volume, all as the
-simulation runs them. ``profile.revision`` changes only when one of
-those facts changes, so re-read the profile when the revision moves.
+A scheduler plans with the heater's profile:
+
+.. code-block:: python
+
+   from nwp500.sim.profile import heater_profile
+
+   profile = heater_profile(params.tank, params.readiness.line_f,
+                            feature=feature)
+   doc = profile.document()  # facts() and revision
+
+It lists every mode with its code, the energy each one uses and whether
+the simulation models it, the setpoint range and step, the device
+commands with each key's type and range, the depletion threshold and
+the tank's volume. ``feature`` (a ``DeviceFeature``) gives the device's
+own setpoint range; without it the range is 104.9 to 149.9 degF.
+Vacation and Power Off are listed with ``modelled`` false: a write into
+either is dropped from the walk (``write_mode_not_modelled``).
+``profile.revision`` changes only when one of those facts changes, so
+re-read the profile when the revision moves. A client without the
+``sim`` extra builds the same profile, less the tank and the depletion
+threshold, from ``nwp500.heater`` (:doc:`/reference/python_api/heater`).
 Express a plan as reservation entries (``Commands.reservations``) and
 writes (``Commands.writes``).
 
@@ -1601,8 +1617,8 @@ threshold reads 104.9 degF at rest (``Record.resting_upper_on_f``).
 ``seen.slots`` are the energy per 10 minutes from the heater's own
 power; ``seen.modes`` are the mode in force and whether the heat source
 the heater reported showed it in effect, named by a heater profile
-(``profile=``, the simulation's own by default; a mode it does not list
-has no name) from when its revision took effect (``revision_since=``).
+(``profile=``, the simulation's own by default, which names Vacation
+and Power Off too; a mode it does not list has no name) from when its revision took effect (``revision_since=``).
 ``seen.gaps`` are where a
 signal's record was missing, and a start a missing record could explain
 gets no ``cause``. Set them beside the replay's ``result.heating``
@@ -1640,7 +1656,8 @@ way. The other answers (``time_to_ready``, ``next_recovery``,
    doc["deliverable_gal"]  # the answer's fields, at the top level
 
 Each document has ``schema_version`` and ``kind``, the answer's type
-in snake case (``codec.DOCUMENT_KINDS``). Instants are ISO 8601 strings,
+in snake case (``codec.DOCUMENT_KINDS``). A heater profile's fields are
+``profile.document()``: its facts and its ``revision``. Instants are ISO 8601 strings,
 nested answers are objects, and a number that isn't finite is null, so
 the document is strict JSON.
 

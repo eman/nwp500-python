@@ -44,6 +44,7 @@ from ..exceptions import (
     ParameterValidationError,
     RangeValidationError,
 )
+from ..heater import ANTI_LEGIONELLA_PERIOD_DAYS, VACATION_DAYS
 from ..models import (
     Device,
     DeviceFeature,
@@ -674,7 +675,7 @@ class MqttDeviceController:
                 )
             # 1-99 days: the front panel (User's Information Manual
             # 3.4.5) allows 99.
-            self._validate_range("vacation_days", vacation_days, 1, 99)
+            self._validate_range("vacation_days", vacation_days, *VACATION_DAYS)
             param = [mode_id, vacation_days]
         else:
             param = [mode_id]
@@ -687,7 +688,9 @@ class MqttDeviceController:
         self, device: Device, period_days: int
     ) -> int:
         """Enable Anti-Legionella disinfection."""
-        self._validate_range("period_days", period_days, 1, 30)
+        self._validate_range(
+            "period_days", period_days, *ANTI_LEGIONELLA_PERIOD_DAYS
+        )
         return await self._mode_command(
             device, CommandCode.ANTI_LEGIONELLA_ON, "anti-leg-on", [period_days]
         )
@@ -1271,7 +1274,7 @@ class MqttDeviceController:
             Publish packet ID
         """
         self._validate_int("days", days)
-        self._validate_range("days", days, 1, 99)
+        self._validate_range("days", days, *VACATION_DAYS)
         return await self._mode_command(
             device, CommandCode.GOOUT_DAY, "goout-day", [days]
         )

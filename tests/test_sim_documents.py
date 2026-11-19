@@ -112,6 +112,16 @@ class TestToDocument:
                     value, dict | list | str | int | float | bool | None
                 )
 
+    def test_a_heater_profile_is_its_facts_and_revision(self) -> None:
+        profile = heater_profile()
+        doc = codec.to_document(profile)
+        assert doc == {
+            "schema_version": codec.SCHEMA_VERSION,
+            "kind": "heater_profile",
+            **profile.facts(),
+            "revision": profile.revision,
+        }
+
     def test_another_value_is_a_type_error(self) -> None:
         with pytest.raises(TypeError, match="no document kind"):
             codec.to_document(STATE)

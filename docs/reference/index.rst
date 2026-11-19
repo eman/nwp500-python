@@ -17,6 +17,7 @@ Python API
    python_api/events
    python_api/exceptions
    python_api/cli
+   python_api/heater
    python_api/sim
    api/modules
 
