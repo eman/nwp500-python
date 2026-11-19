@@ -16,6 +16,7 @@ from nwp500.sim.ready import (
     TankNow,
     assess,
     typed,
+    whole_baths,
     whole_showers,
 )
 
@@ -211,6 +212,29 @@ class TestAssess:
         assert a["showers"]["ready_for"] == pytest.approx(50.0 / 12.0, abs=0.01)
         assert a["showers"]["ready_for_whole"] == 4
 
+    @pytest.mark.parametrize(
+        ("deliverable", "baths"),
+        [
+            (5.0, 0),
+            (28.6, 0),
+            (28.7, 1),
+            (38.6, 1),
+            # A top-up of a filled bath is a fill like any other: what is
+            # left after a bath, short of another, is no "refill".
+            (38.7, 1),
+            (57.4, 2),
+            (67.4, 2),
+            # 86.1 / 28.7 is a hair short of 3.0 in binary: still 3 baths.
+            (86.1, 3),
+        ],
+    )
+    def test_the_baths_are_whole_baths_once_one_is_ready(
+        self, deliverable: float, baths: int
+    ) -> None:
+        a = _assess(now_gal=Deliverable(deliverable, "layers"), bath_gal=28.7)
+        assert a["bath"]["ready_for_whole"] == baths
+        assert typed(a, NOW, Recovery("ok")).bath.ready_for_whole == baths
+
     def test_live_conditions_become_reasons(self) -> None:
         a = _assess(
             _tank(drawing=True, element_on=True, tou_window=True),
@@ -229,3 +253,14 @@ class TestAssess:
         assert r.deliverable_gal == 50.0
         assert r.bath.ready
         assert r.defaults_used == ("bath_gal=30.5",)
+
+
+def test_whole_baths_count_none_unless_the_bath_is_ready() -> None:
+    # Not ready within the probe resolution: no bath, whatever the
+    # gallons.
+    assert whole_baths(30.0, 28.7, ready=False) == 0
+    # Ready on a margin rounded away: the one.
+    assert whole_baths(28.65, 28.7, ready=True) == 1
+    assert whole_baths(math.inf, 28.7, ready=True) == 10**9
+    with pytest.raises(ValueError, match="bath_gal"):
+        whole_baths(30.0, 0.0, ready=True)

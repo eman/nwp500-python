@@ -688,8 +688,11 @@ in ``unfitted`` (``INSTALLATION_TERMS``: one installation's fits stand
 in for them); ``site_example_params`` is the installation the values were
 fitted at, its valve included, and ``with_valve(params, (intercept_f,
 slope))`` sets a valve's delivery line, delivered water at ``intercept +
-slope x upper zone``, never above the tank. ``NO_VALVE`` is ``(0, 1)``;
-``SITE_VALVE`` that installation's ``(53.56, 0.485)``. Each field says whether it
+slope x upper zone``, never above the tank. ``with_valve(params,
+delivery_f)`` sets a valve that delivers ``delivery_f`` degF, the
+tank's own water while the tank is cooler (the line ``(delivery_f,
+0)``). ``NO_VALVE`` is ``(0, 1)``; ``SITE_VALVE`` that installation's
+``(53.56, 0.485)``. Each field says whether it
 describes the heater or the installation (``params.scope_of``) and,
 where it matters, the frame it was fitted in (``params.note_of``):
 

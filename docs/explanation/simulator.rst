@@ -244,7 +244,7 @@ is the same with **no mixing valve**: the one draw setting with no
 fitted numbers in it, and the one that errs the safe way for a valve
 owner who leaves it unset (every gallon charged as tank water, so
 depletion is called early, never late). An installation with a valve
-sets its line (``with_valve``). It also has no circulation, and it names
+sets its line, or the temperature it delivers (``with_valve``). It also has no circulation, and it names
 the installation's draw terms as not fitted (``HeaterParams.unfitted``),
 so the answers they reach say ``draw_uncalibrated`` until an
 installation's own meter fits them. The 50 and 80 gal models get the

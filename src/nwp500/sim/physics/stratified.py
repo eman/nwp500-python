@@ -852,7 +852,9 @@ def deliverable_gal(
     water leaving the top in turn, to the first that delivers under the
     line; the inlet zone's passes to where its temperature reaches the
     line's (``line_f``, or the tank temperature the valve delivers it
-    from), in closed form."""
+    from), in closed form. Unlimited (``math.inf``) when water at the
+    line or warmer reaches the top with the valve taking none of it, its
+    setting no warmer than the mains: the tank never drains."""
     _layers(lay, state)
     intercept, slope = valve
     if slope > 0.0:
@@ -867,9 +869,11 @@ def deliverable_gal(
     for gal, heat in col.plug():
         if heat < line:
             return total
-        total += gal / _tank_share(
-            temp_f(heat), inflow_f, valve, undiluted_share
-        )
+        share = _tank_share(temp_f(heat), inflow_f, valve, undiluted_share)
+        if share <= 0.0:
+            # The valve takes none of it: the tap never runs under.
+            return math.inf
+        total += gal / share
     m, start = col.mix_gal, col.mix_start_f
     if m > 0.0 and start < line:
         # The inlet zone's water passes up under the line first.
@@ -887,7 +891,10 @@ def deliverable_gal(
     dx = span / pieces
     for k in range(pieces):
         temp = temp_f(col.mix_f((k + 0.5) * dx))
-        total += dx / _tank_share(temp, inflow_f, valve, undiluted_share)
+        share = _tank_share(temp, inflow_f, valve, undiluted_share)
+        if share <= 0.0:
+            return math.inf
+        total += dx / share
     return total
 
 

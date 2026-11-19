@@ -118,6 +118,20 @@ def whole_showers(ready_for: float) -> int:
     return max(0, math.floor(min(ready_for, 1e9) + 1e-9))
 
 
+def whole_baths(deliverable_gal: float, bath_gal: float, ready: bool) -> int:
+    """Whole baths the tank is ready for: none unless the bath is ready
+    (``ready``, with its rounding and margin), then each whole bath's
+    worth of ``deliverable_gal``, at least the one. A top-up of a filled
+    bath is a fill like any other. The epsilon keeps 86.1 gal from
+    counting two 28.7 gal baths on a quotient that came back a hair
+    short of 3."""
+    if not ready:
+        return 0
+    if bath_gal <= 0:
+        raise ValueError("bath_gal must be positive")
+    return max(1, int(min(deliverable_gal / bath_gal, 1e9) + 1e-9))
+
+
 @dataclass(frozen=True)
 class ModeRun:
     """A mode's walk from now (``api.time_to_ready``): minutes until its
@@ -157,7 +171,8 @@ def assess(
     ``tank_upper_f`` and ``tank_lower_f`` (two decimals),
     ``deliverable_gal``; ``bath``: ``volume_gal``, ``volume_source``
     (``bath_source``), ``ready``, ``margin_gal``, ``ready_in_minutes``,
-    ``ready_at`` and ``by_mode`` (one row per ``MODES``: ``mode``,
+    ``ready_at``, ``ready_for_whole`` (``whole_baths``) and ``by_mode``
+    (one row per ``MODES``: ``mode``,
     ``reachable_now``, ``ready_in_minutes``, ``ready_at``,
     ``energy_kwh``, ``reasons``); ``showers``: ``volume_gal``,
     ``volume_source`` (``shower_source``), ``ready_for`` and
@@ -262,6 +277,7 @@ def assess(
             "margin_gal": round(now_gal.gal - bath_gal, 1),
             "ready_in_minutes": ready_in,
             "ready_at": by_mode[0]["ready_at"],
+            "ready_for_whole": whole_baths(now_gal.gal, bath_gal, ready),
             "by_mode": by_mode,
         },
         "showers": {
@@ -307,6 +323,10 @@ class BathReady:
     ready_in_minutes: float | None
     ready_at: datetime | None
     by_mode: tuple[ModeReady, ...]
+    #: Whole baths the deliverable gallons are: none unless ``ready``,
+    #: then each whole bath's worth, at least the one
+    #: (``whole_baths``).
+    ready_for_whole: int
 
 
 @dataclass(frozen=True)
@@ -375,6 +395,7 @@ def typed(
                 )
                 for row in bath["by_mode"]
             ),
+            ready_for_whole=bath["ready_for_whole"],
         ),
         showers=ShowersReady(
             volume_gal=showers["volume_gal"],

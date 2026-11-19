@@ -695,6 +695,52 @@ class TestDraw:
         state = S.TankState.uniform(12, 140.0)
         assert S.deliverable_gal(L, state, 105.0, 110.0) == math.inf
 
+    @pytest.mark.parametrize(
+        ("valve", "inflow"),
+        [
+            ((120.0, 0.0), 120.0),
+            ((120.0, 0.0), 125.0),
+            (SITE_VALVE, 122.0),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "state",
+        [S.TankState.uniform(12, 140.0), S.TankState((60.0, *([140.0] * 11)))],
+        ids=["hot", "cold-bottom"],
+    )
+    def test_a_valve_set_no_warmer_than_the_mains_never_runs_under(
+        self, valve: tuple[float, float], inflow: float, state: S.TankState
+    ) -> None:
+        """The valve delivers the line from its cold side alone and takes
+        nothing from the tank, cold bottom or not."""
+        assert S.deliverable_gal(L, state, 105.0, inflow, valve) == math.inf
+        drawn = S.draw(L, state, 10.0, inflow, valve)
+        assert drawn.withdrawn_gal == 0.0
+
+    def test_the_inlet_zone_the_valve_takes_none_of_never_runs_under(
+        self,
+    ) -> None:
+        """The site's valve with the mains at 105.5 degF: the hot water
+        drains, then the inlet zone's water reaches the top warm enough
+        that the valve delivers the line from its cold side alone."""
+        hot = S.TankState.uniform(12, 140.0)
+        assert S.deliverable_gal(L, hot, 105.0, 105.5, SITE_VALVE) == math.inf
+        assert S.draw(L, hot, 10.0, 105.5, SITE_VALVE).withdrawn_gal > 0.0
+        # A cold bottom reaches the top first.
+        cold = S.TankState((60.0, *([140.0] * 11)))
+        got = S.deliverable_gal(L, cold, 105.0, 105.5, SITE_VALVE)
+        assert math.isfinite(got)
+
+    def test_a_valve_drawing_tank_water_still_meets_a_cold_bottom(
+        self,
+    ) -> None:
+        hot = S.TankState.uniform(12, 140.0)
+        cold = S.TankState((60.0, *([140.0] * 11)))
+        valve = (120.0, 0.0)
+        got = S.deliverable_gal(L, cold, 105.0, 55.0, valve)
+        assert math.isfinite(got)
+        assert got < S.deliverable_gal(L, hot, 105.0, 55.0, valve)
+
     def test_a_tank_under_the_line_delivers_none(self) -> None:
         state = S.TankState.uniform(12, 100.0)
         assert S.deliverable_gal(L, state, 105.0, 55.0) == 0.0

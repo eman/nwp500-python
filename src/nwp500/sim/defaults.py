@@ -272,12 +272,21 @@ def _fitted_65() -> HeaterParams:
 
 
 def with_valve(
-    params: HeaterParams, valve: tuple[float, float]
+    params: HeaterParams, valve: float | tuple[float, float]
 ) -> HeaterParams:
-    """``params`` with the mixing valve ``(intercept_f, slope)``:
+    """``params`` with the mixing valve ``valve``: a number is a valve
+    set to deliver that temperature, °F, the tank's own water while the
+    tank is cooler; a pair ``(intercept_f, slope)`` is a measured line,
     delivered water at ``intercept_f + slope × upper``, never above the
-    tank; ``NO_VALVE`` for none: the draw terms' line."""
-    intercept, slope = valve
+    tank; ``NO_VALVE`` for none. These are the draw terms' line
+    (``DrawParams.delivery_intercept_f`` and ``delivery_slope``): a set
+    temperature is that intercept and a slope of 0."""
+    if isinstance(valve, tuple):
+        intercept, slope = valve
+    else:
+        if not math.isfinite(valve):
+            raise ValueError(f"a valve's delivery is a temperature: {valve!r}")
+        intercept, slope = float(valve), 0.0
     return replace(
         params,
         draw=replace(

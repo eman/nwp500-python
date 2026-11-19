@@ -86,6 +86,12 @@ Results
 .. autoclass:: nwp500.sim.SimulationResult
    :members:
 
+.. autoclass:: nwp500.sim.Heating
+   :members:
+
+.. automodule:: nwp500.sim.result
+   :members: heatings, fully_heated_at, at_temperature, CHAINED
+
 .. autoclass:: nwp500.sim.RecoveryResult
    :members:
 
@@ -228,7 +234,7 @@ Hot water and calibration
 
 .. automodule:: nwp500.sim.ready
    :members: assess, Recovery, TankNow, ModeRun, MODES, showers_ready_for,
-      whole_showers
+      whole_showers, whole_baths
 
 .. automodule:: nwp500.sim.history
    :members: Step, house_gpm, drawn_gal, record, replay, REPLAY,
@@ -326,7 +332,7 @@ Live sources
       read_feature, read_reservations, HeaterSource, ScheduleSource,
       EnvironmentSource, LoadSource, DEFAULT_TIMEOUT, overlay, Built,
       DEFAULT_HORIZON, DEFAULT_PARAMS_NOTE, zone_name, heater_reading,
-      live_schedules
+      live_schedules, with_layers, OWN_LAYERS_NOTE, LAYERS_NOT_USED_NOTE
 
 
 Recorded history
