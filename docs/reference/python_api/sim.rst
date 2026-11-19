@@ -352,7 +352,8 @@ Home Assistant sources
 ======================
 
 .. automodule:: nwp500.sim_home_assistant
-   :members: HomeAssistantEnvironment, HomeAssistantClient, fit_location_air,
+   :members: HomeAssistantEnvironment, HomeAssistantClient, HistoryClient,
+      WeatherClient, fit_location_air,
       Run, inline, HomeAssistantTank, LayersAnswer, TANK_WINDOW,
       mains_plateau, known_runs,
       record_inputs,
