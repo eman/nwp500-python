@@ -406,6 +406,138 @@ class TestTypedSubscriptions:
         assert received[0].download_sw_info[0].component_name == "Controller"
 
     @pytest.mark.asyncio
+    async def test_reservation_list_on_either_topic(self) -> None:
+        """The cloud sometimes relays the rsv/rd list on the device's own
+        topic; the typed subscription takes it from there too, and not
+        the hex form on res/rsv or another device's list."""
+        manager = _manager()
+        received: list[Any] = []
+        device = _device()
+
+        await manager.subscribe_reservation_response(device, received.append)
+
+        assert set(manager.subscriptions) == {
+            "cmd/52/test-client/res/rsv/rd",
+            "cmd/52/navilink-04786332fca0/#",
+        }
+        listed = {
+            "response": {
+                "deviceType": 52,
+                "macAddress": "04786332fca0",
+                "reservationUse": 2,
+                "reservation": [
+                    {
+                        "enable": 1,
+                        "week": 62,
+                        "hour": 6,
+                        "min": 0,
+                        "mode": 2,
+                        "param": 120,
+                    }
+                ],
+            }
+        }
+        await _deliver(manager, "cmd/52/test-client/res/rsv/rd", listed)
+        await _deliver(
+            manager, "cmd/52/navilink-04786332fca0/res/rsv/rd", listed
+        )
+        assert [s.reservation[0].hour for s in received] == [6, 6]
+
+        await _deliver(
+            manager,
+            "cmd/52/navilink-04786332fca0/res/recirc-rsv/rd",
+            listed,
+        )
+        other = json.loads(json.dumps(listed))
+        other["response"]["macAddress"] = "bbbbbbbbbbbb"
+        await _deliver(
+            manager, "cmd/52/navilink-04786332fca0/res/rsv/rd", other
+        )
+        assert len(received) == 2
+
+        await manager.unsubscribe_reservation_response(device, received.append)
+        assert manager.subscriptions == {}
+
+    @pytest.mark.asyncio
+    async def test_reservation_subscribe_rolls_back(self) -> None:
+        """A wildcard subscribe that fails takes back the client-keyed
+        handler the same call registered."""
+        manager = _manager()
+        connection = cast(Any, manager)._connection
+        plain = connection.subscribe.side_effect
+
+        def refuse_wildcard(topic: str, qos: Any, callback: Any) -> Any:
+            if topic.endswith("/#"):
+                future: concurrent.futures.Future[dict[str, Any]] = (
+                    concurrent.futures.Future()
+                )
+                future.set_exception(RuntimeError("refused"))
+                return future, 3
+            return plain(topic, qos, callback)
+
+        connection.subscribe.side_effect = refuse_wildcard
+        with pytest.raises(RuntimeError):
+            await manager.subscribe_reservation_response(
+                _device(), lambda schedule: None
+            )
+        assert manager.subscriptions == {}
+        assert cast(Any, manager)._message_handlers == {}
+
+    @pytest.mark.asyncio
+    async def test_reservation_subscribe_cancelled_rolls_back(self) -> None:
+        """Cancelled while the wildcard's SUBACK is pending: neither
+        handler stays registered."""
+        manager = _manager()
+        connection = cast(Any, manager)._connection
+        plain = connection.subscribe.side_effect
+        pending: concurrent.futures.Future[dict[str, Any]] = (
+            concurrent.futures.Future()
+        )
+
+        def hold_wildcard(topic: str, qos: Any, callback: Any) -> Any:
+            if topic.endswith("/#"):
+                return pending, 3
+            return plain(topic, qos, callback)
+
+        connection.subscribe.side_effect = hold_wildcard
+        task = asyncio.create_task(
+            manager.subscribe_reservation_response(
+                _device(), lambda schedule: None
+            )
+        )
+        for _ in range(20):
+            await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert cast(Any, manager)._message_handlers == {}
+
+    @pytest.mark.asyncio
+    async def test_reservation_unsubscribe_clears_the_wildcard(
+        self,
+    ) -> None:
+        """A failed unsubscribe on the client-keyed topic still removes
+        the device-keyed handler."""
+        manager = _manager()
+        device = _device()
+        received: list[Any] = []
+        await manager.subscribe_reservation_response(device, received.append)
+        connection = cast(Any, manager)._connection
+        plain = connection.unsubscribe.side_effect
+
+        def refuse_client_topic(topic: str) -> Any:
+            if topic.endswith("/res/rsv/rd"):
+                raise RuntimeError("refused")
+            return plain(topic)
+
+        connection.unsubscribe.side_effect = refuse_client_topic
+        with pytest.raises(RuntimeError):
+            await manager.unsubscribe_reservation_response(
+                device, received.append
+            )
+        assert "cmd/52/navilink-04786332fca0/#" not in manager.subscriptions
+
+    @pytest.mark.asyncio
     async def test_subscribe_device_tracks_devices(self) -> None:
         manager = _manager()
         assert manager.subscribed_devices == []

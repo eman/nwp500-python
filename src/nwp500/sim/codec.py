@@ -31,6 +31,7 @@ from typing import Any
 
 import numpy as np
 
+from nwp500.heater import HeaterProfile
 from nwp500.sim.delivery import Deliverable
 from nwp500.sim.inputs import Scenario
 from nwp500.sim.params import (
@@ -38,7 +39,6 @@ from nwp500.sim.params import (
     params_from_document,
     params_to_document,
 )
-from nwp500.sim.profile import HeaterProfile
 from nwp500.sim.ready import Readiness, Recovery
 from nwp500.sim.result import (
     ActiveCycle,
@@ -183,12 +183,15 @@ def _json(value: Any) -> Any:
 def to_document(value: Any) -> dict[str, Any]:
     """``value``, one of the answers in ``DOCUMENT_KINDS``, as a
     document: ``schema_version``, its ``kind``, and its fields, nested
-    answers as objects. A ``TypeError`` for any other value."""
+    answers as objects. A heater profile's fields are its
+    ``HeaterProfile.document()``: its facts and its ``revision``. A
+    ``TypeError`` for any other value."""
     kind = DOCUMENT_KINDS.get(type(value))
     if kind is None:
         raise TypeError(f"no document kind for a {type(value).__name__}")
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "kind": kind,
-        **_json(dataclasses.asdict(value)),
-    }
+    fields = (
+        value.document()
+        if isinstance(value, HeaterProfile)
+        else dataclasses.asdict(value)
+    )
+    return {"schema_version": SCHEMA_VERSION, "kind": kind, **_json(fields)}

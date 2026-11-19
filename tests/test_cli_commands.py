@@ -955,3 +955,29 @@ class TestRecirculationWriteConfirmation:
         out = capsys.readouterr().out
         assert "updated" not in out
         assert "does not match" in out
+
+
+@pytest.mark.parametrize(
+    ("path", "bounds"),
+    [
+        (("vacation",), (1, 99)),
+        (("vacation-duration",), (1, 99)),
+        (("anti-legionella", "set-period"), (1, 30)),
+        (("anti-legionella", "enable"), (1, 30)),
+    ],
+)
+def test_day_counts_take_the_heater_ranges(
+    path: tuple[str, ...], bounds: tuple[int, int]
+) -> None:
+    """The CLI accepts the ranges nwp500.heater publishes, the ones the
+    MQTT client checks (vacation-duration once stopped at 30)."""
+    import click
+
+    from nwp500.cli.__main__ import cli
+
+    command: Any = cli
+    for name in path:
+        command = command.commands[name]
+    days = next(p for p in command.params if p.name in ("days", "period"))
+    assert isinstance(days.type, click.IntRange)
+    assert (days.type.min, days.type.max) == bounds
