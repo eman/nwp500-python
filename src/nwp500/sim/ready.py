@@ -77,6 +77,9 @@ class Recovery:
     #: The heat pump is outside its operating range (``unavailable``):
     #: every mode heats with the elements, as Electric does.
     hp_unavailable: bool = False
+    #: The scenario's commands it does not model (``vacation_not_modelled``,
+    #: ``power_not_modelled``, ...), as ``simulate`` names them.
+    reasons: tuple[str, ...] = ()
 
 
 def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:

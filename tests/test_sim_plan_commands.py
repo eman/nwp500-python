@@ -531,7 +531,8 @@ class TestEveryWalkJudgesTheCommandsAlike:
 
     def test_next_recovery(self, params: HeaterParams) -> None:
         away = next_recovery(_scenario(commands=self.ONE_DAY), params)
-        assert away == next_recovery(_scenario(), params)
+        assert away.reasons == ("vacation_not_modelled",)
+        assert replace(away, reasons=()) == next_recovery(_scenario(), params)
         assert away.outcome != "not_scheduled"
         two = Commands(vacation=VacationCommand(days=2))
         assert next_recovery(_scenario(commands=two), params).outcome == (
@@ -543,7 +544,7 @@ class TestEveryWalkJudgesTheCommandsAlike:
         home = time_to_ready(_scenario(), params)
         assert "vacation_not_modelled" in away.reasons
         assert away.bath == home.bath
-        assert away.recovery == home.recovery
+        assert replace(away.recovery, reasons=()) == home.recovery
 
     def test_carry_on_does_not_go_on_past_the_return(
         self, params: HeaterParams
@@ -563,3 +564,67 @@ class TestEveryWalkJudgesTheCommandsAlike:
         assert "vacation_not_modelled" not in c.tail.reasons
         assert not c.tail.heating
         assert not c.heating_alike
+
+
+class TestEveryAnswerNamesTheCommandsLeftOut:
+    """An answer from a scenario names each command it leaves out,
+    whether or not it walks a mode."""
+
+    LEFT_OUT = Commands(
+        anti_legionella=AntiLegionellaCommand(enabled=True),
+        demand_response=DemandResponseCommand(enabled=True),
+    )
+    NAMED = ("anti_legionella_not_modelled", "demand_response_not_modelled")
+
+    @staticmethod
+    def _off_turned_on() -> Scenario:
+        """Powered off, told to turn on: back on, it runs the mode it
+        had, which the scenario does not hold."""
+        return _with_mode(
+            _scenario(commands=Commands(power=PowerCommand(on=True))),
+            POWER_OFF,
+        )
+
+    @staticmethod
+    def _hot(**kw: Any) -> Scenario:
+        """A tank ready for a bath now: no mode is walked."""
+        return _scenario(state=HeaterState(upper_f=140.0, lower_f=138.0), **kw)
+
+    def test_time_to_ready_with_heating_disabled(
+        self, params: HeaterParams
+    ) -> None:
+        got = time_to_ready(self._off_turned_on(), params)
+        assert got.recovery.outcome == "not_scheduled"
+        assert "power_not_modelled" in got.reasons
+        assert "power_not_modelled" in got.recovery.reasons
+
+    def test_time_to_ready_with_the_bath_ready_now(
+        self, params: HeaterParams
+    ) -> None:
+        got = time_to_ready(self._hot(commands=self.LEFT_OUT), params)
+        assert got.bath.ready
+        assert set(self.NAMED) <= set(got.reasons)
+
+    def test_next_recovery_whatever_its_outcome(
+        self, params: HeaterParams
+    ) -> None:
+        off = next_recovery(self._off_turned_on(), params)
+        assert off.outcome == "not_scheduled"
+        assert off.reasons == ("power_not_modelled",)
+        on = next_recovery(_scenario(commands=self.LEFT_OUT), params)
+        assert on.outcome == "ok"
+        assert on.reasons == self.NAMED
+        assert next_recovery(_scenario(), params).reasons == ()
+
+    def test_element_mode_with_heating_disabled(
+        self, params: HeaterParams
+    ) -> None:
+        got = element_mode(self._off_turned_on(), params, mode=4)
+        assert got.unreachable_reason == "heating_disabled"
+        assert "power_not_modelled" in got.reasons
+
+    def test_carry_on(self, params: HeaterParams) -> None:
+        walk = simulate(_scenario(), params)
+        tail = _scenario(start=walk.until, commands=self.LEFT_OUT)
+        [c] = carry_on([walk], tail, params)
+        assert set(self.NAMED) <= set(c.tail.reasons)

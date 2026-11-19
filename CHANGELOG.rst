@@ -52,7 +52,9 @@ Added
   others the walk cannot follow are left out and named in ``reasons``
   (``vacation_not_modelled``, ``power_not_modelled``,
   ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
-  See "Commands" in :doc:`/reference/simulator-inputs`.
+  ``time_to_ready`` names them whether or not it walks a mode, and
+  ``next_recovery``'s ``Recovery`` has ``reasons`` for them. See
+  "Commands" in :doc:`/reference/simulator-inputs`.
 
 Changed
 -------

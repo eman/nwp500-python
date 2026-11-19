@@ -545,6 +545,12 @@ and each flag a ``bool``; a ``bool`` for a number, or a number for a
 flag, is refused. ``SimulationResult.end_settings`` holds the mode the
 walk ended in, Vacation or Power Off included.
 
+Every answer from a scenario names the commands it leaves out, whether
+or not it walks: ``simulate``, ``element_mode`` and ``carry_on``'s tails
+in their ``reasons``, ``time_to_ready`` in ``Readiness.reasons`` (with
+the bath ready now, or heating disabled, too), and ``next_recovery`` in
+``Recovery.reasons``.
+
 
 Circulation
 ===========

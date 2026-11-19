@@ -1646,9 +1646,23 @@ def next_recovery(
     tank is ready); ``active_cycle`` gives its run-on.
     ``recovery`` serves its duration (``extensions.RecoveryModel``).
     ``not_scheduled`` while heating is disabled; ``unavailable`` when
-    it cannot be computed."""
-    s = scenario
-    mode, disabled = _engine_mode(_commanded(s, s.start + COMMANDS_AHEAD)[0])
+    it cannot be computed. Its ``reasons`` name each of the scenario's
+    commands it does not model (``_commanded``), whatever the
+    outcome."""
+    commanded, reasons = _commanded(scenario, scenario.start + COMMANDS_AHEAD)
+    found = _next_recovery(scenario, params, commanded, recovery)
+    return replace(found, reasons=tuple(reasons)) if reasons else found
+
+
+def _next_recovery(
+    s: Scenario,
+    params: HeaterParams,
+    commanded: int,
+    recovery: RecoveryModel | None,
+) -> Recovery:
+    """``next_recovery``'s answer, the heater in the ``commanded``
+    mode."""
+    mode, disabled = _engine_mode(commanded)
     if disabled:
         return Recovery("not_scheduled")
     now = s.start
@@ -2160,6 +2174,11 @@ def time_to_ready(
                 else []
             ),
         ]
+    )
+    # The commands left out, whether or not a mode was walked (the bath
+    # ready now, or heating disabled): as each walk judges them.
+    answer["reasons"] = _unique(
+        [*answer["reasons"], *_commanded(s, s.start + COMMANDS_AHEAD)[1]]
     )
     if runs:
         answer["reasons"] = _unique(
