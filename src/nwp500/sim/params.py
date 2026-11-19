@@ -259,6 +259,14 @@ class TankParams:
     lower_element_height: float = field(
         default=0.15, metadata=_p(DEFAULT, "fraction")
     )
+    #: The water the upper element's plume carries up, gal/min
+    #: (``physics.stratified.rise``): the water it heats rises to where
+    #: the column is as warm, and the water between sinks. 0 puts the
+    #: heat in the element's layer, which turns over into every cooler
+    #: layer above it, as the lower element's always does.
+    upper_plume_gpm: float = field(
+        default=2.0, metadata=_p(FITTED, "gal/min")
+    )
     #: The span of the tank the condenser coil wraps, from the bottom.
     #: A prior; fitted on stratified climbs.
     condenser_span: tuple[float, float] = field(

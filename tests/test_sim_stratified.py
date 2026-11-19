@@ -242,11 +242,19 @@ class TestHeat:
         assert _monotone(after)
 
     @staticmethod
-    def _upper_climb(height: float) -> float:
+    def _upper_climb(height: float, plume_gpm: float = 0.0) -> float:
         """The upper probe's climb under the upper element from a mixed
-        120 °F tank, °F/min, the element's height ``height``."""
+        120 °F tank, °F/min, the element's height ``height``, its plume
+        carrying ``plume_gpm`` (0: its layer's heat turned over)."""
         lay = S.layout(
-            replace(P, tank=replace(P.tank, upper_element_height=height))
+            replace(
+                P,
+                tank=replace(
+                    P.tank,
+                    upper_element_height=height,
+                    upper_plume_gpm=plume_gpm,
+                ),
+            )
         )
         on = S.Element(
             zone="upper",
@@ -272,6 +280,11 @@ class TestHeat:
         # A layer higher, 5.3 gal less water to heat.
         assert self._upper_climb(0.76) > 1.2 * self._upper_climb(0.74)
 
+    def test_a_plume_lifts_the_upper_probe_sooner(self) -> None:
+        # Its heat reaches the top first, where the probe reads, rather
+        # than the whole zone above the element at once.
+        assert self._upper_climb(0.72, 2.0) > 1.04 * self._upper_climb(0.72)
+
     def test_an_element_heats_the_water_above_it(self) -> None:
         state = S.TankState(tuple(100.0 + i for i in range(12)))
         after = S.add_heat(L, state, S.element_heat(L, "upper", 2000.0))
@@ -284,6 +297,59 @@ class TestHeat:
         assert S.condenser_water_f(L, state) == pytest.approx(
             sum(i * x for i, x in enumerate(w))
         )
+
+
+class TestRise:
+    @given(
+        stable,
+        st.sampled_from(["upper", "lower"]),
+        st.floats(0.0, 2000.0),
+        st.floats(0.0, 30.0),
+    )
+    def test_what_goes_in_is_kept(
+        self, state: S.TankState, zone: S.Zone, btu: float, gal: float
+    ) -> None:
+        after = S.rise(L, state, zone, btu, gal)
+        assert _energy(after) == pytest.approx(
+            _energy(state) + btu, abs=1e-6
+        )
+        assert _monotone(after)
+        # Nothing below the element moves.
+        at = L.element_layer(zone)
+        assert after.layers_f[:at] == state.layers_f[:at]
+
+    def test_a_cold_zone_is_heated_from_the_top(self) -> None:
+        # Above the element at 100 °F: the plume rises past the water
+        # over the element and heats the top, where pooling heats the
+        # four layers alike.
+        state = S.TankState((80.0,) * 8 + (100.0,) * 4)
+        pooled = S.add_heat(L, state, S.element_heat(L, "upper", 300.0))
+        plume = S.rise(L, state, "upper", 300.0, 2.0)
+        assert pooled.layers_f[8:] == pytest.approx((pooled.layers_f[8],) * 4)
+        assert plume.layers_f[-1] > pooled.layers_f[-1] + 3.0
+        assert plume.layers_f[8] < pooled.layers_f[8]
+
+    def test_a_plume_stops_under_warmer_water(self) -> None:
+        state = S.TankState((80.0,) * 8 + (100.0, 100.0, 100.0, 150.0))
+        after = S.rise(L, state, "upper", 300.0, 2.0)
+        # It mixes in under the 150 °F top; the water it passed sinks
+        # into the layers it left, as warm as they were.
+        assert after.layers_f[-1] == 150.0
+        assert after.layers_f[10] > 100.0
+        assert after.layers_f[8:10] == pytest.approx((100.0, 100.0))
+
+    def test_no_water_is_the_layers_heat(self) -> None:
+        state = S.TankState((80.0,) * 8 + (100.0,) * 4)
+        pooled = S.add_heat(L, state, S.element_heat(L, "upper", 300.0))
+        assert S.rise(L, state, "upper", 300.0, 0.0) == pooled
+
+    def test_a_large_plume_is_cut_into_layers(self) -> None:
+        # More than a layer's water a step: each piece rises on its own,
+        # and the heat is the same.
+        state = S.TankState((80.0,) * 8 + (100.0,) * 4)
+        after = S.rise(L, state, "upper", 3000.0, 3.5 * L.layer_gal)
+        assert _energy(after) == pytest.approx(_energy(state) + 3000.0)
+        assert _monotone(after)
 
 
 class TestStir:
