@@ -1,12 +1,13 @@
 """The simulator core's import contract.
 
 ``nwp500.sim`` performs no I/O: it imports nothing from the rest of
-``nwp500`` (so neither the MQTT nor the REST client, nor the
-authentication), and nothing of aiohttp or the AWS IoT SDK. numpy and
-pandas are allowed. Nor does it hold per-request state (no
-``ContextVar`` or thread), and it does not log: what it would warn of
-is in its result. It could therefore be split into its own
-distribution with no change to its code.
+``nwp500`` but the heater's device facts (``nwp500.heater``, which
+imports nothing of the clients), so neither the MQTT nor the REST
+client, nor the authentication, and nothing of aiohttp or the AWS IoT
+SDK. numpy and pandas are allowed. Nor does it hold per-request state
+(no ``ContextVar`` or thread), and it does not log: what it would warn
+of is in its result. It could therefore be split into its own
+distribution, with the device facts, with no change to its code.
 
 ``import nwp500`` never loads it: the simulator is optional, behind the
 ``sim`` extra.
@@ -41,6 +42,9 @@ IDS = [p.relative_to(SIM_ROOT).as_posix() for p in SOURCES]
 
 #: Top-level packages the core must never import: the network clients.
 FORBIDDEN = frozenset({"aiohttp", "awscrt"})
+#: The library's modules outside the core it may import: the heater's
+#: device facts, which it shares with clients that run no simulation.
+SHARED = frozenset({"nwp500.heater"})
 
 #: Per-request state, and logging: the core is the same on every
 #: thread, writes to no handler, and returns what it would warn of.
@@ -120,7 +124,11 @@ def _violation(module: str) -> bool:
     if top in FORBIDDEN or top in STATEFUL:
         return True
     if top == "nwp500":
-        return not (module == "nwp500.sim" or module.startswith("nwp500.sim."))
+        return not (
+            module == "nwp500.sim"
+            or module.startswith("nwp500.sim.")
+            or module in SHARED
+        )
     return False
 
 
@@ -226,6 +234,7 @@ def test_the_import_check_sees_a_violation() -> None:
     for module in (
         "nwp500.sim",
         "nwp500.sim.params",
+        "nwp500.heater",
         "nwp500.sim.physics.stratified",
         "math",
         "numpy",
