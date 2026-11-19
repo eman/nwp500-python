@@ -2080,22 +2080,31 @@ def time_to_ready(
     if marked is None:
         defaults.append("tou_window=in_force (hp_upper_on_f unknown)")
         marked = True
+    # The heater as the settings and the commands leave it at the start,
+    # judged as every walk here judges them: in Vacation or Power Off
+    # nothing heats, and nothing running there goes on
+    # (``_stopped_at_start``), whether or not the bath is ready now.
+    commanded, command_reasons = _commanded(s, s.start + COMMANDS_AHEAD)
+    _, disabled = _engine_mode(commanded)
     tank = TankNow(
         upper_f=s.state.upper_f,
         lower_f=s.state.lower_f,
         drawing=drawing,
-        element_on=s.state.element_running,
+        element_on=s.state.element_running and not disabled,
         tou_window=marked,
         ambient_f=_ambient_at(s.environment, s.start),
-        compressor_on=s.state.compressor_running,
+        compressor_on=s.state.compressor_running and not disabled,
     )
     inlet = _inlet_f(s, params)
     now_gal = deliverable(
         params, tank.upper_f, tank.lower_f, s.state.layers_f, inlet_f=inlet
     )
     # The recovery and the modes' walks are only needed when the bath is
-    # not ready now.
-    nxt = Recovery("unavailable")
+    # not ready now; with heating disabled none is scheduled either way.
+    nxt = Recovery(
+        "not_scheduled" if disabled else "unavailable",
+        reasons=tuple(command_reasons),
+    )
     runs: list[ModeRun] = []
     hp_reasons: tuple[str, ...] = ()
     schedule_unknown = False
@@ -2177,9 +2186,7 @@ def time_to_ready(
     )
     # The commands left out, whether or not a mode was walked (the bath
     # ready now, or heating disabled): as each walk judges them.
-    answer["reasons"] = _unique(
-        [*answer["reasons"], *_commanded(s, s.start + COMMANDS_AHEAD)[1]]
-    )
+    answer["reasons"] = _unique([*answer["reasons"], *command_reasons])
     if runs:
         answer["reasons"] = _unique(
             [

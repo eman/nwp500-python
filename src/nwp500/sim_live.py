@@ -75,7 +75,12 @@ from nwp500.sim import (
     Settings,
     default_params,
 )
-from nwp500.sim.codec import SCHEMA_VERSION, merge, scenario_to_document
+from nwp500.sim.codec import (
+    SCHEMA_VERSION,
+    in_simulator_names,
+    merge,
+    scenario_to_document,
+)
 from nwp500.sim.params import params_from_document
 
 if TYPE_CHECKING:
@@ -472,11 +477,15 @@ def overlay(
         scenario = doc.get("scenario")
         if not isinstance(scenario, Mapping):
             raise ValueError("a scenario document has a scenario object")
-        data = merge(data, cast(Mapping[str, Any], scenario))
+        data = merge(
+            data, in_simulator_names(cast(Mapping[str, Any], scenario))
+        )
+    # Each layer's commands in the simulator's names before it is laid
+    # on, so a plan's ``tou`` replaces a ``tou_enabled`` under it.
     if replace is not None:
-        data.update(replace)
+        data.update(in_simulator_names(replace))
     if over is not None:
-        data = merge(data, over)
+        data = merge(data, in_simulator_names(over))
     env = data.get("environment")
     given = doc.get("scenario") if isinstance(doc, Mapping) else None
     if isinstance(env, Mapping) and _air_without_its_source(

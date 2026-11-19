@@ -544,26 +544,36 @@ class Commands(_Value):
     @model_validator(mode="before")
     @classmethod
     def _plan_tou(cls, data: Any) -> Any:
-        """A plan's ``tou`` command, ``{"enabled": ...}``, as
-        ``tou_enabled``."""
+        """A plan's ``tou`` command as ``tou_enabled``
+        (``commands_in_simulator_names``)."""
         if not isinstance(data, Mapping):
             return data
-        fields = dict(cast(Mapping[str, Any], data))
-        if "tou" not in fields:
-            return fields
-        tou = fields.pop("tou")
-        if fields.get("tou_enabled") is not None:
-            raise ValueError("give tou or tou_enabled, not both")
-        shape: Mapping[str, Any] = (
-            cast(Mapping[str, Any], tou) if isinstance(tou, Mapping) else {}
-        )
-        enabled: object = (
-            shape.get("enabled") if set(shape) == {"enabled"} else None
-        )
-        if not isinstance(enabled, bool):
-            raise ValueError('tou is {"enabled": true} or {"enabled": false}')
-        fields["tou_enabled"] = enabled
+        return commands_in_simulator_names(cast(Mapping[str, Any], data))
+
+
+def commands_in_simulator_names(commands: Mapping[str, Any]) -> dict[str, Any]:
+    """A ``Commands`` mapping with a plan's ``tou`` command,
+    ``{"enabled": ...}``, as ``tou_enabled``; the rest as given. Raises
+    ``ValueError`` for both given in it (``tou_enabled`` not None), or
+    a ``tou`` of any other shape. Layers merged key by key
+    (``sim.codec.merge``) are each put in these names first, so a
+    layer's ``tou`` replaces a ``tou_enabled`` under it."""
+    fields = dict(commands)
+    if "tou" not in fields:
         return fields
+    tou = fields.pop("tou")
+    if fields.get("tou_enabled") is not None:
+        raise ValueError("give tou or tou_enabled, not both")
+    shape: Mapping[str, Any] = (
+        cast(Mapping[str, Any], tou) if isinstance(tou, Mapping) else {}
+    )
+    enabled: object = (
+        shape.get("enabled") if set(shape) == {"enabled"} else None
+    )
+    if not isinstance(enabled, bool):
+        raise ValueError('tou is {"enabled": true} or {"enabled": false}')
+    fields["tou_enabled"] = enabled
+    return fields
 
 
 class Scenario(_Value):

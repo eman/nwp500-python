@@ -551,6 +551,11 @@ in their ``reasons``, ``time_to_ready`` in ``Readiness.reasons`` (with
 the bath ready now, or heating disabled, too), and ``next_recovery`` in
 ``Recovery.reasons``.
 
+A heater in Vacation or Power Off at the start, by its settings or its
+commands, heats in no mode: ``time_to_ready`` gives every mode as not
+reachable now and its recovery as ``not_scheduled``, with the bath
+ready now too, and reads nothing as running there.
+
 
 Circulation
 ===========

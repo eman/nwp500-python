@@ -327,7 +327,11 @@ To lay a scenario document over the heater as it is now, as
 Objects merge key by key, and any other value, a list included,
 replaces the one under it, so ``{"schema_version": 1, "scenario":
 {"settings": {"setpoint_f": 125}}}`` changes the setpoint and keeps
-the rest of the heater's settings. ``composed`` or ``doc`` may be None.
+the rest of the heater's settings. A reservation list, in either form,
+replaces the one under it whole. A layer's ``commands.tou`` (a plan's
+``{"enabled": ...}``) is read as ``tou_enabled`` before it is laid on,
+so it replaces a ``tou_enabled`` under it; one layer giving both is
+refused. ``composed`` or ``doc`` may be None.
 Where neither gives one, the start is ``now``, the horizon 24 hours,
 and the zone ``tz=``. The parameters are ``params=``, then the
 document's, then the heater's, then the 65 gal defaults (with a note in

@@ -10,6 +10,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from nwp500 import sim_adapters as sa
+from nwp500 import sim_live
 from nwp500.models import ReservationEntry as DeviceEntry
 from nwp500.models import ReservationSchedule
 from nwp500.mqtt.control import RESERVATION_ENTRY_FIELDS
@@ -628,3 +629,116 @@ class TestEveryAnswerNamesTheCommandsLeftOut:
         tail = _scenario(start=walk.until, commands=self.LEFT_OUT)
         [c] = carry_on([walk], tail, params)
         assert set(self.NAMED) <= set(c.tail.reasons)
+
+
+class TestHeatingDisabledWithTheBathReadyNow:
+    """With the bath ready now no mode is walked; heating disabled, by
+    the settings or a command, still reaches no mode and schedules no
+    recovery, and the two agree."""
+
+    @staticmethod
+    def _hot(**kw: Any) -> Scenario:
+        return _scenario(
+            state=HeaterState(
+                upper_f=140.0, lower_f=138.0, element_running=True
+            ),
+            settings=Settings(
+                setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=104.9
+            ),
+            **kw,
+        )
+
+    @pytest.mark.parametrize(
+        ("command", "mode"),
+        [
+            (Commands(power=PowerCommand(on=False)), POWER_OFF),
+            (Commands(vacation=VacationCommand(days=2)), VACATION),
+        ],
+    )
+    def test_no_mode_is_reachable(
+        self, params: HeaterParams, command: Commands, mode: int
+    ) -> None:
+        on = time_to_ready(self._hot(), params)
+        assert on.bath.ready
+        assert all(m.reachable_now for m in on.bath.by_mode)
+        assert "element_running" in on.reasons
+        commanded = time_to_ready(self._hot(commands=command), params)
+        settings = time_to_ready(_with_mode(self._hot(), mode), params)
+        for got in (commanded, settings):
+            assert got.bath.ready
+            assert not any(m.reachable_now for m in got.bath.by_mode)
+            assert got.recovery.outcome == "not_scheduled"
+            # What ran at the start stops there.
+            assert "element_running" not in got.reasons
+        assert commanded.bath == settings.bath
+        assert commanded.reasons == settings.reasons
+
+
+class TestLayeredScenarioDocuments:
+    """``sim_live.overlay`` lays documents over one another key by key:
+    each layer's commands are put in the simulator's names first, and
+    reservation lists replace one another whole, in either form."""
+
+    @staticmethod
+    def _doc(**commands_and_schedules: Any) -> dict[str, Any]:
+        doc = scenario_to_document(_scenario())
+        doc["scenario"].update(commands_and_schedules)
+        return doc
+
+    def test_a_plan_tou_replaces_a_tou_enabled_under_it(self) -> None:
+        doc = self._doc(commands={"tou_enabled": False})
+        over = {"commands": {"tou": {"enabled": True}}}
+        got = sim_live.overlay(None, doc, now=T0, over=over).scenario
+        assert got.commands.tou_enabled is True
+        back = sim_live.overlay(
+            None,
+            self._doc(commands={"tou": {"enabled": True}}),
+            now=T0,
+            over={"commands": {"tou_enabled": False}},
+        ).scenario
+        assert back.commands.tou_enabled is False
+
+    def test_a_plan_tou_in_replace_then_over(self) -> None:
+        got = sim_live.overlay(
+            None,
+            self._doc(),
+            now=T0,
+            replace={"commands": {"tou": {"enabled": True}}},
+            over={"commands": {"tou_enabled": False}},
+        ).scenario
+        assert got.commands.tou_enabled is False
+
+    def test_both_spellings_in_one_layer_are_refused(self) -> None:
+        over = {"commands": {"tou": {"enabled": True}, "tou_enabled": False}}
+        with pytest.raises(ValueError, match="not both"):
+            sim_live.overlay(None, self._doc(), now=T0, over=over)
+
+    @pytest.mark.parametrize(
+        ("under", "on_top", "want"),
+        [
+            (SIM.model_dump(), DEVICE, SIM),
+            (DEVICE, SIM.model_dump(), SIM),
+            (
+                DEVICE,
+                {**DEVICE, "enable": 1},
+                SIM.model_copy(update={"enabled": False}),
+            ),
+        ],
+    )
+    def test_reservation_lists_replace_whole(
+        self,
+        under: dict[str, Any],
+        on_top: dict[str, Any],
+        want: ReservationEntry,
+    ) -> None:
+        doc = self._doc(
+            commands={"reservations": [under]},
+            schedules={"reservations": [under]},
+        )
+        over = {
+            "commands": {"reservations": [on_top]},
+            "schedules": {"reservations": [on_top]},
+        }
+        got = sim_live.overlay(None, doc, now=T0, over=over).scenario
+        assert got.commands.reservations == (want,)
+        assert got.schedules.reservations == (want,)

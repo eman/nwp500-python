@@ -53,8 +53,10 @@ Added
   (``vacation_not_modelled``, ``power_not_modelled``,
   ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
   ``time_to_ready`` names them whether or not it walks a mode, and
-  ``next_recovery``'s ``Recovery`` has ``reasons`` for them. See
-  "Commands" in :doc:`/reference/simulator-inputs`.
+  ``next_recovery``'s ``Recovery`` has ``reasons`` for them.
+  ``sim_live.overlay`` reads each layer's ``tou`` as ``tou_enabled``
+  before laying it on. See "Commands" in
+  :doc:`/reference/simulator-inputs`.
 
 Changed
 -------
@@ -101,7 +103,10 @@ Fixed
   the start: the restart lockout runs from there and ``end_history``
   holds the stop. Before, no stop was recorded, a reservation entry
   could restart the compressor at once, and the history given was
-  lost. See the ``mode`` row in :doc:`/reference/simulator-inputs`.
+  lost. ``time_to_ready`` with the bath ready now also gave every mode
+  as reachable on a heater in Vacation or Power Off; it now gives none,
+  and its recovery as ``not_scheduled``. See the ``mode`` row in
+  :doc:`/reference/simulator-inputs`.
 
 Version 9.13.3 (2026-11-15)
 ===========================
