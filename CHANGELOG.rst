@@ -8,6 +8,16 @@ Unreleased
 Added
 -----
 
+- **Protocols for the Home Assistant client.**
+  ``sim_home_assistant.HistoryClient`` (``state`` and ``read_history``)
+  and ``WeatherClient`` (those, ``forecast`` and ``outdoor_history``)
+  are the methods the Home Assistant readers call, as
+  ``typing.Protocol`` classes. ``read_heater_history``,
+  ``record_inputs`` and ``HomeAssistantTank`` take a ``HistoryClient``;
+  ``HomeAssistantEnvironment`` and ``fit_location_air`` a
+  ``WeatherClient``. ``HomeAssistantClient`` is both, and a client that
+  reads Home Assistant another way type-checks without a cast. See
+  "Home Assistant sources" in :doc:`/reference/python_api/sim`.
 - **A walk's heatings, and when the tank is first at temperature.**
   ``SimulationResult.heatings`` chains the heating intervals into
   heatings (``sim.Heating``): an interval starting within a minute of
