@@ -63,6 +63,22 @@ Fixed
   ``ANTI_LEGIONELLA_PERIOD_DAYS``) before connecting. See
   :doc:`/reference/python_api/cli`.
 
+Fixed
+-----
+
+- **Reservation lists relayed on the heater's own topic are read.**
+  The cloud sometimes republishes a reservation read's ``rsv/rd`` list
+  on ``cmd/52/navilink-<mac>/res/rsv/rd`` instead of the reader's
+  response topic. ``subscribe_reservation_response`` listened only on
+  the client-keyed topic, so ``fetch_reservations`` and
+  ``update_reservations_confirmed`` timed out. It now takes the list from
+  the device-keyed topic too. See "Reservation and Recirculation Schedule
+  Responses" in :doc:`/reference/protocol/mqtt_protocol`.
+- **Calibration no longer raises a pandas FutureWarning.** The heat
+  pump fit's recovery frame held the first run's ``minutes_off`` (NaN)
+  as an object column, and pandas 2 warned on concatenating it on every
+  calibration. The column is a float column now.
+
 Version 9.13.3 (2026-11-15)
 ===========================
 

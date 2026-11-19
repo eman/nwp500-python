@@ -40,6 +40,9 @@ publishes there.
                                                              # form
    cmd/{deviceType}/navilink-{mac}/res/dl-sw-info            # device-keyed
                                                              # reply
+   cmd/{deviceType}/navilink-{mac}/res/rsv/rd                # relayed
+                                                             # reservation
+                                                             # list
    cmd/{deviceType}/navilink-{mac}/res/ctrl-fail             # control
                                                              # failure
    evt/{deviceType}/navilink-{mac}/app-connection            # event and
@@ -1133,6 +1136,20 @@ On ``res/rsv/rd`` and ``res/recirc-rsv/rd``:
 The same schedule is also republished on ``res/rsv`` / ``res/recirc-rsv``
 with ``reservation`` as a hex string of six bytes per entry
 (``enable, week, hour, min, mode, param``).
+
+Sometimes the heater answers a reservation read on its own topic,
+``cmd/52/navilink-{mac}/res/rsv``, and the cloud then republishes the
+JSON list under the device-keyed topic
+``cmd/52/navilink-{mac}/res/rsv/rd`` instead of the ``responseTopic`` the
+read named. The list is the same either way, and the protocol carries no
+correlation id on ``rsv/rd``, so a reply on one topic is no more the
+reader's than one on the other.
+``subscribe_reservation_response`` takes the list from both: the
+client-keyed topic and, through the ``cmd/52/navilink-{mac}/#`` wildcard,
+the device-keyed one. ``fetch_reservations`` and
+``update_reservations_confirmed`` wait on that subscription, so they
+accept either. A list that arrives on both topics reaches the callback
+twice.
 
 In a weekly (``rsv``) entry, ``mode`` is ``ReservationMode`` in the
 library: 0 = not reserved, 1 = Heat Pump,
