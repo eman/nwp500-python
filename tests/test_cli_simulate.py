@@ -686,6 +686,26 @@ class TestTheTanksLayers:
         assert not keeper.probes
         assert "tank_profile_estimated" not in result.reasons
 
+    def test_null_layers_walk_from_the_probes(self) -> None:
+        n = sim.default_params(2).tank.layers
+        keeper = _Keeper((120.0,) * n)
+        doc = scenario_to_document(_scenario())
+        doc["scenario"]["state"]["layers_f"] = None
+        result = sim_cli.run(
+            sim_cli.Inputs(scenario=doc),
+            None,
+            NOW,
+            "table",
+            io.StringIO(),
+            keeper=cast(Any, keeper),
+        )
+        assert not keeper.probes
+        assert "tank_profile_estimated" in result.reasons
+
+    def test_a_bath_too_small_to_judge_is_not_computed(self) -> None:
+        text, _ = self._run(None, bath=0.01)
+        assert "Bath and showers: not computed (bath_gal must" in text
+
     def test_a_scenario_not_starting_now_takes_no_layers(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:

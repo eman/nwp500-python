@@ -64,6 +64,7 @@ from nwp500.sim.inputs import (
     HEAT_PUMP,
     HIGH_DEMAND,
     POWER_OFF,
+    VACATION,
     Draw,
     Environment,
     HeaterState,
@@ -128,6 +129,12 @@ ENGINE_MODE: Mapping[int, HeaterMode] = MappingProxyType(
         HIGH_DEMAND: "high_demand",
     }
 )
+
+#: Vacation hands back to the mode before it this long before its days
+#: are up, and heats to the setpoint (the user's manual, 3.4.5).
+VACATION_RETURNS_EARLY = timedelta(hours=9)
+#: A vacation command the walk leaves out (``_commanded``).
+VACATION_NOT_MODELLED = "vacation_not_modelled"
 
 #: The ambient grid's spacing, and how far it reaches either side of
 #: the span (a recovery that starts near the end runs past it).
@@ -351,6 +358,80 @@ def _engine_mode(mode: int) -> tuple[HeaterMode, bool]:
     return (named, False) if named is not None else ("heat_pump", True)
 
 
+def _commanded(
+    s: Scenario, until: datetime | None = None
+) -> tuple[int, list[str]]:
+    """The mode the scenario's commands leave the heater in at its
+    start (a ``DhwOperationSetting`` value), and a reason for each
+    command the simulation does not model, judged over the span to
+    ``until`` (the scenario's end by default). Taken in the order a plan
+    serves them (``profile.COMMANDS``), each on the mode the one before
+    left:
+
+    - ``vacation``: Vacation, when ``until`` comes by its return, its
+      days less ``VACATION_RETURNS_EARLY`` from the start; else
+      ``vacation_not_modelled``, since the walk holds no rule for
+      leaving Vacation. On a heater powered off, also not modelled.
+    - ``power``: off is Power Off. On is no change on a heater that is
+      on; on one powered off it returns to the mode it had, which the
+      scenario does not hold: ``power_not_modelled``.
+    - ``anti_legionella`` and ``demand_response``: off is the walk as it
+      runs, which runs no cycle and takes no utility event; on is
+      ``anti_legionella_not_modelled`` or
+      ``demand_response_not_modelled``.
+
+    ``tou`` is ``tou_enabled``, walked as the switch is."""
+    c = s.commands
+    mode = s.settings.mode
+    end = s.until if until is None else until
+    reasons: list[str] = []
+    if c.vacation is not None:
+        returns = (
+            s.start + timedelta(days=c.vacation.days) - VACATION_RETURNS_EARLY
+        )
+        if mode == POWER_OFF or end > returns:
+            reasons.append(VACATION_NOT_MODELLED)
+        else:
+            mode = VACATION
+    if c.power is not None:
+        if not c.power.on:
+            mode = POWER_OFF
+        elif mode == POWER_OFF:
+            reasons.append("power_not_modelled")
+    if c.anti_legionella is not None and c.anti_legionella.enabled:
+        reasons.append("anti_legionella_not_modelled")
+    if c.demand_response is not None and c.demand_response.enabled:
+        reasons.append("demand_response_not_modelled")
+    return mode, reasons
+
+
+def _stopped_at_start(s: Scenario) -> Scenario:
+    """``s`` with any heating stopped at its start when it starts in
+    Vacation or Power Off (its settings', or its commands'): the
+    compressor and the elements off, and the compressor's stop there, so
+    its restart lockout runs from the start and ``end_history`` holds
+    it. The probes stay as read (``_warm``)."""
+    st = s.state
+    if not _engine_mode(s.settings.mode)[1] or not (
+        st.compressor_running or st.element_running
+    ):
+        return s
+    update: dict[str, Any] = {
+        "state": st.model_copy(
+            update={
+                "compressor_running": False,
+                "element_running": False,
+                "element_running_since": None,
+            }
+        )
+    }
+    if st.compressor_running:
+        update["history"] = s.history.model_copy(
+            update={"compressor_stopped_at": s.start}
+        )
+    return s.model_copy(update=update)
+
+
 def _history_defaults(
     state: HeaterState, history: History, defaults: list[str]
 ) -> None:
@@ -451,6 +532,7 @@ def simulate(
     start_hold: Callable[[float | None], float] | None = None,
     running_hold: float = 0.0,
     running_starts: bool = False,
+    commands_until: datetime | None = None,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
@@ -491,6 +573,12 @@ def simulate(
     over a recovery running now). With TOU on and no periods to lay out,
     ``reasons`` says ``tou_schedule_unknown`` and no window is kept.
 
+    ``commands_until`` is the end the commands are judged to: a
+    vacation returning before it is not modelled
+    (``vacation_not_modelled``). None, the scenario's end. A caller
+    walking one scenario over spans of different lengths passes the
+    farthest end, so each walk takes the commands alike.
+
     Raises ``engine.SimulationError`` when the walk cannot be completed.
     """
     s = scenario
@@ -500,7 +588,17 @@ def simulate(
         if s.state.resume is None
         else Resume.from_document(json.loads(s.state.resume))
     )
-    reasons: list[str] = []
+    # The probes as read, before a start in Vacation or Power Off stops
+    # a running compressor: still read warm over the water (``_warm``).
+    read = s.state
+    commanded, reasons = _commanded(s, commands_until)
+    if commanded != s.settings.mode:
+        # Set at the start, as the heater's own settings.
+        s = s.model_copy(
+            update={
+                "settings": s.settings.model_copy(update={"mode": commanded})
+            }
+        )
     mode, disabled = _engine_mode(s.settings.mode)
     if resume is not None:
         resume.check_from(s.start)
@@ -511,6 +609,8 @@ def simulate(
         # would.
         resume = None
         reasons.append(RESUME_DROPPED)
+    if resume is None:
+        s = _stopped_at_start(s)
     setpoint_f = s.settings.setpoint_f
     if resume is not None and setpoint_f != resume.controller.setpoint_f:
         # Moved since the walk ended: written at the start, as an app
@@ -577,7 +677,7 @@ def simulate(
     draws = _pieces(s.loads.draws, params)
     # A walk's end state, its resume carried or dropped (into Vacation
     # or Power Off), holds the walk's water, not probes read warm.
-    warm = _warm(params, s.state, running_starts=running_starts)
+    warm = _warm(params, read, running_starts=running_starts)
     tank, estimated = _tank(physics, s.state, warm)
     reasons += estimated
     sim = walk(
@@ -1384,7 +1484,7 @@ def element_mode(
     unpriced = any(
         h.source == "compressor" and h.input_wh is None for h in heating
     )
-    _, disabled = _engine_mode(s.settings.mode)
+    _, disabled = _engine_mode(_commanded(s, s.start + COMMANDS_AHEAD)[0])
     reason: str | None = None
     # The heater's own marker decides, at its own setpoint; unknown
     # counts as in force.
@@ -1546,9 +1646,23 @@ def next_recovery(
     tank is ready); ``active_cycle`` gives its run-on.
     ``recovery`` serves its duration (``extensions.RecoveryModel``).
     ``not_scheduled`` while heating is disabled; ``unavailable`` when
-    it cannot be computed."""
-    s = scenario
-    mode, disabled = _engine_mode(s.settings.mode)
+    it cannot be computed. Its ``reasons`` name each of the scenario's
+    commands it does not model (``_commanded``), whatever the
+    outcome."""
+    commanded, reasons = _commanded(scenario, scenario.start + COMMANDS_AHEAD)
+    found = _next_recovery(scenario, params, commanded, recovery)
+    return replace(found, reasons=tuple(reasons)) if reasons else found
+
+
+def _next_recovery(
+    s: Scenario,
+    params: HeaterParams,
+    commanded: int,
+    recovery: RecoveryModel | None,
+) -> Recovery:
+    """``next_recovery``'s answer, the heater in the ``commanded``
+    mode."""
+    mode, disabled = _engine_mode(commanded)
     if disabled:
         return Recovery("not_scheduled")
     now = s.start
@@ -1765,6 +1879,11 @@ def _until(points: list[HeatingPoint], at: datetime) -> list[HeatingPoint]:
 
 #: How far ahead ``time_to_ready`` walks each mode for the bath.
 READY_HORIZON = timedelta(hours=24)
+#: The end ``element_mode``, ``time_to_ready`` and ``next_recovery``
+#: judge a scenario's commands to (``simulate(commands_until=...)``):
+#: the farthest any of their walks looks, so each walk, and the
+#: reachability test, takes the commands alike.
+COMMANDS_AHEAD = max(READY_HORIZON, TRIGGER_HORIZON)
 
 #: Each mode ``time_to_ready`` walks, by the setting that selects it.
 _MODE_SETTING: Mapping[HeaterMode, int] = MappingProxyType(
@@ -1822,6 +1941,7 @@ def _mode_walk(
         recovery=recovery,
         tou_windows_in_force=windows,
         inlet_measured=inlet_measured,
+        commands_until=s.start + COMMANDS_AHEAD,
     )
 
 
@@ -1932,7 +2052,9 @@ def time_to_ready(
     ``inlet_temp_modelled``.
 
     Raises ``ValueError`` for a setpoint written outside the heater's
-    range, as ``simulate`` does.
+    range, as ``simulate`` does, and for a bath that is not positive at
+    its reported tenth of a gallon delivered, or a shower that is not
+    positive.
     """
     s = scenario
     _check_setpoints(s)
@@ -1951,8 +2073,17 @@ def time_to_ready(
         shower_source = "default"
         defaults.append(f"shower_gal={shower_gal}")
     # The meter's gallons, as a draw's (``DrawParams.meter_reads``).
+    asked = bath_gal
     bath_gal = round(params.draw.delivered_gal(bath_gal, s.start), 1)
     shower_gal = params.draw.delivered_gal(shower_gal, s.start)
+    # Judged and reported to a tenth: a bath under it is no bath.
+    if not bath_gal > 0.0:
+        raise ValueError(
+            f"bath_gal must round to at least 0.1 gal delivered: {asked!r} "
+            f"rounds to {bath_gal} gal"
+        )
+    if not shower_gal > 0.0:
+        raise ValueError(f"shower_gal must be positive: {shower_gal!r}")
     # In a TOU window now: the heater's own marker. Unknown counts as in
     # force, as for the counter test and for ``element_mode``: the
     # conservative direction is "it may not heat".
@@ -1960,22 +2091,31 @@ def time_to_ready(
     if marked is None:
         defaults.append("tou_window=in_force (hp_upper_on_f unknown)")
         marked = True
+    # The heater as the settings and the commands leave it at the start,
+    # judged as every walk here judges them: in Vacation or Power Off
+    # nothing heats, and nothing running there goes on
+    # (``_stopped_at_start``), whether or not the bath is ready now.
+    commanded, command_reasons = _commanded(s, s.start + COMMANDS_AHEAD)
+    _, disabled = _engine_mode(commanded)
     tank = TankNow(
         upper_f=s.state.upper_f,
         lower_f=s.state.lower_f,
         drawing=drawing,
-        element_on=s.state.element_running,
+        element_on=s.state.element_running and not disabled,
         tou_window=marked,
         ambient_f=_ambient_at(s.environment, s.start),
-        compressor_on=s.state.compressor_running,
+        compressor_on=s.state.compressor_running and not disabled,
     )
     inlet = _inlet_f(s, params)
     now_gal = deliverable(
         params, tank.upper_f, tank.lower_f, s.state.layers_f, inlet_f=inlet
     )
     # The recovery and the modes' walks are only needed when the bath is
-    # not ready now.
-    nxt = Recovery("unavailable")
+    # not ready now; with heating disabled none is scheduled either way.
+    nxt = Recovery(
+        "not_scheduled" if disabled else "unavailable",
+        reasons=tuple(command_reasons),
+    )
     runs: list[ModeRun] = []
     hp_reasons: tuple[str, ...] = ()
     schedule_unknown = False
@@ -2055,6 +2195,9 @@ def time_to_ready(
             ),
         ]
     )
+    # The commands left out, whether or not a mode was walked (the bath
+    # ready now, or heating disabled): as each walk judges them.
+    answer["reasons"] = _unique([*answer["reasons"], *command_reasons])
     if runs:
         answer["reasons"] = _unique(
             [

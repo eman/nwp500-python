@@ -225,18 +225,9 @@ def params(feature: DeviceFeature) -> HeaterParams:
 def reservation_entries(
     schedule: ReservationSchedule,
 ) -> tuple[ReservationEntry, ...]:
-    """The schedule's entries, as the device stores them."""
-    return tuple(
-        ReservationEntry(
-            enabled=e.enabled,
-            week=e.week,
-            hour=e.hour,
-            minute=e.min,
-            mode=e.mode,
-            setpoint_half_c=e.param,
-        )
-        for e in schedule.reservation
-    )
+    """The schedule's entries, as the device stores them
+    (``ReservationEntry.from_device``)."""
+    return tuple(ReservationEntry.from_device(e) for e in schedule.reservation)
 
 
 def _period(p: TOUPeriod, season: int | None = None) -> TouPeriod:
@@ -420,14 +411,7 @@ def reservation_entry(
         mode_id=mode,
         temperature=temperature,
     )
-    return ReservationEntry(
-        enabled=e["enable"] == 2,
-        week=e["week"],
-        hour=e["hour"],
-        minute=e["min"],
-        mode=e["mode"],
-        setpoint_half_c=e["param"],
-    )
+    return ReservationEntry.from_device(e)
 
 
 # ── results, in the preferred units ─────────────────────────────────

@@ -8,9 +8,10 @@ their offset, the horizon an ISO 8601 duration. Parsing takes a
 
 A result document holds what the walk answered: the path, the heating
 intervals, the writes and mode writes, the modes, the delivery
-temperature along the path, the draw windows, the reasons and the
-defaults used, with instants as ISO 8601 strings and floats as they
-are.
+temperature along the path, the draw windows, the reasons, the
+defaults used and when the tank is first at temperature
+(``SimulationResult.fully_heated_at``), with instants as ISO 8601
+strings and floats as they are.
 
 The simulator's other answers (``time_to_ready``'s ``Readiness``,
 ``forecast``'s ``Forecast`` and the rest in ``DOCUMENT_KINDS``) are
@@ -26,18 +27,18 @@ import math
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
+from nwp500.heater import HeaterProfile
 from nwp500.sim.delivery import Deliverable
-from nwp500.sim.inputs import Scenario
+from nwp500.sim.inputs import Scenario, commands_in_simulator_names
 from nwp500.sim.params import (
     HeaterParams,
     params_from_document,
     params_to_document,
 )
-from nwp500.sim.profile import HeaterProfile
 from nwp500.sim.ready import Readiness, Recovery
 from nwp500.sim.result import (
     ActiveCycle,
@@ -69,6 +70,21 @@ def scenario_to_document(
     if params is not None:
         doc["params"] = params_to_document(params)
     return doc
+
+
+def in_simulator_names(scenario: Mapping[str, Any]) -> dict[str, Any]:
+    """A scenario document's ``scenario`` object (or a layer laid over
+    one) with its commands in the simulator's names
+    (``inputs.commands_in_simulator_names``): what to put each layer in
+    before ``merge``, so a plan's ``tou`` in one replaces a
+    ``tou_enabled`` under it."""
+    out = dict(scenario)
+    commands = out.get("commands")
+    if isinstance(commands, Mapping):
+        out["commands"] = commands_in_simulator_names(
+            cast(Mapping[str, Any], commands)
+        )
+    return out
 
 
 def merge(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
@@ -127,6 +143,7 @@ def result_to_document(result: SimulationResult) -> dict[str, Any]:
         "windows": [_plain(dataclasses.asdict(w)) for w in result.windows],
         "reasons": list(result.reasons),
         "defaults_used": list(result.defaults_used),
+        "fully_heated_at": _plain(result.fully_heated_at),
         # Where the walk left the heater: a scenario from ``until`` takes
         # them as its state, history and settings.
         **{
@@ -181,12 +198,15 @@ def _json(value: Any) -> Any:
 def to_document(value: Any) -> dict[str, Any]:
     """``value``, one of the answers in ``DOCUMENT_KINDS``, as a
     document: ``schema_version``, its ``kind``, and its fields, nested
-    answers as objects. A ``TypeError`` for any other value."""
+    answers as objects. A heater profile's fields are its
+    ``HeaterProfile.document()``: its facts and its ``revision``. A
+    ``TypeError`` for any other value."""
     kind = DOCUMENT_KINDS.get(type(value))
     if kind is None:
         raise TypeError(f"no document kind for a {type(value).__name__}")
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "kind": kind,
-        **_json(dataclasses.asdict(value)),
-    }
+    fields = (
+        value.document()
+        if isinstance(value, HeaterProfile)
+        else dataclasses.asdict(value)
+    )
+    return {"schema_version": SCHEMA_VERSION, "kind": kind, **_json(fields)}

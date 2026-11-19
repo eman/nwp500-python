@@ -1384,7 +1384,7 @@ from them directly.
 
 
 The inlet's mixing by the draw's flow (2026-10-31)
-=================================================
+==================================================
 
 **Tried.** Measured, not built: whether a faster draw mixes more of the
 bottom, so the inlet zone should grow with the flow. On the 45 held-out
@@ -1479,7 +1479,7 @@ measured".
 
 
 The circulation's return as one volume, or a plug at the bottom (2026-10-29)
-==========================================================================
+============================================================================
 
 **Tried.** Two forms of the loop's return before the measured pipe: an
 effective loop of 19.36 gal, its return at the tank's own temperature

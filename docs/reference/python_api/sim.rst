@@ -76,6 +76,18 @@ Scenario
 .. autoclass:: nwp500.sim.Write
    :members:
 
+.. autoclass:: nwp500.sim.VacationCommand
+   :members:
+
+.. autoclass:: nwp500.sim.PowerCommand
+   :members:
+
+.. autoclass:: nwp500.sim.AntiLegionellaCommand
+   :members:
+
+.. autoclass:: nwp500.sim.DemandResponseCommand
+   :members:
+
 .. autoclass:: nwp500.sim.CirculationRun
    :members:
 
@@ -85,6 +97,12 @@ Results
 
 .. autoclass:: nwp500.sim.SimulationResult
    :members:
+
+.. autoclass:: nwp500.sim.Heating
+   :members:
+
+.. automodule:: nwp500.sim.result
+   :members: heatings, fully_heated_at, at_temperature, CHAINED
 
 .. autoclass:: nwp500.sim.RecoveryResult
    :members:
@@ -199,7 +217,11 @@ Hot water and calibration
    :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
 
 .. automodule:: nwp500.sim.profile
-   :members: HeaterProfile, heater_profile, check, COMMAND_KEYS
+   :members: heater_profile, mode_sources
+
+``nwp500.sim.profile`` re-exports the device facts of
+:doc:`heater` (``HeaterProfile``, ``check``, ``COMMAND_KEYS``,
+``COMMAND_RANGES``, ``MODES`` and the rest).
 
 .. automodule:: nwp500.sim.draw_forecast
    :members: ForecastSlot, check_issue, covers, shifted, draw_profile,
@@ -224,7 +246,7 @@ Hot water and calibration
 
 .. automodule:: nwp500.sim.ready
    :members: assess, Recovery, TankNow, ModeRun, MODES, showers_ready_for,
-      whole_showers
+      whole_showers, whole_baths
 
 .. automodule:: nwp500.sim.history
    :members: Step, house_gpm, drawn_gal, record, replay, REPLAY,
@@ -322,7 +344,7 @@ Live sources
       read_feature, read_reservations, HeaterSource, ScheduleSource,
       EnvironmentSource, LoadSource, DEFAULT_TIMEOUT, overlay, Built,
       DEFAULT_HORIZON, DEFAULT_PARAMS_NOTE, zone_name, heater_reading,
-      live_schedules
+      live_schedules, with_layers, OWN_LAYERS_NOTE, LAYERS_NOT_USED_NOTE
 
 
 Recorded history
@@ -348,7 +370,8 @@ Home Assistant sources
 ======================
 
 .. automodule:: nwp500.sim_home_assistant
-   :members: HomeAssistantEnvironment, HomeAssistantClient, fit_location_air,
+   :members: HomeAssistantEnvironment, HomeAssistantClient, HistoryClient,
+      WeatherClient, fit_location_air,
       Run, inline, HomeAssistantTank, LayersAnswer, TANK_WINDOW,
       mains_plateau, known_runs,
       record_inputs,

@@ -3,6 +3,7 @@ history, recovered from a tank planted with a known heat, power, start
 hold and stop."""
 
 import math
+import warnings
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -174,6 +175,15 @@ class TestTheFrame:
         off = frame.drop_duplicates("cycle")["minutes_off"].to_numpy(float)
         assert math.isnan(off[0])
         assert off[1:] == pytest.approx([c[0] for c in CYCLES[1:]], abs=0.2)
+
+    def test_minutes_off_is_a_float_column(self) -> None:
+        """The first run's NaN once made an object column, and pandas 2
+        warned on concatenating it (FutureWarning, on every
+        calibration)."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            built = hpf.recovery_frame(planted(CYCLES))
+        assert built["minutes_off"].dtype == np.float64
 
     def test_each_minute_is_the_cycle_s_own(self, frame: pd.DataFrame) -> None:
         starts = {c.start for c in heat_pump_cycles(planted(CYCLES))}

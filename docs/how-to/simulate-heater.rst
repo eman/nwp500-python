@@ -200,7 +200,8 @@ give:
   them, or for a scenario that doesn't start now, it starts from the
   profile the two probes stand for, "deliverable now" says
   ``probes``, ``reasons`` says ``tank_profile_estimated``, and a
-  warning says why.
+  warning says why. A scenario whose state names ``layers_f`` keeps
+  its own: a list, or null to start from the two probes.
 
 Under "deliverable now", the table gives the bath and the showers the
 tank is ready for (``sim.time_to_ready``): the bath ready with its
@@ -327,13 +328,41 @@ To lay a scenario document over the heater as it is now, as
 Objects merge key by key, and any other value, a list included,
 replaces the one under it, so ``{"schema_version": 1, "scenario":
 {"settings": {"setpoint_f": 125}}}`` changes the setpoint and keeps
-the rest of the heater's settings. ``composed`` or ``doc`` may be None.
+the rest of the heater's settings. A reservation list, in either form,
+replaces the one under it whole. A layer's ``commands.tou`` (a plan's
+``{"enabled": ...}``) is read as ``tou_enabled`` before it is laid on,
+so it replaces a ``tou_enabled`` under it; one layer giving both is
+refused. ``composed`` or ``doc`` may be None.
 Where neither gives one, the start is ``now``, the horizon 24 hours,
 and the zone ``tz=``. The parameters are ``params=``, then the
 document's, then the heater's, then the 65 gal defaults (with a note in
 ``built.notes``). ``replace=`` takes parts that stand in whole for the
 scenario's, and ``over=`` parts laid on after them. A document that
 doesn't make a scenario raises ``ValueError``.
+
+With the heater's tank layers in hand (``HeaterState.layers_f``, as
+its history leaves them, such as the ``layers_f`` of
+``HomeAssistantTank.layers``), lay them on with ``with_layers``. It
+lays them only on the heater's tank now: a scenario that starts when
+the heater's does, with its parameters and its state apart from the
+layers. ``heater`` is the heater's own ``Built``, the
+one the document was laid over:
+
+.. code-block:: python
+
+   heater = sim_live.overlay(composed, now=now)
+   built = sim_live.with_layers(
+       sim_live.overlay(composed, doc, now=now), heater, layers_f
+   )
+
+For the heater's own scenario, pass it as both:
+``sim_live.with_layers(heater, heater, layers_f)``. A document, or
+``replace=`` or ``over=``, whose state names ``layers_f`` keeps its own
+(``built.layers_given``): a list, or null to walk from the two probes.
+``built.notes`` gets ``sim_live.OWN_LAYERS_NOTE`` when the walk reads
+the tank from a document's own layers rather than the probes beside
+them, and ``sim_live.LAYERS_NOT_USED_NOTE`` when the heater's layers
+are left off a scenario that isn't the heater's.
 
 To have the models themselves, read them directly. Each MQTT read is a
 request answered on a subscription:
@@ -494,6 +523,20 @@ What a result holds:
    ``heat_pump`` (an element heating in the heat pump's place, which the
    heat pump took back), ``envelope`` (the heat pump left its operating
    range) or ``horizon``. ``input_wh`` is its electricity.
+``result.heatings``
+   The intervals as heatings: an interval starting within a minute
+   (``sim.result.CHAINED``) of the end of the one reaching furthest
+   before it joins it, such as Electric's lower element after its upper,
+   or an element run inside a longer compressor run. Each ``Heating``
+   has its ``intervals``, its ``start``, the ``end`` and ``stop`` of the
+   interval reaching furthest (``last``), its ``input_wh``, and
+   ``at_temperature``: whether it ends with the tank at temperature (at
+   its target, at the TOU cap's, or ended by a setpoint write the tank
+   had already reached).
+``result.fully_heated_at``
+   When the tank is first at temperature within the walk: the end of
+   the first heating that ends at temperature, or None. The result
+   document carries it as ``fully_heated_at``.
 ``result.points``
    The tank along the walk, in degF: ``upper_f``, ``lower_f``, the
    setpoint, the mode, and whether it is heating. ``sa.path(result)``
@@ -568,6 +611,42 @@ that switches to either, or a reservation that powers the heater off,
 is not modelled: it is left out, and ``reasons`` says so (``write_mode_not_modelled``,
 ``reservation_mode_not_modelled``). ``input_wh`` is None when an
 interval's energy could not be priced.
+
+Reservation entries can be given as the device holds them. Pass the
+list read with ``request_reservations`` (``schedule.reservation``), or
+entries in the device's six fields, and the simulator reads them:
+
+.. code-block:: python
+
+   device_entries = [
+       {"enable": 2, "week": 124, "hour": 5, "min": 30,
+        "mode": 4, "param": 120},   # weekdays 05:30, High Demand, 60 degC
+   ]
+   as_read = scenario.model_copy(update={"commands": sim.Commands(
+       reservations=device_entries,
+   )})
+   # And back to the form update_reservations writes:
+   [e.to_device() for e in as_read.commands.reservations]
+
+A plan's other commands are taken in the keys the heater profile lists
+(``sim.profile.COMMAND_KEYS``), each set at the start:
+
+.. code-block:: python
+
+   away = scenario.model_copy(update={"commands": sim.Commands.model_validate({
+       "vacation": {"days": 3},
+       "tou": {"enabled": True},
+       "anti_legionella": {"enabled": False},
+   })})
+   result = sim.simulate(away, params)
+
+``power`` off and a vacation that lasts the whole span are walked: the
+heater starts no heating, as it does when it starts in Power Off or
+Vacation. A command the walk cannot follow (a vacation whose return
+falls inside the span, power on from Power Off, anti-legionella or
+demand response turned on) is left out and named in ``reasons``, such
+as ``vacation_not_modelled``. :doc:`/reference/simulator-inputs` gives
+each command's rule.
 
 
 Weigh what a change leaves behind
@@ -912,8 +991,10 @@ after the probe crosses the line. ``inlet_f`` is the mains the draw
 meets, else the parameters' mains on the day ``on``
 (``DrawParams.mains_on``), else ``DrawParams.inlet_temp_f``: through a
 valve, a colder
-inlet takes more tank water a gallon. The water standing in your pipe is
-not in them. ``delivery.within_resolution`` says whether a probe error
+inlet takes more tank water a gallon. Mains at the line, or a valve
+that delivers the line from mains no colder than its setting, never run
+the tap under it: the gallons are unlimited (``math.inf``). The water
+standing in your pipe is not in them. ``delivery.within_resolution`` says whether a probe error
 of ``ReadinessParams.probe_resolution_f`` would take the answer across a
 volume.
 
@@ -937,10 +1018,14 @@ showers it is ready for.
    for m in r.bath.by_mode:
        print(f"{m.mode:<12} {m.ready_in_minutes} min, {m.energy_kwh} kWh"
              f"{'' if m.reachable_now else ' (not reachable now)'}")
-   print(r.showers.ready_for_whole, "showers;", r.reasons)
+   print(r.bath.ready_for_whole, "baths,", r.showers.ready_for_whole,
+         "showers;", r.reasons)
 
 The gallons now are ``readiness``'s, from the scenario's state (its
-``layers_f`` when given) at its inlet. When the bath isn't ready, each
+``layers_f`` when given) at its inlet. ``r.bath.ready_for_whole`` is the
+whole baths they make: none unless ``r.bath.ready``, else each whole
+bath's worth, at least the one, as ``r.showers.ready_for_whole`` counts
+whole showers. When the bath isn't ready, each
 mode's time is the scenario walked with that mode written at its start,
 as the heater takes a mode write (an element mode runs its entry rule),
 for up to 24 hours (``READY_HORIZON``), to the first instant its layers
@@ -955,7 +1040,9 @@ still take. An element mode's row carries the reasons its walk adds to
 the answer's. An element mode is not reachable inside a TOU
 window, nor anything while heating is disabled. The bath defaults to
 ``ReadinessParams.bath_gal`` (28.7 gal, one household's), the shower to
-12 gal; ``defaults_used`` says when they were used.
+12 gal; ``defaults_used`` says when they were used. The bath is judged
+to a tenth of a gallon delivered, so one that rounds to 0.0 gal raises
+``ValueError``, as a shower of 0 gal or less does.
 
 The recovery is the core's physics alone. It runs short on long
 recoveries (:doc:`/explanation/simulator`), so a long time to ready is
@@ -1524,13 +1611,31 @@ below the setpoint the upper element starts.
 Plan with the heater profile
 ============================
 
-A scheduler plans with ``sim.profile.heater_profile(params.tank)``.
-It lists the modes and the energy each one uses, the setpoint range
-and step, the depletion threshold and the tank's volume, all as the
-simulation runs them. ``profile.revision`` changes only when one of
-those facts changes, so re-read the profile when the revision moves.
-Express a plan as reservation entries (``Commands.reservations``) and
-writes (``Commands.writes``).
+A scheduler plans with the heater's profile:
+
+.. code-block:: python
+
+   from nwp500.sim.profile import heater_profile
+
+   profile = heater_profile(params.tank, params.readiness.line_f,
+                            feature=feature)
+   doc = profile.document()  # facts() and revision
+
+It lists every mode with its code, the energy each one uses and whether
+the simulation models it, the setpoint range and step, the device
+commands with each key's type and range, the depletion threshold and
+the tank's volume. ``feature`` (a ``DeviceFeature``) gives the device's
+own setpoint range; without it the range is 104.9 to 149.9 degF.
+Vacation and Power Off are listed with ``modelled`` false: a write into
+either is dropped from the walk (``write_mode_not_modelled``).
+``profile.revision`` changes only when one of those facts changes, so
+re-read the profile when the revision moves. A client without the
+``sim`` extra builds the same profile, less the tank and the depletion
+threshold, from ``nwp500.heater`` (:doc:`/reference/python_api/heater`).
+Express a plan as reservation entries (``Commands.reservations``, in
+the simulator's form or the device's), writes (``Commands.writes``) and
+the profile's commands (``Commands.vacation``, ``power``,
+``anti_legionella``, ``tou``, ``demand_response``).
 
 To keep a ``next_recovery`` answer and reuse it later, age it with
 ``sim.recovery_as_of(rec, computed_at, now)``. Otherwise its start
@@ -1601,8 +1706,8 @@ threshold reads 104.9 degF at rest (``Record.resting_upper_on_f``).
 ``seen.slots`` are the energy per 10 minutes from the heater's own
 power; ``seen.modes`` are the mode in force and whether the heat source
 the heater reported showed it in effect, named by a heater profile
-(``profile=``, the simulation's own by default; a mode it does not list
-has no name) from when its revision took effect (``revision_since=``).
+(``profile=``, the simulation's own by default, which names Vacation
+and Power Off too; a mode it does not list has no name) from when its revision took effect (``revision_since=``).
 ``seen.gaps`` are where a
 signal's record was missing, and a start a missing record could explain
 gets no ``cause``. Set them beside the replay's ``result.heating``
@@ -1640,7 +1745,8 @@ way. The other answers (``time_to_ready``, ``next_recovery``,
    doc["deliverable_gal"]  # the answer's fields, at the top level
 
 Each document has ``schema_version`` and ``kind``, the answer's type
-in snake case (``codec.DOCUMENT_KINDS``). Instants are ISO 8601 strings,
+in snake case (``codec.DOCUMENT_KINDS``). A heater profile's fields are
+``profile.document()``: its facts and its ``revision``. Instants are ISO 8601 strings,
 nested answers are objects, and a number that isn't finite is null, so
 the document is strict JSON.
 

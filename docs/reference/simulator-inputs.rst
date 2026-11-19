@@ -213,8 +213,10 @@ Built by ``sim_adapters.settings(status)``.
      - mode
      - 1
      - ``DeviceStatus.dhw_operation_setting``. In Vacation (5) or Power
-       Off (6) the heater starts no heating. A status in Standby (0) is
-       refused by ``sim_adapters.settings``.
+       Off (6) the heater starts no heating, and a compressor or element
+       running at the start stops there: the restart lockout runs from
+       the start, and ``end_history`` holds the stop. A status in
+       Standby (0) is refused by ``sim_adapters.settings``.
    * - ``hp_lower_on_f``
      - degF
      - None
@@ -322,7 +324,7 @@ A ``ReservationEntry`` is one entry as the device stores it:
      - Device field
    * - ``enabled``
      - bool
-     - ``enable`` (2 on, 1 off)
+     - ``enable`` (2 on, 1 off; any value other than 2 reads as off)
    * - ``week``
      - day mask
      - ``week``
@@ -335,6 +337,26 @@ A ``ReservationEntry`` is one entry as the device stores it:
    * - ``setpoint_half_c``
      - half degC
      - ``param``
+
+Only the names differ, and ``enable``'s 2 and 1 for ``enabled``: the day
+mask and the half-degree setpoint are the device's own values.
+``Schedules.reservations`` and ``Commands.reservations`` take entries in
+either form. An entry in the device's form is a mapping of all six
+device fields, as the device reports an entry, or the library's
+``nwp500.models.ReservationEntry`` (``ReservationSchedule.reservation``
+from ``request_reservations``). A boolean ``enable`` is refused, since
+``True`` is 1, which the device reads as off.
+
+.. code-block:: python
+
+   device = {"enable": 2, "week": 124, "hour": 5, "min": 30,
+             "mode": 4, "param": 120}
+   entry = sim.ReservationEntry.from_device(device)
+   entry.to_device() == device   # True: the form update_reservations writes
+   sim.Commands(reservations=[device])   # read as the simulator's form
+
+``sim.inputs.DEVICE_ENTRY_FIELDS`` maps each device field to the
+simulator's.
 
 An entry fires in its minute on each day its mask names, setting the
 mode and the setpoint. Its ``mode`` is a ``ReservationMode``: 1-4 are
@@ -476,7 +498,63 @@ heater does on its own.
        says. None keeps the heater's.
    * - ``tou_enabled``
      - None
-     - The TOU switch, set at the start. None keeps the heater's.
+     - The TOU switch, set at the start. None keeps the heater's. A
+       plan's ``tou`` command, ``{"enabled": true}``, is taken in its
+       place; giving both is refused.
+   * - ``vacation``
+     - None
+     - ``{"days": 1-99}``: Vacation from the start. The heater returns
+       to its mode 9 hours before its days are up and heats to the
+       setpoint (the user's manual, 3.4.5). A span that ends by then
+       walks as Vacation (5): no heating, and each entry skipped. A
+       span the return falls inside, or a heater in Power Off, is not
+       modelled: the command is left out and ``reasons`` says
+       ``vacation_not_modelled``. ``element_mode``, ``time_to_ready``
+       and ``next_recovery`` judge it over their 24-hour look ahead,
+       whatever the scenario's horizon. A ``carry_on`` tail inside the
+       vacation is not shown going on alike when walking it on passes
+       the return (``Carried.heating_alike`` is False).
+   * - ``power``
+     - None
+     - ``{"on": false}`` walks as Power Off (6) from the start: heating
+       running there stops (`Settings: Settings`_), and none starts
+       until a reservation entry turns the heater on.
+       ``{"on": true}`` is no change on a heater that is on; on one in
+       Power Off it returns the heater to the mode it had before, which
+       the scenario does not hold, so it is left out with
+       ``power_not_modelled``.
+   * - ``anti_legionella``
+     - None
+     - ``{"enabled": bool, "period_days": 1-30}``, ``period_days`` given
+       with ``enabled`` true only. The walk runs no anti-legionella
+       cycle, so ``false`` is walked as it is. ``true`` is
+       ``anti_legionella_not_modelled``: when a cycle runs depends on
+       the heater's own day count, and what it heats with is not
+       fitted.
+   * - ``demand_response``
+     - None
+     - ``{"enabled": bool}``. The walk takes no utility event, so
+       ``false`` is walked as it is. ``true`` is
+       ``demand_response_not_modelled``: the events a utility will send
+       are not known.
+
+The commands besides ``writes`` take these keys, as a plan carries them
+(``sim.profile.COMMAND_KEYS``), and are applied at the start in that
+order: ``vacation``, then ``power``. Each whole number is an ``int``
+and each flag a ``bool``; a ``bool`` for a number, or a number for a
+flag, is refused. ``SimulationResult.end_settings`` holds the mode the
+walk ended in, Vacation or Power Off included.
+
+Every answer from a scenario names the commands it leaves out, whether
+or not it walks: ``simulate``, ``element_mode`` and ``carry_on``'s tails
+in their ``reasons``, ``time_to_ready`` in ``Readiness.reasons`` (with
+the bath ready now, or heating disabled, too), and ``next_recovery`` in
+``Recovery.reasons``.
+
+A heater in Vacation or Power Off at the start, by its settings or its
+commands, heats in no mode: ``time_to_ready`` gives every mode as not
+reachable now and its recovery as ``not_scheduled``, with the bath
+ready now too, and reads nothing as running there.
 
 
 Circulation
@@ -688,8 +766,11 @@ in ``unfitted`` (``INSTALLATION_TERMS``: one installation's fits stand
 in for them); ``site_example_params`` is the installation the values were
 fitted at, its valve included, and ``with_valve(params, (intercept_f,
 slope))`` sets a valve's delivery line, delivered water at ``intercept +
-slope x upper zone``, never above the tank. ``NO_VALVE`` is ``(0, 1)``;
-``SITE_VALVE`` that installation's ``(53.56, 0.485)``. Each field says whether it
+slope x upper zone``, never above the tank. ``with_valve(params,
+delivery_f)`` sets a valve that delivers ``delivery_f`` degF, the
+tank's own water while the tank is cooler (the line ``(delivery_f,
+0)``). ``NO_VALVE`` is ``(0, 1)``; ``SITE_VALVE`` that installation's
+``(53.56, 0.485)``. Each field says whether it
 describes the heater or the installation (``params.scope_of``) and,
 where it matters, the frame it was fitted in (``params.note_of``):
 
@@ -1167,6 +1248,13 @@ The ones about inputs and parameters:
    * - ``write_mode_not_modelled``, ``reservation_mode_not_modelled``
      - A write into Vacation or Power Off, or a reservation in Power Off
        (or a mode id other than 1-4), was left out.
+   * - ``vacation_not_modelled``, ``power_not_modelled``
+     - A ``vacation`` command whose return falls inside the span (or
+       given to a heater in Power Off), or ``power`` on given to a heater
+       in Power Off, was left out (`Commands: Commands`_).
+   * - ``anti_legionella_not_modelled``, ``demand_response_not_modelled``
+     - The command turned the function on; the walk runs no cycle and
+       takes no utility event (`Commands: Commands`_).
    * - ``physics_truncated=integration_bound_reached``
      - A served recovery rests on an integration that hit its bound.
    * - ``physics_failed``

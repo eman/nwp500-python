@@ -5,9 +5,105 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+
+- **Protocols for the Home Assistant client.**
+  ``sim_home_assistant.HistoryClient`` (``state`` and ``read_history``)
+  and ``WeatherClient`` (those, ``forecast`` and ``outdoor_history``)
+  are the methods the Home Assistant readers call, as
+  ``typing.Protocol`` classes. ``read_heater_history``,
+  ``record_inputs`` and ``HomeAssistantTank`` take a ``HistoryClient``;
+  ``HomeAssistantEnvironment`` and ``fit_location_air`` a
+  ``WeatherClient``. ``HomeAssistantClient`` is both, and a client that
+  reads Home Assistant another way type-checks without a cast. See
+  "Home Assistant sources" in :doc:`/reference/python_api/sim`.
+- **The heater's description in the core library.** ``nwp500.heater``
+  holds the device facts a scheduler plans with: every mode with its
+  code, its energy sources and whether the simulation models it, the
+  setpoint range and step, and the device commands with their keys.
+  ``HeaterProfile`` and ``check`` moved there from ``sim.profile``,
+  which re-exports them, and ``device_profile(feature)`` builds a
+  device's profile. See :doc:`/reference/python_api/heater`.
+- **A device's own setpoint range.** ``device_profile(feature)`` and
+  ``sim.profile.heater_profile(..., feature=feature)`` take the range
+  from a ``DeviceFeature``; without one it stays 104.9 to 149.9 degF.
+  See :doc:`/reference/python_api/heater`.
+- **Command value ranges.** ``COMMAND_RANGES`` gives each whole-number
+  command key's range (vacation ``days`` 1 to 99, anti-Legionella
+  ``period_days`` 1 to 30) and ``COMMAND_KEYS_ONLY_WITH`` the keys
+  given only with another; the profile's document states both under
+  ``command_keys``. The MQTT client checks the same ranges. See
+  "Commands" in :doc:`/reference/python_api/heater`.
+- **A walk's heatings, and when the tank is first at temperature.**
+  ``SimulationResult.heatings`` chains the heating intervals into
+  heatings (``sim.Heating``): an interval starting within a minute of
+  the end of the one reaching furthest before it joins it, such as
+  Electric's lower element after its upper. Each says when it starts
+  (its earliest interval's start) and ends, why it ends, its electricity, and whether the tank is at
+  temperature then. ``SimulationResult.fully_heated_at`` is the end of
+  the first heating that ends at temperature, and the result document
+  carries it. See "Run it and read the answer" in
+  :doc:`/how-to/simulate-heater`.
+- **Whole baths on the readiness answer.** ``Readiness.bath`` has
+  ``ready_for_whole``, as ``Readiness.showers`` has: none unless the
+  bath is ready, else each whole bath's worth of the deliverable
+  gallons, at least the one (``sim.ready.whole_baths``).
+  ``time_to_ready`` raises ``ValueError`` for a bath that rounds to
+  0.0 gal delivered, or a shower that is not positive. See "Ask when
+  a bath will be ready" in :doc:`/how-to/simulate-heater`.
+- **A mixing valve given as the temperature it delivers.**
+  ``with_valve(params, 120.0)`` sets a valve that delivers 120 degF, or
+  the tank's own water while the tank is cooler, beside
+  ``with_valve(params, (intercept_f, slope))`` for a measured line. See
+  "Parameters: HeaterParams" in :doc:`/reference/simulator-inputs`.
+- **The heater's tank layers laid on where they apply.**
+  ``sim_live.with_layers`` lays the heater's layers on a scenario only
+  when it is the heater's tank now (the heater's start, parameters and
+  state apart from the layers), keeps the ``layers_f`` a document,
+  ``replace=`` or ``over=`` names (``Built.layers_given``), and adds a
+  note when the walk reads the tank from a document's own layers
+  (``OWN_LAYERS_NOTE``) or leaves the heater's off
+  (``LAYERS_NOT_USED_NOTE``). See "Fetch what the heater reports" in
+  :doc:`/how-to/simulate-heater`.
+- **A scenario takes reservation entries as the device holds them.**
+  ``Schedules.reservations`` and ``Commands.reservations`` read an entry
+  in the device's six fields (``enable``, ``week``, ``hour``, ``min``,
+  ``mode``, ``param``), as a mapping or as the library's
+  ``ReservationEntry``, so a list read with ``request_reservations``
+  goes in as it is. ``sim.ReservationEntry.from_device`` and
+  ``to_device`` convert one entry either way, and
+  ``sim.inputs.DEVICE_ENTRY_FIELDS`` maps the field names. See the
+  reservation entry table in :doc:`/reference/simulator-inputs`.
+- **A scenario's commands take every command a plan carries.**
+  ``Commands`` takes ``vacation``, ``power``, ``anti_legionella`` and
+  ``demand_response`` in the keys of ``sim.profile.COMMAND_KEYS``, and
+  ``tou`` in place of ``tou_enabled``. Power off, and a vacation that
+  lasts the whole span, are walked as Power Off and Vacation; the
+  others the walk cannot follow are left out and named in ``reasons``
+  (``vacation_not_modelled``, ``power_not_modelled``,
+  ``anti_legionella_not_modelled``, ``demand_response_not_modelled``).
+  ``time_to_ready`` names them whether or not it walks a mode, and
+  ``next_recovery``'s ``Recovery`` has ``reasons`` for them.
+  ``sim_live.overlay`` reads each layer's ``tou`` as ``tou_enabled``
+  before laying it on. See "Commands" in
+  :doc:`/reference/simulator-inputs`.
+
 Changed
 -------
 
+- **The profile lists every mode.** ``HeaterProfile.modes`` holds
+  ``ProfileMode`` entries for all six modes, Vacation and Power Off
+  with no sources and ``modelled`` false, so ``name_of`` names them and
+  ``sim_adapters.observe`` reports them by name. ``modelled_names``
+  gives the modes the simulation runs. The ``revision`` moves with the
+  new facts. See "Modes" in :doc:`/reference/python_api/heater`.
+- **A profile document is its facts and its revision.**
+  ``HeaterProfile.document()`` and ``codec.to_document(profile)`` give
+  ``facts()`` with ``revision``, in place of the dataclass's fields.
+  See "The profile as a document" in
+  :doc:`/reference/python_api/heater` and "Plan with the heater
+  profile" in :doc:`/how-to/simulate-heater`.
 - **The upper element's heat rises as a plume.** The water it heats
   leaves the element's layer and rises to where the column is as warm,
   and the water it passes sinks to take its place
@@ -21,6 +117,54 @@ Changed
   element keeps its layer. ``upper_plume_gpm=0`` gives the old
   behaviour. See "The elements" in
   :doc:`/explanation/simulator-methodology`.
+
+Fixed
+-----
+
+- **The CLI's day counts take the device's ranges.** ``vacation-duration``
+  refused 31 to 99 days, which the device and the MQTT client accept;
+  ``vacation``, ``anti-legionella enable --period`` and
+  ``anti-legionella set-period`` now check the same ranges as the MQTT
+  client (``nwp500.heater.VACATION_DAYS`` and
+  ``ANTI_LEGIONELLA_PERIOD_DAYS``) before connecting. See
+  :doc:`/reference/python_api/cli`.
+- **Reservation lists relayed on the heater's own topic are read.**
+  The cloud sometimes republishes a reservation read's ``rsv/rd`` list
+  on ``cmd/52/navilink-<mac>/res/rsv/rd`` instead of the reader's
+  response topic. ``subscribe_reservation_response`` listened only on
+  the client-keyed topic, so ``fetch_reservations`` and
+  ``update_reservations_confirmed`` timed out. It now takes the list from
+  the device-keyed topic too. See "Reservation and Recirculation Schedule
+  Responses" in :doc:`/reference/protocol/mqtt_protocol`.
+- **Calibration no longer raises a pandas FutureWarning.** The heat
+  pump fit's recovery frame held the first run's ``minutes_off`` (NaN)
+  as an object column, and pandas 2 warned on concatenating it on every
+  calibration. The column is a float column now.
+- **A scenario's null layers start ``nwp-cli simulate`` from the
+  probes.** With the Home Assistant draw flow configured, a scenario
+  document whose state gives ``layers_f`` as null was walked from the
+  tank's history layers anyway; it now starts from the two probes, as
+  a list of its own is kept. See "From the command line" in
+  :doc:`/how-to/simulate-heater`.
+- **A mixing valve set no warmer than the mains no longer divides by
+  zero.** With the valve delivering the line from its cold side alone,
+  as a valve set to 120 degF does with 120 degF mains or warmer, or the
+  site's line once its delivery falls to the mains, the tank's
+  deliverable gallons (``readiness``, ``time_to_ready``, a draw
+  window's ``deliverable_gal``) raised ``ZeroDivisionError``. They are
+  now unlimited, as for mains at the line. See "Ask how much hot water
+  is left" in :doc:`/how-to/simulate-heater`.
+- **A simulation that starts in Vacation or Power Off stops what was
+  running.** A scenario whose state has the compressor or an element
+  running, with its settings in Vacation or Power Off (as a tail
+  carried on from a walk that ended heating can be), now stops them at
+  the start: the restart lockout runs from there and ``end_history``
+  holds the stop. Before, no stop was recorded, a reservation entry
+  could restart the compressor at once, and the history given was
+  lost. ``time_to_ready`` with the bath ready now also gave every mode
+  as reachable on a heater in Vacation or Power Off; it now gives none,
+  and its recovery as ``not_scheduled``. See the ``mode`` row in
+  :doc:`/reference/simulator-inputs`.
 
 Version 9.13.3 (2026-11-15)
 ===========================
