@@ -54,7 +54,7 @@ from nwp500.sim.heat_pump_recovery import (
     rate_scale,
 )
 from nwp500.sim.heating_trajectory import HeatingPoint, from_walk
-from nwp500.sim.params import CirculationParams, CompressorParams, HeaterParams
+from nwp500.sim.params import CirculationParams, HeaterParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import (
     HEAT_MAP_OUT_OF_DOMAIN,
@@ -259,14 +259,6 @@ class Physics(Protocol):
         """The tank just after a delivered draw of ``gal`` at ``at``,
         through the valve or, ``undiluted``, its water whole."""
         ...
-
-
-def _water_outside(c: CompressorParams, books: st.Books) -> bool:
-    """Whether a walk's heating, if any, ran with the probes' mean over
-    it outside the heat map's water span."""
-    return books.compressor_heat_h > 0.0 and heat_water_outside(
-        c, books.compressor_mean_f_h / books.compressor_heat_h
-    )
 
 
 def ambient_window_mean(
@@ -838,8 +830,11 @@ class TankPhysics:
                 under_way=under_way,
             )
         reasons = scaled.reasons
-        if heat_air_outside(self.params.compressor, air) or _water_outside(
-            self.params.compressor, walked.books
+        books = walked.books
+        if heat_air_outside(self.params.compressor, air) or (
+            self.heating_reasons(
+                books.compressor_heat_h, books.compressor_mean_f_h
+            )
         ):
             reasons = (*reasons, HEAT_MAP_OUT_OF_DOMAIN)
         return Recovered(
