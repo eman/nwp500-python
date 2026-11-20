@@ -202,7 +202,9 @@ class OutputFormatter:
             report.totals, "ENERGY USAGE - REQUESTED MONTHS"
         )
         if report.months:
-            self._print_energy_rich(report.months)
+            self._print_daily_energy_rich(
+                report.months, "MONTHLY BREAKDOWN", "Month", width=15
+            )
         if report.lifetime is not None:
             self.print_lifetime_energy(report.lifetime)
 
@@ -466,32 +468,6 @@ class OutputFormatter:
         )
         self.console.print(table)
 
-    def _print_energy_rich(self, months: list[EnergyPeriodRow]) -> None:
-        """Rich-enhanced monthly energy breakdown."""
-        assert self.console is not None
-
-        table = cast(Any, Table)(title="MONTHLY BREAKDOWN", show_header=True)
-        table.add_column("Month", style="cyan", width=15)
-        table.add_column(
-            "Total kWh", style="magenta", justify="right", width=12
-        )
-        table.add_column("HP Usage", width=18)
-        table.add_column("HE Usage", width=18)
-
-        for month in months:
-            total_kwh = month.total_wh / 1000
-            hp_kwh = month.heat_pump_wh / 1000
-            he_kwh = month.heat_element_wh / 1000
-            hp_pct = month.heat_pump_percentage
-            he_pct = month.heat_element_percentage
-
-            hp_text, he_text = self._energy_usage_cells(
-                hp_kwh, hp_pct, he_kwh, he_pct
-            )
-            table.add_row(month.label, f"{total_kwh:.1f}", hp_text, he_text)
-
-        self.console.print(table)
-
     def _energy_usage_cells(
         self, hp_kwh: float, hp_pct: float, he_kwh: float, he_pct: float
     ) -> tuple[str, str]:
@@ -531,12 +507,18 @@ class OutputFormatter:
         days: list[EnergyPeriodRow],
         title: str = "DAILY BREAKDOWN",
         column: str = "Day",
+        width: int | None = None,
     ) -> None:
-        """Rich-enhanced per-period energy breakdown."""
+        """Rich-enhanced per-period energy breakdown.
+
+        ``width`` is the first column's; by default it fits ``column``.
+        """
         assert self.console is not None
 
         table = cast(Any, Table)(title=title, show_header=True)
-        table.add_column(column, style="cyan", width=max(6, len(column) + 6))
+        table.add_column(
+            column, style="cyan", width=width or max(6, len(column) + 6)
+        )
         table.add_column(
             "Total kWh", style="magenta", justify="right", width=12
         )
