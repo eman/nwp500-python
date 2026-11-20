@@ -136,19 +136,13 @@ def drawn_gal(s: Step, params: HeaterParams) -> float:
     return gal / share if share > 0.0 else 0.0
 
 
-def _runs(on: Sequence[bool]) -> tuple[tuple[int, int], ...]:
-    """The runs of ``on``: each one's first and last-plus-one index."""
-    out: list[tuple[int, int]] = []
-    start: int | None = None
-    for k, v in enumerate(on):
-        if v and start is None:
-            start = k
-        elif not v and start is not None:
-            out.append((start, k))
-            start = None
-    if start is not None:
-        out.append((start, len(on)))
-    return tuple(out)
+def true_runs(on: Sequence[bool] | np.ndarray) -> tuple[tuple[int, int], ...]:
+    """The runs of True in ``on``: each one's first and last-plus-one
+    index."""
+    edges = np.diff(np.r_[0, np.asarray(on, dtype=np.int8), 0])
+    starts = np.flatnonzero(edges == 1).tolist()
+    ends = np.flatnonzero(edges == -1).tolist()
+    return tuple(zip(starts, ends, strict=True))
 
 
 def record(steps: Sequence[Step], params: HeaterParams) -> TankRecord:
@@ -209,11 +203,11 @@ def record(steps: Sequence[Step], params: HeaterParams) -> TankRecord:
         upper_f=np.array(upper, dtype=float),
         lower_f=np.array(lower, dtype=float),
         air_f=np.array(air, dtype=float),
-        compressor=_runs(compressor),
-        element=_runs(element),
-        circulating=_runs(circulating),
+        compressor=true_runs(compressor),
+        element=true_runs(element),
+        circulating=true_runs(circulating),
         draws=tuple(sorted(drawn.values())),
-        lower_element=_runs(lower_element),
+        lower_element=true_runs(lower_element),
     )
 
 

@@ -35,7 +35,7 @@ import pandas as pd
 from scipy.optimize import least_squares
 
 from nwp500.sim.circulation import cooled_share, steady_share
-from nwp500.sim.history import REPLAY
+from nwp500.sim.history import REPLAY, true_runs
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.heat_pump import start_hold_min
@@ -203,13 +203,6 @@ class TankRecord:
         )
 
 
-def _runs(on: np.ndarray) -> tuple[Run, ...]:
-    edges = np.diff(np.r_[0, on.astype(np.int8), 0])
-    starts = np.where(edges == 1)[0]
-    ends = np.where(edges == -1)[0]
-    return tuple(zip(starts.tolist(), ends.tolist(), strict=True))
-
-
 def tank_record(
     frame: pd.DataFrame, draws: Iterable[tuple[datetime, float]] = ()
 ) -> TankRecord:
@@ -249,12 +242,12 @@ def tank_record(
         # The air holds through a gap in its readings, and before the
         # first, as the walk needs one.
         air_f=value("air_f").ffill().bfill().to_numpy(dtype=float),
-        compressor=_runs(held("compressor_on")),
-        element=_runs(held("element_on")),
-        circulating=_runs(held("circulating")),
+        compressor=true_runs(held("compressor_on")),
+        element=true_runs(held("element_on")),
+        circulating=true_runs(held("circulating")),
         draws=tuple(sorted(metered)),
         draw_seconds={t: s for t, _, s in draw_durations(frame, metered) if s},
-        lower_element=_runs(held("lower_element_on")),
+        lower_element=true_runs(held("lower_element_on")),
     )
 
 

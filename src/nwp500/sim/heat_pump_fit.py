@@ -41,6 +41,7 @@ from nwp500.sim.calibration import (
     water_in_use,
     water_over,
 )
+from nwp500.sim.history import true_runs
 from nwp500.sim.params import (
     MAP_REF_AIR_F,
     MAP_REF_WATER_F,
@@ -423,14 +424,6 @@ def run_ons(frame: pd.DataFrame) -> tuple[pd.DataFrame, RunOnFit]:
     )
 
 
-def _stretches(ok: np.ndarray) -> list[tuple[int, int]]:
-    """The runs of True in ``ok``: ``[i, j)``."""
-    edges = np.flatnonzero(np.diff(np.concatenate(([0], ok.astype(int), [0]))))
-    return [
-        (int(i), int(j)) for i, j in zip(edges[::2], edges[1::2], strict=True)
-    ]
-
-
 def _mean(values: np.ndarray) -> float:
     """The finite values' mean; NaN with none."""
     ok = np.isfinite(values)
@@ -483,7 +476,7 @@ def climb_heat(
             & ~g["water"].to_numpy(dtype=bool)
             & np.isfinite(g["air_f"].to_numpy(dtype=float))
         )
-        for i, j in _stretches(ok):
+        for i, j in true_runs(ok):
             if j - i < min_minutes:
                 continue
             s = g.iloc[i:j]
@@ -555,7 +548,7 @@ def power_blocks(
         phase = g["phase"].to_numpy()
         coldest = np.fmin.accumulate(g["air_f"].to_numpy(dtype=float))
         for name in PHASES:
-            for i, j in _stretches(phase == name):
+            for i, j in true_runs(phase == name):
                 for a in range(i, j - block_minutes + 1, block_minutes):
                     s = g.iloc[a : a + block_minutes]
                     watts = s["power_w"].to_numpy(dtype=float)
