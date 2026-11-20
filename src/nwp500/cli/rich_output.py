@@ -12,12 +12,10 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
-from rich.tree import Tree
 
 from .presentation import (
     DailyEnergyReport,
@@ -255,14 +253,6 @@ class OutputFormatter:
         """
         self._print_info_rich(message)
 
-    def print_device_list(self, devices: list[dict[str, Any]]) -> None:
-        """Print list of devices with status indicators.
-
-        Args:
-            devices: List of device dictionaries with status info
-        """
-        self._print_device_list_rich(devices)
-
     def print_tou_schedule(
         self,
         name: str,
@@ -324,45 +314,6 @@ class OutputFormatter:
             padding=(0, 2),
         )
         self.console.print(panel)
-
-    def _print_device_list_rich(self, devices: list[dict[str, Any]]) -> None:
-        """Rich-enhanced device list output."""
-        assert self.console is not None
-
-        if not devices:
-            panel = cast(Any, Panel)("No devices found", border_style="yellow")
-            self.console.print(panel)
-            return
-
-        table = cast(Any, Table)(title="🏘️ Devices", show_header=True)
-        table.add_column("Device Name", style="cyan", width=20)
-        table.add_column("Status", width=15)
-        table.add_column("Temperature", style="magenta", width=15)
-        table.add_column("Power", width=12)
-        table.add_column("Updated", style="dim", width=12)
-
-        for device in devices:
-            name = device.get("name", "Unknown")
-            status = device.get("status", "unknown").lower()
-            temp = device.get("temperature", "N/A")
-            power = device.get("power", "N/A")
-            updated = device.get("updated", "Never")
-
-            # Status indicator
-            if status == "online":
-                status_indicator = "🟢 Online"
-            elif status == "idle":
-                status_indicator = "🟡 Idle"
-            elif status == "offline":
-                status_indicator = "🔴 Offline"
-            else:
-                status_indicator = f"⚪ {status}"
-
-            table.add_row(
-                name, status_indicator, str(temp), str(power), updated
-            )
-
-        self.console.print(table)
 
     def _print_tou_rich(
         self,
@@ -670,25 +621,6 @@ class OutputFormatter:
         """
         self._print_json_highlighted_rich(data)
 
-    def print_device_tree(
-        self, device_name: str, device_info: dict[str, Any]
-    ) -> None:
-        """Print device information as a tree structure.
-
-        Args:
-            device_name: Name of the device
-            device_info: Dictionary of device information
-        """
-        self._print_device_tree_rich(device_name, device_info)
-
-    def print_markdown_report(self, markdown_content: str) -> None:
-        """Print markdown-formatted content.
-
-        Args:
-            markdown_content: Markdown formatted string
-        """
-        self._print_markdown_rich(markdown_content)
-
     # Rich implementations (Phase 3)
 
     def _print_json_highlighted_rich(self, data: Any) -> None:
@@ -700,57 +632,6 @@ class OutputFormatter:
             json_str, "json", theme="monokai", line_numbers=False
         )
         self.console.print(syntax)
-
-    def _print_device_tree_rich(
-        self, device_name: str, device_info: dict[str, Any]
-    ) -> None:
-        """Rich-enhanced tree output for device information."""
-        assert self.console is not None
-
-        tree = cast(Any, Tree)(f"📱 {device_name}", guide_style="bold cyan")
-
-        # Organize info into categories
-        categories = {
-            "🆔 Identity": [
-                "serial_number",
-                "model_type",
-                "country_code",
-                "volume_code",
-            ],
-            "🔧 Firmware": [
-                "controller_version",
-                "panel_version",
-                "wifi_version",
-                "recirc_version",
-            ],
-            "⚙️ Configuration": [
-                "temperature_unit",
-                "dhw_temp_range",
-                "freeze_protection_range",
-            ],
-            "✨ Features": [
-                "power_control",
-                "heat_pump_mode",
-                "recirculation",
-                "energy_usage",
-            ],
-        }
-
-        for category, keys in categories.items():
-            category_node = tree.add(category)
-            for key in keys:
-                if key in device_info:
-                    value = device_info[key]
-                    category_node.add(f"{key}: [green]{value}[/green]")
-
-        self.console.print(tree)
-
-    def _print_markdown_rich(self, content: str) -> None:
-        """Rich-enhanced markdown rendering."""
-        assert self.console is not None
-
-        markdown = cast(Any, Markdown)(content)
-        self.console.print(markdown)
 
 
 # Global formatter instance
