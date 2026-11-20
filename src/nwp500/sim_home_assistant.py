@@ -748,23 +748,6 @@ def held(
     return out
 
 
-def busy(*spans: Sequence[Span]) -> list[Span]:
-    """``spans`` together, overlapping ones joined, in time order, in
-    UTC."""
-    out: list[Span] = []
-    flat = (
-        (a.astimezone(UTC), b.astimezone(UTC))
-        for group in spans
-        for a, b in group
-    )
-    for a, b in sorted(flat):
-        if out and a <= out[-1][1]:
-            out[-1] = (out[-1][0], max(out[-1][1], b))
-        else:
-            out.append((a, b))
-    return out
-
-
 def to_gal(value: float, unit: str | None) -> float:
     """A volume in ``unit`` (gal, L, m³, ft³), in US gallons."""
     u = (unit or "").strip().lower()
@@ -835,7 +818,7 @@ def demand_spans(
             on.append((a, b))
         elif state != "off":
             dark.append((a, b))
-    return busy(on), busy(dark)
+    return sa.join_spans(on), sa.join_spans(dark)
 
 
 def percent(value: float, unit: str | None) -> float:
@@ -1170,11 +1153,11 @@ def mains_plateau(
             return None
         # Before the pump's first reading, a draw may have overlapped a
         # run: skipped, as one that overlaps a run is.
-        runs = busy(known, unknown)
+        runs = sa.join_spans(known, unknown)
     # A draw while the probe or the pump was unavailable may have
     # overlapped a run unseen: the plateau skips it, as it skips one
     # that overlaps a run.
-    busy_spans = busy(
+    busy_spans = sa.join_spans(
         runs,
         unread,
         *(history.outages.get(n, []) for n in (probe, pump) if n),
@@ -1473,7 +1456,7 @@ async def _heater_air(
             ambient,
             compressor,
             now,
-            busy(unread, got.outages.get(ambient_id, [])),
+            sa.join_spans(unread, got.outages.get(ambient_id, [])),
         )
 
     return cast("tuple[list[Reading], Reading | None]", await run(work))
@@ -1851,7 +1834,7 @@ async def record_inputs(
         elif whole("demand", [(t, 0.0) for t, _ in rows]):
             on, dark = demand_spans(rows, start, end)
             # While it was unavailable, a draw may have gone unseen.
-            drawing = busy(on, dark)
+            drawing = sa.join_spans(on, dark)
             outage("demand", dark)
     circulating = None
     pump_id = e.circulation_speed
@@ -1865,17 +1848,23 @@ async def record_inputs(
                 down = got.outages.get(pump_id, [])
                 runs = pump_runs(rpm, start, end)
                 # While the pump was unavailable, it may have run.
-                circulating = None if runs is None else busy(runs, down)
+                circulating = (
+                    None if runs is None else sa.join_spans(runs, down)
+                )
                 outage("circulation", down)
         except ValueError as err:
             notes.append(f"circulation: {err}")
     air_down = (
-        tuple(busy(got.outages.get(e.air, []), unread.get("air", [])))
+        tuple(sa.join_spans(got.outages.get(e.air, []), unread.get("air", [])))
         if air is not None and e.air
         else ()
     )
     rh_down = (
-        tuple(busy(got.outages.get(e.humidity, []), unread.get("humidity", [])))
+        tuple(
+            sa.join_spans(
+                got.outages.get(e.humidity, []), unread.get("humidity", [])
+            )
+        )
         if humidity is not None and e.humidity
         else ()
     )
@@ -2197,7 +2186,7 @@ async def read_heater_history(
         notes.append(
             f"{name}: nothing read in {len(spans)} windows, left unobserved"
         )
-    outages = busy(down)
+    outages = sa.join_spans(down)
     if outages:
         hours = sum((b - a).total_seconds() for a, b in outages) / 3600
         notes.append(
@@ -2453,7 +2442,7 @@ class HomeAssistantTank:
         except ValueError as err:
             notes.append(f"layers: {self.flow}: {err}")
             return None, notes
-        flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
+        flow_out = sa.join_spans(unread, got.outages.get(self.flow, []), unseen)
         runs: list[Span] = []
         if e.circulation_speed is not None:
             known, unknown, why = known_runs(
@@ -2480,7 +2469,7 @@ class HomeAssistantTank:
                 for a, b in got.outages.get(e.circulation_speed, [])
                 if a + PUMP_STALE < b
             ]
-            runs = busy(_without(known or [], stale), unseen)
+            runs = sa.join_spans(_without(known or [], stale), unseen)
         air: list[Reading] = []
         air_out: list[Span] = []
         if e.air is not None:
@@ -2488,7 +2477,7 @@ class HomeAssistantTank:
                 air, bad = got.converted(
                     e.air, self._units.get(e.air), to_f, at
                 )
-                air_out = busy(bad, got.outages.get(e.air, []), unseen)
+                air_out = sa.join_spans(bad, got.outages.get(e.air, []), unseen)
             except ValueError as err:
                 notes.append(f"layers: {e.air}: {err}")
         if runs and params.circulation is None:
