@@ -79,6 +79,7 @@ from functools import cached_property
 from itertools import pairwise
 from typing import Literal
 
+from nwp500.sim.circulation import steady_share
 from nwp500.sim.params import CompressorParams, HeaterParams
 from nwp500.sim.physics.draw import delivery_temp_f, hot_fraction
 from nwp500.sim.physics.heat_pump import heat_btu_h, power_w
@@ -1096,14 +1097,6 @@ class Flowing:
     pipe_ua_btu_hr_f: float = 0.0
 
 
-def _kept(f: Flowing, top_f: float) -> float:
-    """The share of the top's lift over the rest ``f``'s pipe keeps,
-    the top at ``top_f``: ``circulation.steady_share``."""
-    if f.pipe_ua_btu_hr_f <= 0.0:
-        return 1.0
-    return math.exp(-f.pipe_ua_btu_hr_f / (f.gpm * 60.0 * btu_per_gal_f(top_f)))
-
-
 @dataclass(frozen=True, kw_only=True)
 class Delivered:
     """A delivered draw at ``at`` (``draw``): through the walk's valve
@@ -1386,7 +1379,9 @@ class _Walk:
             if gal > 0.0:
                 top = state.layers_f[-1]
                 inflow = (
-                    f.rest_f + _kept(f, top) * (top - f.rest_f)
+                    f.rest_f
+                    + steady_share(f.pipe_ua_btu_hr_f, f.gpm, top)
+                    * (top - f.rest_f)
                     if f.inflow_f is None
                     else f.inflow_f
                 )
