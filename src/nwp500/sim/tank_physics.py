@@ -662,20 +662,14 @@ class TankPhysics:
             start,
             end,
             air_f=self.ambient.at,
-            heating=st.Heating(
-                compressor=st.Compressor(
-                    params=self.params.compressor,
-                    on_at=start,
-                    heats_at=heats,
-                    scale=scale,
-                    stirs=not under_way or hold_minutes > 0.0,
-                    fan_high_at=fan_high_from(
-                        self.params.compressor,
-                        start,
-                        None,
-                        self.ambient.first_under,
-                    ),
-                    fan_held=True,
+            heating=self._heating(
+                Running(
+                    compressor=CompressorRun(
+                        on_at=start,
+                        heats_at=heats,
+                        scale=scale,
+                        stirs=not under_way or hold_minutes > 0.0,
+                    )
                 )
             ),
             flowing=self._flows(start, end),
