@@ -11,7 +11,7 @@ All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 
 import asyncio
 import logging
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import TYPE_CHECKING, Any
 
 from .converters import device_bool_from_python
@@ -34,6 +34,24 @@ _RAW_RESERVATION_FIELDS = {
     "mode",
     "param",
 }
+
+
+async def _unsubscribe(
+    mqtt: NavienMqttClient,
+    device: Device,
+    on_schedule: Callable[[ReservationSchedule], None],
+) -> None:
+    """Remove a reservation reply callback, logging a failure."""
+    try:
+        await mqtt.unsubscribe_reservation_response(device, on_schedule)
+    except Exception:
+        from .mqtt.utils import redact_mac
+
+        _logger.warning(
+            "Failed to unsubscribe reservations response handler for device %s",
+            redact_mac(device.device_info.mac_address),
+            exc_info=True,
+        )
 
 
 async def fetch_reservations(
@@ -69,17 +87,7 @@ async def fetch_reservations(
     except TimeoutError:
         return None
     finally:
-        try:
-            await mqtt.unsubscribe_reservation_response(device, on_schedule)
-        except Exception:
-            from .mqtt.utils import redact_mac
-
-            _logger.warning(
-                "Failed to unsubscribe reservations response handler for "
-                "device %s",
-                redact_mac(device.device_info.mac_address),
-                exc_info=True,
-            )
+        await _unsubscribe(mqtt, device, on_schedule)
 
 
 async def update_reservations_confirmed(
@@ -163,17 +171,7 @@ async def update_reservations_confirmed(
         except TimeoutError:
             return None
     finally:
-        try:
-            await mqtt.unsubscribe_reservation_response(device, on_schedule)
-        except Exception:
-            from .mqtt.utils import redact_mac
-
-            _logger.warning(
-                "Failed to unsubscribe reservations response handler for "
-                "device %s",
-                redact_mac(device.device_info.mac_address),
-                exc_info=True,
-            )
+        await _unsubscribe(mqtt, device, on_schedule)
 
 
 async def add_reservation(
