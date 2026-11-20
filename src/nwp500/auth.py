@@ -612,25 +612,17 @@ class NavienAuthClient:
                 # subsequent refresh would fail.
                 if self._auth_response and self._auth_response.tokens:
                     old_tokens = self._auth_response.tokens
-                    if (
-                        not new_tokens.refresh_token
-                        and old_tokens.refresh_token
+                    for field in (
+                        "refresh_token",
+                        "id_token",
+                        "access_key_id",
+                        "secret_key",
+                        "session_token",
                     ):
-                        new_tokens.refresh_token = old_tokens.refresh_token
-                    if not new_tokens.id_token and old_tokens.id_token:
-                        new_tokens.id_token = old_tokens.id_token
-                    if (
-                        not new_tokens.access_key_id
-                        and old_tokens.access_key_id
-                    ):
-                        new_tokens.access_key_id = old_tokens.access_key_id
-                    if not new_tokens.secret_key and old_tokens.secret_key:
-                        new_tokens.secret_key = old_tokens.secret_key
-                    if (
-                        not new_tokens.session_token
-                        and old_tokens.session_token
-                    ):
-                        new_tokens.session_token = old_tokens.session_token
+                        if not getattr(new_tokens, field):
+                            kept = getattr(old_tokens, field)
+                            if kept:
+                                setattr(new_tokens, field, kept)
                     if (
                         not new_tokens.authorization_expires_in
                         and old_tokens.authorization_expires_in
