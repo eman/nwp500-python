@@ -1122,7 +1122,9 @@ class MqttSubscriptionManager:
 
         Also records ``device`` so ``disconnect()`` sends it ``st/end``.
         """
-        topic = self._query_response_topic(device, suffix, app_form)
+        topic = MqttTopicBuilder.query_response_topic(
+            device, self._client_id, suffix, "app" if app_form else "client"
+        )
         mac = device.device_info.mac_address
         handler = self._make_handler(
             model,
@@ -1143,27 +1145,13 @@ class MqttSubscriptionManager:
         app_form: bool = False,
     ) -> None:
         """Remove a typed callback registered by :meth:`_subscribe_response`."""
-        topic = self._query_response_topic(device, suffix, app_form)
+        topic = MqttTopicBuilder.query_response_topic(
+            device, self._client_id, suffix, "app" if app_form else "client"
+        )
         await self._unsubscribe_callback(
             topic,
             callback,
             _response_kind(topic, device.device_info.mac_address),
-        )
-
-    def _query_response_topic(
-        self, device: Device, suffix: str, app_form: bool = False
-    ) -> str:
-        device_type = str(device.device_info.device_type)
-        if app_form:
-            return MqttTopicBuilder.app_response_topic(
-                device_type,
-                device.device_info.home_seq,
-                0,
-                self._client_id,
-                suffix,
-            )
-        return MqttTopicBuilder.response_topic(
-            device_type, self._client_id, suffix
         )
 
     async def _unsubscribe_callback(

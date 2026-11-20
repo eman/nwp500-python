@@ -19,6 +19,11 @@ Topic schema::
     Event (app connection):      evt/{device_type}/navilink-{mac}/app-connection
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import Device
+
 #: Suffix of the device-keyed topic carrying control failures.
 CONTROL_FAIL_SUFFIX = "ctrl-fail"
 
@@ -108,6 +113,28 @@ class MqttTopicBuilder:
         """
         dt = MqttTopicBuilder.device_topic(mac_address)
         return f"cmd/{device_type}/{dt}/res/{suffix}"
+
+    @staticmethod
+    def query_response_topic(
+        device: Device, client_id: str, suffix: str, form: str = "client"
+    ) -> str:
+        """Build the response topic a query asks the device to answer on.
+
+        ``form`` picks the shape: ``"client"`` for :meth:`response_topic`,
+        ``"app"`` for :meth:`app_response_topic` (with the device's
+        ``home_seq`` and ``user_seq`` 0) or ``"device"`` for
+        :meth:`device_response_topic`.
+        """
+        device_type = str(device.device_info.device_type)
+        if form == "app":
+            return MqttTopicBuilder.app_response_topic(
+                device_type, device.device_info.home_seq, 0, client_id, suffix
+            )
+        if form == "device":
+            return MqttTopicBuilder.device_response_topic(
+                device_type, device.device_info.mac_address, suffix
+            )
+        return MqttTopicBuilder.response_topic(device_type, client_id, suffix)
 
     @staticmethod
     def control_fail_response_topic(device_type: str, mac_address: str) -> str:
