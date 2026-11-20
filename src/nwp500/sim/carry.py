@@ -41,8 +41,7 @@ from nwp500.sim.inputs import (
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
 from nwp500.sim.result import SimulationResult
-from nwp500.sim.schedules import reservation_firings, tou_windows
-from nwp500.sim.tou_triggers import while_enabled
+from nwp500.sim.schedules import reservation_firings, scenario_tou_windows
 from nwp500.sim.units import BTU_PER_WH
 
 #: How near, °F in every layer, a tail's end must come to the first
@@ -429,28 +428,9 @@ def _windows(
 ) -> Sequence[tuple[datetime, datetime]]:
     """The TOU windows of ``tail`` walked on to ``end``: the given ones,
     else its schedule's, laid out as ``simulate`` lays them out."""
-    if given is None:
-        tou_on = (
-            tail.commands.tou_enabled
-            if tail.commands.tou_enabled is not None
-            else tail.schedules.tou_enabled
-        )
-        switches = tail.schedules.tou_switches
-        given = (
-            while_enabled(
-                tou_windows(
-                    tail.schedules.tou_periods,
-                    ZoneInfo(tail.tz),
-                    tail.start,
-                    end + RECOVERY_AHEAD,
-                ),
-                tou_on,
-                switches,
-            )
-            if tou_on or any(on for _, on in switches)
-            else ()
-        )
-    return given
+    if given is not None:
+        return given
+    return scenario_tou_windows(tail, tail.start, end + RECOVERY_AHEAD) or ()
 
 
 def _due(result: SimulationResult, params: HeaterParams) -> list[datetime]:

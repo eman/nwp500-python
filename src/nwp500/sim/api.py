@@ -104,6 +104,7 @@ from nwp500.sim.result import (
 from nwp500.sim.schedules import (
     half_c_to_f,
     reservation_firings,
+    scenario_tou_windows,
     tou_windows,
 )
 from nwp500.sim.tank_physics import (
@@ -636,35 +637,13 @@ def simulate(
         defaults=defaults,
         circulation=circulation,
     )
-    tou_on = (
-        s.commands.tou_enabled
-        if s.commands.tou_enabled is not None
-        else s.schedules.tou_enabled
-    )
-    switches = s.schedules.tou_switches
     # To as far past the end as a recovery judges its cap, so one
     # running at the end is judged as in a walk going on past it.
-    windows: tuple[tuple[datetime, datetime], ...] = (
-        tuple(
-            while_enabled(
-                tou_windows(
-                    s.schedules.tou_periods,
-                    tz,
-                    s.start,
-                    s.until + RECOVERY_AHEAD,
-                ),
-                tou_on,
-                switches,
-            )
-        )
-        if tou_on or any(on for _, on in switches)
-        else ()
-    )
+    scheduled = scenario_tou_windows(s, s.start, s.until + RECOVERY_AHEAD)
+    windows = tuple(scheduled or ())
     if tou_windows_in_force is not None:
         windows = tuple(tou_windows_in_force)
-    elif (tou_on or any(on for _, on in switches)) and not (
-        s.schedules.tou_periods
-    ):
+    elif scheduled is None:
         reasons.append("tou_schedule_unknown")
     if s.settings.hp_lower_on_f is None:
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
@@ -1547,28 +1526,6 @@ def _ambient_at(environment: Environment, at: datetime) -> float:
     return AmbientSampler(readings).at(at)
 
 
-def _scheduled(
-    s: Scenario, start: datetime, end: datetime
-) -> list[tuple[datetime, datetime]] | None:
-    """The schedule's TOU windows over ``[start, end]``: none with TOU
-    off; None, not known, with it on and no periods to lay out."""
-    on = (
-        s.commands.tou_enabled
-        if s.commands.tou_enabled is not None
-        else s.schedules.tou_enabled
-    )
-    switches = s.schedules.tou_switches
-    if not on and not any(sw for _, sw in switches):
-        return []
-    if not s.schedules.tou_periods:
-        return None
-    return while_enabled(
-        tou_windows(s.schedules.tou_periods, ZoneInfo(s.tz), start, end),
-        on,
-        switches,
-    )
-
-
 def _to_start(
     s: Scenario, params: HeaterParams, start: datetime
 ) -> tuple[float, float]:
@@ -1780,7 +1737,7 @@ def _tou_capped(
         tou_marked(s.settings) is not False,
         start,
         full[-1].at,
-        _scheduled(s, start, full[-1].at),
+        scenario_tou_windows(s, start, full[-1].at),
     )
     stop = _cap_stop(full, level, windows)
     if stop is None:
@@ -1898,7 +1855,7 @@ def _windows(
     (``marked_windows``), and whether its schedule is unknown. TOU on
     with neither its periods nor the heater's marker known is in force,
     as for the counter test."""
-    scheduled = _scheduled(s, s.start, end)
+    scheduled = scenario_tou_windows(s, s.start, end)
     marker = tou_marked(s.settings)
     if marker is None and scheduled is None:
         marker = True
