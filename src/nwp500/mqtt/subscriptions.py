@@ -848,13 +848,8 @@ class MqttSubscriptionManager:
         """
         # Subscribe to all command responses from device (broader pattern)
         # Device responses come on cmd/{device_type}/navilink-{device_id}/#
-        device_id = device.device_info.mac_address
-        device_type = str(device.device_info.device_type)
-        response_topic = MqttTopicBuilder.command_topic(
-            device_type, device_id, "#"
-        )
-        self._devices[device_id] = device
-        return await self.subscribe(response_topic, callback)
+        self._devices[device.device_info.mac_address] = device
+        return await self.subscribe(self._device_wildcard(device), callback)
 
     async def subscribe_device_status(
         self, device: Device, callback: Callable[[DeviceStatus], None]
