@@ -1139,9 +1139,7 @@ def _stints(
 def _asof_row(
     rows: Sequence[tuple[datetime, float]], t: datetime
 ) -> float | None:
-    times = [x for x, _ in rows]
-    i = bisect.bisect_right(times, t) - 1
-    return rows[i][1] if i >= 0 else None
+    return _held_at(rows, [t])[0]
 
 
 def _changes(rows: Sequence[tuple[datetime, float]]) -> list[datetime]:
@@ -1497,18 +1495,12 @@ def element_grid(
     tz = first.tzinfo
     grid = [datetime.fromtimestamp(x, tz=tz) for x in range(t0, t1 + 1, 60)]
 
-    def held(rows: Sequence[tuple[datetime, float]]) -> list[float]:
+    def held(
+        rows: Sequence[tuple[datetime, float]], max_age: timedelta | None = None
+    ) -> list[float]:
         return [
-            np.nan if (v := _asof_row(rows, t)) is None else v for t in grid
+            np.nan if v is None else v for v in _held_at(rows, grid, max_age)
         ]
-
-    power_times = [t for t, _ in record.power_w]
-
-    def power_at(t: datetime) -> float:
-        i = bisect.bisect_right(power_times, t) - 1
-        if i < 0 or t - power_times[i] > timedelta(minutes=5):
-            return np.nan
-        return record.power_w[i][1]
 
     g = pd.DataFrame(
         {
@@ -1519,7 +1511,7 @@ def element_grid(
             "upper": held(record.upper_f),
             "lower": held(record.lower_f),
             "setpoint": held(record.setpoint_f),
-            "W": [power_at(t) for t in grid],
+            "W": held(record.power_w, timedelta(minutes=5)),
         },
         index=pd.DatetimeIndex(grid),
     )
