@@ -124,6 +124,12 @@ class TestTheProfile:
         _check_setpoint("write", wide.setpoint_min_f)
         _check_setpoint("write", wide.setpoint_max_f)
 
+    def test_a_device_range_outside_the_walk_s_is_refused(self) -> None:
+        """Raw limits 70/80 (95.0-104.0 °F) share no setpoint with the
+        simulation's 104.9-149.9."""
+        with pytest.raises(ValueError, match="is empty"):
+            P.heater_profile(feature=_Limits(70, 80))
+
     def test_the_device_facts_are_the_cores(self) -> None:
         """``sim.profile`` re-exports ``nwp500.heater``'s facts."""
         from nwp500 import heater

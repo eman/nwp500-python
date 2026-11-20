@@ -29,7 +29,8 @@ Added
   ``sim.profile.heater_profile(..., feature=feature)`` take the range
   from a ``DeviceFeature``; without one it stays 104.9 to 149.9 degF.
   ``heater_profile`` keeps it within the 104.9 to 149.9 degF the
-  simulation runs, so a setpoint the profile offers walks. See
+  simulation runs, so a setpoint the profile offers walks, and raises
+  ``ValueError`` for a device range wholly outside it. See
   :doc:`/reference/python_api/heater`.
 - **Command value ranges.** ``COMMAND_RANGES`` gives each whole-number
   command key's range (vacation ``days`` 1 to 99, anti-Legionella

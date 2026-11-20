@@ -99,12 +99,15 @@ def heater_profile(
 
     The setpoint range is the device's within the one the simulation
     runs, ``SETPOINT_MIN_F`` to ``SETPOINT_MAX_F``: a device that
-    reports a wider one plans only the setpoints a walk takes."""
+    reports a wider one plans only the setpoints a walk takes. Raises
+    ``ValueError`` (``check``) for a device range wholly outside it."""
     device = device_profile(feature)
-    return dataclasses.replace(
+    profile = dataclasses.replace(
         device,
         setpoint_min_f=max(device.setpoint_min_f, SETPOINT_MIN_F),
         setpoint_max_f=min(device.setpoint_max_f, SETPOINT_MAX_F),
         depletion_threshold_f=line_f,
         tank_gal=tank.volume_gal,
     )
+    check(profile)
+    return profile
