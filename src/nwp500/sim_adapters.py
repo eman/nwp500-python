@@ -1465,15 +1465,13 @@ def run_flow(
     readings on the steps' grid, for ``steps_from_changes``'
     ``circulation_flow`` where no sensor reads the pump: a run is taken
     at its flow (``CirculationParams.flow_gpm``)."""
-    out: list[tuple[datetime, float]] = []
-    step = timedelta(seconds=STEP_GRID_S)
-    for t, end in sorted(
-        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs
-    ):
-        while t < end:
-            out.append((t, flow_gpm))
-            t += step
-    return out
+    return [
+        (t, flow_gpm)
+        for a, b in sorted(
+            (a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs
+        )
+        for t in _step_grid(a, b)
+    ]
 
 
 def run_readings(
