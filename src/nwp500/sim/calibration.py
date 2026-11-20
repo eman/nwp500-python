@@ -779,17 +779,11 @@ def measure_runs(
     median of those in it, its rest the hours since the run before it
     ended, a run left out included."""
     on = sorted(running)
-    clusters: list[list[datetime]] = []
-    for t in on:
-        if clusters and t - clusters[-1][1] <= RUN_GAP:
-            clusters[-1][1] = t
-        else:
-            clusters.append([t, t])
     flow, return_f = sorted(flow), sorted(return_f)
     upper_f, air_f = sorted(upper_f), sorted(air_f)
     out: list[MeasuredRun] = []
     last_end: datetime | None = None
-    for a, b in ((c[0], c[1]) for c in clusters):
+    for a, b in merge_runs([(t, t) for t in on], RUN_GAP):
         rest = (
             None
             if last_end is None
