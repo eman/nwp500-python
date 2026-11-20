@@ -220,11 +220,6 @@ _SNAPSHOT_COLUMNS = (
     "circulation_runs",
 )
 
-#: Circulation runs closer than this in a cycle are one run, as the
-#: circulation's displaced volume was fitted (``circulation.RUN_GAP``).
-_RUN_GAP = timedelta(minutes=10)
-
-
 #: A recovery's lower-zone target when the history records no stop
 #: threshold (``target_f``), °F.
 UNRECORDED_TARGET_F = 140.0
@@ -241,9 +236,10 @@ def _in_cycle(
     """A snapshot's metered draws and circulation runs: the delivered
     gallons from ``at`` to ``end`` and the volume-weighted upper zone
     they left at, and each run over the span (merged within
-    ``_RUN_GAP``) as ``(minutes in the span, the upper zone where the
-    span takes it up, hours since the run before it ended, minutes it had
-    run before the span)``, the hours None for the first run given. None
+    ``circulation.RUN_GAP``, as the displaced volume was fitted) as
+    ``(minutes in the span, the upper zone where the span takes it up,
+    hours since the run before it ended, minutes it had run before the
+    span)``, the hours None for the first run given. None
     for what was not given: an unrecorded meter or circulation is not an
     idle one."""
     out: dict[str, object] = {
@@ -265,7 +261,7 @@ def _in_cycle(
                 sum(u * g for u, g in weighted if u is not None) / gal
             )
     if circulation is not None:
-        merged = merge_runs(circulation, _RUN_GAP)
+        merged = merge_runs(circulation, RUN_GAP)
         found: list[tuple[float, float, float | None, float]] = []
         for i, (a0, b0) in enumerate(merged):
             a, b = max(a0, at), min(b0, end)
