@@ -304,6 +304,37 @@ def _number(state: Any) -> float | None:
     return value if math.isfinite(value) else None
 
 
+def _stamp(row: Mapping[str, Any]) -> Any:
+    """A history row's instant as written: ``last_updated``, else
+    ``last_changed``."""
+    return row.get("last_updated") or row.get("last_changed")
+
+
+def _text(attributes: Any, key: str) -> str | None:
+    """The text ``attributes`` holds at ``key``; None when it holds
+    none."""
+    if not isinstance(attributes, Mapping):
+        return None
+    value = cast(Mapping[str, Any], attributes).get(key)
+    return value if isinstance(value, str) else None
+
+
+def _series(doc: Any) -> Iterable[tuple[str, list[Mapping[str, Any]]]]:
+    """Each entity's rows in ``/api/history/period``'s answer, with the
+    entity its first row names; a series that names none is left
+    out."""
+    if not isinstance(doc, list):
+        raise HomeAssistantError("not a history")
+    for series in doc:
+        if not isinstance(series, list) or not series:
+            continue
+        rows = [
+            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
+        ]
+        if rows and "entity_id" in rows[0]:
+            yield str(rows[0]["entity_id"]), rows
+
+
 @dataclass(frozen=True)
 class State:
     """An entity's value now: the number (None for none), its unit, and
@@ -326,19 +357,11 @@ def parse_state(doc: Any) -> State:
     if not isinstance(doc, Mapping) or "state" not in doc:
         raise HomeAssistantError("not an entity state")
     d = cast(Mapping[str, Any], doc)
-    attributes = d.get("attributes")
-    unit = None
-    if isinstance(attributes, Mapping):
-        u = cast(Mapping[str, Any], attributes).get("unit_of_measurement")
-        unit = u if isinstance(u, str) else None
-    stamp = (
-        d.get("last_reported") or d.get("last_updated") or d.get("last_changed")
-    )
     return State(
         entity=str(d.get("entity_id", "")),
         value=_number(d.get("state")),
-        unit=unit,
-        at=_instant(stamp),
+        unit=_text(d.get("attributes"), "unit_of_measurement"),
+        at=_instant(d.get("last_reported") or _stamp(d)),
     )
 
 
@@ -363,7 +386,7 @@ def parse_history(doc: Any) -> dict[str, list[Reading]]:
                 continue
             r = cast(Mapping[str, Any], row)
             value = _number(r.get("state"))
-            stamp = r.get("last_updated") or r.get("last_changed")
+            stamp = _stamp(r)
             if value is not None and stamp is not None:
                 readings.append((_instant(stamp), value))
         out[entity] = sorted(readings, key=lambda x: x[0])
@@ -375,22 +398,13 @@ def parse_outages(doc: Any, end: datetime) -> dict[str, list[Span]]:
     was ``unavailable`` or ``unknown``: from that row to the next with a
     number, or to ``end``. ``parse_history`` leaves those rows out, so
     without these an outage reads as the last value held."""
-    if not isinstance(doc, list):
-        raise HomeAssistantError("not a history")
     out: dict[str, list[Span]] = {}
-    for series in doc:
-        if not isinstance(series, list) or not series:
-            continue
-        rows = [
-            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
-        ]
-        if not rows or "entity_id" not in rows[0]:
-            continue
+    for entity, rows in _series(doc):
         stamped = sorted(
             (
                 (_instant(stamp), _number(r.get("state")) is not None)
                 for r in rows
-                if (stamp := r.get("last_updated") or r.get("last_changed"))
+                if (stamp := _stamp(r))
             ),
             key=lambda x: x[0],
         )
@@ -404,7 +418,7 @@ def parse_outages(doc: Any, end: datetime) -> dict[str, list[Span]]:
                 down = None
         if down is not None and end > down:
             spans.append((down, end))
-        out[str(rows[0]["entity_id"])] = spans
+        out[entity] = spans
     return out
 
 
@@ -553,34 +567,16 @@ def parse_units(doc: Any) -> dict[str, list[str | None]]:
     """The unit each of ``parse_history``'s readings was recorded in
     (its row's ``unit_of_measurement``, None if it carries none), by
     entity, in the same order."""
-    if not isinstance(doc, list):
-        raise HomeAssistantError("not a history")
     out: dict[str, list[str | None]] = {}
-    for series in doc:
-        if not isinstance(series, list) or not series:
-            continue
-        rows = [
-            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
-        ]
-        if not rows or "entity_id" not in rows[0]:
-            continue
+    for entity, rows in _series(doc):
         units: list[tuple[datetime, str | None]] = []
         for r in rows:
-            stamp = r.get("last_updated") or r.get("last_changed")
+            stamp = _stamp(r)
             if _number(r.get("state")) is None or stamp is None:
                 continue
-            attributes = r.get("attributes")
-            unit = (
-                cast(Mapping[str, Any], attributes).get("unit_of_measurement")
-                if isinstance(attributes, Mapping)
-                else None
-            )
-            units.append(
-                (_instant(stamp), unit if isinstance(unit, str) else None)
-            )
-        out[str(rows[0]["entity_id"])] = [
-            u for _, u in sorted(units, key=lambda x: x[0])
-        ]
+            unit = _text(r.get("attributes"), "unit_of_measurement")
+            units.append((_instant(stamp), unit))
+        out[entity] = [u for _, u in sorted(units, key=lambda x: x[0])]
     return out
 
 
@@ -590,26 +586,17 @@ def parse_states(doc: Any) -> dict[str, list[tuple[datetime, str]]]:
     written, in time order. ``parse_history`` keeps only the numbers;
     these keep a binary sensor's ``on``, an enum's name and an outage's
     ``unavailable`` too."""
-    if not isinstance(doc, list):
-        raise HomeAssistantError("not a history")
-    out: dict[str, list[tuple[datetime, str]]] = {}
-    for series in doc:
-        if not isinstance(series, list) or not series:
-            continue
-        rows = [
-            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
-        ]
-        if not rows or "entity_id" not in rows[0]:
-            continue
-        out[str(rows[0]["entity_id"])] = sorted(
+    return {
+        entity: sorted(
             (
                 (_instant(stamp), str(r.get("state")))
                 for r in rows
-                if (stamp := r.get("last_updated") or r.get("last_changed"))
+                if (stamp := _stamp(r))
             ),
             key=lambda x: x[0],
         )
-    return out
+        for entity, rows in _series(doc)
+    }
 
 
 def history_for(doc: Any, entities: Iterable[str]) -> dict[str, list[Reading]]:
@@ -663,7 +650,7 @@ def parse_outdoor_history(
             row = cast(Mapping[str, Any], r)
             if row.get("entity_id", entity) != entity:
                 break
-            stamp = row.get("last_updated") or row.get("last_changed")
+            stamp = _stamp(row)
             attributes = row.get("attributes")
             if stamp is None or not isinstance(attributes, Mapping):
                 continue
@@ -671,14 +658,8 @@ def parse_outdoor_history(
             value = _number(a.get("temperature"))
             if value is None:
                 continue
-            unit = a.get("temperature_unit")
-            out.append(
-                (
-                    _instant(stamp),
-                    value,
-                    unit if isinstance(unit, str) else None,
-                )
-            )
+            unit = _text(a, "temperature_unit")
+            out.append((_instant(stamp), value, unit))
     out.sort(key=lambda x: x[0])
     return out
 
@@ -1036,8 +1017,8 @@ class HomeAssistantClient:
         )
         hours, unit = parse_forecast(doc, entity)
         if unit is None:
-            unit = (await self._attributes(entity)).get("temperature_unit")
-        return hours, unit if isinstance(unit, str) else None
+            unit = await self._temperature_unit(entity)
+        return hours, unit
 
     async def outdoor_history(
         self, entity: str, start: datetime, end: datetime
@@ -1059,8 +1040,7 @@ class HomeAssistantClient:
         rows = parse_outdoor_history(doc, entity)
         today: str | None = None
         if any(u is None for _, _, u in rows):
-            u = (await self._attributes(entity)).get("temperature_unit")
-            today = u if isinstance(u, str) else None
+            today = await self._temperature_unit(entity)
         out: list[Reading] = []
         for t, v, u in rows:
             try:
@@ -1069,14 +1049,10 @@ class HomeAssistantClient:
                 continue
         return out
 
-    async def _attributes(self, entity: str) -> Mapping[str, Any]:
+    async def _temperature_unit(self, entity: str) -> str | None:
         doc = await self._json("GET", f"/api/states/{entity}")
         attributes = doc.get("attributes") if isinstance(doc, dict) else None
-        return (
-            cast(Mapping[str, Any], attributes)
-            if isinstance(attributes, Mapping)
-            else {}
-        )
+        return _text(attributes, "temperature_unit")
 
 
 def known_runs(
