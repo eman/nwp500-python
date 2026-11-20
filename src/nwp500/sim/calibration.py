@@ -47,6 +47,7 @@ values when it had the evidence to.
 
 import bisect
 import math
+import statistics
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -1054,19 +1055,16 @@ def recent_flow_gpm(
     median flows over the ``window`` before ``until``, the flow being a
     setting that moves in steps. None with fewer than
     ``MIN_RUNS_FOR_FLOW``."""
-    flows = sorted(
+    flows = [
         r.flow_gpm
         for r in runs
         if r.flow_gpm is not None
         and r.flow_gpm > 0.0
         and until - window <= r.start <= until
-    )
+    ]
     if len(flows) < MIN_RUNS_FOR_FLOW:
         return None
-    mid = len(flows) // 2
-    if len(flows) % 2:
-        return flows[mid]
-    return (flows[mid - 1] + flows[mid]) / 2.0
+    return statistics.median(flows)
 
 
 def flow_lookup(
