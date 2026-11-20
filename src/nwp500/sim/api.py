@@ -1853,16 +1853,20 @@ def _mode_run(
     within ``READY_HORIZON``, under the TOU ``windows``. Its reasons are
     the walk's to that instant, or over the whole horizon when it does
     not get there. ``inlet_measured`` goes on to the walks."""
-    try:
-        result = _mode_walk(
+
+    def walk_for(horizon: timedelta) -> SimulationResult:
+        return _mode_walk(
             s,
             params,
             mode,
-            READY_HORIZON,
+            horizon,
             windows,
             recovery,
             inlet_measured=inlet_measured,
         )
+
+    try:
+        result = walk_for(READY_HORIZON)
     except SimulationError:
         return ModeRun(mode, None, None, ("time_to_ready_unavailable",))
     wh = 0.0
@@ -1882,15 +1886,7 @@ def _mode_run(
         if span > timedelta(0):
             # What the walk rests on up to the bath, not past it.
             with contextlib.suppress(SimulationError):
-                reasons = _mode_walk(
-                    s,
-                    params,
-                    mode,
-                    span,
-                    windows,
-                    recovery,
-                    inlet_measured=inlet_measured,
-                ).reasons
+                reasons = walk_for(span).reasons
         return ModeRun(
             mode,
             round(span.total_seconds() / 60.0, 1),
