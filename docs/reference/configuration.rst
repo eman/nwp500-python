@@ -153,7 +153,7 @@ Basic Example
 .. code-block:: python
 
    from nwp500 import NavienMqttClient
-   from nwp500.mqtt_utils import MqttConnectionConfig
+   from nwp500.mqtt import MqttConnectionConfig
 
    config = MqttConnectionConfig(
        # Connection settings
@@ -235,7 +235,7 @@ Example: Production Configuration
    import os
    import logging
    from nwp500 import NavienAuthClient, NavienMqttClient
-   from nwp500.mqtt_utils import MqttConnectionConfig
+   from nwp500.mqtt import MqttConnectionConfig
 
    # Configure logging
    logging.basicConfig(

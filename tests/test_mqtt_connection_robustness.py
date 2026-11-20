@@ -21,7 +21,11 @@ from nwp500.mqtt import NavienMqttClient
 from nwp500.mqtt.connection import MqttConnection
 from nwp500.mqtt.periodic import MqttPeriodicRequestManager
 from nwp500.mqtt.subscriptions import MqttSubscriptionManager
-from nwp500.mqtt.utils import MqttConnectionConfig, QoS
+from nwp500.mqtt.utils import (
+    MqttConnectionConfig,
+    QoS,
+    consume_abandoned_future,
+)
 
 
 def _future(
@@ -393,8 +397,10 @@ class TestAbandonedAckLog:
         future.set_exception(SubscribeError("cmd/52/navilink-04786332fca0/#"))
         caplog.set_level(logging.DEBUG, logger="nwp500.mqtt.connection")
 
-        MqttConnection._consume_abandoned_future(  # pyright: ignore[reportPrivateUsage]
-            cast(Any, future), "Subscribe"
+        consume_abandoned_future(
+            cast(Any, future),
+            "Subscribe",
+            logging.getLogger("nwp500.mqtt.connection"),
         )
 
         assert "SubscribeError" in caplog.text

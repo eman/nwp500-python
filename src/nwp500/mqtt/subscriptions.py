@@ -11,7 +11,6 @@ This module handles all subscription-related operations including:
 
 import asyncio
 import contextlib
-import functools
 import json
 import logging
 import re
@@ -51,6 +50,7 @@ from ..topic_builder import (
 from .state_tracker import DeviceStateTracker
 from .types import QoS, to_awscrt_qos
 from .utils import (
+    await_ack,
     get_response_data,
     log_payload,
     redact_mac,
@@ -398,31 +398,6 @@ class MqttSubscriptionManager:
             )
         )
 
-    @staticmethod
-    def _consume_abandoned_future(
-        future: asyncio.Future[Any], operation: str
-    ) -> None:
-        """Retrieve the eventual result of an abandoned acknowledgement future.
-
-        When the shielded acknowledgement future outlives a cancelled or
-        timed-out awaiter, nothing else consumes its eventual result. If it
-        later completes with an exception, asyncio logs a "Future exception
-        was never retrieved" warning at garbage-collection time. This
-        callback retrieves that result/exception so the warning is never
-        emitted, logging benign errors (e.g. ``AwsCrtError`` from
-        clean-session cancellation during reconnect) at debug level instead.
-        """
-        if future.cancelled():
-            return
-        exc = future.exception()
-        if exc is not None:
-            # The type only: a late SubscribeError's text is the topic.
-            _logger.debug(
-                "%s completed with exception after being abandoned: %s",
-                operation,
-                type(exc).__name__,
-            )
-
     async def subscribe(
         self,
         topic: str,
@@ -533,36 +508,12 @@ class MqttSubscriptionManager:
             qos=to_awscrt_qos(qos),
             callback=self._on_message_received,
         )
-        awaitable_future = asyncio.wrap_future(subscribe_future)
-        try:
-            subscribe_result = await asyncio.wait_for(
-                asyncio.shield(awaitable_future),
-                timeout=self._operation_timeout,
-            )
-        except asyncio.CancelledError:
-            _logger.debug(
-                f"Subscribe to '{redact_topic(topic)}' was cancelled "
-                "but will complete in background"
-            )
-            awaitable_future.add_done_callback(
-                functools.partial(
-                    MqttSubscriptionManager._consume_abandoned_future,
-                    operation=f"Subscribe to '{redact_topic(topic)}'",
-                )
-            )
-            raise
-        except TimeoutError:
-            _logger.error(
-                f"Subscribe to '{redact_topic(topic)}' not "
-                f"acknowledged within {self._operation_timeout:.1f}s"
-            )
-            awaitable_future.add_done_callback(
-                functools.partial(
-                    MqttSubscriptionManager._consume_abandoned_future,
-                    operation=f"Subscribe to '{redact_topic(topic)}'",
-                )
-            )
-            raise
+        subscribe_result = await await_ack(
+            subscribe_future,
+            f"Subscribe to '{redact_topic(topic)}'",
+            self._operation_timeout,
+            _logger,
+        )
 
         _logger.info(
             f"Subscription succeeded (topic redacted) with QoS "
@@ -698,36 +649,12 @@ class MqttSubscriptionManager:
             # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
             on_sent()
-            awaitable_future = asyncio.wrap_future(unsubscribe_future)
-            try:
-                await asyncio.wait_for(
-                    asyncio.shield(awaitable_future),
-                    timeout=self._operation_timeout,
-                )
-            except asyncio.CancelledError:
-                _logger.debug(
-                    "Unsubscribe from topic (redacted) was "
-                    "cancelled but will complete in background"
-                )
-                awaitable_future.add_done_callback(
-                    functools.partial(
-                        MqttSubscriptionManager._consume_abandoned_future,
-                        operation="Unsubscribe from topic (redacted)",
-                    )
-                )
-                raise
-            except TimeoutError:
-                _logger.error(
-                    "Unsubscribe from topic (redacted) not "
-                    f"acknowledged within {self._operation_timeout:.1f}s"
-                )
-                awaitable_future.add_done_callback(
-                    functools.partial(
-                        MqttSubscriptionManager._consume_abandoned_future,
-                        operation="Unsubscribe from topic (redacted)",
-                    )
-                )
-                raise
+            await await_ack(
+                unsubscribe_future,
+                "Unsubscribe from topic (redacted)",
+                self._operation_timeout,
+                _logger,
+            )
 
             _logger.info("Unsubscribed from topic (redacted)")
 

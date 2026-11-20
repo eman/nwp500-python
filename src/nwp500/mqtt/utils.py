@@ -6,6 +6,8 @@ configuration classes, and common data structures used across MQTT modules.
 """
 
 import asyncio
+import concurrent.futures
+import functools
 import json
 import logging
 import re
@@ -481,6 +483,94 @@ _ALT_KEYS: dict[str, str] = {
 }
 
 _SENTINEL = object()
+
+
+def consume_abandoned_future(
+    future: asyncio.Future[Any], operation: str, logger: logging.Logger
+) -> None:
+    """Retrieve the eventual result of an abandoned acknowledgement future.
+
+    When :func:`await_ack` is cancelled or times out, the shielded future
+    keeps running in the background. If nobody retrieves its eventual
+    exception, asyncio logs a "Future exception was never retrieved"
+    warning at garbage-collection time. This callback consumes that
+    result/exception so the warning is never emitted, logging benign
+    errors (e.g. ``AwsCrtError`` from clean-session cancellation during
+    reconnect) at debug level instead.
+    """
+    if future.cancelled():
+        return
+    exc = future.exception()
+    if exc is not None:
+        # The type only: a late SubscribeError's text is the topic.
+        logger.debug(
+            "%s completed with exception after being abandoned: %s",
+            operation,
+            type(exc).__name__,
+        )
+
+
+async def await_ack(
+    future: concurrent.futures.Future[Any] | asyncio.Future[Any],
+    operation: str,
+    timeout: float,
+    logger: logging.Logger,
+) -> Any:
+    """Await a broker acknowledgement future with a timeout.
+
+    The awscrt future is shielded so cancellation (or a timeout) never
+    propagates into the SDK future: the underlying operation completes
+    independently, preventing InvalidStateError in AWS CRT callbacks.
+
+    A timeout guards against half-open TCP connections where the
+    acknowledgement never arrives; without it callers can hang until
+    the keep-alive expires (20+ minutes).
+
+    If the awaiting task is cancelled or times out before the shielded
+    future completes, a done callback is attached so its eventual
+    result/exception is still retrieved, preventing asyncio's "Future
+    exception was never retrieved" warnings.
+
+    Args:
+        future: Acknowledgement future: the
+            ``concurrent.futures.Future`` returned by the AWS CRT SDK
+            (wrapped via ``asyncio.wrap_future``), or an already
+            loop-bound ``asyncio.Future``
+        operation: Human-readable operation name for error messages
+        timeout: Seconds to wait for the acknowledgement
+        logger: Logger for the cancellation, timeout and late-error
+            messages
+
+    Returns:
+        The acknowledgement result
+
+    Raises:
+        TimeoutError: If no acknowledgement within
+            ``timeout`` seconds
+        asyncio.CancelledError: If the awaiting task is cancelled
+    """
+    awaitable_future: asyncio.Future[Any] = (
+        asyncio.wrap_future(future)
+        if isinstance(future, concurrent.futures.Future)
+        else future
+    )
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(awaitable_future), timeout=timeout
+        )
+    except (asyncio.CancelledError, TimeoutError) as e:
+        if isinstance(e, TimeoutError):
+            logger.error("%s not acknowledged within %.1fs", operation, timeout)
+        else:
+            logger.debug(
+                "%s was cancelled but will complete in background", operation
+            )
+        awaitable_future.add_done_callback(
+            functools.partial(
+                consume_abandoned_future, operation=operation, logger=logger
+            )
+        )
+        raise
 
 
 async def request_reply[T](
