@@ -5,6 +5,44 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+
+- **Duplicate code merged across the library.** Logic copied between
+  modules now lives in one place, and code nothing reached is gone:
+  about 880 fewer lines in ``src``, with the same behaviour and the
+  same simulated results. In the core library, the MQTT client's
+  acknowledgement waits, abandoned-future handling, reconnect hand-over
+  and subscription proxies, the auth client's requests, the schedule
+  models' shared entry fields, and the CLI's reply waits and energy
+  tables each have one implementation. New shared helpers:
+  ``MqttTopicBuilder.query_response_topic`` and, in ``nwp500.mqtt.utils``,
+  ``request_reply``, ``await_ack`` and ``consume_abandoned_future``. The
+  CLI's anti-legionella commands and ``fetch_reservations`` now remove
+  their reply subscription on every path. In the simulator, the TOU
+  window layout, reservation schedule choice, circulation gap, runs of
+  True, span merging and capped-stop rule are each written once
+  (``schedules.scenario_tou_windows``, ``Scenario.reservation_schedule``,
+  ``Circulation.of``, ``circulation.run_gap``, ``history.true_runs``).
+
+Removed
+-------
+
+- ``sim_home_assistant.busy``: use ``sim_adapters.join_spans``, which
+  gives the same spans. ``sim.history_frame.merge``: use
+  ``sim.circulation.merge_runs(spans, timedelta(0))``.
+  ``sim.params.SCALED`` (``Provenance.SCALED`` stays) and
+  ``sim.ready.ELEMENT_MODES``. ``sim_adapters._L_PER_GAL`` is public as
+  ``sim_adapters.L_PER_GAL``.
+- The CLI output formatter's unused ``print_device_list``,
+  ``print_device_tree`` and ``print_markdown_report``.
+
+Fixed
+-----
+
+- **MQTT documentation imports.** Five examples imported from the
+  nonexistent ``nwp500.mqtt_utils``; they import from ``nwp500.mqtt``.
+
 Version 9.14.0 (2026-11-20)
 ===========================
 
