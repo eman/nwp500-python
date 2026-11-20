@@ -1106,16 +1106,18 @@ def element_notes(
     return notes
 
 
-def _check_element(s: _Step) -> None:
-    """A running element that has reached its off point stops; otherwise
-    it runs on to it."""
+def _check_element(
+    s: _Step, reason: StopReason = "target", *, mode_follows: bool = False
+) -> None:
+    """A running element that has reached its off point stops, for
+    ``reason`` (``_stop_element``); otherwise it runs on to it."""
     e = s.state.element
     if not e.running:
         return
     temp = s.upper if e.zone == "upper" else s.lower
     off = s.sp - _off_deficit(s, e.zone)
     if temp >= off - ELEMENT_DONE_F:
-        _stop_element(s, "target")
+        _stop_element(s, reason, mode_follows=mode_follows)
     else:
         s.act(ElementRetarget(off))
 
@@ -1288,13 +1290,8 @@ def _setpoint(
     s.state = replace(s.state, setpoint_f=value)
     s.act(SetpointSet(s.at, value))
     _unlatch(s)
-    e = s.state.element
-    if e.running:
-        temp = s.upper if e.zone == "upper" else s.lower
-        if temp >= value - _off_deficit(s, e.zone) - ELEMENT_DONE_F:
-            _stop_element(s, "write", mode_follows=mode_follows)
-        else:
-            s.act(ElementRetarget(s.sp - _off_deficit(s, e.zone)))
+    if s.state.element.running:
+        _check_element(s, "write", mode_follows=mode_follows)
     elif (
         s.heats_as == ENERGY_SAVER
         and value > previous
