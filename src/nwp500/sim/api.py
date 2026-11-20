@@ -164,6 +164,19 @@ def _air_readings(environment: Environment) -> pd.DataFrame | None:
     )
 
 
+def _air(environment: Environment) -> Callable[[datetime], float]:
+    """The air at the heater by instant, °F: the readings'
+    (``AmbientSampler``), else the one value, the default for one that
+    is not finite."""
+    readings = _air_readings(environment)
+    if readings is not None:
+        return AmbientSampler(readings).at
+    a = environment.ambient_f
+    assert not isinstance(a, tuple)
+    value = float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F
+    return lambda _: value
+
+
 def _ambient_frame(
     environment: Environment, start: datetime, until: datetime
 ) -> pd.DataFrame:
@@ -172,16 +185,8 @@ def _ambient_frame(
     readings interpolated onto it and held past their ends."""
     t0 = pd.Timestamp(start - AMBIENT_BEFORE).floor(AMBIENT_STEP)
     stamps = pd.date_range(t0, until + AMBIENT_AFTER, freq=AMBIENT_STEP)
-    readings = _air_readings(environment)
-    if readings is not None:
-        sampler = AmbientSampler(readings)
-        values = [sampler.at(t.to_pydatetime()) for t in stamps]
-    else:
-        a = environment.ambient_f
-        assert not isinstance(a, tuple)
-        values = [float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F] * len(
-            stamps
-        )
+    air = _air(environment)
+    values = [air(t.to_pydatetime()) for t in stamps]
     return pd.DataFrame({"ambient_f": values}, index=stamps)
 
 
@@ -1492,16 +1497,6 @@ def _instant(at: datetime) -> datetime:
     return at.astimezone(UTC)
 
 
-def _ambient_at(environment: Environment, at: datetime) -> float:
-    """The air at the heater at ``at``, °F, from ``environment``."""
-    a = environment.ambient_f
-    readings = _air_readings(environment)
-    if readings is None:
-        assert not isinstance(a, tuple)
-        return float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F
-    return AmbientSampler(readings).at(at)
-
-
 def _to_start(
     s: Scenario, params: HeaterParams, start: datetime
 ) -> tuple[float, float]:
@@ -1625,7 +1620,7 @@ def _next_recovery(
         # there, or the rest of one under way, leaves.
         upper, lower = _to_start(s, params, start)
         if mode != "electric" and _out_of_range(
-            params, [_ambient_at(s.environment, start)], lower
+            params, [_air(s.environment)(start)], lower
         ):
             # No heat-pump recovery runs: the elements heat the tank,
             # from the heater's own start.
@@ -1991,7 +1986,7 @@ def time_to_ready(
         drawing=drawing,
         element_on=s.state.element_running and not disabled,
         tou_window=marked,
-        ambient_f=_ambient_at(s.environment, s.start),
+        ambient_f=_air(s.environment)(s.start),
         compressor_on=s.state.compressor_running and not disabled,
     )
     inlet = _inlet_f(s, params)
@@ -2486,7 +2481,7 @@ def active_cycle(
         defaults.append("hp_lower_off_f=setpoint_f")
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
-    air = _ambient_at(environment, at)
+    air = _air(environment)(at)
     stop = goal + params.controller.hp_stop_overshoot_f
     # Its probes read warm over the water (``_warm``): the walk's stop
     # is the water's.
