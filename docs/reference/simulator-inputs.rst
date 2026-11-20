@@ -356,7 +356,12 @@ from ``request_reservations``). A boolean ``enable`` is refused, since
    sim.Commands(reservations=[device])   # read as the simulator's form
 
 ``sim.inputs.DEVICE_ENTRY_FIELDS`` maps each device field to the
-simulator's.
+simulator's. A device entry may also carry the fields the library's
+``ReservationEntry.model_dump()`` adds (``sim.inputs.DEVICE_DUMP_FIELDS``:
+``enabled``, ``days``, ``time``, ``temperature``, ``unit`` and
+``mode_name``), so an entry ``nwp-cli reservations get --json`` prints
+goes in as it is; the six fields hold the entry, and an ``enabled``
+that disagrees with ``enable`` is refused.
 
 An entry fires in its minute on each day its mask names, setting the
 mode and the setpoint. Its ``mode`` is a ``ReservationMode``: 1-4 are
@@ -500,7 +505,7 @@ heater does on its own.
      - None
      - The TOU switch, set at the start. None keeps the heater's. A
        plan's ``tou`` command, ``{"enabled": true}``, is taken in its
-       place; giving both is refused.
+       place; giving both is refused. A null ``tou`` is no command.
    * - ``vacation``
      - None
      - ``{"days": 1-99}``: Vacation from the start. The heater returns
@@ -765,8 +770,8 @@ valve**, and names the installation's draw terms
 in ``unfitted`` (``INSTALLATION_TERMS``: one installation's fits stand
 in for them); ``site_example_params`` is the installation the values were
 fitted at, its valve included, and ``with_valve(params, (intercept_f,
-slope))`` sets a valve's delivery line, delivered water at ``intercept +
-slope x upper zone``, never above the tank. ``with_valve(params,
+slope))`` (a tuple or a list) sets a valve's delivery line, delivered
+water at ``intercept + slope x upper zone``, never above the tank. ``with_valve(params,
 delivery_f)`` sets a valve that delivers ``delivery_f`` degF, the
 tank's own water while the tank is cooler (the line ``(delivery_f,
 0)``). ``NO_VALVE`` is ``(0, 1)``; ``SITE_VALVE`` that installation's

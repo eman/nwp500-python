@@ -24,8 +24,10 @@ valve or its own climate (``DrawParams.climate_f``) passes its own
 """
 
 import math
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import cast
 
 from nwp500.sim.params import (
     INSTALLATION_TERMS,
@@ -272,21 +274,33 @@ def _fitted_65() -> HeaterParams:
 
 
 def with_valve(
-    params: HeaterParams, valve: float | tuple[float, float]
+    params: HeaterParams, valve: float | Sequence[float]
 ) -> HeaterParams:
     """``params`` with the mixing valve ``valve``: a number is a valve
     set to deliver that temperature, °F, the tank's own water while the
-    tank is cooler; a pair ``(intercept_f, slope)`` is a measured line,
-    delivered water at ``intercept_f + slope × upper``, never above the
-    tank; ``NO_VALVE`` for none. These are the draw terms' line
+    tank is cooler; a pair ``(intercept_f, slope)``, a tuple or a list
+    (as JSON loads one), is a measured line, delivered water at
+    ``intercept_f + slope × upper``, never above the tank; ``NO_VALVE``
+    for none. These are the draw terms' line
     (``DrawParams.delivery_intercept_f`` and ``delivery_slope``): a set
-    temperature is that intercept and a slope of 0."""
-    if isinstance(valve, tuple):
-        intercept, slope = valve
-    else:
+    temperature is that intercept and a slope of 0. Raises
+    ``ValueError`` for a bool, a number that is not finite, or anything
+    else that is not a pair of numbers."""
+    if isinstance(valve, bool):
+        raise ValueError(f"a valve's delivery is a temperature: {valve!r}")
+    if isinstance(valve, int | float):
         if not math.isfinite(valve):
             raise ValueError(f"a valve's delivery is a temperature: {valve!r}")
         intercept, slope = float(valve), 0.0
+    else:
+        pair = cast(tuple[object, ...], tuple(valve))
+        if len(pair) != 2 or any(
+            isinstance(v, bool) or not isinstance(v, int | float) for v in pair
+        ):
+            raise ValueError(
+                f"a valve's line is (intercept_f, slope): {valve!r}"
+            )
+        intercept, slope = (float(cast(float, v)) for v in pair)
     return replace(
         params,
         draw=replace(

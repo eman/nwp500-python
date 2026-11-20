@@ -28,7 +28,10 @@ Added
 - **A device's own setpoint range.** ``device_profile(feature)`` and
   ``sim.profile.heater_profile(..., feature=feature)`` take the range
   from a ``DeviceFeature``; without one it stays 104.9 to 149.9 degF.
-  See :doc:`/reference/python_api/heater`.
+  ``heater_profile`` keeps it within the 104.9 to 149.9 degF the
+  simulation runs, so a setpoint the profile offers walks, and raises
+  ``ValueError`` for a device range wholly outside it. See
+  :doc:`/reference/python_api/heater`.
 - **Command value ranges.** ``COMMAND_RANGES`` gives each whole-number
   command key's range (vacation ``days`` 1 to 99, anti-Legionella
   ``period_days`` 1 to 30) and ``COMMAND_KEYS_ONLY_WITH`` the keys
@@ -55,8 +58,10 @@ Added
 - **A mixing valve given as the temperature it delivers.**
   ``with_valve(params, 120.0)`` sets a valve that delivers 120 degF, or
   the tank's own water while the tank is cooler, beside
-  ``with_valve(params, (intercept_f, slope))`` for a measured line. See
-  "Parameters: HeaterParams" in :doc:`/reference/simulator-inputs`.
+  ``with_valve(params, (intercept_f, slope))`` for a measured line. The
+  line may be any pair, a list as JSON loads one included; a bool is
+  refused. See "Parameters: HeaterParams" in
+  :doc:`/reference/simulator-inputs`.
 - **The heater's tank layers laid on where they apply.**
   ``sim_live.with_layers`` lays the heater's layers on a scenario only
   when it is the heater's tank now (the heater's start, parameters and
@@ -71,14 +76,18 @@ Added
   in the device's six fields (``enable``, ``week``, ``hour``, ``min``,
   ``mode``, ``param``), as a mapping or as the library's
   ``ReservationEntry``, so a list read with ``request_reservations``
-  goes in as it is. ``sim.ReservationEntry.from_device`` and
+  goes in as it is, and so does an entry ``nwp-cli reservations get
+  --json`` prints, with the fields the library's ``model_dump()`` adds
+  (``sim.inputs.DEVICE_DUMP_FIELDS``; its ``enabled`` has to agree with
+  ``enable``). ``sim.ReservationEntry.from_device`` and
   ``to_device`` convert one entry either way, and
   ``sim.inputs.DEVICE_ENTRY_FIELDS`` maps the field names. See the
   reservation entry table in :doc:`/reference/simulator-inputs`.
 - **A scenario's commands take every command a plan carries.**
   ``Commands`` takes ``vacation``, ``power``, ``anti_legionella`` and
   ``demand_response`` in the keys of ``sim.profile.COMMAND_KEYS``, and
-  ``tou`` in place of ``tou_enabled``. Power off, and a vacation that
+  ``tou`` in place of ``tou_enabled``, a null ``tou`` being no TOU
+  command, as a null is for the others. Power off, and a vacation that
   lasts the whole span, are walked as Power Off and Vacation; the
   others the walk cannot follow are left out and named in ``reasons``
   (``vacation_not_modelled``, ``power_not_modelled``,
@@ -138,6 +147,14 @@ Fixed
   ``update_reservations_confirmed`` timed out. It now takes the list from
   the device-keyed topic too. See "Reservation and Recirculation Schedule
   Responses" in :doc:`/reference/protocol/mqtt_protocol`.
+- **``nwp-cli reservations set`` reads a relayed confirmation.** It
+  listened for the device's echo on the client-keyed ``rsv/rd`` topic
+  only, so it logged "Timed out updating reservations." when the cloud
+  relayed the list on the device's own topic, though the write was
+  applied, and it left its subscription in place. It now writes through
+  ``update_reservations_confirmed``, prints the schedule the device
+  echoed, and logs an entry the client refuses instead of raising. See
+  :doc:`/reference/python_api/cli`.
 - **Calibration no longer raises a pandas FutureWarning.** The heat
   pump fit's recovery frame held the first run's ``minutes_off`` (NaN)
   as an object column, and pandas 2 warned on concatenating it on every

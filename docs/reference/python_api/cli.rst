@@ -471,6 +471,11 @@ View and manage reservation schedules.
    nwp-cli reservations delete <index>
    nwp-cli reservations update <index> [--days] [--hour] [--minute] [--mode] [--temp] [--enable|--disable]
 
+``set`` writes the whole list and waits up to 10 seconds for the
+device's echo of it (``update_reservations_confirmed``), then prints
+the schedule the device holds as JSON; with no echo it logs "Timed out
+updating reservations."
+
 **Options (add):**
 
 .. option:: --days
