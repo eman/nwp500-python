@@ -339,8 +339,10 @@ class TestWhatEndsTheRecovery:
         self, params: HeaterParams, mode: int
     ) -> None:
         """The element is dropped short of the setpoint; the compressor
-        carrying on does not make the recovery whole."""
-        s = _scenario(125.0, 110.0, given={"schedules": _tou_opening_at(12, 8)})
+        carrying on does not make the recovery whole. At 6 min: dropped
+        at 8, the heat still on its way to the top takes the upper probe
+        to the setpoint 0.83 min after."""
+        s = _scenario(125.0, 110.0, given={"schedules": _tou_opening_at(12, 6)})
         r = element_mode(s, params, mode=mode)
         assert r.upper_setpoint_minutes is None
         assert r.full_minutes is None

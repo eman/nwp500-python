@@ -18,6 +18,15 @@ past what drives it:
   stepped so no layer passes its neighbours (the maximum principle);
 - ``add_heat``: heat into layers, then ``mix``, so heat put in low
   rises to where it belongs;
+- ``rise``: the upper element's heat as its plume: the water it heats
+  leaves the element's layer and rises to where the column is as warm,
+  and the water between sinks to take its place. ``plume_gal`` gives
+  the plume as much water as still reaches the top a set excess warmer
+  than the warmest water above the element: over a zone as warm
+  throughout, a few gallons a minute that fill it from the top; under
+  a warmer top, as a draw leaves the water at the element, a thinner,
+  hotter plume, so a short run heats a hot top instead of the whole
+  zone;
 - ``stir``: the compressor's start: the condenser's convection pools
   the water it wraps with the water below it (``Layout.stir_weights``)
   to their mean, so the lower probe dips to the cold bottom's share
@@ -181,6 +190,12 @@ class Layout:
     correction_top: float | None = None
     #: The column's axial conductance, end to end, BTU/hr·°F.
     conductance_btu_hr_f: float
+    #: How much warmer than the warmest water above it the upper
+    #: element's plume reaches the top, °F
+    #: (``TankParams.upper_plume_excess_f``, ``plume_gal``); 0 puts its
+    #: heat in its layer, which turns over into the cooler ones above,
+    #: as the lower element's always does.
+    upper_plume_excess_f: float = 0.0
     #: The air and the condenser's water the heat pump's maps are read
     #: over, °F: the controller's envelope (``hp_air_range_f``,
     #: ``hp_water_range_f``), where a fit is checked
@@ -237,6 +252,7 @@ class Layout:
             "ua_bottom_btu_hr_f",
             "ua_top_btu_hr_f",
             "conductance_btu_hr_f",
+            "upper_plume_excess_f",
             "upper_probe_spread_gal",
             "lower_probe_spread_gal",
         ):
@@ -368,6 +384,7 @@ def layout(params: HeaterParams) -> Layout:
         ua_bottom_btu_hr_f=loss.ua_bottom_btu_hr_f,
         ua_top_btu_hr_f=loss.ua_top_btu_hr_f,
         conductance_btu_hr_f=t.conductance_btu_hr_f,
+        upper_plume_excess_f=t.upper_plume_excess_f,
         upper_probe_spread_gal=t.upper_probe_spread_gal,
         lower_probe_spread_gal=t.lower_probe_spread_gal,
         lower_probe_offset_f=t.lower_probe_offset_f,
@@ -496,9 +513,11 @@ def add_heat(lay: Layout, state: TankState, btu: Sequence[float]) -> TankState:
     heats = tuple(
         h + q / lay.layer_btu_f for h, q in zip(state.heats_f, btu, strict=True)
     )
+    # A layer whose heat is as it was (none, or too little to move it)
+    # keeps its temperature exactly.
     temps = tuple(
-        temp_f(h) if q else t
-        for h, q, t in zip(heats, btu, layers, strict=True)
+        t if h == h0 else temp_f(h)
+        for h, h0, t in zip(heats, state.heats_f, layers, strict=True)
     )
     return mix(TankState.of_heats(heats, temps))
 
@@ -546,6 +565,67 @@ def element_heat(lay: Layout, zone: Zone, btu: float) -> tuple[float, ...]:
     """``btu`` of the ``zone`` element's, into its layer."""
     at = lay.element_layer(zone)
     return tuple(btu if i == at else 0.0 for i in range(lay.layers))
+
+
+def rise(
+    lay: Layout, state: TankState, zone: Zone, btu: float, gal: float
+) -> TankState:
+    """``state`` with ``btu`` of the ``zone`` element's carried up by
+    its plume, ``gal`` of water: the plume leaves the element's layer
+    that much hotter and rises through the layers cooler than it, into
+    the first that is not (or the top), mixing in there, while the water
+    between sinks by its volume to take its place. The same heat. With
+    no water to carry it, or none cooler above, the heat stays in the
+    element's layer (``element_heat``), and so does a plume of the
+    whole zone above the element or more, which turns it over. A plume
+    of more than a layer is taken a layer at a time, each rising to its
+    own height."""
+    layers = _layers(lay, state)
+    if btu == 0.0:
+        return state
+    at = lay.element_layer(zone)
+    if not 0.0 < gal < (lay.layers - at) * lay.layer_gal:
+        return add_heat(lay, state, element_heat(lay, zone, btu))
+    pieces = max(1, math.ceil(gal / lay.layer_gal))
+    share = gal / pieces / lay.layer_gal
+    # Each piece's heat, as a layer's (``heat_f``), and the plume's lift
+    # over the water it leaves.
+    q = btu / pieces / lay.layer_btu_f
+    lift = q / share if share > 0.0 else math.inf
+    heats = list(state.heats_f)
+    for _ in range(pieces):
+        plume = heats[at] + lift
+        top = at
+        while top + 1 < lay.layers and heats[top + 1] < plume:
+            top += 1
+        out = heats[:]
+        for i in range(at, top):
+            out[i] = heats[i] + share * (heats[i + 1] - heats[i])
+        out[top] = heats[top] + share * (heats[at] - heats[top]) + q
+        heats = out
+    # A layer the water left as it was keeps its temperature exactly.
+    temps = tuple(
+        t if h == h0 else temp_f(h)
+        for h, h0, t in zip(heats, state.heats_f, layers, strict=True)
+    )
+    return mix(TankState.of_heats(heats, temps))
+
+
+def plume_gal(lay: Layout, state: TankState, zone: Zone, btu: float) -> float:
+    """The water ``btu`` of the ``zone`` element's plume carries up
+    (``rise``): as much as reaches the top
+    ``Layout.upper_plume_excess_f`` warmer than the warmest water above
+    the element. Over water as warm as the element's layer, its lift
+    is the excess alone; the more the water above is stratified, the
+    thinner and hotter the plume. 0 with no excess (the layer's heat
+    turned over) or no layer above."""
+    at = lay.element_layer(zone)
+    excess = lay.upper_plume_excess_f
+    if excess <= 0.0 or btu <= 0.0 or at + 1 >= lay.layers:
+        return 0.0
+    heats = state.heats_f
+    lift = max(0.0, max(heats[at + 1 :]) - heats[at]) + excess
+    return btu / (WATER_BTU_PER_GAL_F * lift)
 
 
 # ── flow ──
@@ -1239,8 +1319,9 @@ class _Walk:
         """The tank from ``a`` (the draws there taken) to ``b``: the
         compressor's start stir where its heating begins at ``a`` (it
         still running), the
-        heat in, the flows, the jacket, conduction, then any inversion
-        turned over."""
+        heat in (the upper element's by its plume, ``rise``), the
+        flows, the jacket, conduction, then any inversion turned
+        over."""
         lay = self.lay
         hours = (b - a).total_seconds() / 3600.0
         air = self.air_f(a)
@@ -1285,22 +1366,26 @@ class _Walk:
                     sum(observe(lay, state)) / 2.0 * heat_h if heat_h else 0.0
                 ),
             )
+        plumes: list[tuple[Zone, float]] = []
         for e in self.heating.elements:
             off = None if e.off_at is None else e.off_at + e.lag
-            q = (
-                credit
-                * e.watts
-                * BTU_PER_WH
-                * _overlap_h(a, b, e.on_at + e.lag, off)
-            )
+            heating_h = _overlap_h(a, b, e.on_at + e.lag, off)
+            q = credit * e.watts * BTU_PER_WH * heating_h
             wh = e.watts * _overlap_h(a, b, e.on_at, e.off_at)
-            heat = [
-                x + y
-                for x, y in zip(heat, element_heat(lay, e.zone, q), strict=True)
-            ]
+            if e.zone == "upper" and lay.upper_plume_excess_f > 0.0:
+                plumes.append((e.zone, q))
+            else:
+                heat = [
+                    x + y
+                    for x, y in zip(
+                        heat, element_heat(lay, e.zone, q), strict=True
+                    )
+                ]
             books += Books(element_btu=q, element_wh=wh)
         if any(heat):
             state = add_heat(lay, state, heat)
+        for zone, q in plumes:
+            state = rise(lay, state, zone, q, plume_gal(lay, state, zone, q))
         for f in self.flows_over(a, b):
             gal = f.gpm * 60.0 * _overlap_h(a, b, f.start, f.end)
             if gal > 0.0:
@@ -1347,7 +1432,8 @@ def walk(
     compressor's start stirs the bottom where its heating begins there
     (``stir``), then the heat goes in (the condenser's by its map at the
     air and the water at the step's start, held to the envelope
-    ``Layout.map_air_f`` and ``map_water_f``), the water flows, the jacket
+    ``Layout.map_air_f`` and ``map_water_f``; then the upper element's,
+    by its plume, ``rise``), the water flows, the jacket
     loses, the layers conduct, and inversions turn over. ``stop``, read
     after each step,
     ends the walk at the first instant it holds, to

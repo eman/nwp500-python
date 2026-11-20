@@ -293,14 +293,14 @@ class TestCarryOn:
         assert not other.settled
 
     def test_an_elements_heat_still_arriving_is_under_way(self) -> None:
-        # High Demand: the upper element's late-morning run, the walk
+        # High Demand: the upper element's midday run, the walk
         # ending 30 s after it stops with nothing running, its heat
         # reaching the water a dead time (``upper_dead_time_min``,
         # 1.21 min) after.
         high = BASE.model_copy(
             update={
                 "loads": sim.Loads(),
-                "state": sim.HeaterState(upper_f=100, lower_f=95),
+                "state": sim.HeaterState(upper_f=119, lower_f=112),
                 "settings": SETTINGS.model_copy(update={"mode": 4}),
             }
         )

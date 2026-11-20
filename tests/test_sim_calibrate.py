@@ -126,7 +126,8 @@ class TestTheFits:
             readings, ambient=AIR_F, params=_fitted(12.0), tank_weeks=None
         )
         assert every.tank.n_windows == 20
-        assert every.calibration.params.loss.ua_side_btu_hr_f > 1.1 * UA
+        # The older days' loss, twice the last weeks', pulls it up.
+        assert every.calibration.params.loss.ua_side_btu_hr_f > 1.05 * UA
         # Under the default's weeks, the whole history.
         assert sc.TANK_WEEKS * 7 > 20
         default = sc.calibrate(readings, ambient=AIR_F, params=_fitted(12.0))

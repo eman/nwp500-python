@@ -1110,7 +1110,23 @@ with. Heights are shares of the volume from the bottom.
        read the upper probe to 4.4 degF RMS at 0.72 against 4.7 at
        0.79 (2026-11-02, the installation's fitted parameters, the
        lower element's minutes replayed in its layer), so 0.72 is
-       kept.
+       kept. Those figures turn the upper's layer over; its heat now
+       rises as a plume (below).
+   * - ``tank.upper_plume_excess_f``
+     - 10 degF
+     - How much warmer than the warmest water above the element the
+       upper element's plume reaches the top. The plume carries as much
+       water as that leaves it, rises to where the column is as warm,
+       and the water it passes sinks: over a mixed zone a few gallons a
+       minute, after a depleting draw a thinner, hotter plume that
+       heats a hot top. 0 turns its layer over as before. Fitted on the
+       record's 36 upper-element runs from 2026-02-26, walked from their
+       replayed layers with their recorded heating: the upper probe
+       6.55 degF RMS against 8.67 turned over, 9.24 against 12.81 on
+       the cold starts, and the mixed starts no worse; the draw-free
+       climb 2.24 degF/min against the record's 2.10. The lower element keeps its layer: its runs read closer
+       that way (:doc:`/explanation/simulator-methodology`, "The
+       elements").
    * - ``tank.condenser_span``
      - 0-0.45
      - The coil wraps the lower stratum: recoveries heat 0.44-0.48 of
