@@ -983,19 +983,7 @@ class HomeAssistantClient:
         names = sorted(set(entities))
         if not names:
             return History({}, {})
-        doc = await self._json(
-            "GET",
-            f"/api/history/period/{start.astimezone(UTC).isoformat()}",
-            params={
-                "filter_entity_id": ",".join(names),
-                "end_time": end.astimezone(UTC).isoformat(),
-                # Full rows, every change: a minimal row carries only
-                # ``last_changed``, which an attribute-only update
-                # leaves behind.
-                # With attributes: each row's unit, which can change.
-                "significant_changes_only": "0",
-            },
-        )
+        doc = await self._period(names, start, end)
         outages = parse_outages(doc, end)
         units = parse_units(doc)
         states = parse_states(doc)
@@ -1027,16 +1015,7 @@ class HomeAssistantClient:
         each reading from the unit it was recorded in
         (``parse_outdoor_history``), the entity's own unit where a row
         names none. A reading in no unit ``to_f`` reads is left out."""
-        doc = await self._json(
-            "GET",
-            f"/api/history/period/{start.astimezone(UTC).isoformat()}",
-            params={
-                "filter_entity_id": entity,
-                "end_time": end.astimezone(UTC).isoformat(),
-                # Every row, with its attributes: the temperature is one.
-                "significant_changes_only": "0",
-            },
-        )
+        doc = await self._period([entity], start, end)
         rows = parse_outdoor_history(doc, entity)
         today: str | None = None
         if any(u is None for _, _, u in rows):
@@ -1048,6 +1027,25 @@ class HomeAssistantClient:
             except ValueError:
                 continue
         return out
+
+    async def _period(
+        self, entities: Sequence[str], start: datetime, end: datetime
+    ) -> Any:
+        """``/api/history/period``'s answer for ``entities``."""
+        return await self._json(
+            "GET",
+            f"/api/history/period/{start.astimezone(UTC).isoformat()}",
+            params={
+                "filter_entity_id": ",".join(entities),
+                "end_time": end.astimezone(UTC).isoformat(),
+                # Full rows, every change: a minimal row carries only
+                # ``last_changed``, which an attribute-only update
+                # leaves behind.
+                # With attributes: each row's unit, which can change,
+                # and a weather entity's temperature.
+                "significant_changes_only": "0",
+            },
+        )
 
     async def _temperature_unit(self, entity: str) -> str | None:
         doc = await self._json("GET", f"/api/states/{entity}")
