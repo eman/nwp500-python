@@ -52,12 +52,8 @@ class DeviceSubscriptionsMixin:
         Returns:
             Subscription packet ID
         """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        # Delegate to subscription manager
-        return await self._subscription_manager.subscribe_device(
-            device, callback
+        return await self._delegate_subscription(
+            "subscribe_device", device, callback
         )
 
     async def _delegate_subscription(self, method_name: str, *args: Any) -> int:
@@ -66,6 +62,13 @@ class DeviceSubscriptionsMixin:
             raise MqttNotConnectedError("Not connected to MQTT broker")
         method = getattr(self._subscription_manager, method_name)
         return cast(int, await method(*args))
+
+    async def _delegate_unsubscription(
+        self, method_name: str, *args: Any
+    ) -> None:
+        """Forward an unsubscribe to the manager; a no-op without one."""
+        if self._subscription_manager:
+            await getattr(self._subscription_manager, method_name)(*args)
 
     async def subscribe_device_status(
         self, device: Device, callback: Callable[[DeviceStatus], None]
@@ -79,10 +82,8 @@ class DeviceSubscriptionsMixin:
         self, device: Device, callback: Callable[[DeviceStatus], None]
     ) -> None:
         """Unsubscribe a specific device status callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_device_status(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_device_status", device, callback
         )
 
     async def subscribe_device_feature(
@@ -97,10 +98,8 @@ class DeviceSubscriptionsMixin:
         self, device: Device, callback: Callable[[DeviceFeature], None]
     ) -> None:
         """Unsubscribe a specific device feature callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_device_feature(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_device_feature", device, callback
         )
 
     async def subscribe_energy_usage(
@@ -119,10 +118,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[EnergyUsageResponse], None],
     ) -> None:
         """Unsubscribe a specific energy usage callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_energy_usage(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_energy_usage", device, callback
         )
 
     async def subscribe_energy_usage_monthly(
@@ -141,10 +138,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[EnergyUsageResponse], None],
     ) -> None:
         """Unsubscribe a specific monthly energy usage callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_energy_usage_monthly(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_energy_usage_monthly", device, callback
         )
 
     async def subscribe_energy_usage_hourly(
@@ -163,10 +158,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[EnergyUsageResponse], None],
     ) -> None:
         """Unsubscribe a specific hourly energy usage callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_energy_usage_hourly(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_energy_usage_hourly", device, callback
         )
 
     async def subscribe_diagnostics(
@@ -185,10 +178,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[DeviceDiagnostics], None],
     ) -> None:
         """Unsubscribe a specific diagnostics callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_diagnostics(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_diagnostics", device, callback
         )
 
     async def subscribe_firmware_commit_response(
@@ -207,10 +198,9 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[dict[str, Any]], None],
     ) -> None:
         """Unsubscribe a specific firmware commit reply callback."""
-        if not self._subscription_manager:
-            return
-        manager = self._subscription_manager
-        await manager.unsubscribe_firmware_commit_response(device, callback)
+        await self._delegate_unsubscription(
+            "unsubscribe_firmware_commit_response", device, callback
+        )
 
     async def subscribe_firmware_download_info(
         self,
@@ -228,10 +218,9 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[FirmwareDownloadInfo], None],
     ) -> None:
         """Unsubscribe a specific firmware download info callback."""
-        if not self._subscription_manager:
-            return
-        manager = self._subscription_manager
-        await manager.unsubscribe_firmware_download_info(device, callback)
+        await self._delegate_unsubscription(
+            "unsubscribe_firmware_download_info", device, callback
+        )
 
     async def subscribe_control_fail_response(
         self,
@@ -265,10 +254,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[ControlFailResponse], None],
     ) -> None:
         """Unsubscribe a specific control failure callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_control_fail_response(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_control_fail_response", device, callback
         )
 
     async def subscribe_app_connection(
@@ -302,10 +289,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[AppConnectionEvent], None],
     ) -> None:
         """Unsubscribe a specific app-connection callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_app_connection(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_app_connection", device, callback
         )
 
     async def subscribe_reservation_response(
@@ -324,10 +309,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[ReservationSchedule], None],
     ) -> None:
         """Unsubscribe a specific reservation response callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_reservation_response(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_reservation_response", device, callback
         )
 
     async def subscribe_recirculation_schedule_response(
@@ -346,11 +329,8 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[RecirculationSchedule], None],
     ) -> None:
         """Unsubscribe a specific recirculation schedule callback."""
-        if not self._subscription_manager:
-            return
-        manager = self._subscription_manager
-        await manager.unsubscribe_recirculation_schedule_response(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_recirculation_schedule_response", device, callback
         )
 
     async def subscribe_tou_response(
@@ -385,8 +365,6 @@ class DeviceSubscriptionsMixin:
         callback: Callable[[TOUReservationSchedule], None],
     ) -> None:
         """Unsubscribe a specific TOU response callback."""
-        if not self._subscription_manager:
-            return
-        await self._subscription_manager.unsubscribe_tou_response(
-            device, callback
+        await self._delegate_unsubscription(
+            "unsubscribe_tou_response", device, callback
         )
