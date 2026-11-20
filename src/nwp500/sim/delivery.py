@@ -170,20 +170,6 @@ def _state_before(
     return q.upper_f, q.lower_f
 
 
-def _at_onset(
-    points: Sequence[PathPoint],
-    delivery: Sequence[float],
-    at: datetime,
-    upper: float,
-) -> float:
-    """The delivery at ``at``, before anything drawn there: the last
-    element before it, or the first at it; the zone if none."""
-    k = next((i for i, p in enumerate(points) if p.at >= at), None)
-    if k is None:
-        return upper
-    return delivery[k] if points[k].at == at else delivery[max(0, k - 1)]
-
-
 @dataclass(frozen=True)
 class Depletion:
     """The delivery temperature over a span, and whether it fell below
@@ -297,13 +283,14 @@ class DrawWindowResult:
     draws_until: datetime | None = None
 
 
-def _onset(points: Sequence[PathPoint], at: datetime) -> PathPoint | None:
-    """The path's element in force at ``at``, before anything taken
-    there: the first at that instant, else the last before it."""
+def _onset(points: Sequence[PathPoint], at: datetime) -> int | None:
+    """The index of the path's element in force at ``at``, before
+    anything taken there: the first at that instant, else the last
+    before it."""
     k = bisect_left([p.at for p in points], at)
     if k < len(points) and points[k].at == at:
-        return points[k]
-    return points[k - 1] if k > 0 else None
+        return k
+    return k - 1 if k > 0 else None
 
 
 def draw_windows(
@@ -329,9 +316,10 @@ def draw_windows(
         # A window already open at the start is read at the start.
         opened = max(start, sim.points[0].at)
         state = _state_before(sim.points, opened)
-        there = _onset(sim.points, opened)
-        if state is None or there is None:
+        i = _onset(sim.points, opened)
+        if state is None or i is None:
             continue
+        there = sim.points[i]
         upper, lower = state
         judged = depletion(
             sim.points, opened, min(end, sim.points[-1].at), delivery, p
@@ -354,7 +342,7 @@ def draw_windows(
                 expected_gal=expected,
                 upper_f=upper,
                 lower_f=lower,
-                delivery_f=_at_onset(sim.points, delivery, opened, upper),
+                delivery_f=delivery[i],
                 deliverable_gal=gal,
                 margin_gal=None if expected is None else gal - expected,
                 recovery=recovery,
