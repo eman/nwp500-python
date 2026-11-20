@@ -9,39 +9,21 @@ fetch the current schedule, apply the change, then send the updated list back.
 All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 """
 
-import asyncio
 import logging
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING, Any
 
 from .converters import device_bool_from_python
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationEntry, ReservationSchedule
 from .mqtt.control import validate_reservation_entries
+from .mqtt.utils import request_reply
 
 if TYPE_CHECKING:
     from .models import Device
     from .mqtt import NavienMqttClient
 
 _logger = logging.getLogger(__name__)
-
-
-async def _unsubscribe(
-    mqtt: NavienMqttClient,
-    device: Device,
-    on_schedule: Callable[[ReservationSchedule], None],
-) -> None:
-    """Remove a reservation reply callback, logging a failure."""
-    try:
-        await mqtt.unsubscribe_reservation_response(device, on_schedule)
-    except Exception:
-        from .mqtt.utils import redact_mac
-
-        _logger.warning(
-            "Failed to unsubscribe reservations response handler for device %s",
-            redact_mac(device.device_info.mac_address),
-            exc_info=True,
-        )
 
 
 async def fetch_reservations(
@@ -62,22 +44,15 @@ async def fetch_reservations(
     Returns:
         The current :class:`ReservationSchedule`, or ``None`` on timeout.
     """
-    future: asyncio.Future[ReservationSchedule] = (
-        asyncio.get_running_loop().create_future()
+    return await request_reply(
+        mqtt.subscribe_reservation_response,
+        mqtt.unsubscribe_reservation_response,
+        device,
+        lambda: mqtt.request_reservations(device),
+        timeout=timeout,
+        what="reservations",
+        logger=_logger,
     )
-
-    def on_schedule(schedule: ReservationSchedule) -> None:
-        if not future.done():
-            future.set_result(schedule)
-
-    await mqtt.subscribe_reservation_response(device, on_schedule)
-    await mqtt.request_reservations(device)
-    try:
-        return await asyncio.wait_for(future, timeout=timeout)
-    except TimeoutError:
-        return None
-    finally:
-        await _unsubscribe(mqtt, device, on_schedule)
 
 
 async def _fetch_entries(
@@ -157,25 +132,18 @@ async def update_reservations_confirmed(
         reservation=[ReservationEntry(**entry) for entry in reservations],
     ).canonical()
 
-    future: asyncio.Future[ReservationSchedule] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def on_schedule(schedule: ReservationSchedule) -> None:
-        if not future.done() and schedule.canonical() == expected:
-            future.set_result(schedule)
-
-    await mqtt.subscribe_reservation_response(device, on_schedule)
-    try:
-        await mqtt.update_reservations(
+    return await request_reply(
+        mqtt.subscribe_reservation_response,
+        mqtt.unsubscribe_reservation_response,
+        device,
+        lambda: mqtt.update_reservations(
             device, reservations, enabled=enabled, kept=kept
-        )
-        try:
-            return await asyncio.wait_for(future, timeout=timeout)
-        except TimeoutError:
-            return None
-    finally:
-        await _unsubscribe(mqtt, device, on_schedule)
+        ),
+        timeout=timeout,
+        what="reservations",
+        logger=_logger,
+        accept=lambda schedule: schedule.canonical() == expected,
+    )
 
 
 async def add_reservation(

@@ -5,10 +5,12 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
+import asyncio
 import json
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -479,6 +481,48 @@ _ALT_KEYS: dict[str, str] = {
 }
 
 _SENTINEL = object()
+
+
+async def request_reply[T](
+    subscribe: Callable[[Device, Callable[[T], None]], Awaitable[Any]],
+    unsubscribe: Callable[[Device, Callable[[T], None]], Awaitable[Any]],
+    device: Device,
+    send: Callable[[], Awaitable[Any]],
+    *,
+    timeout: float,
+    what: str,
+    logger: logging.Logger,
+    accept: Callable[[T], bool] = lambda _: True,
+) -> T | None:
+    """Subscribe, ``send``, and wait for the first reply ``accept`` takes.
+
+    Returns ``None`` when no such reply arrives within ``timeout``. The
+    callback is removed afterwards; a failed unsubscribe is logged to
+    ``logger`` as a warning naming ``what``, the kind of response.
+    """
+    future: asyncio.Future[T] = asyncio.get_running_loop().create_future()
+
+    def on_reply(reply: T) -> None:
+        if not future.done() and accept(reply):
+            future.set_result(reply)
+
+    await subscribe(device, on_reply)
+    try:
+        await send()
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError:
+            return None
+    finally:
+        try:
+            await unsubscribe(device, on_reply)
+        except Exception:
+            logger.warning(
+                "Failed to unsubscribe %s response handler for device %s",
+                what,
+                redact_mac(device.device_info.mac_address),
+                exc_info=True,
+            )
 
 
 def get_response_data(message: dict[str, Any], key: str | None) -> Any:
