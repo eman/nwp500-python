@@ -1338,10 +1338,7 @@ class _Engine:
         """The compressor starts (``controller.StartCompressor``),
         heating after ``hold`` minutes, at the pace a recovery model
         gives it (``TankPhysics.scale``)."""
-        level = min(
-            self.sp + self.params.hp_stop_overshoot_f,
-            self.params.hp_water_range_f[1],
-        )
+        level = self._stop_level(self.sp)
         scale, confidence = 1.0, 1.0
         why: tuple[str, ...] = ()
         under_way = start.cause == "running" and not self.running_starts
