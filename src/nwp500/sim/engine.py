@@ -716,19 +716,7 @@ class _Engine:
         #: or a recovery takes it.
         self.draws = sorted(d for d in draws if start <= d[0] < until)
         self.withheld = sorted(withheld_windows)
-        self.path: list[PathPoint] = [
-            PathPoint(
-                start,
-                self.upper,
-                self.lower,
-                self.sp,
-                running,
-                0.0,
-                mode=self.mode,
-                layers_f=_layers_of(self.tank_state),
-                heating_disabled=ctl.disabled(self.state, self.settings),
-            )
-        ]
+        self.path: list[PathPoint] = [self._mark(running)]
         self.heating: list[HeatingInterval] = carried
         #: Instants the path must carry an element at, exactly (the
         #: forecast's draw windows): not the feature's events, only stops.
@@ -1517,22 +1505,25 @@ class _Engine:
                 )
             )
 
+    def _mark(self, heating: bool) -> PathPoint:
+        """The path's point at ``self.t``: the tank as it stands, with
+        no electricity charged to it."""
+        return PathPoint(
+            self.t,
+            self.upper,
+            self.lower,
+            self.sp,
+            heating,
+            0.0,
+            mode=self.mode,
+            layers_f=_layers_of(self.tank_state),
+            heating_disabled=ctl.disabled(self.state, self.settings),
+        )
+
     def _step_point(self) -> None:
         """The state just after a draw, at the draw's instant, so the
         path shows the step rather than a slide into it."""
-        self.path.append(
-            PathPoint(
-                self.t,
-                self.upper,
-                self.lower,
-                self.sp,
-                True,
-                0.0,
-                mode=self.mode,
-                layers_f=_layers_of(self.tank_state),
-                heating_disabled=ctl.disabled(self.state, self.settings),
-            )
-        )
+        self.path.append(self._mark(True))
 
     # ── entries, raw writes and the heater's mode events ──
 
@@ -1925,19 +1916,7 @@ class _Engine:
             self._set(
                 self.physics.draw(self.t, self.tank_state, gal, undiluted)
             )
-        self.path.append(
-            PathPoint(
-                self.t,
-                self.upper,
-                self.lower,
-                self.sp,
-                self.element is not None,
-                0.0,
-                mode=self.mode,
-                layers_f=_layers_of(self.tank_state),
-                heating_disabled=ctl.disabled(self.state, self.settings),
-            )
-        )
+        self.path.append(self._mark(self.element is not None))
 
     def _coast_to(self, at: datetime) -> None:
         """The tank walked to ``at`` exactly, taking the draws before
