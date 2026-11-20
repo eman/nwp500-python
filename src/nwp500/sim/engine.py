@@ -2002,8 +2002,30 @@ def simulate(
     (a raw write, ``id`` ``"settings"``). The tank is ``state``'s, or the
     probes', as for any walk.
     """
-    # Every argument as given, and nothing else bound yet.
-    return _Engine(**locals()).run()
+    return _Engine(
+        start=start,
+        upper_f=upper_f,
+        lower_f=lower_f,
+        running=running,
+        until=until,
+        setpoint_f=setpoint_f,
+        entries=entries,
+        heater=heater,
+        physics=physics,
+        draws=draws,
+        withheld_windows=withheld_windows,
+        marks=marks,
+        element_running=element_running,
+        element_running_since=element_running_since,
+        raw_writes=raw_writes,
+        stopped_at=stopped_at,
+        start_hold=start_hold,
+        running_hold=running_hold,
+        running_starts=running_starts,
+        controller=controller,
+        state=state,
+        resume=resume,
+    ).run()
 
 
 def energy_by_slot(
