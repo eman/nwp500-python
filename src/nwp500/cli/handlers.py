@@ -7,6 +7,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar, cast
 
 from nwp500 import (
+    ConvertedTOUPlan,
     Device,
     DeviceFeature,
     DeviceStatus,
@@ -709,6 +710,36 @@ async def handle_tou_rates_request(
         _formatter.print_error(str(e), title="Error")
 
 
+async def _converted_rate_plan(
+    api_client: NavienAPIClient,
+    zip_code: str,
+    plan_name: str,
+    utility: str | None,
+) -> tuple[dict[str, Any], ConvertedTOUPlan] | None:
+    """Find a rate plan on OpenEI and convert it via the Navien backend.
+
+    Prints why and returns None when there is no plan to show.
+    """
+    from nwp500.openei import OpenEIClient
+
+    async with OpenEIClient() as client:
+        rate_plan = await client.get_rate_plan(
+            zip_code, plan_name, utility=utility
+        )
+    if not rate_plan:
+        _formatter.print_error(
+            f"Rate plan matching '{plan_name}' not found", title="Not Found"
+        )
+        return None
+    converted = await api_client.convert_tou([rate_plan])
+    if not converted:
+        _formatter.print_error(
+            "Backend returned no converted plans", title="Conversion Error"
+        )
+        return None
+    return rate_plan, converted[0]
+
+
 async def handle_tou_plan_request(
     api_client: NavienAPIClient,
     zip_code: str,
@@ -723,32 +754,14 @@ async def handle_tou_plan_request(
         decode_season_bitfield,
         decode_week_bitfield,
     )
-    from nwp500.openei import OpenEIClient
 
     try:
-        async with OpenEIClient() as client:
-            rate_plan = await client.get_rate_plan(
-                zip_code, plan_name, utility=utility
-            )
-
-        if not rate_plan:
-            _formatter.print_error(
-                f"Rate plan matching '{plan_name}' not found",
-                title="Not Found",
-            )
+        found = await _converted_rate_plan(
+            api_client, zip_code, plan_name, utility
+        )
+        if found is None:
             return
-
-        # Convert via Navien backend
-        converted = await api_client.convert_tou([rate_plan])
-
-        if not converted:
-            _formatter.print_error(
-                "Backend returned no converted plans",
-                title="Conversion Error",
-            )
-            return
-
-        plan = converted[0]
+        _, plan = found
 
         if output_json:
             schedules = []
@@ -815,33 +828,14 @@ async def handle_tou_apply_request(
     enable: bool = False,
 ) -> None:
     """Apply a TOU rate plan to the water heater."""
-    from nwp500.openei import OpenEIClient
-
     try:
-        # Step 1: Find the rate plan from OpenEI
-        async with OpenEIClient() as client:
-            rate_plan = await client.get_rate_plan(
-                zip_code, plan_name, utility=utility
-            )
-
-        if not rate_plan:
-            _formatter.print_error(
-                f"Rate plan matching '{plan_name}' not found",
-                title="Not Found",
-            )
+        # Steps 1 and 2: find the rate plan on OpenEI, convert it
+        found = await _converted_rate_plan(
+            api_client, zip_code, plan_name, utility
+        )
+        if found is None:
             return
-
-        # Step 2: Convert via Navien backend
-        converted = await api_client.convert_tou([rate_plan])
-
-        if not converted:
-            _formatter.print_error(
-                "Backend returned no converted plans",
-                title="Conversion Error",
-            )
-            return
-
-        plan = converted[0]
+        rate_plan, plan = found
 
         # Step 3: Get device register path from current TOU info
         serial = await get_controller_serial_number(mqtt, device)
