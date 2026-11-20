@@ -10,7 +10,7 @@ Changed
 
 - **Duplicate code merged across the library.** Logic copied between
   modules now lives in one place, and code nothing reached is gone:
-  about 880 fewer lines in ``src``, with the same behaviour and the
+  about 850 fewer lines in ``src``, with the same behaviour and the
   same simulated results. In the core library, the MQTT client's
   acknowledgement waits, abandoned-future handling, reconnect hand-over
   and subscription proxies, the auth client's requests, the schedule
