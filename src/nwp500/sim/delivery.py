@@ -42,6 +42,7 @@ from nwp500.sim.engine import HeatingInterval, PathPoint, Simulation
 from nwp500.sim.params import DrawParams, HeaterParams, ReadinessParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.draw import delivery_temp_f
+from nwp500.sim.tank_physics import Point, point_at
 
 
 @dataclass(frozen=True)
@@ -161,16 +162,12 @@ def _state_before(
     points: Sequence[PathPoint], at: datetime
 ) -> tuple[float, float] | None:
     """The simulated tank at ``at``, before anything taken at that
-    instant: a draw's step sits on it as a second element."""
-    for p0, p1 in itertools.pairwise(points):
-        if p0.at <= at <= p1.at:
-            span = (p1.at - p0.at).total_seconds()
-            f = 0.0 if span <= 0 else (at - p0.at).total_seconds() / span
-            return (
-                p0.upper_f + (p1.upper_f - p0.upper_f) * f,
-                p0.lower_f + (p1.lower_f - p0.lower_f) * f,
-            )
-    return None
+    instant: a draw's step sits on it as a second element. None off
+    the path."""
+    if len(points) < 2 or not points[0].at <= at <= points[-1].at:
+        return None
+    q = point_at([Point(p.at, p.upper_f, p.lower_f) for p in points], at)
+    return q.upper_f, q.lower_f
 
 
 def _at_onset(
