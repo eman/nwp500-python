@@ -468,24 +468,28 @@ async def handle_enable_anti_legionella_request(
         _logger.error(f"Device error: {e}")
 
 
+async def _request_status(
+    mqtt: NavienMqttClient, device: Device
+) -> DeviceStatus:
+    """Request the device status and wait for it."""
+    status: DeviceStatus = await _wait_for_response(
+        mqtt.subscribe_device_status,
+        mqtt.unsubscribe_device_status,
+        device,
+        lambda: mqtt.request_device_status(device),
+        action_name="device status",
+    )
+    return status
+
+
 async def handle_set_anti_legionella_period_request(
     mqtt: NavienMqttClient,
     device: Device,
     period_days: int,
 ) -> None:
     """Set Anti-Legionella cycle period without changing enabled state."""
-    future: asyncio.Future[DeviceStatus] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def _on_status(status: DeviceStatus) -> None:
-        if not future.done():
-            future.set_result(status)
-
     try:
-        await mqtt.subscribe_device_status(device, _on_status)
-        await mqtt.request_device_status(device)
-        status = await asyncio.wait_for(future, timeout=10)
+        status = await _request_status(mqtt, device)
 
         # Get current enabled state
         use = getattr(status, "anti_legionella_use", None)
@@ -504,7 +508,7 @@ async def handle_set_anti_legionella_period_request(
     except DeviceError as e:
         _logger.error(f"Device error: {e}")
     except TimeoutError:
-        _logger.error("Timeout waiting for device status")
+        pass  # _wait_for_response logged it
 
 
 async def handle_disable_anti_legionella_request(
@@ -524,18 +528,8 @@ async def handle_get_anti_legionella_status_request(
     device: Device,
 ) -> None:
     """Display Anti-Legionella status from device status."""
-    future: asyncio.Future[DeviceStatus] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def _on_status(status: DeviceStatus) -> None:
-        if not future.done():
-            future.set_result(status)
-
-    await mqtt.subscribe_device_status(device, _on_status)
-    await mqtt.request_device_status(device)
     try:
-        status = await asyncio.wait_for(future, timeout=10)
+        status = await _request_status(mqtt, device)
         period = getattr(status, "anti_legionella_period", None)
         use = getattr(status, "anti_legionella_use", None)
         busy = getattr(status, "anti_legionella_operation_busy", None)
@@ -559,7 +553,7 @@ async def handle_get_anti_legionella_status_request(
         ]
         _formatter.print_status_table(items)
     except TimeoutError:
-        _logger.error("Timed out waiting for device status.")
+        pass  # _wait_for_response logged it
 
 
 async def handle_get_device_info_rest(
