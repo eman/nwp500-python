@@ -117,20 +117,6 @@ def scenario_from_document(
     return scenario, (None if params is None else params_from_document(params))
 
 
-def _plain(value: Any) -> Any:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, float) and not math.isfinite(value):
-        # JSON has no infinity: a tap the mains keeps above the line
-        # never runs under it, and its gallons are null.
-        return None
-    if isinstance(value, dict):
-        return {str(k): _plain(v) for k, v in value.items()}  # pyright: ignore[reportUnknownVariableType]
-    if isinstance(value, list | tuple):
-        return [_plain(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
-    return value
-
-
 def result_to_document(result: SimulationResult) -> dict[str, Any]:
     """``result`` as a document."""
     whole = dataclasses.asdict(result.simulation)
@@ -138,12 +124,12 @@ def result_to_document(result: SimulationResult) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "start": result.start.isoformat(),
         "until": result.until.isoformat(),
-        **{k: _plain(whole[k]) for k in RESULT_FIELDS},
-        "delivery": _plain(list(result.delivery)),
-        "windows": [_plain(dataclasses.asdict(w)) for w in result.windows],
+        **{k: _json(whole[k]) for k in RESULT_FIELDS},
+        "delivery": _json(list(result.delivery)),
+        "windows": [_json(dataclasses.asdict(w)) for w in result.windows],
         "reasons": list(result.reasons),
         "defaults_used": list(result.defaults_used),
-        "fully_heated_at": _plain(result.fully_heated_at),
+        "fully_heated_at": _json(result.fully_heated_at),
         # Where the walk left the heater: a scenario from ``until`` takes
         # them as its state, history and settings.
         **{

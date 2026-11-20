@@ -289,8 +289,7 @@ class NavienAPIClient:
             APIError: If API request fails
             AuthenticationError: If not authenticated
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         response = await self._make_request(
             "POST",
@@ -298,7 +297,7 @@ class NavienAPIClient:
             json_data={
                 "offset": offset,
                 "count": count,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
             },
         )
 
@@ -325,8 +324,7 @@ class NavienAPIClient:
             APIError: If API request fails
             AuthenticationError: If not authenticated
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         response = await self._make_request(
             "POST",
@@ -334,7 +332,7 @@ class NavienAPIClient:
             json_data={
                 "macAddress": mac_address,
                 "additionalValue": additional_value,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
             },
         )
 
@@ -363,8 +361,7 @@ class NavienAPIClient:
             APIError: If API request fails
             AuthenticationError: If not authenticated
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         response = await self._make_request(
             "POST",
@@ -372,7 +369,7 @@ class NavienAPIClient:
             json_data={
                 "macAddress": mac_address,
                 "additionalValue": additional_value,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
             },
         )
 
@@ -407,8 +404,7 @@ class NavienAPIClient:
             APIError: If API request fails
             AuthenticationError: If not authenticated
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         response = await self._make_request(
             "GET",
@@ -417,7 +413,7 @@ class NavienAPIClient:
                 "additionalValue": additional_value,
                 "controllerId": controller_id,
                 "macAddress": mac_address,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
                 "userType": user_type or self._user_type(),
             },
         )
@@ -458,8 +454,7 @@ class NavienAPIClient:
             response (``auth_client.current_user.user_type``) and falls
             back to ``"O"`` (owner) when that is unavailable.
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         response = await self._make_request(
             "POST",
@@ -468,7 +463,7 @@ class NavienAPIClient:
                 "sourceData": source_data,
                 "sourceType": source_type,
                 "sourceVersion": source_version,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
                 "userType": self._user_type(),
             },
         )
@@ -512,8 +507,7 @@ class NavienAPIClient:
             APIError: If API request fails
             AuthenticationError: If not authenticated
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         response = await self._make_request(
             "PUT",
@@ -525,7 +519,7 @@ class NavienAPIClient:
                 "sourceData": source_data,
                 "sourceType": source_type,
                 "touInfo": tou_info,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
                 "userType": user_type or self._user_type(),
                 "zipCode": zip_code,
             },
@@ -562,8 +556,7 @@ class NavienAPIClient:
             APIError: If API request fails
             AuthenticationError: If not authenticated
         """
-        if not self._auth_client.user_email:
-            raise AuthenticationError("Must authenticate first")
+        user_email = self._require_user_email()
 
         await self._make_request(
             "POST",
@@ -573,7 +566,7 @@ class NavienAPIClient:
                 "appVersion": app_version,
                 "os": os,
                 "osVersion": os_version,
-                "userId": self._auth_client.user_email,
+                "userId": user_email,
                 "pushToken": push_token,
             },
         )

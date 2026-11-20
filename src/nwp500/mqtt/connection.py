@@ -30,7 +30,7 @@ from .types import (
     to_awscrt_qos,
     to_awscrt_will,
 )
-from .utils import log_payload, redact_topic
+from .utils import await_ack, log_payload, redact_topic
 
 if TYPE_CHECKING:
     from ..auth import NavienAuthClient
@@ -194,98 +194,18 @@ class MqttConnection:
         """The Last-Will registered with the CONNECT packet, if any."""
         return self._will
 
-    @staticmethod
-    def _consume_abandoned_future(
-        future: asyncio.Future[Any], operation: str
-    ) -> None:
-        """Retrieve the eventual result of an abandoned acknowledgement future.
-
-        When ``_await_ack`` is cancelled or times out, the shielded future
-        keeps running in the background. If nobody retrieves its eventual
-        exception, asyncio logs a "Future exception was never retrieved"
-        warning at garbage-collection time. This callback consumes that
-        result/exception so the warning is never emitted, logging benign
-        errors (e.g. ``AwsCrtError`` from clean-session cancellation during
-        reconnect) at debug level instead.
-        """
-        if future.cancelled():
-            return
-        exc = future.exception()
-        if exc is not None:
-            # The type only: a late SubscribeError's text is the topic.
-            _logger.debug(
-                "%s completed with exception after being abandoned: %s",
-                operation,
-                type(exc).__name__,
-            )
-
     async def _await_ack(
         self,
         future: concurrent.futures.Future[Any] | asyncio.Future[Any],
         operation: str,
     ) -> Any:
-        """Await a broker acknowledgement future with a timeout.
+        """Await a broker acknowledgement within ``operation_timeout``.
 
-        The awscrt future is shielded so cancellation (or a timeout) never
-        propagates into the SDK future: the underlying operation completes
-        independently, preventing InvalidStateError in AWS CRT callbacks.
-
-        A timeout guards against half-open TCP connections where the
-        acknowledgement never arrives; without it callers can hang until
-        the keep-alive expires (20+ minutes).
-
-        If the awaiting task is cancelled or times out before the shielded
-        future completes, a done callback is attached so its eventual
-        result/exception is still retrieved, preventing asyncio's "Future
-        exception was never retrieved" warnings.
-
-        Args:
-            future: Acknowledgement future: the
-                ``concurrent.futures.Future`` returned by the AWS CRT SDK
-                (wrapped via ``asyncio.wrap_future``), or an already
-                loop-bound ``asyncio.Future``
-            operation: Human-readable operation name for error messages
-
-        Returns:
-            The acknowledgement result
-
-        Raises:
-            TimeoutError: If no acknowledgement within
-                config.operation_timeout seconds
-            asyncio.CancelledError: If the awaiting task is cancelled
+        See :func:`~nwp500.mqtt.utils.await_ack`.
         """
-        awaitable_future: asyncio.Future[Any] = (
-            asyncio.wrap_future(future)
-            if isinstance(future, concurrent.futures.Future)
-            else future
+        return await await_ack(
+            future, operation, self.config.operation_timeout, _logger
         )
-        try:
-            return await asyncio.wait_for(
-                asyncio.shield(awaitable_future),
-                timeout=self.config.operation_timeout,
-            )
-        except asyncio.CancelledError:
-            _logger.debug(
-                "%s was cancelled but will complete in background", operation
-            )
-            awaitable_future.add_done_callback(
-                functools.partial(
-                    self._consume_abandoned_future, operation=operation
-                )
-            )
-            raise
-        except TimeoutError:
-            _logger.error(
-                "%s not acknowledged within %.1fs",
-                operation,
-                self.config.operation_timeout,
-            )
-            awaitable_future.add_done_callback(
-                functools.partial(
-                    self._consume_abandoned_future, operation=operation
-                )
-            )
-            raise
 
     async def connect(self) -> bool:
         """

@@ -207,6 +207,18 @@ async def _with_device(
     return 1
 
 
+async def _with_api(
+    command: Callable[[NavienAPIClient], Awaitable[None]],
+) -> None:
+    """Run ``command`` with the REST client ``_with_device`` attached."""
+    ctx = click.get_current_context()
+    api = ctx.obj.get("api") if ctx.obj is not None else None
+    if api:
+        await command(api)
+    else:
+        _logger.error("API client not available")
+
+
 def async_command(f: Any) -> Any:
     """Decorator to run click commands asynchronously with device connection."""
 
@@ -307,14 +319,9 @@ async def device_info(
     raw: bool,
 ) -> None:
     """Show basic device info from REST API (DeviceInfo model)."""
-    ctx = click.get_current_context()
-    api = None
-    if ctx and hasattr(ctx, "obj") and ctx.obj is not None:
-        api = ctx.obj.get("api")
-    if api:
-        await handlers.handle_get_device_info_rest(api, device, raw)
-    else:
-        _logger.error("API client not available")
+    await _with_api(
+        lambda api: handlers.handle_get_device_info_rest(api, device, raw)
+    )
 
 
 @cli.command()  # type: ignore[attr-defined]
@@ -717,16 +724,11 @@ async def tou_get(
     output_json: bool = False,
 ) -> None:
     """Get current TOU schedule."""
-    ctx = click.get_current_context()
-    api = None
-    if ctx and hasattr(ctx, "obj") and ctx.obj is not None:
-        api = ctx.obj.get("api")
-    if api:
-        await handlers.handle_get_tou_request(
+    await _with_api(
+        lambda api: handlers.handle_get_tou_request(
             mqtt, device, api, output_json=output_json
         )
-    else:
-        _logger.error("API client not available")
+    )
 
 
 @tou.command("set")  # type: ignore[attr-defined]
@@ -773,18 +775,11 @@ async def tou_plan(
     Shows decoded seasons, time intervals, and prices per kWh.
     Requires OPENEI_API_KEY environment variable.
     """
-    ctx = click.get_current_context()
-    api = ctx.obj.get("api") if ctx and ctx.obj else None
-    if api:
-        await handlers.handle_tou_plan_request(
-            api,
-            zip_code,
-            plan_name,
-            utility=utility,
-            output_json=output_json,
+    await _with_api(
+        lambda api: handlers.handle_tou_plan_request(
+            api, zip_code, plan_name, utility=utility, output_json=output_json
         )
-    else:
-        _logger.error("API client not available")
+    )
 
 
 @tou.command("apply")  # type: ignore[attr-defined]
@@ -808,10 +803,8 @@ async def tou_apply(
 
     Requires OPENEI_API_KEY environment variable.
     """
-    ctx = click.get_current_context()
-    api = ctx.obj.get("api") if ctx and ctx.obj else None
-    if api:
-        await handlers.handle_tou_apply_request(
+    await _with_api(
+        lambda api: handlers.handle_tou_apply_request(
             mqtt,
             device,
             api,
@@ -820,8 +813,7 @@ async def tou_apply(
             utility=utility,
             enable=enable,
         )
-    else:
-        _logger.error("API client not available")
+    )
 
 
 def _parse_months(

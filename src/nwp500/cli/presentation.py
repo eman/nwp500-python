@@ -917,6 +917,23 @@ def _percentages(hp_wh: int, he_wh: int, total_wh: int) -> tuple[float, float]:
     return hp_pct, he_pct
 
 
+def _period_row(label: str, entry: Any) -> EnergyPeriodRow:
+    """One row from a day's or a month's energy entry."""
+    hp_wh = entry.heat_pump_usage
+    he_wh = entry.heat_element_usage
+    hp_pct, he_pct = _percentages(hp_wh, he_wh, entry.total_usage)
+    return EnergyPeriodRow(
+        label=label,
+        total_wh=entry.total_usage,
+        heat_pump_wh=hp_wh,
+        heat_element_wh=he_wh,
+        heat_pump_time=entry.heat_pump_time,
+        heat_element_time=entry.heat_element_time,
+        heat_pump_percentage=hp_pct,
+        heat_element_percentage=he_pct,
+    )
+
+
 def build_energy_report(energy_response: Any) -> EnergyReport:
     """Aggregate an energy response into neutral period rows.
 
@@ -976,24 +993,10 @@ def build_daily_energy_report(
     if not month_data or not month_data.data:
         return None
 
-    days: list[EnergyPeriodRow] = []
-    for day_num, day_data in enumerate(month_data.data, start=1):
-        total_wh = day_data.total_usage
-        hp_wh = day_data.heat_pump_usage
-        he_wh = day_data.heat_element_usage
-        hp_pct, he_pct = _percentages(hp_wh, he_wh, total_wh)
-        days.append(
-            EnergyPeriodRow(
-                label=str(day_num),
-                total_wh=total_wh,
-                heat_pump_wh=hp_wh,
-                heat_element_wh=he_wh,
-                heat_pump_time=day_data.heat_pump_time,
-                heat_element_time=day_data.heat_element_time,
-                heat_pump_percentage=hp_pct,
-                heat_element_percentage=he_pct,
-            )
-        )
+    days = [
+        _period_row(str(day_num), day_data)
+        for day_num, day_data in enumerate(month_data.data, start=1)
+    ]
     return DailyEnergyReport(
         year=year,
         month=month,
@@ -1022,25 +1025,13 @@ def build_yearly_energy_report(
     if not year_data or not year_data.data:
         return None
 
-    rows: list[EnergyPeriodRow] = []
-    for month_num, month_data in enumerate(year_data.data, start=1):
-        total_wh = month_data.total_usage
-        hp_wh = month_data.heat_pump_usage
-        he_wh = month_data.heat_element_usage
-        hp_pct, he_pct = _percentages(hp_wh, he_wh, total_wh)
-        label = month_name[month_num] if month_num <= 12 else str(month_num)
-        rows.append(
-            EnergyPeriodRow(
-                label=label,
-                total_wh=total_wh,
-                heat_pump_wh=hp_wh,
-                heat_element_wh=he_wh,
-                heat_pump_time=month_data.heat_pump_time,
-                heat_element_time=month_data.heat_element_time,
-                heat_pump_percentage=hp_pct,
-                heat_element_percentage=he_pct,
-            )
+    rows = [
+        _period_row(
+            month_name[month_num] if month_num <= 12 else str(month_num),
+            month_data,
         )
+        for month_num, month_data in enumerate(year_data.data, start=1)
+    ]
     return DailyEnergyReport(
         year=year,
         month=0,

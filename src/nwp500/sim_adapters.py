@@ -119,7 +119,7 @@ if TYPE_CHECKING:
 # functions and nothing else.
 
 #: Litres in a US gallon.
-_L_PER_GAL = 3.785411784
+L_PER_GAL = 3.785411784
 
 
 def _metric() -> bool:
@@ -132,26 +132,16 @@ def _from_device(t: Temperature) -> float:
     return t.to_fahrenheit()
 
 
-def _to_sim(value: float) -> float:
-    """A temperature in the preferred unit, in the simulator's."""
-    return value * 9 / 5 + 32 if _metric() else value
-
-
-def _volume_to_sim(value: float) -> float:
-    """A volume in the preferred unit, in the simulator's."""
-    return value / _L_PER_GAL if _metric() else value
-
-
 def to_sim_temperature(value: float) -> float:
     """A temperature in the preferred unit, in the simulator's (°F): for
     any input the builders below do not take."""
-    return _to_sim(value)
+    return value * 9 / 5 + 32 if _metric() else value
 
 
 def to_sim_volume(value: float) -> float:
     """A volume in the preferred unit, in the simulator's (US gallons):
     ``time_to_ready``'s ``bath_gal`` and ``shower_gal``, say."""
-    return _volume_to_sim(value)
+    return value / L_PER_GAL if _metric() else value
 
 
 def temperature(value_f: float) -> float:
@@ -162,7 +152,7 @@ def temperature(value_f: float) -> float:
 
 def volume(value_gal: float) -> float:
     """A volume from the simulator (US gallons) in the preferred unit."""
-    return value_gal * _L_PER_GAL if _metric() else value_gal
+    return value_gal * L_PER_GAL if _metric() else value_gal
 
 
 def temperature_unit() -> str:
@@ -335,16 +325,18 @@ def environment(
         if status.comp_use is False:
             ambient_f -= IDLE_CABINET_WARM_F
     elif isinstance(ambient, int | float):
-        ambient_f = _to_sim(float(ambient))
+        ambient_f = to_sim_temperature(float(ambient))
     else:
-        ambient_f = tuple((at, _to_sim(v)) for at, v in _finite(ambient))
+        ambient_f = tuple(
+            (at, to_sim_temperature(v)) for at, v in _finite(ambient)
+        )
     kw: dict[str, Any] = {"ambient_f": ambient_f}
     if ambient is None and status is not None and status.comp_use is False:
         kw["ambient_cabinet"] = True
     if humidity is not None:
         kw["humidity"] = humidity
     if inlet is not None:
-        kw["inlet_f"] = _to_sim(inlet)
+        kw["inlet_f"] = to_sim_temperature(inlet)
     return Environment(**kw)
 
 
@@ -361,13 +353,13 @@ def loads(
     the volume as the same meter counts it (``sim.DrawWindow``)."""
     return Loads(
         draws=tuple(
-            Draw(at=at, gallons=_volume_to_sim(v)) for at, v in _finite(draws)
+            Draw(at=at, gallons=to_sim_volume(v)) for at, v in _finite(draws)
         ),
         windows=tuple(
             DrawWindow(
                 start=a,
                 end=b,
-                expected_gal=None if v is None else _volume_to_sim(v),
+                expected_gal=None if v is None else to_sim_volume(v),
             )
             for a, b, v in windows
         ),
@@ -385,7 +377,7 @@ def write(
     unit; ``mode`` a ``DhwOperationSetting`` value."""
     return Write(
         at=at,
-        setpoint_f=None if setpoint is None else _to_sim(setpoint),
+        setpoint_f=None if setpoint is None else to_sim_temperature(setpoint),
         mode=mode,
         id=id,
     )
@@ -527,10 +519,12 @@ def location_air(
     installation's; fit your own with ``sim.location_air.fit``."""
     air = project_location_air(
         model,
-        [(at, _to_sim(v)) for at, v in _finite(outdoor)],
+        [(at, to_sim_temperature(v)) for at, v in _finite(outdoor)],
         start,
         until,
-        anchor=None if anchor is None else (anchor[0], _to_sim(anchor[1])),
+        anchor=None
+        if anchor is None
+        else (anchor[0], to_sim_temperature(anchor[1])),
     )
     return tuple((at, temperature(v)) for at, v in air)
 
@@ -726,7 +720,7 @@ def add_inputs(
         points = sorted(_finite(series), key=lambda r: r[0])
         if not points:
             continue
-        to = _to_sim if name == "air_f" else float
+        to = to_sim_temperature if name == "air_f" else float
         frame[name] = np.interp(
             seconds,
             [at.timestamp() for at, _ in points],
@@ -1170,7 +1164,7 @@ def _recorded_air(
     import pandas as pd
 
     rows = sorted(
-        (t.astimezone(UTC), _to_sim(v))
+        (t.astimezone(UTC), to_sim_temperature(v))
         for t, v in _finite(air or ())
         if at - CLIMATE_LOOKBACK
         <= t.astimezone(UTC)
@@ -1471,15 +1465,13 @@ def run_flow(
     readings on the steps' grid, for ``steps_from_changes``'
     ``circulation_flow`` where no sensor reads the pump: a run is taken
     at its flow (``CirculationParams.flow_gpm``)."""
-    out: list[tuple[datetime, float]] = []
-    step = timedelta(seconds=STEP_GRID_S)
-    for t, end in sorted(
-        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs
-    ):
-        while t < end:
-            out.append((t, flow_gpm))
-            t += step
-    return out
+    return [
+        (t, flow_gpm)
+        for a, b in sorted(
+            (a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs
+        )
+        for t in _step_grid(a, b)
+    ]
 
 
 def run_readings(
@@ -1772,12 +1764,12 @@ def _steps_on(
         heater.upper_element,
         heater.lower_element,
     )
-    meters = series(flow, _volume_to_sim)
-    run_flows = series(circulation_flow, _volume_to_sim)
+    meters = series(flow, to_sim_volume)
+    run_flows = series(circulation_flow, to_sim_volume)
     meter = _held(meters, grid, flow_hold)
-    probe = _held(series(inlet, _to_sim), grid, inlet_hold)
+    probe = _held(series(inlet, to_sim_temperature), grid, inlet_hold)
     probe = _unknown_in(probe, grid, inlet_unknown)
-    airs = series(air, _to_sim)
+    airs = series(air, to_sim_temperature)
     if not airs and heater.air is not None:
         # No air reading: the heater's own while its compressor runs.
         amb = heater.air
@@ -2172,7 +2164,7 @@ def draw_frame(
         return _held([(t, f(s)) for t, s in statuses], grid, None)
 
     meter = _held(
-        sorted((t.astimezone(UTC), _volume_to_sim(v)) for t, v in flow),
+        sorted((t.astimezone(UTC), to_sim_volume(v)) for t, v in flow),
         grid,
         FLOW_HOLD,
     )
@@ -2238,7 +2230,7 @@ def cold_supply(
     pass it on as ``environment(inlet=temperature(...))``, and to
     ``time_to_ready`` as ``inlet_measured``."""
     return cold_supply_f(
-        [(t, _to_sim(v)) for t, v in _finite(probe)],
+        [(t, to_sim_temperature(v)) for t, v in _finite(probe)],
         at=at,
         draws=draws,
         circulation=circulation,

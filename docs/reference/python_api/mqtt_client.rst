@@ -107,7 +107,7 @@ NavienMqttClient
    .. code-block:: python
 
       from nwp500 import NavienMqttClient
-      from nwp500.mqtt_utils import MqttConnectionConfig
+      from nwp500.mqtt import MqttConnectionConfig
 
       # Default configuration
       mqtt = NavienMqttClient(auth)
@@ -927,7 +927,7 @@ start_periodic_requests()
 
    .. code-block:: python
 
-      from nwp500.mqtt_utils import PeriodicRequestType
+      from nwp500.mqtt import PeriodicRequestType
       
       # Subscribe first
       await mqtt.subscribe_device_status(device, on_status)

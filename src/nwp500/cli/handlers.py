@@ -7,6 +7,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar, cast
 
 from nwp500 import (
+    ConvertedTOUPlan,
     Device,
     DeviceFeature,
     DeviceStatus,
@@ -468,24 +469,28 @@ async def handle_enable_anti_legionella_request(
         _logger.error(f"Device error: {e}")
 
 
+async def _request_status(
+    mqtt: NavienMqttClient, device: Device
+) -> DeviceStatus:
+    """Request the device status and wait for it."""
+    status: DeviceStatus = await _wait_for_response(
+        mqtt.subscribe_device_status,
+        mqtt.unsubscribe_device_status,
+        device,
+        lambda: mqtt.request_device_status(device),
+        action_name="device status",
+    )
+    return status
+
+
 async def handle_set_anti_legionella_period_request(
     mqtt: NavienMqttClient,
     device: Device,
     period_days: int,
 ) -> None:
     """Set Anti-Legionella cycle period without changing enabled state."""
-    future: asyncio.Future[DeviceStatus] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def _on_status(status: DeviceStatus) -> None:
-        if not future.done():
-            future.set_result(status)
-
     try:
-        await mqtt.subscribe_device_status(device, _on_status)
-        await mqtt.request_device_status(device)
-        status = await asyncio.wait_for(future, timeout=10)
+        status = await _request_status(mqtt, device)
 
         # Get current enabled state
         use = getattr(status, "anti_legionella_use", None)
@@ -504,7 +509,7 @@ async def handle_set_anti_legionella_period_request(
     except DeviceError as e:
         _logger.error(f"Device error: {e}")
     except TimeoutError:
-        _logger.error("Timeout waiting for device status")
+        pass  # _wait_for_response logged it
 
 
 async def handle_disable_anti_legionella_request(
@@ -524,18 +529,8 @@ async def handle_get_anti_legionella_status_request(
     device: Device,
 ) -> None:
     """Display Anti-Legionella status from device status."""
-    future: asyncio.Future[DeviceStatus] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def _on_status(status: DeviceStatus) -> None:
-        if not future.done():
-            future.set_result(status)
-
-    await mqtt.subscribe_device_status(device, _on_status)
-    await mqtt.request_device_status(device)
     try:
-        status = await asyncio.wait_for(future, timeout=10)
+        status = await _request_status(mqtt, device)
         period = getattr(status, "anti_legionella_period", None)
         use = getattr(status, "anti_legionella_use", None)
         busy = getattr(status, "anti_legionella_operation_busy", None)
@@ -559,7 +554,7 @@ async def handle_get_anti_legionella_status_request(
         ]
         _formatter.print_status_table(items)
     except TimeoutError:
-        _logger.error("Timed out waiting for device status.")
+        pass  # _wait_for_response logged it
 
 
 async def handle_get_device_info_rest(
@@ -715,6 +710,36 @@ async def handle_tou_rates_request(
         _formatter.print_error(str(e), title="Error")
 
 
+async def _converted_rate_plan(
+    api_client: NavienAPIClient,
+    zip_code: str,
+    plan_name: str,
+    utility: str | None,
+) -> tuple[dict[str, Any], ConvertedTOUPlan] | None:
+    """Find a rate plan on OpenEI and convert it via the Navien backend.
+
+    Prints why and returns None when there is no plan to show.
+    """
+    from nwp500.openei import OpenEIClient
+
+    async with OpenEIClient() as client:
+        rate_plan = await client.get_rate_plan(
+            zip_code, plan_name, utility=utility
+        )
+    if not rate_plan:
+        _formatter.print_error(
+            f"Rate plan matching '{plan_name}' not found", title="Not Found"
+        )
+        return None
+    converted = await api_client.convert_tou([rate_plan])
+    if not converted:
+        _formatter.print_error(
+            "Backend returned no converted plans", title="Conversion Error"
+        )
+        return None
+    return rate_plan, converted[0]
+
+
 async def handle_tou_plan_request(
     api_client: NavienAPIClient,
     zip_code: str,
@@ -729,32 +754,14 @@ async def handle_tou_plan_request(
         decode_season_bitfield,
         decode_week_bitfield,
     )
-    from nwp500.openei import OpenEIClient
 
     try:
-        async with OpenEIClient() as client:
-            rate_plan = await client.get_rate_plan(
-                zip_code, plan_name, utility=utility
-            )
-
-        if not rate_plan:
-            _formatter.print_error(
-                f"Rate plan matching '{plan_name}' not found",
-                title="Not Found",
-            )
+        found = await _converted_rate_plan(
+            api_client, zip_code, plan_name, utility
+        )
+        if found is None:
             return
-
-        # Convert via Navien backend
-        converted = await api_client.convert_tou([rate_plan])
-
-        if not converted:
-            _formatter.print_error(
-                "Backend returned no converted plans",
-                title="Conversion Error",
-            )
-            return
-
-        plan = converted[0]
+        _, plan = found
 
         if output_json:
             schedules = []
@@ -821,33 +828,14 @@ async def handle_tou_apply_request(
     enable: bool = False,
 ) -> None:
     """Apply a TOU rate plan to the water heater."""
-    from nwp500.openei import OpenEIClient
-
     try:
-        # Step 1: Find the rate plan from OpenEI
-        async with OpenEIClient() as client:
-            rate_plan = await client.get_rate_plan(
-                zip_code, plan_name, utility=utility
-            )
-
-        if not rate_plan:
-            _formatter.print_error(
-                f"Rate plan matching '{plan_name}' not found",
-                title="Not Found",
-            )
+        # Steps 1 and 2: find the rate plan on OpenEI, convert it
+        found = await _converted_rate_plan(
+            api_client, zip_code, plan_name, utility
+        )
+        if found is None:
             return
-
-        # Step 2: Convert via Navien backend
-        converted = await api_client.convert_tou([rate_plan])
-
-        if not converted:
-            _formatter.print_error(
-                "Backend returned no converted plans",
-                title="Conversion Error",
-            )
-            return
-
-        plan = converted[0]
+        rate_plan, plan = found
 
         # Step 3: Get device register path from current TOU info
         serial = await get_controller_serial_number(mqtt, device)

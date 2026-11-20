@@ -79,6 +79,7 @@ from functools import cached_property
 from itertools import pairwise
 from typing import Literal
 
+from nwp500.sim.circulation import steady_share
 from nwp500.sim.params import CompressorParams, HeaterParams
 from nwp500.sim.physics.draw import delivery_temp_f, hot_fraction
 from nwp500.sim.physics.heat_pump import heat_btu_h, power_w
@@ -429,18 +430,24 @@ def mix(state: TankState) -> TankState:
             total, count = total + below, count + n
         pools.append((total, count))
     out: list[float] = []
-    pooled: list[float] = []
     for total, count in pools:
         # A layer left alone keeps its temperature exactly.
-        i = len(out)
         if count == 1:
-            out.append(layers[i])
-            pooled.append(heats[i])
+            out.append(layers[len(out)])
         else:
-            mean = total / count
-            out.extend([temp_f(mean)] * count)
-            pooled.extend([mean] * count)
-    return TankState.of_heats(pooled, out)
+            out.extend([temp_f(total / count)] * count)
+    return TankState(tuple(out))
+
+
+def _reheated(state: TankState, heats: Sequence[float]) -> TankState:
+    """``state`` with its layers' heats moved to ``heats``, then mixed. A
+    layer whose heat is as it was (none put in, or too little to move
+    it) keeps its temperature exactly."""
+    temps = tuple(
+        t if h == h0 else temp_f(h)
+        for h, h0, t in zip(heats, state.heats_f, state.layers_f, strict=True)
+    )
+    return mix(TankState(temps))
 
 
 def lose(
@@ -507,19 +514,15 @@ def conduct(lay: Layout, state: TankState, hours: float) -> TankState:
 def add_heat(lay: Layout, state: TankState, btu: Sequence[float]) -> TankState:
     """``state`` with ``btu`` put into each layer, then mixed: heat put
     in below warmer water rises through it."""
-    layers = _layers(lay, state)
-    if len(btu) != len(layers):
+    if len(btu) != len(_layers(lay, state)):
         raise ValueError("one heat per layer")
-    heats = tuple(
-        h + q / lay.layer_btu_f for h, q in zip(state.heats_f, btu, strict=True)
+    return _reheated(
+        state,
+        [
+            h + q / lay.layer_btu_f
+            for h, q in zip(state.heats_f, btu, strict=True)
+        ],
     )
-    # A layer whose heat is as it was (none, or too little to move it)
-    # keeps its temperature exactly.
-    temps = tuple(
-        t if h == h0 else temp_f(h)
-        for h, h0, t in zip(heats, state.heats_f, layers, strict=True)
-    )
-    return mix(TankState.of_heats(heats, temps))
 
 
 def stir(lay: Layout, state: TankState) -> TankState:
@@ -528,7 +531,7 @@ def stir(lay: Layout, state: TankState) -> TankState:
     ``Layout.stir_weights`` share, pooled to their mean, then mixed. The
     same heat; the lower probe reads the pool, below what it read with
     the cold bottom left alone."""
-    layers = _layers(lay, state)
+    _layers(lay, state)
     heats = state.heats_f
     w = lay.stir_weights
     # About the bottom's, so a pool of equal heats is exactly theirs.
@@ -536,15 +539,13 @@ def stir(lay: Layout, state: TankState) -> TankState:
     pool = base + sum(
         a * (h - base) for a, h in zip(w, heats, strict=True)
     ) / sum(w)
-    stirred = tuple(
-        h + a * (pool - h) if a and h != pool else h
-        for a, h in zip(w, heats, strict=True)
+    return _reheated(
+        state,
+        [
+            h + a * (pool - h) if a and h != pool else h
+            for a, h in zip(w, heats, strict=True)
+        ],
     )
-    temps = tuple(
-        t if s == h else temp_f(s)
-        for s, h, t in zip(stirred, heats, layers, strict=True)
-    )
-    return mix(TankState.of_heats(stirred, temps))
 
 
 def condenser_water_f(lay: Layout, state: TankState) -> float:
@@ -580,7 +581,7 @@ def rise(
     whole zone above the element or more, which turns it over. A plume
     of more than a layer is taken a layer at a time, each rising to its
     own height."""
-    layers = _layers(lay, state)
+    _layers(lay, state)
     if btu == 0.0:
         return state
     at = lay.element_layer(zone)
@@ -603,12 +604,7 @@ def rise(
             out[i] = heats[i] + share * (heats[i + 1] - heats[i])
         out[top] = heats[top] + share * (heats[at] - heats[top]) + q
         heats = out
-    # A layer the water left as it was keeps its temperature exactly.
-    temps = tuple(
-        t if h == h0 else temp_f(h)
-        for h, h0, t in zip(heats, state.heats_f, layers, strict=True)
-    )
-    return mix(TankState.of_heats(heats, temps))
+    return _reheated(state, heats)
 
 
 def plume_gal(lay: Layout, state: TankState, zone: Zone, btu: float) -> float:
@@ -1101,14 +1097,6 @@ class Flowing:
     pipe_ua_btu_hr_f: float = 0.0
 
 
-def _kept(f: Flowing, top_f: float) -> float:
-    """The share of the top's lift over the rest ``f``'s pipe keeps,
-    the top at ``top_f``: ``circulation.steady_share``."""
-    if f.pipe_ua_btu_hr_f <= 0.0:
-        return 1.0
-    return math.exp(-f.pipe_ua_btu_hr_f / (f.gpm * 60.0 * btu_per_gal_f(top_f)))
-
-
 @dataclass(frozen=True, kw_only=True)
 class Delivered:
     """A delivered draw at ``at`` (``draw``): through the walk's valve
@@ -1391,7 +1379,9 @@ class _Walk:
             if gal > 0.0:
                 top = state.layers_f[-1]
                 inflow = (
-                    f.rest_f + _kept(f, top) * (top - f.rest_f)
+                    f.rest_f
+                    + steady_share(f.pipe_ua_btu_hr_f, f.gpm, top)
+                    * (top - f.rest_f)
                     if f.inflow_f is None
                     else f.inflow_f
                 )

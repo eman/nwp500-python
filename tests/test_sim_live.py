@@ -6,6 +6,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
+from test_sim_adapters import FEATURE as ADAPTERS_FEATURE
 
 from nwp500 import sim, sim_live
 from nwp500.exceptions import APIError
@@ -20,22 +21,8 @@ from nwp500.models import (
     TOUPeriod,
 )
 
-FEATURE: dict[str, Any] = {
-    "countryCode": 3,
-    "modelTypeCode": 240,
-    "controlTypeCode": 1,
-    "volumeCode": 3,
-    "controllerSwVersion": 184877056,
-    "panelSwVersion": 0,
-    "wifiSwVersion": 34013184,
-    "controllerSwCode": 33556241,
-    "panelSwCode": 0,
-    "wifiSwCode": 268435985,
-    "recircSwVersion": 0,
-    "recircModelTypeCode": 0,
-    "controllerSerialNumber": "ABC123",
-    "dhwTemperatureSettingUse": 2,
-}
+#: The 80 gal tank's feature.
+FEATURE: dict[str, Any] = ADAPTERS_FEATURE | {"volumeCode": 3}
 
 RESERVATIONS: dict[str, Any] = {
     "reservationUse": 2,

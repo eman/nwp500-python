@@ -42,6 +42,7 @@ from nwp500.sim.engine import HeatingInterval, PathPoint, Simulation
 from nwp500.sim.params import DrawParams, HeaterParams, ReadinessParams
 from nwp500.sim.physics import stratified as st
 from nwp500.sim.physics.draw import delivery_temp_f
+from nwp500.sim.tank_physics import Point, point_at
 
 
 @dataclass(frozen=True)
@@ -161,30 +162,12 @@ def _state_before(
     points: Sequence[PathPoint], at: datetime
 ) -> tuple[float, float] | None:
     """The simulated tank at ``at``, before anything taken at that
-    instant: a draw's step sits on it as a second element."""
-    for p0, p1 in itertools.pairwise(points):
-        if p0.at <= at <= p1.at:
-            span = (p1.at - p0.at).total_seconds()
-            f = 0.0 if span <= 0 else (at - p0.at).total_seconds() / span
-            return (
-                p0.upper_f + (p1.upper_f - p0.upper_f) * f,
-                p0.lower_f + (p1.lower_f - p0.lower_f) * f,
-            )
-    return None
-
-
-def _at_onset(
-    points: Sequence[PathPoint],
-    delivery: Sequence[float],
-    at: datetime,
-    upper: float,
-) -> float:
-    """The delivery at ``at``, before anything drawn there: the last
-    element before it, or the first at it; the zone if none."""
-    k = next((i for i, p in enumerate(points) if p.at >= at), None)
-    if k is None:
-        return upper
-    return delivery[k] if points[k].at == at else delivery[max(0, k - 1)]
+    instant: a draw's step sits on it as a second element. None off
+    the path."""
+    if len(points) < 2 or not points[0].at <= at <= points[-1].at:
+        return None
+    q = point_at([Point(p.at, p.upper_f, p.lower_f) for p in points], at)
+    return q.upper_f, q.lower_f
 
 
 @dataclass(frozen=True)
@@ -300,13 +283,14 @@ class DrawWindowResult:
     draws_until: datetime | None = None
 
 
-def _onset(points: Sequence[PathPoint], at: datetime) -> PathPoint | None:
-    """The path's element in force at ``at``, before anything taken
-    there: the first at that instant, else the last before it."""
+def _onset(points: Sequence[PathPoint], at: datetime) -> int | None:
+    """The index of the path's element in force at ``at``, before
+    anything taken there: the first at that instant, else the last
+    before it."""
     k = bisect_left([p.at for p in points], at)
     if k < len(points) and points[k].at == at:
-        return points[k]
-    return points[k - 1] if k > 0 else None
+        return k
+    return k - 1 if k > 0 else None
 
 
 def draw_windows(
@@ -332,9 +316,10 @@ def draw_windows(
         # A window already open at the start is read at the start.
         opened = max(start, sim.points[0].at)
         state = _state_before(sim.points, opened)
-        there = _onset(sim.points, opened)
-        if state is None or there is None:
+        i = _onset(sim.points, opened)
+        if state is None or i is None:
             continue
+        there = sim.points[i]
         upper, lower = state
         judged = depletion(
             sim.points, opened, min(end, sim.points[-1].at), delivery, p
@@ -357,7 +342,7 @@ def draw_windows(
                 expected_gal=expected,
                 upper_f=upper,
                 lower_f=lower,
-                delivery_f=_at_onset(sim.points, delivery, opened, upper),
+                delivery_f=delivery[i],
                 deliverable_gal=gal,
                 margin_gal=None if expected is None else gal - expected,
                 recovery=recovery,

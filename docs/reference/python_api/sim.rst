@@ -214,7 +214,7 @@ Hot water and calibration
       MIN_POWER_W, CHECK_POINTS, HEAT_SLOPE_SIGNS, POWER_SLOPE_SIGNS
 
 .. automodule:: nwp500.sim.history_frame
-   :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
+   :members: Interval, instants, on_intervals, asof, floats, energy_wh
 
 .. automodule:: nwp500.sim.profile
    :members: heater_profile, mode_sources
@@ -382,5 +382,5 @@ Home Assistant sources
       history_for,
       parse_forecast, parse_outdoor_history, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
-      pump_runs, demand_spans, busy, covers_start, percent,
+      pump_runs, demand_spans, covers_start, percent,
       fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError

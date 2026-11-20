@@ -35,14 +35,27 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Self
 
 from nwp500.sim.physics.water import btu_per_gal_f
+
+if TYPE_CHECKING:
+    from nwp500.sim.inputs import Loads
+    from nwp500.sim.params import HeaterParams
 
 #: A run: when it starts and when it ends.
 Run = tuple[datetime, datetime]
 
 #: Runs no farther apart than this are one run.
 RUN_GAP = timedelta(minutes=10)
+
+
+def run_gap(params: HeaterParams | None) -> timedelta:
+    """The gap runs are merged within: the installation's
+    (``CirculationParams.run_gap_min``), else ``RUN_GAP``."""
+    if params is None or params.circulation is None:
+        return RUN_GAP
+    return timedelta(minutes=params.circulation.run_gap_min)
 
 
 def displaced_gal(minutes: float, displaced: float, flow_gpm: float) -> float:
@@ -107,6 +120,18 @@ class Circulation:
             else [r for r in self.runs if r[0] <= self.known_until]
         )
         object.__setattr__(self, "runs", tuple(merge_runs(known, self.gap)))
+
+    @classmethod
+    def of(cls, loads: Loads, params: HeaterParams | None) -> Self | None:
+        """``loads``' circulation as a walk takes it, merged at the
+        installation's gap (``run_gap``); None without one."""
+        if loads.circulation is None:
+            return None
+        return cls(
+            tuple((r.start, r.end) for r in loads.circulation),
+            loads.circulation_known_until,
+            run_gap(params),
+        )
 
     def over(self, start: datetime, end: datetime) -> list[Run]:
         """The known runs overlapping ``[start, end)``, unclipped, in the

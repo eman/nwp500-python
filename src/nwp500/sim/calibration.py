@@ -47,6 +47,7 @@ values when it had the evidence to.
 
 import bisect
 import math
+import statistics
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -118,7 +119,7 @@ def busy_intervals(
     for column in columns:
         on = history[column].fillna(False).astype(bool).to_numpy()
         spans += [(a, b + settle) for a, b in hf.on_intervals(when, on)]
-    return hf.merge(spans)
+    return merge_runs(spans, timedelta(0))
 
 
 def quiet_windows(
@@ -220,11 +221,6 @@ _SNAPSHOT_COLUMNS = (
     "circulation_runs",
 )
 
-#: Circulation runs closer than this in a cycle are one run, as the
-#: circulation's displaced volume was fitted (``circulation.RUN_GAP``).
-_RUN_GAP = timedelta(minutes=10)
-
-
 #: A recovery's lower-zone target when the history records no stop
 #: threshold (``target_f``), °F.
 UNRECORDED_TARGET_F = 140.0
@@ -241,9 +237,10 @@ def _in_cycle(
     """A snapshot's metered draws and circulation runs: the delivered
     gallons from ``at`` to ``end`` and the volume-weighted upper zone
     they left at, and each run over the span (merged within
-    ``_RUN_GAP``) as ``(minutes in the span, the upper zone where the
-    span takes it up, hours since the run before it ended, minutes it had
-    run before the span)``, the hours None for the first run given. None
+    ``circulation.RUN_GAP``, as the displaced volume was fitted) as
+    ``(minutes in the span, the upper zone where the span takes it up,
+    hours since the run before it ended, minutes it had run before the
+    span)``, the hours None for the first run given. None
     for what was not given: an unrecorded meter or circulation is not an
     idle one."""
     out: dict[str, object] = {
@@ -265,7 +262,7 @@ def _in_cycle(
                 sum(u * g for u, g in weighted if u is not None) / gal
             )
     if circulation is not None:
-        merged = merge_runs(circulation, _RUN_GAP)
+        merged = merge_runs(circulation, RUN_GAP)
         found: list[tuple[float, float, float | None, float]] = []
         for i, (a0, b0) in enumerate(merged):
             a, b = max(a0, at), min(b0, end)
@@ -783,17 +780,11 @@ def measure_runs(
     median of those in it, its rest the hours since the run before it
     ended, a run left out included."""
     on = sorted(running)
-    clusters: list[list[datetime]] = []
-    for t in on:
-        if clusters and t - clusters[-1][1] <= RUN_GAP:
-            clusters[-1][1] = t
-        else:
-            clusters.append([t, t])
     flow, return_f = sorted(flow), sorted(return_f)
     upper_f, air_f = sorted(upper_f), sorted(air_f)
     out: list[MeasuredRun] = []
     last_end: datetime | None = None
-    for a, b in ((c[0], c[1]) for c in clusters):
+    for a, b in merge_runs([(t, t) for t in on], RUN_GAP):
         rest = (
             None
             if last_end is None
@@ -1064,19 +1055,16 @@ def recent_flow_gpm(
     median flows over the ``window`` before ``until``, the flow being a
     setting that moves in steps. None with fewer than
     ``MIN_RUNS_FOR_FLOW``."""
-    flows = sorted(
+    flows = [
         r.flow_gpm
         for r in runs
         if r.flow_gpm is not None
         and r.flow_gpm > 0.0
         and until - window <= r.start <= until
-    )
+    ]
     if len(flows) < MIN_RUNS_FOR_FLOW:
         return None
-    mid = len(flows) // 2
-    if len(flows) % 2:
-        return flows[mid]
-    return (flows[mid - 1] + flows[mid]) / 2.0
+    return statistics.median(flows)
 
 
 def flow_lookup(
@@ -1143,9 +1131,7 @@ def _stints(
 def _asof_row(
     rows: Sequence[tuple[datetime, float]], t: datetime
 ) -> float | None:
-    times = [x for x, _ in rows]
-    i = bisect.bisect_right(times, t) - 1
-    return rows[i][1] if i >= 0 else None
+    return _held_at(rows, [t])[0]
 
 
 def _changes(rows: Sequence[tuple[datetime, float]]) -> list[datetime]:
@@ -1501,18 +1487,12 @@ def element_grid(
     tz = first.tzinfo
     grid = [datetime.fromtimestamp(x, tz=tz) for x in range(t0, t1 + 1, 60)]
 
-    def held(rows: Sequence[tuple[datetime, float]]) -> list[float]:
+    def held(
+        rows: Sequence[tuple[datetime, float]], max_age: timedelta | None = None
+    ) -> list[float]:
         return [
-            np.nan if (v := _asof_row(rows, t)) is None else v for t in grid
+            np.nan if v is None else v for v in _held_at(rows, grid, max_age)
         ]
-
-    power_times = [t for t, _ in record.power_w]
-
-    def power_at(t: datetime) -> float:
-        i = bisect.bisect_right(power_times, t) - 1
-        if i < 0 or t - power_times[i] > timedelta(minutes=5):
-            return np.nan
-        return record.power_w[i][1]
 
     g = pd.DataFrame(
         {
@@ -1523,7 +1503,7 @@ def element_grid(
             "upper": held(record.upper_f),
             "lower": held(record.lower_f),
             "setpoint": held(record.setpoint_f),
-            "W": [power_at(t) for t in grid],
+            "W": held(record.power_w, timedelta(minutes=5)),
         },
         index=pd.DatetimeIndex(grid),
     )

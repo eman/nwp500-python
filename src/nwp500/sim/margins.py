@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
 
-from nwp500.sim.circulation import RUN_GAP, Circulation
+from nwp500.sim.circulation import Circulation
 from nwp500.sim.controller import COMPRESSOR_MODES
 from nwp500.sim.engine import PathPoint
 from nwp500.sim.inputs import Loads
@@ -223,20 +223,12 @@ def start_margins(
             and (until is None or p[0] < until)
         ]
         drops += [(t, t) for t, _ in pieces]
-        if loads.circulation is not None:
-            # The runs as the walk takes them: merged within the
-            # circulation's gap, those after ``circulation_known_until``
-            # left out (``api._circulation``).
-            gap = (
-                RUN_GAP
-                if params is None or params.circulation is None
-                else timedelta(minutes=params.circulation.run_gap_min)
-            )
-            drops += Circulation(
-                tuple((r.start, r.end) for r in loads.circulation),
-                loads.circulation_known_until,
-                gap,
-            ).runs
+        # The runs as the walk takes them: merged within the
+        # circulation's gap, those after ``circulation_known_until``
+        # left out.
+        circulation = Circulation.of(loads, params)
+        if circulation is not None:
+            drops += circulation.runs
     out: list[StartMargin] = []
     for i, j, k in _coasts(points):
         best: dict[MarginTrigger, tuple[float, datetime]] = {}

@@ -11,6 +11,7 @@ from typing import Any, ClassVar, TypedDict, cast
 import pytest
 
 from nwp500 import sim, sim_live
+from nwp500 import sim_adapters as sa
 from nwp500 import sim_home_assistant as ha
 from nwp500.sim.location_air import FittedLocationAir, LocationAirModel
 
@@ -905,9 +906,9 @@ class TestTheSecondReview:
         with pytest.raises(ValueError, match="rotational speed"):
             ha.to_rpm(40.0, None)
 
-    def test_busy(self) -> None:
+    def test_join_spans(self) -> None:
         x = [(_t(0), _t(1)), (_t(3), _t(4))]
-        assert ha.busy(x, [(_t(0.5), _t(2))]) == [
+        assert sa.join_spans(x, [(_t(0.5), _t(2))]) == [
             (_t(0), _t(2)),
             (_t(3), _t(4)),
         ]
@@ -1388,7 +1389,6 @@ class TestTheInletReadsNoPreference:
     ) -> None:
         """The preference flips to metric as the plateau's readings are
         taken in: the mains is what it was."""
-        from nwp500 import sim_adapters as sa
         from nwp500.unit_system import set_unit_system
 
         set_unit_system("us_customary")
@@ -1874,8 +1874,6 @@ class TestHistoryKeptCurrent:
         assert h.since(t[3]).readings["sensor.a"] == [(t[2], 2.0)]
 
     def test_a_heater_history_extended_and_trimmed(self) -> None:
-        from nwp500 import sim_adapters as sa
-
         t = [NOW + timedelta(minutes=m) for m in range(4)]
         a = ha.HeaterHistory(
             sa.ChangeRows(upper_f=[(t[0], 140.0)], lower_f=[(t[0], 139.0)]),

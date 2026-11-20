@@ -104,12 +104,26 @@ def is_heater_mode(name: str) -> TypeIs[HeaterMode]:
 BASE_REASONS: tuple[str, ...] = ("element_model_small_n",)
 
 
-def _start_bracket(mode: ElementMode, p: ElementParams) -> tuple[float, float]:
-    """The band the device's own decision is known to sit in.
+def entry_deficit_f(mode: ElementMode, params: ElementParams) -> float:
+    """How far below the setpoint the upper zone must be, when ``mode``
+    takes effect, for its upper element to start (the device runs'
+    edges; see ``ElementParams``): the top of ``entry_bracket_f``.
 
-    A deficit inside it is on the edge of a threshold this model treats
-    as a step, and no run has been made there.
+    Two different things wear the same name.  Electric and High Demand
+    put ``he_upper_on`` at the setpoint, so this is a thermostat and the
+    answer is ~0.  Energy Saver rests it at 104.9 °F and what history
+    shows is an entry effect at about 5 °F.
     """
+    return entry_bracket_f(mode, params)[1]
+
+
+def entry_bracket_f(
+    mode: ElementMode, params: ElementParams
+) -> tuple[float, float]:
+    """The deficits between which the device's own entry decision lies
+    and no run has been made: a deficit inside it is on the edge of a
+    threshold this model treats as a step."""
+    p = params
     if mode == "ENERGY_SAVER":
         return p.energy_saver_bracket_lower_f, p.energy_saver_entry_deficit_f
     if mode == "HIGH_DEMAND":
@@ -118,36 +132,6 @@ def _start_bracket(mode: ElementMode, p: ElementParams) -> tuple[float, float]:
             p.high_demand_starts_below_setpoint_f,
         )
     return p.start_bracket_lower_f, p.upper_starts_below_setpoint_f
-
-
-def _start_deficit(mode: ElementMode, p: ElementParams) -> float:
-    """How far below the setpoint the element needs before it starts.
-
-    Two different things wear the same name.  Electric and High Demand
-    put ``he_upper_on`` at the setpoint, so this is a thermostat and the
-    answer is ~0.  Energy Saver rests it at 104.9 °F and what history
-    shows is an entry effect at about 5 °F.
-    """
-    if mode == "ENERGY_SAVER":
-        return p.energy_saver_entry_deficit_f
-    if mode == "HIGH_DEMAND":
-        return p.high_demand_starts_below_setpoint_f
-    return p.upper_starts_below_setpoint_f
-
-
-def entry_deficit_f(mode: ElementMode, params: ElementParams) -> float:
-    """How far below the setpoint the upper zone must be, when ``mode``
-    takes effect, for its upper element to start (the device runs'
-    edges; see ``ElementParams``)."""
-    return _start_deficit(mode, params)
-
-
-def entry_bracket_f(
-    mode: ElementMode, params: ElementParams
-) -> tuple[float, float]:
-    """The deficits between which the device's own entry decision lies
-    and no run has been made."""
-    return _start_bracket(mode, params)
 
 
 def upper_off_deficit_f(mode: ElementMode, params: ElementParams) -> float:

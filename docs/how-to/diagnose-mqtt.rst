@@ -161,7 +161,7 @@ Start with these hardened settings:
 
 .. code-block:: python
 
-   from nwp500.mqtt_utils import MqttConnectionConfig
+   from nwp500.mqtt import MqttConnectionConfig
 
    config = MqttConnectionConfig(
        # 1. Keep-alive below NAT idle timeouts (the default)

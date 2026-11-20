@@ -17,28 +17,114 @@ from ..unit_system import get_unit_system
 from ._converters import reservation_param_to_preferred
 
 
-def _decode_hex_reservation_field(data: Any) -> Any:
-    """Decode a hex-encoded ``reservation`` string into an entry list.
+class _ScheduleEntry(NavienBaseModel):
+    """The six wire fields of a schedule entry, and their readings."""
 
-    Device read-backs deliver the schedule as a hex string on the legacy
-    response topic and as a JSON list on the ``/rd`` topic; both shapes are
-    accepted. Used as a ``mode="before"`` validator by every schedule model.
-    """
-    if isinstance(data, dict):
-        d = cast(dict[str, Any], data).copy()
-        raw = d.get("reservation", "")
-        if isinstance(raw, str):
-            if raw:
-                from ..encoding import decode_reservation_hex
+    enable: int = 2
+    week: int = 0
+    hour: int = 0
+    min: int = 0
+    mode: int = 1
+    param: int = 0
 
-                d["reservation"] = decode_reservation_hex(raw)
-            else:
-                d["reservation"] = []
-        return d
-    return data
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def enabled(self) -> bool:
+        """Whether this entry is active (device bool: 2=on, 1=off)."""
+        return self.enable == 2
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def days(self) -> list[str]:
+        """Weekday names for this entry."""
+        from ..encoding import decode_week_bitfield
+
+        return decode_week_bitfield(self.week)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def time(self) -> str:
+        """Formatted time string (HH:MM)."""
+        return f"{self.hour:02d}:{self.min:02d}"
+
+    def canonical_key(self) -> tuple[int, int, int, int, int, int]:
+        """Raw protocol fields as a stable, hashable tuple.
+
+        Used to compare a desired entry against a device read-back without
+        depending on field order or computed properties.
+        """
+        return (
+            self.enable,
+            self.week,
+            self.hour,
+            self.min,
+            self.mode,
+            self.param,
+        )
 
 
-class ReservationEntry(NavienBaseModel):
+class _Schedule[EntryT: _ScheduleEntry](NavienBaseModel):
+    """A schedule envelope: ``reservationUse`` (2=on, 1=off) and entries."""
+
+    reservation_use: int = Field(default=0, alias="reservationUse")
+    reservation: list[EntryT] = Field(default_factory=list[EntryT])
+
+    model_config = ConfigDict(
+        alias_generator=None,
+        populate_by_name=True,
+        extra="ignore",
+        use_enum_values=False,
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _decode_hex_reservation(cls, data: Any) -> Any:
+        """Decode a hex-encoded ``reservation`` string into an entry list.
+
+        Device read-backs deliver the schedule as a hex string on the
+        legacy response topic and as a JSON list on the ``/rd`` topic; both
+        shapes are accepted.
+        """
+        if isinstance(data, dict):
+            d = cast(dict[str, Any], data).copy()
+            raw = d.get("reservation", "")
+            if isinstance(raw, str):
+                if raw:
+                    from ..encoding import decode_reservation_hex
+
+                    d["reservation"] = decode_reservation_hex(raw)
+                else:
+                    d["reservation"] = []
+            return d
+        return data
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def enabled(self) -> bool:
+        """Whether the schedule is globally enabled.
+
+        Device bool convention: 2=on, 1=off.
+        """
+        return self.reservation_use == 2
+
+    def canonical(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
+        """Normalized, order-independent representation of this schedule.
+
+        Entry order in a device read-back is not guaranteed to match the
+        order a program was written in, so entries are sorted by their raw
+        field tuple. Two schedules holding the same entries return equal
+        (and equally hashable) results from this method regardless of
+        entry order. This is the intended way to compare a desired program
+        against a device read-back (see
+        :func:`nwp500.reservations.update_reservations_confirmed`).
+        """
+        return (
+            self.enabled,
+            tuple(sorted(entry.canonical_key() for entry in self.reservation)),
+        )
+
+
+class ReservationEntry(_ScheduleEntry):
     """A single scheduled reservation entry.
 
     Wraps the raw 6-byte protocol fields and provides computed properties
@@ -65,33 +151,6 @@ class ReservationEntry(NavienBaseModel):
         across every async task and thread rather than being context-local
         (see issue #103).
     """
-
-    enable: int = 2
-    week: int = 0
-    hour: int = 0
-    min: int = 0
-    mode: int = 1
-    param: int = 0
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def enabled(self) -> bool:
-        """Whether this reservation is active (device bool: 2=on, 1=off)."""
-        return self.enable == 2
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def days(self) -> list[str]:
-        """Weekday names for this reservation."""
-        from ..encoding import decode_week_bitfield
-
-        return decode_week_bitfield(self.week)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def time(self) -> str:
-        """Formatted time string (HH:MM)."""
-        return f"{self.hour:02d}:{self.min:02d}"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -120,23 +179,8 @@ class ReservationEntry(NavienBaseModel):
         except ValueError:
             return f"Unknown ({self.mode})"
 
-    def canonical_key(self) -> tuple[int, int, int, int, int, int]:
-        """Raw protocol fields as a stable, hashable tuple.
 
-        Used to compare a desired reservation entry against a device
-        read-back without depending on field order or computed properties.
-        """
-        return (
-            self.enable,
-            self.week,
-            self.hour,
-            self.min,
-            self.mode,
-            self.param,
-        )
-
-
-class ReservationSchedule(NavienBaseModel):
+class ReservationSchedule(_Schedule[ReservationEntry]):
     """Complete reservation schedule from the device.
 
     Can be constructed from raw MQTT response data. The ``reservation``
@@ -144,49 +188,8 @@ class ReservationSchedule(NavienBaseModel):
     dicts/ReservationEntry objects.
     """
 
-    reservation_use: int = Field(default=0, alias="reservationUse")
-    reservation: list[ReservationEntry] = Field(default_factory=list)
 
-    model_config = ConfigDict(
-        alias_generator=None,
-        populate_by_name=True,
-        extra="ignore",
-        use_enum_values=False,
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _decode_hex_reservation(cls, data: Any) -> Any:
-        """Decode hex-encoded reservation string into entry list."""
-        return _decode_hex_reservation_field(data)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def enabled(self) -> bool:
-        """Whether the reservation system is globally enabled.
-
-        Device bool convention: 2=on, 1=off.
-        """
-        return self.reservation_use == 2
-
-    def canonical(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
-        """Normalized, order-independent representation of this schedule.
-
-        Entry order in a device read-back is not guaranteed to match the
-        order a program was written in, so entries are sorted by their raw
-        field tuple. Two schedules holding the same reservations return
-        equal (and equally hashable) results from this method regardless of
-        entry order. This is the intended way to compare a desired program
-        against a device read-back (see
-        :func:`nwp500.reservations.update_reservations_confirmed`).
-        """
-        return (
-            self.enabled,
-            tuple(sorted(entry.canonical_key() for entry in self.reservation)),
-        )
-
-
-class RecirculationScheduleEntry(NavienBaseModel):
+class RecirculationScheduleEntry(_ScheduleEntry):
     """A single entry in the recirculation pump schedule.
 
     Used with the RECIR_RESERVATION command (33554440), published on
@@ -238,43 +241,12 @@ class RecirculationScheduleEntry(NavienBaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def enabled(self) -> bool:
-        """Whether this entry is active (device bool: 2=on, 1=off)."""
-        return self.enable == 2
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def days(self) -> list[str]:
-        """Weekday names for this entry."""
-        from ..encoding import decode_week_bitfield
-
-        return decode_week_bitfield(self.week)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def time(self) -> str:
-        """Formatted time string (HH:MM)."""
-        return f"{self.hour:02d}:{self.min:02d}"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
     def pump_on(self) -> bool:
         """Whether the entry switches the pump on (mode 2) or off (mode 1)."""
         return self.mode == 2
 
-    def canonical_key(self) -> tuple[int, int, int, int, int, int]:
-        """Raw protocol fields as a stable, hashable tuple."""
-        return (
-            self.enable,
-            self.week,
-            self.hour,
-            self.min,
-            self.mode,
-            self.param,
-        )
 
-
-class RecirculationSchedule(NavienBaseModel):
+class RecirculationSchedule(_Schedule[RecirculationScheduleEntry]):
     """Complete recirculation pump schedule (RECIR_RESERVATION command).
 
     Written with command code 33554440 on ``ctrl/recirc-rsv/rd`` and read
@@ -286,33 +258,6 @@ class RecirculationSchedule(NavienBaseModel):
     """
 
     reservation_use: int = Field(default=0, alias="reservationUse", strict=True)
-    reservation: list[RecirculationScheduleEntry] = Field(default_factory=list)
-
-    model_config = ConfigDict(
-        alias_generator=None,
-        populate_by_name=True,
-        extra="ignore",
-        use_enum_values=False,
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _decode_hex_reservation(cls, data: Any) -> Any:
-        """Decode hex-encoded reservation string into entry list."""
-        return _decode_hex_reservation_field(data)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def enabled(self) -> bool:
-        """Whether the recirculation schedule is globally enabled."""
-        return self.reservation_use == 2
-
-    def canonical(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
-        """Order-independent representation for read-back comparison."""
-        return (
-            self.enabled,
-            tuple(sorted(entry.canonical_key() for entry in self.reservation)),
-        )
 
 
 class OtaCommitPayload(NavienBaseModel):

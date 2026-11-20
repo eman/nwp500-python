@@ -12,12 +12,10 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
-from rich.tree import Tree
 
 from .presentation import (
     DailyEnergyReport,
@@ -162,7 +160,37 @@ class OutputFormatter:
             items: List of (category, label, value) tuples
             title: Table title
         """
-        self._print_status_rich(items, title)
+        assert self.console is not None
+
+        table = cast(Any, Table)(title=title, show_header=False)
+
+        if not items:
+            # Preserve the previous empty-status header rendering.
+            width = 44
+            print("=" * width)
+            print(title)
+            print("=" * width)
+            print("=" * width)
+            return
+
+        current_category: str | None = None
+        for category, label, value in items:
+            if category != current_category:
+                # Add category row
+                if current_category is not None:
+                    table.add_row()
+                table.add_row(
+                    cast(Any, Text)(category, style="bold cyan"),
+                )
+                current_category = category
+
+            # Add data row with styling
+            table.add_row(
+                cast(Any, Text)(f"  {label}", style="magenta"),
+                cast(Any, Text)(str(value), style="green"),
+            )
+
+        self.console.print(table)
 
     def print_energy_table(self, report: EnergyReport) -> None:
         """Print an energy usage report (summary + monthly breakdown).
@@ -174,7 +202,9 @@ class OutputFormatter:
             report.totals, "ENERGY USAGE - REQUESTED MONTHS"
         )
         if report.months:
-            self._print_energy_rich(report.months)
+            self._print_daily_energy_rich(
+                report.months, "MONTHLY BREAKDOWN", "Month", width=15
+            )
         if report.lifetime is not None:
             self.print_lifetime_energy(report.lifetime)
 
@@ -237,7 +267,20 @@ class OutputFormatter:
             title: Panel title
             details: Optional list of detail lines
         """
-        self._print_error_rich(message, title, details)
+        assert self.console is not None
+
+        content = f"❌ {title}\n\n{message}"
+        if details:
+            content += "\n\nDetails:"
+            for detail in details:
+                content += f"\n  • {detail}"
+
+        panel = cast(Any, Panel)(
+            content,
+            border_style="red",
+            padding=(1, 2),
+        )
+        self.console.print(panel)
 
     def print_success(self, message: str) -> None:
         """Print a success message.
@@ -245,7 +288,13 @@ class OutputFormatter:
         Args:
             message: Success message to display
         """
-        self._print_success_rich(message)
+        assert self.console is not None
+        panel = cast(Any, Panel)(
+            f"[green]✓ {message}[/green]",
+            border_style="green",
+            padding=(0, 2),
+        )
+        self.console.print(panel)
 
     def print_info(self, message: str) -> None:
         """Print an info message.
@@ -253,15 +302,13 @@ class OutputFormatter:
         Args:
             message: Info message to display
         """
-        self._print_info_rich(message)
-
-    def print_device_list(self, devices: list[dict[str, Any]]) -> None:
-        """Print list of devices with status indicators.
-
-        Args:
-            devices: List of device dictionaries with status info
-        """
-        self._print_device_list_rich(devices)
+        assert self.console is not None
+        panel = cast(Any, Panel)(
+            f"[blue]ℹ {message}[/blue]",
+            border_style="blue",
+            padding=(0, 2),
+        )
+        self.console.print(panel)
 
     def print_tou_schedule(
         self,
@@ -284,97 +331,6 @@ class OutputFormatter:
             decode_week: Function to decode week bitfield
             decode_price_fn: Function to decode price values
         """
-        self._print_tou_rich(
-            name,
-            utility,
-            zip_code,
-            schedules,
-            decode_season,
-            decode_week,
-            decode_price_fn,
-        )
-
-    def print_reservations_table(
-        self, reservations: list[dict[str, Any]], enabled: bool = False
-    ) -> None:
-        """Print reservations as a formatted table.
-
-        Args:
-            reservations: List of reservation dictionaries
-            enabled: Whether reservations are enabled globally
-        """
-        self._print_reservations_rich(reservations, enabled)
-
-    def _print_success_rich(self, message: str) -> None:
-        """Rich-enhanced success output."""
-        assert self.console is not None
-        panel = cast(Any, Panel)(
-            f"[green]✓ {message}[/green]",
-            border_style="green",
-            padding=(0, 2),
-        )
-        self.console.print(panel)
-
-    def _print_info_rich(self, message: str) -> None:
-        """Rich-enhanced info output."""
-        assert self.console is not None
-        panel = cast(Any, Panel)(
-            f"[blue]ℹ {message}[/blue]",
-            border_style="blue",
-            padding=(0, 2),
-        )
-        self.console.print(panel)
-
-    def _print_device_list_rich(self, devices: list[dict[str, Any]]) -> None:
-        """Rich-enhanced device list output."""
-        assert self.console is not None
-
-        if not devices:
-            panel = cast(Any, Panel)("No devices found", border_style="yellow")
-            self.console.print(panel)
-            return
-
-        table = cast(Any, Table)(title="🏘️ Devices", show_header=True)
-        table.add_column("Device Name", style="cyan", width=20)
-        table.add_column("Status", width=15)
-        table.add_column("Temperature", style="magenta", width=15)
-        table.add_column("Power", width=12)
-        table.add_column("Updated", style="dim", width=12)
-
-        for device in devices:
-            name = device.get("name", "Unknown")
-            status = device.get("status", "unknown").lower()
-            temp = device.get("temperature", "N/A")
-            power = device.get("power", "N/A")
-            updated = device.get("updated", "Never")
-
-            # Status indicator
-            if status == "online":
-                status_indicator = "🟢 Online"
-            elif status == "idle":
-                status_indicator = "🟡 Idle"
-            elif status == "offline":
-                status_indicator = "🔴 Offline"
-            else:
-                status_indicator = f"⚪ {status}"
-
-            table.add_row(
-                name, status_indicator, str(temp), str(power), updated
-            )
-
-        self.console.print(table)
-
-    def _print_tou_rich(
-        self,
-        name: str,
-        utility: str,
-        zip_code: int,
-        schedules: Any,
-        decode_season: Any,
-        decode_week: Any,
-        decode_price_fn: Any,
-    ) -> None:
-        """Rich-enhanced TOU schedule output."""
         assert self.console is not None
 
         self.console.print()
@@ -431,10 +387,15 @@ class OutputFormatter:
 
             self.console.print(table)
 
-    def _print_reservations_rich(
+    def print_reservations_table(
         self, reservations: list[dict[str, Any]], enabled: bool = False
     ) -> None:
-        """Rich-enhanced reservations output."""
+        """Print reservations as a formatted table.
+
+        Args:
+            reservations: List of reservation dictionaries
+            enabled: Whether reservations are enabled globally
+        """
         assert self.console is not None
 
         status_color = "green" if enabled else "red"
@@ -477,46 +438,6 @@ class OutputFormatter:
 
         self.console.print(table)
 
-    # Rich implementations
-
-    def _print_status_rich(
-        self,
-        items: list[tuple[str, str, str]],
-        title: str = "DEVICE STATUS",
-    ) -> None:
-        """Rich-enhanced status output."""
-        assert self.console is not None
-
-        table = cast(Any, Table)(title=title, show_header=False)
-
-        if not items:
-            # Preserve the previous empty-status header rendering.
-            width = 44
-            print("=" * width)
-            print(title)
-            print("=" * width)
-            print("=" * width)
-            return
-
-        current_category: str | None = None
-        for category, label, value in items:
-            if category != current_category:
-                # Add category row
-                if current_category is not None:
-                    table.add_row()
-                table.add_row(
-                    cast(Any, Text)(category, style="bold cyan"),
-                )
-                current_category = category
-
-            # Add data row with styling
-            table.add_row(
-                cast(Any, Text)(f"  {label}", style="magenta"),
-                cast(Any, Text)(str(value), style="green"),
-            )
-
-        self.console.print(table)
-
     def _print_energy_summary(self, totals: EnergyTotals, title: str) -> None:
         """Render the shared energy 'TOTAL SUMMARY' block as a Rich table."""
         assert self.console is not None
@@ -545,32 +466,6 @@ class OutputFormatter:
         table.add_row(
             "  Heat Element", f"{totals.heat_element_time_hours} hours"
         )
-        self.console.print(table)
-
-    def _print_energy_rich(self, months: list[EnergyPeriodRow]) -> None:
-        """Rich-enhanced monthly energy breakdown."""
-        assert self.console is not None
-
-        table = cast(Any, Table)(title="MONTHLY BREAKDOWN", show_header=True)
-        table.add_column("Month", style="cyan", width=15)
-        table.add_column(
-            "Total kWh", style="magenta", justify="right", width=12
-        )
-        table.add_column("HP Usage", width=18)
-        table.add_column("HE Usage", width=18)
-
-        for month in months:
-            total_kwh = month.total_wh / 1000
-            hp_kwh = month.heat_pump_wh / 1000
-            he_kwh = month.heat_element_wh / 1000
-            hp_pct = month.heat_pump_percentage
-            he_pct = month.heat_element_percentage
-
-            hp_text, he_text = self._energy_usage_cells(
-                hp_kwh, hp_pct, he_kwh, he_pct
-            )
-            table.add_row(month.label, f"{total_kwh:.1f}", hp_text, he_text)
-
         self.console.print(table)
 
     def _energy_usage_cells(
@@ -612,12 +507,18 @@ class OutputFormatter:
         days: list[EnergyPeriodRow],
         title: str = "DAILY BREAKDOWN",
         column: str = "Day",
+        width: int | None = None,
     ) -> None:
-        """Rich-enhanced per-period energy breakdown."""
+        """Rich-enhanced per-period energy breakdown.
+
+        ``width`` is the first column's; by default it fits ``column``.
+        """
         assert self.console is not None
 
         table = cast(Any, Table)(title=title, show_header=True)
-        table.add_column(column, style="cyan", width=max(6, len(column) + 6))
+        table.add_column(
+            column, style="cyan", width=width or max(6, len(column) + 6)
+        )
         table.add_column(
             "Total kWh", style="magenta", justify="right", width=12
         )
@@ -638,61 +539,12 @@ class OutputFormatter:
 
         self.console.print(table)
 
-    def _print_error_rich(
-        self,
-        message: str,
-        title: str,
-        details: list[str] | None = None,
-    ) -> None:
-        """Rich-enhanced error output."""
-        assert self.console is not None
-
-        content = f"❌ {title}\n\n{message}"
-        if details:
-            content += "\n\nDetails:"
-            for detail in details:
-                content += f"\n  • {detail}"
-
-        panel = cast(Any, Panel)(
-            content,
-            border_style="red",
-            padding=(1, 2),
-        )
-        self.console.print(panel)
-
-    # Phase 3: Advanced Features
-
     def print_json_highlighted(self, data: Any) -> None:
         """Print JSON with syntax highlighting.
 
         Args:
             data: Data to print as JSON
         """
-        self._print_json_highlighted_rich(data)
-
-    def print_device_tree(
-        self, device_name: str, device_info: dict[str, Any]
-    ) -> None:
-        """Print device information as a tree structure.
-
-        Args:
-            device_name: Name of the device
-            device_info: Dictionary of device information
-        """
-        self._print_device_tree_rich(device_name, device_info)
-
-    def print_markdown_report(self, markdown_content: str) -> None:
-        """Print markdown-formatted content.
-
-        Args:
-            markdown_content: Markdown formatted string
-        """
-        self._print_markdown_rich(markdown_content)
-
-    # Rich implementations (Phase 3)
-
-    def _print_json_highlighted_rich(self, data: Any) -> None:
-        """Rich-enhanced JSON output with syntax highlighting."""
         assert self.console is not None
 
         json_str = json.dumps(data, indent=2, default=str)
@@ -700,57 +552,6 @@ class OutputFormatter:
             json_str, "json", theme="monokai", line_numbers=False
         )
         self.console.print(syntax)
-
-    def _print_device_tree_rich(
-        self, device_name: str, device_info: dict[str, Any]
-    ) -> None:
-        """Rich-enhanced tree output for device information."""
-        assert self.console is not None
-
-        tree = cast(Any, Tree)(f"📱 {device_name}", guide_style="bold cyan")
-
-        # Organize info into categories
-        categories = {
-            "🆔 Identity": [
-                "serial_number",
-                "model_type",
-                "country_code",
-                "volume_code",
-            ],
-            "🔧 Firmware": [
-                "controller_version",
-                "panel_version",
-                "wifi_version",
-                "recirc_version",
-            ],
-            "⚙️ Configuration": [
-                "temperature_unit",
-                "dhw_temp_range",
-                "freeze_protection_range",
-            ],
-            "✨ Features": [
-                "power_control",
-                "heat_pump_mode",
-                "recirculation",
-                "energy_usage",
-            ],
-        }
-
-        for category, keys in categories.items():
-            category_node = tree.add(category)
-            for key in keys:
-                if key in device_info:
-                    value = device_info[key]
-                    category_node.add(f"{key}: [green]{value}[/green]")
-
-        self.console.print(tree)
-
-    def _print_markdown_rich(self, content: str) -> None:
-        """Rich-enhanced markdown rendering."""
-        assert self.console is not None
-
-        markdown = cast(Any, Markdown)(content)
-        self.console.print(markdown)
 
 
 # Global formatter instance
