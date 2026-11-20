@@ -160,7 +160,37 @@ class OutputFormatter:
             items: List of (category, label, value) tuples
             title: Table title
         """
-        self._print_status_rich(items, title)
+        assert self.console is not None
+
+        table = cast(Any, Table)(title=title, show_header=False)
+
+        if not items:
+            # Preserve the previous empty-status header rendering.
+            width = 44
+            print("=" * width)
+            print(title)
+            print("=" * width)
+            print("=" * width)
+            return
+
+        current_category: str | None = None
+        for category, label, value in items:
+            if category != current_category:
+                # Add category row
+                if current_category is not None:
+                    table.add_row()
+                table.add_row(
+                    cast(Any, Text)(category, style="bold cyan"),
+                )
+                current_category = category
+
+            # Add data row with styling
+            table.add_row(
+                cast(Any, Text)(f"  {label}", style="magenta"),
+                cast(Any, Text)(str(value), style="green"),
+            )
+
+        self.console.print(table)
 
     def print_energy_table(self, report: EnergyReport) -> None:
         """Print an energy usage report (summary + monthly breakdown).
@@ -235,7 +265,20 @@ class OutputFormatter:
             title: Panel title
             details: Optional list of detail lines
         """
-        self._print_error_rich(message, title, details)
+        assert self.console is not None
+
+        content = f"❌ {title}\n\n{message}"
+        if details:
+            content += "\n\nDetails:"
+            for detail in details:
+                content += f"\n  • {detail}"
+
+        panel = cast(Any, Panel)(
+            content,
+            border_style="red",
+            padding=(1, 2),
+        )
+        self.console.print(panel)
 
     def print_success(self, message: str) -> None:
         """Print a success message.
@@ -243,7 +286,13 @@ class OutputFormatter:
         Args:
             message: Success message to display
         """
-        self._print_success_rich(message)
+        assert self.console is not None
+        panel = cast(Any, Panel)(
+            f"[green]✓ {message}[/green]",
+            border_style="green",
+            padding=(0, 2),
+        )
+        self.console.print(panel)
 
     def print_info(self, message: str) -> None:
         """Print an info message.
@@ -251,7 +300,13 @@ class OutputFormatter:
         Args:
             message: Info message to display
         """
-        self._print_info_rich(message)
+        assert self.console is not None
+        panel = cast(Any, Panel)(
+            f"[blue]ℹ {message}[/blue]",
+            border_style="blue",
+            padding=(0, 2),
+        )
+        self.console.print(panel)
 
     def print_tou_schedule(
         self,
@@ -274,58 +329,6 @@ class OutputFormatter:
             decode_week: Function to decode week bitfield
             decode_price_fn: Function to decode price values
         """
-        self._print_tou_rich(
-            name,
-            utility,
-            zip_code,
-            schedules,
-            decode_season,
-            decode_week,
-            decode_price_fn,
-        )
-
-    def print_reservations_table(
-        self, reservations: list[dict[str, Any]], enabled: bool = False
-    ) -> None:
-        """Print reservations as a formatted table.
-
-        Args:
-            reservations: List of reservation dictionaries
-            enabled: Whether reservations are enabled globally
-        """
-        self._print_reservations_rich(reservations, enabled)
-
-    def _print_success_rich(self, message: str) -> None:
-        """Rich-enhanced success output."""
-        assert self.console is not None
-        panel = cast(Any, Panel)(
-            f"[green]✓ {message}[/green]",
-            border_style="green",
-            padding=(0, 2),
-        )
-        self.console.print(panel)
-
-    def _print_info_rich(self, message: str) -> None:
-        """Rich-enhanced info output."""
-        assert self.console is not None
-        panel = cast(Any, Panel)(
-            f"[blue]ℹ {message}[/blue]",
-            border_style="blue",
-            padding=(0, 2),
-        )
-        self.console.print(panel)
-
-    def _print_tou_rich(
-        self,
-        name: str,
-        utility: str,
-        zip_code: int,
-        schedules: Any,
-        decode_season: Any,
-        decode_week: Any,
-        decode_price_fn: Any,
-    ) -> None:
-        """Rich-enhanced TOU schedule output."""
         assert self.console is not None
 
         self.console.print()
@@ -382,10 +385,15 @@ class OutputFormatter:
 
             self.console.print(table)
 
-    def _print_reservations_rich(
+    def print_reservations_table(
         self, reservations: list[dict[str, Any]], enabled: bool = False
     ) -> None:
-        """Rich-enhanced reservations output."""
+        """Print reservations as a formatted table.
+
+        Args:
+            reservations: List of reservation dictionaries
+            enabled: Whether reservations are enabled globally
+        """
         assert self.console is not None
 
         status_color = "green" if enabled else "red"
@@ -425,46 +433,6 @@ class OutputFormatter:
             unit = res.get("unit", "")
             temp_str = f"{temp}{unit}" if temp != "?" else "?"
             table.add_row(num, status, days_str, time_str, mode, temp_str)
-
-        self.console.print(table)
-
-    # Rich implementations
-
-    def _print_status_rich(
-        self,
-        items: list[tuple[str, str, str]],
-        title: str = "DEVICE STATUS",
-    ) -> None:
-        """Rich-enhanced status output."""
-        assert self.console is not None
-
-        table = cast(Any, Table)(title=title, show_header=False)
-
-        if not items:
-            # Preserve the previous empty-status header rendering.
-            width = 44
-            print("=" * width)
-            print(title)
-            print("=" * width)
-            print("=" * width)
-            return
-
-        current_category: str | None = None
-        for category, label, value in items:
-            if category != current_category:
-                # Add category row
-                if current_category is not None:
-                    table.add_row()
-                table.add_row(
-                    cast(Any, Text)(category, style="bold cyan"),
-                )
-                current_category = category
-
-            # Add data row with styling
-            table.add_row(
-                cast(Any, Text)(f"  {label}", style="magenta"),
-                cast(Any, Text)(str(value), style="green"),
-            )
 
         self.console.print(table)
 
@@ -589,42 +557,12 @@ class OutputFormatter:
 
         self.console.print(table)
 
-    def _print_error_rich(
-        self,
-        message: str,
-        title: str,
-        details: list[str] | None = None,
-    ) -> None:
-        """Rich-enhanced error output."""
-        assert self.console is not None
-
-        content = f"❌ {title}\n\n{message}"
-        if details:
-            content += "\n\nDetails:"
-            for detail in details:
-                content += f"\n  • {detail}"
-
-        panel = cast(Any, Panel)(
-            content,
-            border_style="red",
-            padding=(1, 2),
-        )
-        self.console.print(panel)
-
-    # Phase 3: Advanced Features
-
     def print_json_highlighted(self, data: Any) -> None:
         """Print JSON with syntax highlighting.
 
         Args:
             data: Data to print as JSON
         """
-        self._print_json_highlighted_rich(data)
-
-    # Rich implementations (Phase 3)
-
-    def _print_json_highlighted_rich(self, data: Any) -> None:
-        """Rich-enhanced JSON output with syntax highlighting."""
         assert self.console is not None
 
         json_str = json.dumps(data, indent=2, default=str)
