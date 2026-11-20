@@ -156,6 +156,14 @@ _DEVICE_ONLY = frozenset(DEVICE_ENTRY_FIELDS) - set(
     DEVICE_ENTRY_FIELDS.values()
 )
 _SIM_ONLY = frozenset(DEVICE_ENTRY_FIELDS.values()) - set(DEVICE_ENTRY_FIELDS)
+#: The fields the library's ``ReservationEntry.model_dump()`` adds to the
+#: device's six, each worked out from them (``nwp-cli reservations get
+#: --json`` prints them): a device entry may carry them, and the six
+#: hold the entry. ``enabled`` is the simulator's name too, so it has
+#: to agree with ``enable``.
+DEVICE_DUMP_FIELDS = frozenset(
+    {"enabled", "days", "time", "temperature", "unit", "mode_name"}
+)
 
 
 def _device_enabled(enable: object) -> bool:
@@ -180,14 +188,24 @@ def _from_device(fields: Mapping[str, Any]) -> dict[str, Any]:
             + "; missing "
             + ", ".join(missing)
         )
-    both = sorted(_SIM_ONLY & set(fields))
+    both = sorted(_SIM_ONLY & set(fields) - DEVICE_DUMP_FIELDS)
     if both:
         raise ValueError(
             "an entry is in the device's fields or the simulator's, not "
             f"both: {', '.join(both)} given with enable, min and param"
         )
-    out = {DEVICE_ENTRY_FIELDS.get(k, k): v for k, v in fields.items()}
-    out["enabled"] = _device_enabled(fields["enable"])
+    enabled = _device_enabled(fields["enable"])
+    if "enabled" in fields and fields["enabled"] is not enabled:
+        raise ValueError(
+            f"enabled {fields['enabled']!r} disagrees with enable "
+            f"{fields['enable']!r} ({DEVICE_ON} is on)"
+        )
+    out = {
+        DEVICE_ENTRY_FIELDS.get(k, k): v
+        for k, v in fields.items()
+        if k not in DEVICE_DUMP_FIELDS
+    }
+    out["enabled"] = enabled
     return out
 
 
@@ -197,7 +215,9 @@ class ReservationEntry(_Value):
     It takes the simulator's fields or the device's (``enable``,
     ``week``, ``hour``, ``min``, ``mode``, ``param``, all six), as a
     mapping or as the library's ``nwp500.models.ReservationEntry``:
-    :data:`DEVICE_ENTRY_FIELDS` maps one to the other.
+    :data:`DEVICE_ENTRY_FIELDS` maps one to the other. A device entry
+    may also carry the fields that library entry's ``model_dump()`` adds
+    (:data:`DEVICE_DUMP_FIELDS`).
     :meth:`from_device` reads the device's form and :meth:`to_device`
     gives it back."""
 
@@ -237,9 +257,12 @@ class ReservationEntry(_Value):
         ``update_reservations`` writes one, or the library's
         ``nwp500.models.ReservationEntry``. ``enable`` 2 is on and any
         other whole number off; the rest are taken as they are
-        (``DEVICE_ENTRY_FIELDS``). Raises ``ValueError`` for an entry
-        missing one of the six, an ``enable`` that is not a whole number,
-        or a field out of its range."""
+        (``DEVICE_ENTRY_FIELDS``). The fields the library entry's
+        ``model_dump()`` adds (``DEVICE_DUMP_FIELDS``) are read past,
+        ``enabled`` once it agrees with ``enable``. Raises
+        ``ValueError`` for an entry missing one of the six, an
+        ``enable`` that is not a whole number, an ``enabled`` that
+        disagrees with it, or a field out of its range."""
         if isinstance(entry, Mapping):
             fields: Mapping[str, Any] = entry
         else:
@@ -553,17 +576,22 @@ class Commands(_Value):
 
 def commands_in_simulator_names(commands: Mapping[str, Any]) -> dict[str, Any]:
     """A ``Commands`` mapping with a plan's ``tou`` command,
-    ``{"enabled": ...}``, as ``tou_enabled``; the rest as given. Raises
-    ``ValueError`` for both given in it (``tou_enabled`` not None), or
-    a ``tou`` of any other shape. Layers merged key by key
-    (``sim.codec.merge``) are each put in these names first, so a
-    layer's ``tou`` replaces a ``tou_enabled`` under it."""
+    ``{"enabled": ...}``, as ``tou_enabled``, and a null ``tou`` (no
+    TOU command, as for the other commands) as ``tou_enabled`` None;
+    the rest as given. Raises ``ValueError`` for both given in it
+    (``tou_enabled`` not None), or a ``tou`` of any other shape.
+    Layers merged key by key (``sim.codec.merge``) are each put in
+    these names first, so a layer's ``tou`` replaces a ``tou_enabled``
+    under it."""
     fields = dict(commands)
     if "tou" not in fields:
         return fields
     tou = fields.pop("tou")
     if fields.get("tou_enabled") is not None:
         raise ValueError("give tou or tou_enabled, not both")
+    if tou is None:
+        fields["tou_enabled"] = None
+        return fields
     shape: Mapping[str, Any] = (
         cast(Mapping[str, Any], tou) if isinstance(tou, Mapping) else {}
     )

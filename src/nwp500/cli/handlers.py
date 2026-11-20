@@ -33,8 +33,8 @@ from nwp500.reservations import (
     delete_reservation,
     fetch_reservations,
     update_reservation,
+    update_reservations_confirmed,
 )
-from nwp500.topic_builder import MqttTopicBuilder
 from nwp500.unit_system import get_unit_system
 
 from .output_formatters import (
@@ -359,23 +359,17 @@ async def handle_update_reservations_request(
         _logger.error(f"Invalid reservations JSON: {e}")
         return
 
-    future = asyncio.get_running_loop().create_future()
-
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done() and "response" in message:
-            print_json(message)
-            future.set_result(None)
-
-    device_type = str(device.device_info.device_type)
-    response_topic = MqttTopicBuilder.response_topic(
-        device_type, mqtt.client_id, "rsv/rd"
-    )
-    await mqtt.subscribe(response_topic, raw_callback)
-    await mqtt.update_reservations(device, reservations, enabled=enabled)
     try:
-        await asyncio.wait_for(future, timeout=10)
-    except TimeoutError:
+        confirmed = await update_reservations_confirmed(
+            mqtt, device, reservations, enabled=enabled
+        )
+    except ValidationError as e:
+        _logger.error(f"Failed to update reservations: {e}")
+        return
+    if confirmed is None:
         _logger.error("Timed out updating reservations.")
+        return
+    print_json(confirmed.model_dump())
 
 
 async def handle_add_reservation_request(

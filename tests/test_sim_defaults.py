@@ -264,6 +264,14 @@ def test_a_valve_set_to_a_temperature_delivers_it_flat() -> None:
     assert delivery_f(valved, 110.0) == 110.0
     with pytest.raises(ValueError, match="temperature"):
         with_valve(d, float("nan"))
+    # A pair loaded from JSON is a list.
+    assert with_valve(d, [120.0, 0.0]) == valved
+    assert with_valve(d, list(SITE_VALVE)) == with_valve(d, SITE_VALVE)
+    with pytest.raises(ValueError, match="temperature"):
+        with_valve(d, True)  # type: ignore[arg-type]
+    for bad in ([120.0], [120.0, True], (1.0, 2.0, 3.0)):
+        with pytest.raises(ValueError, match="intercept_f, slope"):
+            with_valve(d, bad)
 
 
 @pytest.mark.parametrize("inlet", [120.0, 125.0])

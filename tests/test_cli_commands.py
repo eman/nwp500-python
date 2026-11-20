@@ -1,7 +1,7 @@
 """Tests for CLI command handlers."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -981,3 +981,85 @@ def test_day_counts_take_the_heater_ranges(
     days = next(p for p in command.params if p.name in ("days", "period"))
     assert isinstance(days.type, click.IntRange)
     assert (days.type.min, days.type.max) == bounds
+
+
+class TestUpdateReservations:
+    """``reservations set`` waits for the device's echo through
+    ``subscribe_reservation_response``, which also takes a list the
+    cloud relays on the device's own topic, and removes its handler."""
+
+    ENTRY: ClassVar[dict[str, int]] = {
+        "enable": 1,
+        "week": 62,
+        "hour": 6,
+        "min": 0,
+        "mode": 3,
+        "param": 120,
+    }
+
+    def _mqtt(self, echo: bool) -> MagicMock:
+        from nwp500.models import ReservationSchedule
+
+        mqtt = MagicMock()
+        handlers: list[Any] = []
+
+        async def subscribe(device: Any, callback: Any) -> None:
+            handlers.append(callback)
+
+        async def update(device: Any, entries: Any, **kw: Any) -> None:
+            if echo:
+                handlers[0](
+                    ReservationSchedule(
+                        reservationUse=2, reservation=list(entries)
+                    )
+                )
+
+        mqtt.subscribe_reservation_response = AsyncMock(side_effect=subscribe)
+        mqtt.unsubscribe_reservation_response = AsyncMock()
+        mqtt.update_reservations = AsyncMock(side_effect=update)
+        mqtt.handlers = handlers
+        return mqtt
+
+    @pytest.mark.asyncio
+    async def test_the_echo_is_printed_and_the_handler_removed(
+        self, mock_device: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import json
+
+        from nwp500.cli.handlers import handle_update_reservations_request
+
+        mqtt = self._mqtt(echo=True)
+        await handle_update_reservations_request(
+            mqtt, mock_device, json.dumps([self.ENTRY]), True
+        )
+        out = json.loads(capsys.readouterr().out)
+        assert out["reservation"][0]["hour"] == 6
+        mqtt.unsubscribe_reservation_response.assert_awaited_once_with(
+            mock_device, mqtt.handlers[0]
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_echo_times_out_and_removes_the_handler(
+        self, mock_device: MagicMock, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import json
+
+        from nwp500.cli import handlers as h
+
+        mqtt = self._mqtt(echo=False)
+
+        async def quick(*args: Any, **kw: Any) -> Any:
+            return await _confirmed(*args, timeout=0.01, **kw)
+
+        with patch.object(h, "update_reservations_confirmed", new=quick):
+            await h.handle_update_reservations_request(
+                mqtt, mock_device, json.dumps([self.ENTRY]), True
+            )
+        assert "Timed out updating reservations." in caplog.text
+        mqtt.unsubscribe_reservation_response.assert_awaited_once()
+
+
+async def _confirmed(*args: Any, **kw: Any) -> Any:
+    from nwp500.reservations import update_reservations_confirmed
+
+    return await update_reservations_confirmed(*args, **kw)

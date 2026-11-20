@@ -110,6 +110,20 @@ class TestTheProfile:
         assert (narrow.setpoint_min_f, narrow.setpoint_max_f) == (104.9, 140.9)
         assert narrow.revision != P.heater_profile().revision
 
+    def test_a_wider_device_range_plans_what_the_walk_runs(self) -> None:
+        """A device reporting a wider range than the simulation runs
+        gets the simulation's: a write at the profile's maximum walks."""
+        wide = P.heater_profile(feature=_Limits(70, 140))
+        assert P.device_profile(_Limits(70, 140)).setpoint_max_f == 158.0
+        assert (wide.setpoint_min_f, wide.setpoint_max_f) == (
+            P.SETPOINT_MIN_F,
+            P.SETPOINT_MAX_F,
+        )
+        from nwp500.sim.api import _check_setpoint
+
+        _check_setpoint("write", wide.setpoint_min_f)
+        _check_setpoint("write", wide.setpoint_max_f)
+
     def test_the_device_facts_are_the_cores(self) -> None:
         """``sim.profile`` re-exports ``nwp500.heater``'s facts."""
         from nwp500 import heater

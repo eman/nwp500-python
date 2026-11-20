@@ -95,9 +95,16 @@ def heater_profile(
     ``feature``, a ``DeviceFeature``, when given), with ``tank_gal``
     ``tank``'s volume, the one the physics use (pass
     ``HeaterParams.tank``), and ``depletion_threshold_f`` the line
-    readiness draws at (pass ``HeaterParams.readiness.line_f``)."""
+    readiness draws at (pass ``HeaterParams.readiness.line_f``).
+
+    The setpoint range is the device's within the one the simulation
+    runs, ``SETPOINT_MIN_F`` to ``SETPOINT_MAX_F``: a device that
+    reports a wider one plans only the setpoints a walk takes."""
+    device = device_profile(feature)
     return dataclasses.replace(
-        device_profile(feature),
+        device,
+        setpoint_min_f=max(device.setpoint_min_f, SETPOINT_MIN_F),
+        setpoint_max_f=min(device.setpoint_max_f, SETPOINT_MAX_F),
         depletion_threshold_f=line_f,
         tank_gal=tank.volume_gal,
     )

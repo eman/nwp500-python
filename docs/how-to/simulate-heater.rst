@@ -1625,7 +1625,8 @@ It lists every mode with its code, the energy each one uses and whether
 the simulation models it, the setpoint range and step, the device
 commands with each key's type and range, the depletion threshold and
 the tank's volume. ``feature`` (a ``DeviceFeature``) gives the device's
-own setpoint range; without it the range is 104.9 to 149.9 degF.
+own setpoint range, kept within the 104.9 to 149.9 degF the simulation
+runs; without it the range is 104.9 to 149.9 degF.
 Vacation and Power Off are listed with ``modelled`` false: a write into
 either is dropped from the walk (``write_mode_not_modelled``).
 ``profile.revision`` changes only when one of those facts changes, so

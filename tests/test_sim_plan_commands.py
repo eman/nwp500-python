@@ -135,6 +135,31 @@ class TestDeviceEntries:
         with pytest.raises(ValidationError, match="not both"):
             ReservationEntry.model_validate({**DEVICE, "minute": 30})
 
+    def test_the_library_s_dump_reads_as_the_simulator_s(self) -> None:
+        """``nwp-cli reservations get --json`` prints the library entry's
+        ``model_dump()``: the six fields and the ones worked out from
+        them, which are read past."""
+        import json
+
+        dumped = json.loads(json.dumps(DeviceEntry(**DEVICE).model_dump()))
+        assert set(dumped) - set(DEVICE) == set(
+            DeviceEntry.model_computed_fields
+        )
+        assert ReservationEntry.model_validate(dumped) == SIM
+        assert ReservationEntry.from_device(dumped) == SIM
+        assert Schedules.model_validate(
+            {"reservations": [dumped]}
+        ).reservations == (SIM,)
+
+    def test_the_dump_fields_are_the_library_s(self) -> None:
+        from nwp500.sim.inputs import DEVICE_DUMP_FIELDS
+
+        assert DEVICE_DUMP_FIELDS == set(DeviceEntry.model_computed_fields)
+
+    def test_a_dumped_enabled_has_to_agree(self) -> None:
+        with pytest.raises(ValidationError, match="disagrees with enable"):
+            ReservationEntry.model_validate({**DEVICE, "enabled": False})
+
     def test_the_adapters_read_through_the_same_mapping(self) -> None:
         schedule = ReservationSchedule.model_validate(
             {"reservationUse": 2, "reservation": [DEVICE]}
@@ -203,6 +228,13 @@ class TestCommandShapes:
             {"tou": {"enabled": False}, "tou_enabled": None}
         )
         assert c.tou_enabled is False
+
+    def test_a_null_tou_is_no_command(self) -> None:
+        """As ``{"vacation": null}`` and the rest: no TOU command, and
+        over a layer that set the switch, the switch unset."""
+        assert Commands.model_validate({"tou": None}).tou_enabled is None
+        with pytest.raises(ValidationError, match="not both"):
+            Commands.model_validate({"tou": None, "tou_enabled": True})
 
     @pytest.mark.parametrize(
         "tou", [True, {"enabled": 1}, {"enabled": True, "x": 1}, {}]
