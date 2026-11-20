@@ -9,7 +9,6 @@ fetch the current schedule, apply the change, then send the updated list back.
 All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 """
 
-import asyncio
 import logging
 from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING, Any
@@ -18,22 +17,13 @@ from .converters import device_bool_from_python
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationEntry, ReservationSchedule
 from .mqtt.control import validate_reservation_entries
+from .mqtt.utils import request_reply
 
 if TYPE_CHECKING:
     from .models import Device
     from .mqtt import NavienMqttClient
 
 _logger = logging.getLogger(__name__)
-
-# Raw protocol fields for ReservationEntry (used in model_dump include)
-_RAW_RESERVATION_FIELDS = {
-    "enable",
-    "week",
-    "hour",
-    "min",
-    "mode",
-    "param",
-}
 
 
 async def fetch_reservations(
@@ -54,32 +44,29 @@ async def fetch_reservations(
     Returns:
         The current :class:`ReservationSchedule`, or ``None`` on timeout.
     """
-    future: asyncio.Future[ReservationSchedule] = (
-        asyncio.get_running_loop().create_future()
+    return await request_reply(
+        mqtt.subscribe_reservation_response,
+        mqtt.unsubscribe_reservation_response,
+        device,
+        lambda: mqtt.request_reservations(device),
+        timeout=timeout,
+        what="reservations",
+        logger=_logger,
     )
 
-    def on_schedule(schedule: ReservationSchedule) -> None:
-        if not future.done():
-            future.set_result(schedule)
 
-    await mqtt.subscribe_reservation_response(device, on_schedule)
-    await mqtt.request_reservations(device)
-    try:
-        return await asyncio.wait_for(future, timeout=timeout)
-    except TimeoutError:
-        return None
-    finally:
-        try:
-            await mqtt.unsubscribe_reservation_response(device, on_schedule)
-        except Exception:
-            from .mqtt.utils import redact_mac
+async def _fetch_entries(
+    mqtt: NavienMqttClient, device: Device
+) -> tuple[ReservationSchedule, list[dict[str, Any]]]:
+    """The current schedule and its entries as raw protocol dicts.
 
-            _logger.warning(
-                "Failed to unsubscribe reservations response handler for "
-                "device %s",
-                redact_mac(device.device_info.mac_address),
-                exc_info=True,
-            )
+    Raises:
+        TimeoutError: If the current schedule cannot be fetched.
+    """
+    schedule = await fetch_reservations(mqtt, device)
+    if schedule is None:
+        raise TimeoutError("Timed out fetching current reservations")
+    return schedule, [e.to_protocol_dict() for e in schedule.reservation]
 
 
 async def update_reservations_confirmed(
@@ -145,35 +132,18 @@ async def update_reservations_confirmed(
         reservation=[ReservationEntry(**entry) for entry in reservations],
     ).canonical()
 
-    future: asyncio.Future[ReservationSchedule] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def on_schedule(schedule: ReservationSchedule) -> None:
-        if not future.done() and schedule.canonical() == expected:
-            future.set_result(schedule)
-
-    await mqtt.subscribe_reservation_response(device, on_schedule)
-    try:
-        await mqtt.update_reservations(
+    return await request_reply(
+        mqtt.subscribe_reservation_response,
+        mqtt.unsubscribe_reservation_response,
+        device,
+        lambda: mqtt.update_reservations(
             device, reservations, enabled=enabled, kept=kept
-        )
-        try:
-            return await asyncio.wait_for(future, timeout=timeout)
-        except TimeoutError:
-            return None
-    finally:
-        try:
-            await mqtt.unsubscribe_reservation_response(device, on_schedule)
-        except Exception:
-            from .mqtt.utils import redact_mac
-
-            _logger.warning(
-                "Failed to unsubscribe reservations response handler for "
-                "device %s",
-                redact_mac(device.device_info.mac_address),
-                exc_info=True,
-            )
+        ),
+        timeout=timeout,
+        what="reservations",
+        logger=_logger,
+        accept=lambda schedule: schedule.canonical() == expected,
+    )
 
 
 async def add_reservation(
@@ -227,14 +197,7 @@ async def add_reservation(
         temperature=temperature,
     )
 
-    schedule = await fetch_reservations(mqtt, device)
-    if schedule is None:
-        raise TimeoutError("Timed out fetching current reservations")
-
-    current_reservations = [
-        e.model_dump(include=_RAW_RESERVATION_FIELDS)
-        for e in schedule.reservation
-    ]
+    _, current_reservations = await _fetch_entries(mqtt, device)
     kept = range(1, len(current_reservations) + 1)
     current_reservations.append(reservation_entry)
 
@@ -263,21 +226,14 @@ async def delete_reservation(
         ValueError: If ``index`` is out of the valid range.
         TimeoutError: If the current schedule cannot be fetched.
     """
-    schedule = await fetch_reservations(mqtt, device)
-    if schedule is None:
-        raise TimeoutError("Timed out fetching current reservations")
-
-    count = len(schedule.reservation)
+    schedule, current_reservations = await _fetch_entries(mqtt, device)
+    count = len(current_reservations)
     if index < 1 or index > count:
         raise ValueError(
             f"Invalid reservation index {index}. "
             f"Valid range: 1-{count} ({count} reservation(s) exist)"
         )
 
-    current_reservations = [
-        e.model_dump(include=_RAW_RESERVATION_FIELDS)
-        for e in schedule.reservation
-    ]
     removed = current_reservations.pop(index - 1)
     _logger.info(f"Removing reservation {index}: {removed}")
 
@@ -330,11 +286,8 @@ async def update_reservation(
         ValidationError: If the updated entry fails model validation.
         TimeoutError: If the current schedule cannot be fetched.
     """
-    schedule = await fetch_reservations(mqtt, device)
-    if schedule is None:
-        raise TimeoutError("Timed out fetching current reservations")
-
-    count = len(schedule.reservation)
+    schedule, current_reservations = await _fetch_entries(mqtt, device)
+    count = len(current_reservations)
     if index < 1 or index > count:
         raise ValueError(
             f"Invalid reservation index {index}. "
@@ -375,10 +328,6 @@ async def update_reservation(
             "param": existing.param,
         }
 
-    current_reservations = [
-        e.model_dump(include=_RAW_RESERVATION_FIELDS)
-        for e in schedule.reservation
-    ]
     current_reservations[index - 1] = new_entry
     kept = [i for i in range(1, count + 1) if i != index]
 

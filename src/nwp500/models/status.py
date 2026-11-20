@@ -28,7 +28,7 @@ from ..temperature import (
     HalfCelsius,
     RawCelsius,
 )
-from ..unit_system import get_unit_system
+from ._converters import field_unit, prefers_celsius
 
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 #: An on/off flag the device may decline to report. 0 becomes ``None``
@@ -681,10 +681,7 @@ class DeviceStatus(NavienBaseModel):
         set. Every unit-aware computed property routes through this helper, so
         they all reflect the current global preference.
         """
-        unit_system = get_unit_system()
-        if unit_system is not None:
-            return unit_system == "metric"
-        return self.temperature_type == TemperatureType.CELSIUS
+        return prefers_celsius(self.temperature_type)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -1048,41 +1045,6 @@ class DeviceStatus(NavienBaseModel):
         Returns:
             Unit string (e.g., " °C", " LPM", " L") or empty if field not found
         """
-        model_fields = self.__class__.model_fields
-        lookup_name = (
-            field_name if field_name in model_fields else f"{field_name}_raw"
+        return field_unit(
+            type(self).model_fields, field_name, self._is_celsius()
         )
-        if lookup_name not in model_fields:
-            return ""
-
-        field_info = model_fields[lookup_name]
-        if not hasattr(field_info, "json_schema_extra"):
-            return ""
-
-        extra = field_info.json_schema_extra
-        if not isinstance(extra, dict):
-            return ""
-
-        is_celsius = self._is_celsius()
-
-        device_class = extra.get("device_class")
-
-        # Handle temperature units
-        if device_class == "temperature":
-            return " °C" if is_celsius else " °F"
-
-        # Handle flow rate units
-        if device_class == "flow_rate":
-            return " LPM" if is_celsius else " GPM"
-
-        # Handle volume units
-        if device_class == "water":
-            return " L" if is_celsius else " gal"
-
-        # Fallback to static unit_of_measurement if present
-        if "unit_of_measurement" in extra:
-            unit_val = extra["unit_of_measurement"]
-            unit: str = str(unit_val) if unit_val is not None else ""
-            return f" {unit}" if unit else ""
-
-        return ""

@@ -1,5 +1,68 @@
+from collections.abc import Mapping
+
+from pydantic.fields import FieldInfo
+
+from ..enums import TemperatureType
 from ..temperature import HalfCelsius
 from ..unit_system import get_unit_system
+
+
+def prefers_celsius(temperature_type: TemperatureType) -> bool:
+    """Whether a model's readings are in Celsius.
+
+    The process-wide unit-system preference decides when one is set;
+    otherwise the device's own ``temperature_type`` does.
+    """
+    unit_system = get_unit_system()
+    if unit_system is not None:
+        return unit_system == "metric"
+    return temperature_type == TemperatureType.CELSIUS
+
+
+def field_unit(
+    model_fields: Mapping[str, FieldInfo], field_name: str, is_celsius: bool
+) -> str:
+    """The unit suffix of a model field, as ``get_field_unit`` returns it.
+
+    ``field_name`` may name the field or the computed reading of its
+    ``_raw`` field. Temperature, flow rate and volume fields follow
+    ``is_celsius``; others carry a static ``unit_of_measurement``.
+    """
+    lookup_name = (
+        field_name if field_name in model_fields else f"{field_name}_raw"
+    )
+    if lookup_name not in model_fields:
+        return ""
+
+    field_info = model_fields[lookup_name]
+    if not hasattr(field_info, "json_schema_extra"):
+        return ""
+
+    extra = field_info.json_schema_extra
+    if not isinstance(extra, dict):
+        return ""
+
+    device_class = extra.get("device_class")
+
+    # Handle temperature units
+    if device_class == "temperature":
+        return " °C" if is_celsius else " °F"
+
+    # Handle flow rate units
+    if device_class == "flow_rate":
+        return " LPM" if is_celsius else " GPM"
+
+    # Handle volume units
+    if device_class == "water":
+        return " L" if is_celsius else " gal"
+
+    # Fallback to static unit_of_measurement if present
+    if "unit_of_measurement" in extra:
+        unit_val = extra["unit_of_measurement"]
+        unit: str = str(unit_val) if unit_val is not None else ""
+        return f" {unit}" if unit else ""
+
+    return ""
 
 
 def fahrenheit_to_half_celsius(fahrenheit: float) -> int:

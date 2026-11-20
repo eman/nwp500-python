@@ -9,13 +9,13 @@ just the MQTT publish packet id.
 All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 """
 
-import asyncio
 import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from .converters import device_bool_from_python
 from .models import TOUPeriod, TOUReservationSchedule
+from .mqtt.utils import request_reply
 
 if TYPE_CHECKING:
     from .models import Device
@@ -72,34 +72,18 @@ async def configure_tou_schedule_confirmed(
         reservation=[TOUPeriod(**period) for period in periods],
     ).canonical()
 
-    future: asyncio.Future[TOUReservationSchedule] = (
-        asyncio.get_running_loop().create_future()
-    )
-
-    def on_schedule(schedule: TOUReservationSchedule) -> None:
-        if not future.done() and schedule.canonical() == expected:
-            future.set_result(schedule)
-
-    await mqtt.subscribe_tou_response(device, on_schedule)
-    try:
-        await mqtt.configure_tou_schedule(
+    return await request_reply(
+        mqtt.subscribe_tou_response,
+        mqtt.unsubscribe_tou_response,
+        device,
+        lambda: mqtt.configure_tou_schedule(
             device, controller_serial_number, periods, enabled=enabled
-        )
-        try:
-            return await asyncio.wait_for(future, timeout=timeout)
-        except TimeoutError:
-            return None
-    finally:
-        try:
-            await mqtt.unsubscribe_tou_response(device, on_schedule)
-        except Exception:
-            from .mqtt.utils import redact_mac
-
-            _logger.warning(
-                "Failed to unsubscribe TOU response handler for device %s",
-                redact_mac(device.device_info.mac_address),
-                exc_info=True,
-            )
+        ),
+        timeout=timeout,
+        what="TOU",
+        logger=_logger,
+        accept=lambda schedule: schedule.canonical() == expected,
+    )
 
 
 __all__ = ["configure_tou_schedule_confirmed"]

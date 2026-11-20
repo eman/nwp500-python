@@ -16,8 +16,10 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
+from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _dist_version
@@ -60,6 +62,21 @@ __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _reply_errors(
+    error: type[AuthenticationError], during: str, reply: str
+) -> Generator[None]:
+    """Raise ``error`` for a network failure or an unreadable reply."""
+    try:
+        yield
+    except aiohttp.ClientError as e:
+        _logger.error(f"Network error during {during}: {e}")
+        raise error(f"Network error: {e!s}", retriable=True) from e
+    except (KeyError, ValueError, json.JSONDecodeError) as e:
+        _logger.error(f"Failed to parse {reply} response: {e}")
+        raise error(f"Invalid response format: {e!s}") from e
 
 
 class UserInfo(NavienBaseModel):
@@ -446,6 +463,24 @@ class NavienAuthClient:
             self._session = self._create_session()
             self._owned_session = True
 
+    async def _post(
+        self, endpoint: str, payload: dict[str, Any], headers: dict[str, str]
+    ) -> tuple[dict[str, Any], int, str, bool]:
+        """POST ``payload`` to ``endpoint`` and read the JSON reply.
+
+        Returns the reply, its ``code`` (the HTTP status when it has none),
+        its ``msg`` and whether the HTTP status was a success.
+        """
+        await self._ensure_session()
+        if self._session is None:
+            raise AuthenticationError("Session not initialized")
+        async with self._session.post(
+            f"{self.base_url}{endpoint}", json=payload, headers=headers
+        ) as response:
+            data = await response.json()
+            code = data.get("code", response.status)
+            return data, code, data.get("msg", ""), response.ok
+
     async def sign_in(
         self, user_id: str, password: str
     ) -> AuthenticationResponse:
@@ -463,71 +498,49 @@ class NavienAuthClient:
             InvalidCredentialsError: If credentials are invalid
             AuthenticationError: If authentication fails for other reasons
         """
-        await self._ensure_session()
-
-        if self._session is None:
-            raise AuthenticationError("Session not initialized")
-
-        url = f"{self.base_url}{SIGN_IN_ENDPOINT}"
         payload = {"userId": user_id, "password": password}
 
         _logger.info(f"Attempting sign-in for user: {user_id}")
 
-        try:
-            async with self._session.post(
-                url, json=payload, headers=self.default_headers()
-            ) as response:
-                response_data = await response.json()
+        with _reply_errors(AuthenticationError, "sign-in", "authentication"):
+            response_data, code, msg, ok = await self._post(
+                SIGN_IN_ENDPOINT, payload, self.default_headers()
+            )
 
-                # Check for error responses
-                code = response_data.get("code", response.status)
-                msg = response_data.get("msg", "")
-
-                if code != 200 or not response.ok:
-                    _logger.error(f"Sign-in failed: {code} - {msg}")
-                    if (
-                        code == 401
-                        or "invalid" in msg.lower()
-                        or "unauthorized" in msg.lower()
-                    ):
-                        raise InvalidCredentialsError(
-                            f"Invalid credentials: {msg}",
-                            status_code=code,
-                            response=response_data,
-                        )
-                    raise AuthenticationError(
-                        f"Authentication failed: {msg}",
+            # Check for error responses
+            if code != 200 or not ok:
+                _logger.error(f"Sign-in failed: {code} - {msg}")
+                if (
+                    code == 401
+                    or "invalid" in msg.lower()
+                    or "unauthorized" in msg.lower()
+                ):
+                    raise InvalidCredentialsError(
+                        f"Invalid credentials: {msg}",
                         status_code=code,
                         response=response_data,
                     )
-
-                # Parse successful response
-                auth_response = AuthenticationResponse.model_validate(
-                    response_data
-                )
-                self._auth_response = auth_response
-                self._user_email = user_id  # Store the email for later use
-
-                _logger.info(
-                    "Successfully authenticated user: %s",
-                    auth_response.user_info.full_name,
-                )
-                _logger.debug(
-                    "Token expires in: %s",
-                    auth_response.tokens.time_until_expiry,
+                raise AuthenticationError(
+                    f"Authentication failed: {msg}",
+                    status_code=code,
+                    response=response_data,
                 )
 
-                return auth_response
+            # Parse successful response
+            auth_response = AuthenticationResponse.model_validate(response_data)
+            self._auth_response = auth_response
+            self._user_email = user_id  # Store the email for later use
 
-        except aiohttp.ClientError as e:
-            _logger.error(f"Network error during sign-in: {e}")
-            raise AuthenticationError(
-                f"Network error: {e!s}",
-                retriable=True,
-            ) from e
-        except (KeyError, ValueError, json.JSONDecodeError) as e:
-            _logger.error(f"Failed to parse authentication response: {e}")
-            raise AuthenticationError(f"Invalid response format: {e!s}") from e
+            _logger.info(
+                "Successfully authenticated user: %s",
+                auth_response.user_info.full_name,
+            )
+            _logger.debug(
+                "Token expires in: %s",
+                auth_response.tokens.time_until_expiry,
+            )
+
+            return auth_response
 
     async def refresh_token(
         self, refresh_token: str | None = None
@@ -574,101 +587,73 @@ class NavienAuthClient:
                 refresh_token = self._auth_response.tokens.refresh_token
             else:
                 raise TokenRefreshError("No refresh token available")
-        await self._ensure_session()
-
-        if self._session is None:
-            raise AuthenticationError("Session not initialized")
-
-        url = f"{self.base_url}{REFRESH_ENDPOINT}"
         payload = {"refreshToken": refresh_token}
 
         _logger.info("Attempting to refresh access token")
 
-        try:
-            async with self._session.post(
-                url, json=payload, headers=self.default_headers()
-            ) as response:
-                response_data = await response.json()
+        with _reply_errors(TokenRefreshError, "token refresh", "refresh"):
+            response_data, code, msg, ok = await self._post(
+                REFRESH_ENDPOINT, payload, self.default_headers()
+            )
 
-                code = response_data.get("code", response.status)
-                msg = response_data.get("msg", "")
-
-                if code != 200 or not response.ok:
-                    _logger.error(f"Token refresh failed: {code} - {msg}")
-                    raise TokenRefreshError(
-                        f"Failed to refresh token: {msg}",
-                        status_code=code,
-                        response=response_data,
-                    )
-
-                # Parse new tokens
-                data = response_data.get("data", {})
-                new_tokens = AuthTokens.model_validate(data)
-
-                # Preserve fields the refresh response may omit. The
-                # refresh endpoint does not return AWS credentials, and it
-                # may not echo the refresh token itself. Without this,
-                # new_tokens.refresh_token would be "" and every
-                # subsequent refresh would fail.
-                if self._auth_response and self._auth_response.tokens:
-                    old_tokens = self._auth_response.tokens
-                    if (
-                        not new_tokens.refresh_token
-                        and old_tokens.refresh_token
-                    ):
-                        new_tokens.refresh_token = old_tokens.refresh_token
-                    if not new_tokens.id_token and old_tokens.id_token:
-                        new_tokens.id_token = old_tokens.id_token
-                    if (
-                        not new_tokens.access_key_id
-                        and old_tokens.access_key_id
-                    ):
-                        new_tokens.access_key_id = old_tokens.access_key_id
-                    if not new_tokens.secret_key and old_tokens.secret_key:
-                        new_tokens.secret_key = old_tokens.secret_key
-                    if (
-                        not new_tokens.session_token
-                        and old_tokens.session_token
-                    ):
-                        new_tokens.session_token = old_tokens.session_token
-                    if (
-                        not new_tokens.authorization_expires_in
-                        and old_tokens.authorization_expires_in
-                    ):
-                        new_tokens.authorization_expires_in = (
-                            old_tokens.authorization_expires_in
-                        )
-                        # Also preserve the AWS expiration timestamp. The
-                        # issued_at field survives serialization, so a
-                        # restored token keeps the right AWS expiry too.
-                        new_tokens.aws_credentials_issued_at = (
-                            old_tokens.aws_credentials_issued_at
-                            or old_tokens.issued_at
-                        )
-                        cast(Any, new_tokens)._aws_expires_at = cast(
-                            Any, old_tokens
-                        )._aws_expires_at
-
-                # Update stored auth response if we have one
-                if self._auth_response:
-                    self._auth_response.tokens = new_tokens
-
-                _logger.info("Successfully refreshed access token")
-                _logger.debug(
-                    f"New token expires in: {new_tokens.time_until_expiry}"
+            if code != 200 or not ok:
+                _logger.error(f"Token refresh failed: {code} - {msg}")
+                raise TokenRefreshError(
+                    f"Failed to refresh token: {msg}",
+                    status_code=code,
+                    response=response_data,
                 )
 
-                return new_tokens
+            # Parse new tokens
+            data = response_data.get("data", {})
+            new_tokens = AuthTokens.model_validate(data)
 
-        except aiohttp.ClientError as e:
-            _logger.error(f"Network error during token refresh: {e}")
-            raise TokenRefreshError(
-                f"Network error: {e!s}",
-                retriable=True,
-            ) from e
-        except (KeyError, ValueError, json.JSONDecodeError) as e:
-            _logger.error(f"Failed to parse refresh response: {e}")
-            raise TokenRefreshError(f"Invalid response format: {e!s}") from e
+            # Preserve fields the refresh response may omit. The
+            # refresh endpoint does not return AWS credentials, and it
+            # may not echo the refresh token itself. Without this,
+            # new_tokens.refresh_token would be "" and every
+            # subsequent refresh would fail.
+            if self._auth_response and self._auth_response.tokens:
+                old_tokens = self._auth_response.tokens
+                for field in (
+                    "refresh_token",
+                    "id_token",
+                    "access_key_id",
+                    "secret_key",
+                    "session_token",
+                ):
+                    if not getattr(new_tokens, field):
+                        kept = getattr(old_tokens, field)
+                        if kept:
+                            setattr(new_tokens, field, kept)
+                if (
+                    not new_tokens.authorization_expires_in
+                    and old_tokens.authorization_expires_in
+                ):
+                    new_tokens.authorization_expires_in = (
+                        old_tokens.authorization_expires_in
+                    )
+                    # Also preserve the AWS expiration timestamp. The
+                    # issued_at field survives serialization, so a
+                    # restored token keeps the right AWS expiry too.
+                    new_tokens.aws_credentials_issued_at = (
+                        old_tokens.aws_credentials_issued_at
+                        or old_tokens.issued_at
+                    )
+                    cast(Any, new_tokens)._aws_expires_at = cast(
+                        Any, old_tokens
+                    )._aws_expires_at
+
+            # Update stored auth response if we have one
+            if self._auth_response:
+                self._auth_response.tokens = new_tokens
+
+            _logger.info("Successfully refreshed access token")
+            _logger.debug(
+                f"New token expires in: {new_tokens.time_until_expiry}"
+            )
+
+            return new_tokens
 
     async def refresh_session(self) -> AuthTokens:
         """
@@ -746,61 +731,43 @@ class NavienAuthClient:
             raise AuthenticationError(
                 "No access token available for session refresh"
             )
-        await self._ensure_session()
-
-        if self._session is None:
-            raise AuthenticationError("Session not initialized")
-
-        url = f"{self.base_url}{SESSION_REFRESH_ENDPOINT}"
         payload = {"userId": self._user_email or self._user_id}
 
         _logger.info("Attempting to refresh AWS session credentials")
 
-        try:
-            async with self._session.post(
-                url, json=payload, headers=self.get_auth_headers()
-            ) as response:
-                response_data = await response.json()
+        with _reply_errors(
+            TokenRefreshError, "session refresh", "session refresh"
+        ):
+            response_data, code, msg, ok = await self._post(
+                SESSION_REFRESH_ENDPOINT, payload, self.get_auth_headers()
+            )
 
-                code = response_data.get("code", response.status)
-                msg = response_data.get("msg", "")
+            if code != 200 or not ok:
+                _logger.error(f"Session refresh failed: {code} - {msg}")
+                raise TokenRefreshError(
+                    f"Failed to refresh session: {msg}",
+                    status_code=code,
+                    response=response_data,
+                )
 
-                if code != 200 or not response.ok:
-                    _logger.error(f"Session refresh failed: {code} - {msg}")
-                    raise TokenRefreshError(
-                        f"Failed to refresh session: {msg}",
-                        status_code=code,
-                        response=response_data,
-                    )
+            data = response_data.get("data") or {}
+            if not isinstance(data, dict):
+                raise ValueError("'data' is not an object")
 
-                data = response_data.get("data") or {}
-                if not isinstance(data, dict):
-                    raise ValueError("'data' is not an object")
+            # Overwrite only the keys the server sent.
+            new_tokens, updated = self._merge_token_fields(current, data)
+            if not updated & self._AWS_KEYS:
+                raise TokenRefreshError(
+                    "Session refresh response contained no AWS credentials",
+                    status_code=code,
+                    response=response_data,
+                )
 
-                # Overwrite only the keys the server sent.
-                new_tokens, updated = self._merge_token_fields(current, data)
-                if not updated & self._AWS_KEYS:
-                    raise TokenRefreshError(
-                        "Session refresh response contained no AWS credentials",
-                        status_code=code,
-                        response=response_data,
-                    )
+            if self._auth_response:
+                self._auth_response.tokens = new_tokens
 
-                if self._auth_response:
-                    self._auth_response.tokens = new_tokens
-
-                _logger.info("Successfully refreshed AWS session credentials")
-                return new_tokens
-
-        except aiohttp.ClientError as e:
-            _logger.error(f"Network error during session refresh: {e}")
-            raise TokenRefreshError(
-                f"Network error: {e!s}",
-                retriable=True,
-            ) from e
-        except (KeyError, ValueError, json.JSONDecodeError) as e:
-            _logger.error(f"Failed to parse session refresh response: {e}")
-            raise TokenRefreshError(f"Invalid response format: {e!s}") from e
+            _logger.info("Successfully refreshed AWS session credentials")
+            return new_tokens
 
     async def secured_sign_in(self) -> AuthenticationResponse:
         """
@@ -835,84 +802,61 @@ class NavienAuthClient:
             raise AuthenticationError(
                 "No access token available for secured sign-in"
             )
-        await self._ensure_session()
-
-        if self._session is None:
-            raise AuthenticationError("Session not initialized")
-
         user_id = self._user_email or self._user_id
-        url = f"{self.base_url}{SECURED_SIGN_IN_ENDPOINT}"
         payload = {"userId": user_id}
 
         _logger.info(f"Attempting secured sign-in for user: {user_id}")
 
-        try:
-            async with self._session.post(
-                url, json=payload, headers=self.get_auth_headers()
-            ) as response:
-                response_data = await response.json()
+        with _reply_errors(
+            AuthenticationError, "secured sign-in", "secured sign-in"
+        ):
+            response_data, code, msg, ok = await self._post(
+                SECURED_SIGN_IN_ENDPOINT, payload, self.get_auth_headers()
+            )
 
-                code = response_data.get("code", response.status)
-                msg = response_data.get("msg", "")
-
-                if code != 200 or not response.ok:
-                    _logger.error(f"Secured sign-in failed: {code} - {msg}")
-                    raise AuthenticationError(
-                        f"Secured sign-in failed: {msg}",
-                        status_code=code,
-                        response=response_data,
-                    )
-
-                data = response_data.get("data") or {}
-                if not isinstance(data, dict):
-                    raise ValueError("'data' is not an object")
-                token_data = data.get("token") or data.get("tokens") or {}
-                if not isinstance(token_data, dict):
-                    raise ValueError("'token' is not an object")
-
-                new_tokens, updated = self._merge_token_fields(
-                    current, token_data
-                )
-                if not updated:
-                    raise AuthenticationError(
-                        "Secured sign-in response contained no tokens",
-                        status_code=code,
-                        response=response_data,
-                    )
-
-                auth_response = AuthenticationResponse(
-                    user_info=UserInfo.model_validate(
-                        data.get("userInfo") or {}
-                    ),
-                    tokens=new_tokens,
-                    legal=list(data.get("legal") or []),
-                    code=code,
-                    msg=msg or "SUCCESS",
-                )
-                self._auth_response = auth_response
-                self._user_email = user_id
-
-                _logger.info(
-                    "Successfully re-authenticated user via secured "
-                    "sign-in: %s",
-                    auth_response.user_info.full_name,
-                )
-                _logger.debug(
-                    "Token expires in: %s",
-                    auth_response.tokens.time_until_expiry,
+            if code != 200 or not ok:
+                _logger.error(f"Secured sign-in failed: {code} - {msg}")
+                raise AuthenticationError(
+                    f"Secured sign-in failed: {msg}",
+                    status_code=code,
+                    response=response_data,
                 )
 
-                return auth_response
+            data = response_data.get("data") or {}
+            if not isinstance(data, dict):
+                raise ValueError("'data' is not an object")
+            token_data = data.get("token") or data.get("tokens") or {}
+            if not isinstance(token_data, dict):
+                raise ValueError("'token' is not an object")
 
-        except aiohttp.ClientError as e:
-            _logger.error(f"Network error during secured sign-in: {e}")
-            raise AuthenticationError(
-                f"Network error: {e!s}",
-                retriable=True,
-            ) from e
-        except (KeyError, ValueError, json.JSONDecodeError) as e:
-            _logger.error(f"Failed to parse secured sign-in response: {e}")
-            raise AuthenticationError(f"Invalid response format: {e!s}") from e
+            new_tokens, updated = self._merge_token_fields(current, token_data)
+            if not updated:
+                raise AuthenticationError(
+                    "Secured sign-in response contained no tokens",
+                    status_code=code,
+                    response=response_data,
+                )
+
+            auth_response = AuthenticationResponse(
+                user_info=UserInfo.model_validate(data.get("userInfo") or {}),
+                tokens=new_tokens,
+                legal=list(data.get("legal") or []),
+                code=code,
+                msg=msg or "SUCCESS",
+            )
+            self._auth_response = auth_response
+            self._user_email = user_id
+
+            _logger.info(
+                "Successfully re-authenticated user via secured sign-in: %s",
+                auth_response.user_info.full_name,
+            )
+            _logger.debug(
+                "Token expires in: %s",
+                auth_response.tokens.time_until_expiry,
+            )
+
+            return auth_response
 
     async def _renew_aws_credentials_unlocked(self) -> AuthTokens:
         """Obtain fresh AWS credentials. Caller must hold _refresh_lock.

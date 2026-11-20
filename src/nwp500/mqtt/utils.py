@@ -5,10 +5,14 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
+import asyncio
+import concurrent.futures
+import functools
 import json
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -479,6 +483,136 @@ _ALT_KEYS: dict[str, str] = {
 }
 
 _SENTINEL = object()
+
+
+def consume_abandoned_future(
+    future: asyncio.Future[Any], operation: str, logger: logging.Logger
+) -> None:
+    """Retrieve the eventual result of an abandoned acknowledgement future.
+
+    When :func:`await_ack` is cancelled or times out, the shielded future
+    keeps running in the background. If nobody retrieves its eventual
+    exception, asyncio logs a "Future exception was never retrieved"
+    warning at garbage-collection time. This callback consumes that
+    result/exception so the warning is never emitted, logging benign
+    errors (e.g. ``AwsCrtError`` from clean-session cancellation during
+    reconnect) at debug level instead.
+    """
+    if future.cancelled():
+        return
+    exc = future.exception()
+    if exc is not None:
+        # The type only: a late SubscribeError's text is the topic.
+        logger.debug(
+            "%s completed with exception after being abandoned: %s",
+            operation,
+            type(exc).__name__,
+        )
+
+
+async def await_ack(
+    future: concurrent.futures.Future[Any] | asyncio.Future[Any],
+    operation: str,
+    timeout: float,
+    logger: logging.Logger,
+) -> Any:
+    """Await a broker acknowledgement future with a timeout.
+
+    The awscrt future is shielded so cancellation (or a timeout) never
+    propagates into the SDK future: the underlying operation completes
+    independently, preventing InvalidStateError in AWS CRT callbacks.
+
+    A timeout guards against half-open TCP connections where the
+    acknowledgement never arrives; without it callers can hang until
+    the keep-alive expires (20+ minutes).
+
+    If the awaiting task is cancelled or times out before the shielded
+    future completes, a done callback is attached so its eventual
+    result/exception is still retrieved, preventing asyncio's "Future
+    exception was never retrieved" warnings.
+
+    Args:
+        future: Acknowledgement future: the
+            ``concurrent.futures.Future`` returned by the AWS CRT SDK
+            (wrapped via ``asyncio.wrap_future``), or an already
+            loop-bound ``asyncio.Future``
+        operation: Human-readable operation name for error messages
+        timeout: Seconds to wait for the acknowledgement
+        logger: Logger for the cancellation, timeout and late-error
+            messages
+
+    Returns:
+        The acknowledgement result
+
+    Raises:
+        TimeoutError: If no acknowledgement within
+            ``timeout`` seconds
+        asyncio.CancelledError: If the awaiting task is cancelled
+    """
+    awaitable_future: asyncio.Future[Any] = (
+        asyncio.wrap_future(future)
+        if isinstance(future, concurrent.futures.Future)
+        else future
+    )
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(awaitable_future), timeout=timeout
+        )
+    except (asyncio.CancelledError, TimeoutError) as e:
+        if isinstance(e, TimeoutError):
+            logger.error("%s not acknowledged within %.1fs", operation, timeout)
+        else:
+            logger.debug(
+                "%s was cancelled but will complete in background", operation
+            )
+        awaitable_future.add_done_callback(
+            functools.partial(
+                consume_abandoned_future, operation=operation, logger=logger
+            )
+        )
+        raise
+
+
+async def request_reply[T](
+    subscribe: Callable[[Device, Callable[[T], None]], Awaitable[Any]],
+    unsubscribe: Callable[[Device, Callable[[T], None]], Awaitable[Any]],
+    device: Device,
+    send: Callable[[], Awaitable[Any]],
+    *,
+    timeout: float,
+    what: str,
+    logger: logging.Logger,
+    accept: Callable[[T], bool] = lambda _: True,
+) -> T | None:
+    """Subscribe, ``send``, and wait for the first reply ``accept`` takes.
+
+    Returns ``None`` when no such reply arrives within ``timeout``. The
+    callback is removed afterwards; a failed unsubscribe is logged to
+    ``logger`` as a warning naming ``what``, the kind of response.
+    """
+    future: asyncio.Future[T] = asyncio.get_running_loop().create_future()
+
+    def on_reply(reply: T) -> None:
+        if not future.done() and accept(reply):
+            future.set_result(reply)
+
+    await subscribe(device, on_reply)
+    try:
+        await send()
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError:
+            return None
+    finally:
+        try:
+            await unsubscribe(device, on_reply)
+        except Exception:
+            logger.warning(
+                "Failed to unsubscribe %s response handler for device %s",
+                what,
+                redact_mac(device.device_info.mac_address),
+                exc_info=True,
+            )
 
 
 def get_response_data(message: dict[str, Any], key: str | None) -> Any:

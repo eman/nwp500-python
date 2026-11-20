@@ -508,6 +508,23 @@ class NavienMqttClient(
         if self.config.enable_command_queue and self._command_queue:
             await self._send_queued_commands_internal()
 
+    async def _adopt_connection(self, manager: MqttConnection) -> None:
+        """Take up the connection ``manager`` has just made.
+
+        Restores the subscriptions on it, then flushes the queued
+        commands: a brand-new connection never fires the SDK's
+        on_connection_resumed callback, so they would be lost otherwise.
+        """
+        self._note_session(manager.session_present)
+        self._connection = manager.connection
+        self._connected = True
+        if self._subscription_manager and self._connection:
+            _logger.debug("Re-establishing subscriptions...")
+            self._subscription_manager.update_connection(self._connection)
+            await self._subscription_manager.resubscribe_all()
+        if self.config.enable_command_queue and self._command_queue:
+            await self._send_queued_commands_internal()
+
     async def _active_reconnect(self) -> None:
         """
         Actively trigger a reconnection attempt.
@@ -555,24 +572,7 @@ class NavienMqttClient(
                 # Try to connect
                 success = await self._connection_manager.connect()
                 if success:
-                    self._note_session(self._connection_manager.session_present)
-                    # Update connection references
-                    self._connection = self._connection_manager.connection
-                    self._connected = True
-
-                    # Update subscription manager with new connection
-                    if self._subscription_manager and self._connection:
-                        self._subscription_manager.update_connection(
-                            self._connection
-                        )
-                        await self._subscription_manager.resubscribe_all()
-
-                    # A brand-new connection never fires the SDK's
-                    # on_connection_resumed callback, so queued commands
-                    # must be flushed here or they would be lost.
-                    if self.config.enable_command_queue and self._command_queue:
-                        await self._send_queued_commands_internal()
-
+                    await self._adopt_connection(self._connection_manager)
                     _logger.info("Active reconnection successful")
                 else:
                     _logger.warning("Active reconnection failed")
@@ -678,25 +678,8 @@ class NavienMqttClient(
             # Step 4: Attempt connection
             success = await self._connection_manager.connect()
             if success:
-                self._note_session(self._connection_manager.session_present)
-                # Update connection references
-                self._connection = self._connection_manager.connection
-                self._connected = True
-
                 # Step 5: Re-establish subscriptions
-                if self._subscription_manager and self._connection:
-                    _logger.debug("Re-establishing subscriptions...")
-                    self._subscription_manager.update_connection(
-                        self._connection
-                    )
-                    await self._subscription_manager.resubscribe_all()
-
-                # A brand-new connection never fires the SDK's
-                # on_connection_resumed callback, so queued commands must
-                # be flushed here or they would be lost.
-                if self.config.enable_command_queue and self._command_queue:
-                    await self._send_queued_commands_internal()
-
+                await self._adopt_connection(self._connection_manager)
                 _logger.info(
                     "Deep reconnection successful - fully rebuilt connection"
                 )
@@ -1173,17 +1156,6 @@ class NavienMqttClient(
             # Unsubscribe using the specific callback to avoid leaking resources
             await self.unsubscribe_device_feature(device, on_feature)
 
-    @property
-    def _control(self) -> MqttDeviceController:
-        """
-        Get the internal device controller for sending commands.
-
-        Note:
-            This property is now internal. Use the delegated methods on
-            NavienMqttClient directly for device control.
-        """
-        return self._device_controller
-
     async def start_periodic_requests(
         self,
         device: Device,
@@ -1220,14 +1192,6 @@ class NavienMqttClient(
         await self._periodic_manager.stop_periodic_requests(
             device, request_type
         )
-
-    async def _stop_all_periodic_tasks(self) -> None:
-        """
-        Stop all periodic tasks.
-        ...
-        """
-        # Delegate to public method with specific reason
-        await self.stop_all_periodic_tasks(_reason="connection failure")
 
     async def stop_all_periodic_tasks(self, _reason: str | None = None) -> None:
         """
