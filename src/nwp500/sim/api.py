@@ -28,6 +28,7 @@ from nwp500.sim.controller import (
     ELEMENT_DONE_F,
     HEAT_PUMP_UNAVAILABLE,
     LOWER_TRIGGER_AT_SETPOINT,
+    cap_stop,
     lower_trigger_f,
 )
 from nwp500.sim.decay import AmbientSampler, compute_start_time
@@ -109,6 +110,7 @@ from nwp500.sim.schedules import (
 )
 from nwp500.sim.tank_physics import (
     RECOVERY_BOUND,
+    Point,
     Recovered,
     TankPhysics,
     point_at,
@@ -1713,7 +1715,9 @@ def _tou_capped(
         full[-1].at,
         scenario_tou_windows(s, start, full[-1].at),
     )
-    stop = _cap_stop(full, level, windows)
+    stop = cap_stop(
+        [Point(p.at, p.t_upper_f, p.t_lower_f) for p in full], level, windows
+    )
     if stop is None:
         return full, False
     w0, w1 = next(w for w in windows if w[0] <= stop < w[1])
@@ -1740,49 +1744,6 @@ def _tou_capped(
     if reached < w1:
         return cut, True
     return full, False
-
-
-def _cap_stop(
-    points: Sequence[HeatingPoint],
-    level: float,
-    windows: Sequence[tuple[datetime, datetime]],
-) -> datetime | None:
-    """The first instant on ``points`` inside one of ``windows`` with the
-    lower zone at ``level`` or above; None when there is none."""
-    end = points[-1].at
-    found: list[datetime] = []
-    path = [(p.at, p.t_upper_f, p.t_lower_f) for p in points]
-    for w0, w1 in windows:
-        lo = max(points[0].at, w0)
-        if lo >= w1 or lo > end:
-            continue
-        state = _heating_state(path, lo)
-        if state is not None and state[1] >= level:
-            found.append(lo)
-            continue
-        for p0, p1 in itertools.pairwise(points):
-            if p1.at <= lo or p0.at >= w1:
-                continue
-            if p1.t_lower_f >= level > p0.t_lower_f:
-                f = (level - p0.t_lower_f) / (p1.t_lower_f - p0.t_lower_f)
-                at = p0.at + (p1.at - p0.at) * f
-                if lo <= at < w1:
-                    found.append(at)
-                break
-    return min(found) if found else None
-
-
-def _heating_state(
-    path: Sequence[tuple[datetime, float, float]], at: datetime
-) -> tuple[float, float] | None:
-    for (t0, u0, l0), (t1, u1, l1) in itertools.pairwise(path):
-        if t0 <= at <= t1:
-            span = (t1 - t0).total_seconds()
-            f = 0.0 if span <= 0 else (at - t0).total_seconds() / span
-            return u0 + (u1 - u0) * f, l0 + (l1 - l0) * f
-    if path and at <= path[0][0]:
-        return path[0][1], path[0][2]
-    return None
 
 
 def _until(points: list[HeatingPoint], at: datetime) -> list[HeatingPoint]:
