@@ -26,7 +26,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from nwp500.sim.api import ENGINE_MODE, VACATION_NOT_MODELLED, simulate
-from nwp500.sim.circulation import RUN_GAP, Circulation
+from nwp500.sim.circulation import Circulation, run_gap
 from nwp500.sim.engine import RECOVERY_AHEAD, Resume
 from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.inputs import (
@@ -387,11 +387,6 @@ def _circulated_by(
     gap merged across ``until`` flows to it as the tail ran it."""
     if loads.circulation is None:
         return loads
-    gap = (
-        RUN_GAP
-        if params.circulation is None
-        else timedelta(minutes=params.circulation.run_gap_min)
-    )
     known = loads.circulation_known_until
     given = [
         (r.start, r.end)
@@ -399,7 +394,7 @@ def _circulated_by(
         if known is None or r.start <= known
     ]
     own = max([until, *(b for a, b in given if a < until)])
-    merged = Circulation(tuple(given), None, gap).runs
+    merged = Circulation(tuple(given), None, run_gap(params)).runs
     return loads.model_copy(
         update={
             "circulation": tuple(

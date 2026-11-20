@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from nwp500.sim.circulation import RUN_GAP, Circulation
+from nwp500.sim.circulation import Circulation
 from nwp500.sim.controller import (
     ELEMENT_DONE_F,
     HEAT_PUMP_UNAVAILABLE,
@@ -200,25 +200,6 @@ def _ambient_reasons(environment: Environment) -> list[str]:
     if environment.ambient_defaulted:
         return [AMBIENT_DEFAULTED]
     return [AMBIENT_FROM_CABINET] if environment.ambient_cabinet else []
-
-
-def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:
-    """The scenario's circulation as the core's, or None: its runs
-    merged once, over the whole input, at the circulation's own gap
-    (``CirculationParams.run_gap_min``), so the tank sees the same runs
-    wherever a walk is cut."""
-    if loads.circulation is None:
-        return None
-    gap = (
-        RUN_GAP
-        if params.circulation is None
-        else timedelta(minutes=params.circulation.run_gap_min)
-    )
-    return Circulation(
-        tuple((r.start, r.end) for r in loads.circulation),
-        loads.circulation_known_until,
-        gap,
-    )
 
 
 #: The installation has circulation, and its runs are not known over
@@ -619,7 +600,7 @@ def simulate(
         # Each draw's cold water is priced at an inlet nobody measured
         # at the mains (``cold_supply``).
         reasons.append("inlet_temp_modelled")
-    circulation = _circulation(s.loads, params)
+    circulation = Circulation.of(s.loads, params)
     if _circulation_unknown(params, s.loads, s.until):
         reasons.append(CIRCULATION_UNKNOWN)
     physics = _physics(
@@ -1025,7 +1006,7 @@ def standby(
     if until <= start:
         raise ValueError("until must be after start")
     defaults: list[str] = []
-    circulation = _circulation(loads, params)
+    circulation = Circulation.of(loads, params)
     physics = _physics(
         params,
         environment,
@@ -1569,7 +1550,7 @@ def _to_start(
             draws_on=True,
             model=None,
             defaults=[],
-            circulation=_circulation(s.loads, params),
+            circulation=Circulation.of(s.loads, params),
         )
         for g, undiluted in at_start:
             upper, lower = physics.observe(
@@ -2356,7 +2337,7 @@ def forecast(
         draws_on=False,
         model=model,
         defaults=defaults,
-        circulation=_circulation(loads, params),
+        circulation=Circulation.of(loads, params),
     )
 
     # The heater stops past its own threshold: the recovery's own end.
