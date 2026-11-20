@@ -72,7 +72,6 @@ class Provenance(StrEnum):
 
 MEASURED = Provenance.MEASURED
 FITTED = Provenance.FITTED
-SCALED = Provenance.SCALED
 DEFAULT = Provenance.DEFAULT
 
 
@@ -98,11 +97,6 @@ INSTALLATION = Scope.INSTALLATION
 _LOCATION_AIR = (
     "fitted against a sensor of the air where the heater stands, not the "
     "heater's own ambient reading; circulation runs screened out"
-)
-_IN_RECOVERY = (
-    "fitted with one installation's draws and circulation runs inside its "
-    "recoveries, against a location-air sensor; durations without them "
-    "come out a little long"
 )
 _VALVE_LINE = (
     "a mixing valve's delivery line; intercept 0 and slope 1 is no valve, "

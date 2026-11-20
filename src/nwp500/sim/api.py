@@ -149,8 +149,6 @@ RECOVERY_HORIZON = timedelta(hours=24)
 #: How far ahead ``time_to_ready`` looks for the heater's own trigger;
 #: beyond it the heat pump's time is None (``heating_not_triggered``).
 TRIGGER_HORIZON = timedelta(hours=24)
-#: Room for a recovery after its start: past the integrator's 30 h bound.
-_RECOVERY_ROOM = timedelta(hours=31)
 
 
 def _air_readings(environment: Environment) -> pd.DataFrame | None:
