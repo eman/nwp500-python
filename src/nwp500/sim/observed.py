@@ -37,6 +37,7 @@ from itertools import pairwise
 from typing import Literal
 
 from nwp500.sim.attribution import RESTART_LOCKOUT, WRITE_EVIDENCE, attribute
+from nwp500.sim.circulation import merge_runs
 from nwp500.sim.profile import HeaterProfile, heater_profile
 from nwp500.sim.record import (
     Record,
@@ -239,16 +240,6 @@ def _clip(spans: Sequence[Span], a: datetime, b: datetime) -> list[Span]:
     return [(max(lo, a), min(hi, b)) for lo, hi in spans if lo < b and a < hi]
 
 
-def _merge(spans: Sequence[Span]) -> list[Span]:
-    out: list[Span] = []
-    for lo, hi in sorted(spans):
-        if out and lo <= out[-1][1]:
-            out[-1] = (out[-1][0], max(out[-1][1], hi))
-        else:
-            out.append((lo, hi))
-    return out
-
-
 def count_starts(
     edges: Sequence[datetime], resyncs: Sequence[datetime]
 ) -> list[bool | None]:
@@ -419,16 +410,18 @@ def observe(
 
     sources: list[SourceInterval] = [
         SourceInterval(lo, hi, "compressor")
-        for lo, hi in _merge(
-            [(lo, hi) for lo, hi, on in compressor.pieces(frm, cut) if on]
+        for lo, hi in merge_runs(
+            [(lo, hi) for lo, hi, on in compressor.pieces(frm, cut) if on],
+            timedelta(0),
         )
     ]
     elements = [
         _read(rows, ctx, cut, STATE_LOOKBACK)
         for rows in (record.upper_element, record.lower_element)
     ]
-    element_gaps = _merge(
-        [g for series in elements for g in _known_gaps(series, ctx, cut)]
+    element_gaps = merge_runs(
+        [g for series in elements for g in _known_gaps(series, ctx, cut)],
+        timedelta(0),
     )
     gap("elements", element_gaps, NO_RECORD)
     runs = [r for series in elements for r in _runs(series, frm, cut)]
@@ -563,6 +556,7 @@ def _merge_reasons(
 ) -> list[tuple[datetime, datetime, str]]:
     out: list[tuple[datetime, datetime, str]] = []
     for reason in sorted({r for _, _, r in items}):
-        for lo, hi in _merge([(a, b) for a, b, r in items if r == reason]):
+        spans = [(a, b) for a, b, r in items if r == reason]
+        for lo, hi in merge_runs(spans, timedelta(0)):
             out.append((lo, hi, reason))
     return out

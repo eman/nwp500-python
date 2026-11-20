@@ -118,7 +118,7 @@ def busy_intervals(
     for column in columns:
         on = history[column].fillna(False).astype(bool).to_numpy()
         spans += [(a, b + settle) for a, b in hf.on_intervals(when, on)]
-    return hf.merge(spans)
+    return merge_runs(spans, timedelta(0))
 
 
 def quiet_windows(
