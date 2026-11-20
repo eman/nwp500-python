@@ -4,7 +4,7 @@ parameters and a report out."""
 import io
 import json
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,49 +19,19 @@ try:
 except ImportError:
     pytest.skip("CLI dependencies not installed", allow_module_level=True)
 
+from test_sim_calibrate import AIR_F, T0, _deci_c, quiet_lines
+
 from nwp500 import sim, status_history
 from nwp500 import sim_calibrate as sc
 from nwp500.sim import tank_fit as tf
 from nwp500.sim.params import params_from_document, params_to_document
 from nwp500.unit_system import reset_unit_system
 
-T0 = datetime(2026, 1, 5, tzinfo=UTC)
-UA = 6.0
-AIR_F = 60.0
-MASS = sim.default_params().tank.thermal_mass_btu_f
-
 
 @pytest.fixture(autouse=True)
 def _units() -> Iterator[None]:
     yield
     reset_unit_system()
-
-
-def _deci_c(f: float) -> int:
-    return round((f - 32) / 1.8 * 10)
-
-
-def quiet_lines(
-    status: dict[str, Any],
-    hours: float = 24,
-    ua: float = UA,
-    *,
-    start: datetime = T0,
-) -> list[str]:
-    """A quiet tank cooling at ``ua`` toward ``AIR_F`` from 130 °F, a
-    status every two minutes, as a recorder writes it."""
-    lines, tank, gap = [], 130.0, 4.0
-    step = timedelta(minutes=2)
-    t = start
-    while t < start + timedelta(hours=hours):
-        raw = status | {
-            "tankUpperTemperature": _deci_c(tank + gap / 2),
-            "tankLowerTemperature": _deci_c(tank - gap / 2),
-        }
-        lines.append(status_history.line(t, raw))
-        tank -= ua / MASS * (tank - AIR_F) * step.total_seconds() / 3600
-        t += step
-    return lines
 
 
 def quiet_days(status: dict[str, Any], days: int) -> list[str]:

@@ -382,5 +382,5 @@ Home Assistant sources
       history_for,
       parse_forecast, parse_outdoor_history, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
-      pump_runs, demand_spans, busy, covers_start, percent,
+      pump_runs, demand_spans, covers_start, percent,
       fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError
