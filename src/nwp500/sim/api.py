@@ -23,11 +23,12 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from nwp500.sim.circulation import RUN_GAP, Circulation
+from nwp500.sim.circulation import Circulation
 from nwp500.sim.controller import (
     ELEMENT_DONE_F,
     HEAT_PUMP_UNAVAILABLE,
     LOWER_TRIGGER_AT_SETPOINT,
+    cap_stop,
     lower_trigger_f,
 )
 from nwp500.sim.decay import AmbientSampler, compute_start_time
@@ -104,10 +105,12 @@ from nwp500.sim.result import (
 from nwp500.sim.schedules import (
     half_c_to_f,
     reservation_firings,
+    scenario_tou_windows,
     tou_windows,
 )
 from nwp500.sim.tank_physics import (
     RECOVERY_BOUND,
+    Point,
     Recovered,
     TankPhysics,
     point_at,
@@ -148,8 +151,6 @@ RECOVERY_HORIZON = timedelta(hours=24)
 #: How far ahead ``time_to_ready`` looks for the heater's own trigger;
 #: beyond it the heat pump's time is None (``heating_not_triggered``).
 TRIGGER_HORIZON = timedelta(hours=24)
-#: Room for a recovery after its start: past the integrator's 30 h bound.
-_RECOVERY_ROOM = timedelta(hours=31)
 
 
 def _air_readings(environment: Environment) -> pd.DataFrame | None:
@@ -163,6 +164,19 @@ def _air_readings(environment: Environment) -> pd.DataFrame | None:
     )
 
 
+def _air(environment: Environment) -> Callable[[datetime], float]:
+    """The air at the heater by instant, °F: the readings'
+    (``AmbientSampler``), else the one value, the default for one that
+    is not finite."""
+    readings = _air_readings(environment)
+    if readings is not None:
+        return AmbientSampler(readings).at
+    a = environment.ambient_f
+    assert not isinstance(a, tuple)
+    value = float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F
+    return lambda _: value
+
+
 def _ambient_frame(
     environment: Environment, start: datetime, until: datetime
 ) -> pd.DataFrame:
@@ -171,16 +185,8 @@ def _ambient_frame(
     readings interpolated onto it and held past their ends."""
     t0 = pd.Timestamp(start - AMBIENT_BEFORE).floor(AMBIENT_STEP)
     stamps = pd.date_range(t0, until + AMBIENT_AFTER, freq=AMBIENT_STEP)
-    readings = _air_readings(environment)
-    if readings is not None:
-        sampler = AmbientSampler(readings)
-        values = [sampler.at(t.to_pydatetime()) for t in stamps]
-    else:
-        a = environment.ambient_f
-        assert not isinstance(a, tuple)
-        values = [float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F] * len(
-            stamps
-        )
+    air = _air(environment)
+    values = [air(t.to_pydatetime()) for t in stamps]
     return pd.DataFrame({"ambient_f": values}, index=stamps)
 
 
@@ -199,25 +205,6 @@ def _ambient_reasons(environment: Environment) -> list[str]:
     if environment.ambient_defaulted:
         return [AMBIENT_DEFAULTED]
     return [AMBIENT_FROM_CABINET] if environment.ambient_cabinet else []
-
-
-def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:
-    """The scenario's circulation as the core's, or None: its runs
-    merged once, over the whole input, at the circulation's own gap
-    (``CirculationParams.run_gap_min``), so the tank sees the same runs
-    wherever a walk is cut."""
-    if loads.circulation is None:
-        return None
-    gap = (
-        RUN_GAP
-        if params.circulation is None
-        else timedelta(minutes=params.circulation.run_gap_min)
-    )
-    return Circulation(
-        tuple((r.start, r.end) for r in loads.circulation),
-        loads.circulation_known_until,
-        gap,
-    )
 
 
 #: The installation has circulation, and its runs are not known over
@@ -450,15 +437,10 @@ def _entries(
     """The reservations' firings over the span, as the engine's
     entries: the commands' schedule if they write one, else the
     heater's."""
-    written = scenario.commands.reservations
-    if written is not None:
-        schedule = written
-    elif scenario.schedules.reservations_enabled:
-        schedule = scenario.schedules.reservations
-    else:
-        schedule = ()
     out: list[Entry] = []
-    for f in reservation_firings(schedule, tz, scenario.start, scenario.until):
+    for f in reservation_firings(
+        scenario.reservation_schedule, tz, scenario.start, scenario.until
+    ):
         mode = ENGINE_MODE.get(f.entry.mode)
         if mode is None:
             reasons.append("reservation_mode_not_modelled")
@@ -623,7 +605,7 @@ def simulate(
         # Each draw's cold water is priced at an inlet nobody measured
         # at the mains (``cold_supply``).
         reasons.append("inlet_temp_modelled")
-    circulation = _circulation(s.loads, params)
+    circulation = Circulation.of(s.loads, params)
     if _circulation_unknown(params, s.loads, s.until):
         reasons.append(CIRCULATION_UNKNOWN)
     physics = _physics(
@@ -636,35 +618,13 @@ def simulate(
         defaults=defaults,
         circulation=circulation,
     )
-    tou_on = (
-        s.commands.tou_enabled
-        if s.commands.tou_enabled is not None
-        else s.schedules.tou_enabled
-    )
-    switches = s.schedules.tou_switches
     # To as far past the end as a recovery judges its cap, so one
     # running at the end is judged as in a walk going on past it.
-    windows: tuple[tuple[datetime, datetime], ...] = (
-        tuple(
-            while_enabled(
-                tou_windows(
-                    s.schedules.tou_periods,
-                    tz,
-                    s.start,
-                    s.until + RECOVERY_AHEAD,
-                ),
-                tou_on,
-                switches,
-            )
-        )
-        if tou_on or any(on for _, on in switches)
-        else ()
-    )
+    scheduled = scenario_tou_windows(s, s.start, s.until + RECOVERY_AHEAD)
+    windows = tuple(scheduled or ())
     if tou_windows_in_force is not None:
         windows = tuple(tou_windows_in_force)
-    elif (tou_on or any(on for _, on in switches)) and not (
-        s.schedules.tou_periods
-    ):
+    elif scheduled is None:
         reasons.append("tou_schedule_unknown")
     if s.settings.hp_lower_on_f is None:
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
@@ -1051,7 +1011,7 @@ def standby(
     if until <= start:
         raise ValueError("until must be after start")
     defaults: list[str] = []
-    circulation = _circulation(loads, params)
+    circulation = Circulation.of(loads, params)
     physics = _physics(
         params,
         environment,
@@ -1537,38 +1497,6 @@ def _instant(at: datetime) -> datetime:
     return at.astimezone(UTC)
 
 
-def _ambient_at(environment: Environment, at: datetime) -> float:
-    """The air at the heater at ``at``, °F, from ``environment``."""
-    a = environment.ambient_f
-    readings = _air_readings(environment)
-    if readings is None:
-        assert not isinstance(a, tuple)
-        return float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F
-    return AmbientSampler(readings).at(at)
-
-
-def _scheduled(
-    s: Scenario, start: datetime, end: datetime
-) -> list[tuple[datetime, datetime]] | None:
-    """The schedule's TOU windows over ``[start, end]``: none with TOU
-    off; None, not known, with it on and no periods to lay out."""
-    on = (
-        s.commands.tou_enabled
-        if s.commands.tou_enabled is not None
-        else s.schedules.tou_enabled
-    )
-    switches = s.schedules.tou_switches
-    if not on and not any(sw for _, sw in switches):
-        return []
-    if not s.schedules.tou_periods:
-        return None
-    return while_enabled(
-        tou_windows(s.schedules.tou_periods, ZoneInfo(s.tz), start, end),
-        on,
-        switches,
-    )
-
-
 def _to_start(
     s: Scenario, params: HeaterParams, start: datetime
 ) -> tuple[float, float]:
@@ -1617,7 +1545,7 @@ def _to_start(
             draws_on=True,
             model=None,
             defaults=[],
-            circulation=_circulation(s.loads, params),
+            circulation=Circulation.of(s.loads, params),
         )
         for g, undiluted in at_start:
             upper, lower = physics.observe(
@@ -1692,7 +1620,7 @@ def _next_recovery(
         # there, or the rest of one under way, leaves.
         upper, lower = _to_start(s, params, start)
         if mode != "electric" and _out_of_range(
-            params, [_ambient_at(s.environment, start)], lower
+            params, [_air(s.environment)(start)], lower
         ):
             # No heat-pump recovery runs: the elements heat the tank,
             # from the heater's own start.
@@ -1780,9 +1708,11 @@ def _tou_capped(
         tou_marked(s.settings) is not False,
         start,
         full[-1].at,
-        _scheduled(s, start, full[-1].at),
+        scenario_tou_windows(s, start, full[-1].at),
     )
-    stop = _cap_stop(full, level, windows)
+    stop = cap_stop(
+        [Point(p.at, p.t_upper_f, p.t_lower_f) for p in full], level, windows
+    )
     if stop is None:
         return full, False
     w0, w1 = next(w for w in windows if w[0] <= stop < w[1])
@@ -1809,49 +1739,6 @@ def _tou_capped(
     if reached < w1:
         return cut, True
     return full, False
-
-
-def _cap_stop(
-    points: Sequence[HeatingPoint],
-    level: float,
-    windows: Sequence[tuple[datetime, datetime]],
-) -> datetime | None:
-    """The first instant on ``points`` inside one of ``windows`` with the
-    lower zone at ``level`` or above; None when there is none."""
-    end = points[-1].at
-    found: list[datetime] = []
-    path = [(p.at, p.t_upper_f, p.t_lower_f) for p in points]
-    for w0, w1 in windows:
-        lo = max(points[0].at, w0)
-        if lo >= w1 or lo > end:
-            continue
-        state = _heating_state(path, lo)
-        if state is not None and state[1] >= level:
-            found.append(lo)
-            continue
-        for p0, p1 in itertools.pairwise(points):
-            if p1.at <= lo or p0.at >= w1:
-                continue
-            if p1.t_lower_f >= level > p0.t_lower_f:
-                f = (level - p0.t_lower_f) / (p1.t_lower_f - p0.t_lower_f)
-                at = p0.at + (p1.at - p0.at) * f
-                if lo <= at < w1:
-                    found.append(at)
-                break
-    return min(found) if found else None
-
-
-def _heating_state(
-    path: Sequence[tuple[datetime, float, float]], at: datetime
-) -> tuple[float, float] | None:
-    for (t0, u0, l0), (t1, u1, l1) in itertools.pairwise(path):
-        if t0 <= at <= t1:
-            span = (t1 - t0).total_seconds()
-            f = 0.0 if span <= 0 else (at - t0).total_seconds() / span
-            return u0 + (u1 - u0) * f, l0 + (l1 - l0) * f
-    if path and at <= path[0][0]:
-        return path[0][1], path[0][2]
-    return None
 
 
 def _until(points: list[HeatingPoint], at: datetime) -> list[HeatingPoint]:
@@ -1898,7 +1785,7 @@ def _windows(
     (``marked_windows``), and whether its schedule is unknown. TOU on
     with neither its periods nor the heater's marker known is in force,
     as for the counter test."""
-    scheduled = _scheduled(s, s.start, end)
+    scheduled = scenario_tou_windows(s, s.start, end)
     marker = tou_marked(s.settings)
     if marker is None and scheduled is None:
         marker = True
@@ -1961,16 +1848,20 @@ def _mode_run(
     within ``READY_HORIZON``, under the TOU ``windows``. Its reasons are
     the walk's to that instant, or over the whole horizon when it does
     not get there. ``inlet_measured`` goes on to the walks."""
-    try:
-        result = _mode_walk(
+
+    def walk_for(horizon: timedelta) -> SimulationResult:
+        return _mode_walk(
             s,
             params,
             mode,
-            READY_HORIZON,
+            horizon,
             windows,
             recovery,
             inlet_measured=inlet_measured,
         )
+
+    try:
+        result = walk_for(READY_HORIZON)
     except SimulationError:
         return ModeRun(mode, None, None, ("time_to_ready_unavailable",))
     wh = 0.0
@@ -1990,15 +1881,7 @@ def _mode_run(
         if span > timedelta(0):
             # What the walk rests on up to the bath, not past it.
             with contextlib.suppress(SimulationError):
-                reasons = _mode_walk(
-                    s,
-                    params,
-                    mode,
-                    span,
-                    windows,
-                    recovery,
-                    inlet_measured=inlet_measured,
-                ).reasons
+                reasons = walk_for(span).reasons
         return ModeRun(
             mode,
             round(span.total_seconds() / 60.0, 1),
@@ -2103,7 +1986,7 @@ def time_to_ready(
         drawing=drawing,
         element_on=s.state.element_running and not disabled,
         tou_window=marked,
-        ambient_f=_ambient_at(s.environment, s.start),
+        ambient_f=_air(s.environment)(s.start),
         compressor_on=s.state.compressor_running and not disabled,
     )
     inlet = _inlet_f(s, params)
@@ -2404,7 +2287,7 @@ def forecast(
         draws_on=False,
         model=model,
         defaults=defaults,
-        circulation=_circulation(loads, params),
+        circulation=Circulation.of(loads, params),
     )
 
     # The heater stops past its own threshold: the recovery's own end.
@@ -2598,7 +2481,7 @@ def active_cycle(
         defaults.append("hp_lower_off_f=setpoint_f")
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
-    air = _ambient_at(environment, at)
+    air = _air(environment)(at)
     stop = goal + params.controller.hp_stop_overshoot_f
     # Its probes read warm over the water (``_warm``): the walk's stop
     # is the water's.

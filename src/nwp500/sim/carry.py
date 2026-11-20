@@ -26,7 +26,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from nwp500.sim.api import ENGINE_MODE, VACATION_NOT_MODELLED, simulate
-from nwp500.sim.circulation import RUN_GAP, Circulation
+from nwp500.sim.circulation import Circulation, run_gap
 from nwp500.sim.engine import RECOVERY_AHEAD, Resume
 from nwp500.sim.extensions import RecoveryModel
 from nwp500.sim.inputs import (
@@ -41,8 +41,7 @@ from nwp500.sim.inputs import (
 from nwp500.sim.params import HeaterParams
 from nwp500.sim.physics.stratified import TankState, energy_btu, layout
 from nwp500.sim.result import SimulationResult
-from nwp500.sim.schedules import reservation_firings, tou_windows
-from nwp500.sim.tou_triggers import while_enabled
+from nwp500.sim.schedules import reservation_firings, scenario_tou_windows
 from nwp500.sim.units import BTU_PER_WH
 
 #: How near, °F in every layer, a tail's end must come to the first
@@ -274,17 +273,10 @@ def _over_a_hold(walk: SimulationResult, tail: Scenario) -> Commands:
 
 
 def _entry_at_start(tail: Scenario) -> bool:
-    written = tail.commands.reservations
-    if written is not None:
-        schedule = written
-    elif tail.schedules.reservations_enabled:
-        schedule = tail.schedules.reservations
-    else:
-        return False
     return any(
         f.at == tail.start and f.entry.mode in ENGINE_MODE
         for f in reservation_firings(
-            schedule, ZoneInfo(tail.tz), tail.start, tail.until
+            tail.reservation_schedule, ZoneInfo(tail.tz), tail.start, tail.until
         )
     )
 
@@ -395,11 +387,6 @@ def _circulated_by(
     gap merged across ``until`` flows to it as the tail ran it."""
     if loads.circulation is None:
         return loads
-    gap = (
-        RUN_GAP
-        if params.circulation is None
-        else timedelta(minutes=params.circulation.run_gap_min)
-    )
     known = loads.circulation_known_until
     given = [
         (r.start, r.end)
@@ -407,7 +394,7 @@ def _circulated_by(
         if known is None or r.start <= known
     ]
     own = max([until, *(b for a, b in given if a < until)])
-    merged = Circulation(tuple(given), None, gap).runs
+    merged = Circulation(tuple(given), None, run_gap(params)).runs
     return loads.model_copy(
         update={
             "circulation": tuple(
@@ -429,28 +416,9 @@ def _windows(
 ) -> Sequence[tuple[datetime, datetime]]:
     """The TOU windows of ``tail`` walked on to ``end``: the given ones,
     else its schedule's, laid out as ``simulate`` lays them out."""
-    if given is None:
-        tou_on = (
-            tail.commands.tou_enabled
-            if tail.commands.tou_enabled is not None
-            else tail.schedules.tou_enabled
-        )
-        switches = tail.schedules.tou_switches
-        given = (
-            while_enabled(
-                tou_windows(
-                    tail.schedules.tou_periods,
-                    ZoneInfo(tail.tz),
-                    tail.start,
-                    end + RECOVERY_AHEAD,
-                ),
-                tou_on,
-                switches,
-            )
-            if tou_on or any(on for _, on in switches)
-            else ()
-        )
-    return given
+    if given is not None:
+        return given
+    return scenario_tou_windows(tail, tail.start, end + RECOVERY_AHEAD) or ()
 
 
 def _due(result: SimulationResult, params: HeaterParams) -> list[datetime]:

@@ -31,7 +31,8 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from nwp500.sim.inputs import ReservationEntry, TouPeriod
+from nwp500.sim.inputs import ReservationEntry, Scenario, TouPeriod
+from nwp500.sim.tou_triggers import while_enabled
 
 #: A window: when it opens and when it closes (exclusive), UTC.
 Window = tuple[datetime, datetime]
@@ -130,6 +131,30 @@ def tou_windows(
     as UTC instants, with the local times in ``tz``: their rules
     (``tou_rules``) laid out by ``rule_windows``."""
     return rule_windows(tou_rules(periods), tz, start, end)
+
+
+def scenario_tou_windows(
+    s: Scenario, start: datetime, end: datetime
+) -> list[Window] | None:
+    """``s``'s TOU windows over ``[start, end]``, its switch at the start
+    the commands' (``Commands.tou_enabled``) else the schedules', less
+    the spans it was off (``tou_triggers.while_enabled``): none with TOU
+    off; None, not known, with it on and no periods to lay out."""
+    on = (
+        s.commands.tou_enabled
+        if s.commands.tou_enabled is not None
+        else s.schedules.tou_enabled
+    )
+    switches = s.schedules.tou_switches
+    if not on and not any(sw for _, sw in switches):
+        return []
+    if not s.schedules.tou_periods:
+        return None
+    return while_enabled(
+        tou_windows(s.schedules.tou_periods, ZoneInfo(s.tz), start, end),
+        on,
+        switches,
+    )
 
 
 def rule_windows(

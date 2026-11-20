@@ -100,7 +100,9 @@ def attribute(
                 Attributed(s.at, "heater", "mode_dropped", s.source, s.zone)
             )
             continue
-        write = _write_for(s, writes, stops)
+        write = (
+            None if latest_write is None else _event_for(s, latest_write, stops)
+        )
         if write is not None:
             out.append(Attributed(s.at, "write", None, s.source, s.zone, write))
             continue
@@ -122,15 +124,6 @@ def attribute(
             )
         )
     return out
-
-
-def _write_for(
-    s: Recorded, writes: Sequence[datetime], stops: Sequence[datetime]
-) -> datetime | None:
-    before = [w for w in writes if w <= s.at]
-    if not before:
-        return None
-    return _event_for(s, max(before), stops)
 
 
 def _event_for(

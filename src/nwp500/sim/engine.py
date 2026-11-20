@@ -716,19 +716,7 @@ class _Engine:
         #: or a recovery takes it.
         self.draws = sorted(d for d in draws if start <= d[0] < until)
         self.withheld = sorted(withheld_windows)
-        self.path: list[PathPoint] = [
-            PathPoint(
-                start,
-                self.upper,
-                self.lower,
-                self.sp,
-                running,
-                0.0,
-                mode=self.mode,
-                layers_f=_layers_of(self.tank_state),
-                heating_disabled=ctl.disabled(self.state, self.settings),
-            )
-        ]
+        self.path: list[PathPoint] = [self._mark(running)]
         self.heating: list[HeatingInterval] = carried
         #: Instants the path must carry an element at, exactly (the
         #: forecast's draw windows): not the feature's events, only stops.
@@ -1350,10 +1338,7 @@ class _Engine:
         """The compressor starts (``controller.StartCompressor``),
         heating after ``hold`` minutes, at the pace a recovery model
         gives it (``TankPhysics.scale``)."""
-        level = min(
-            self.sp + self.params.hp_stop_overshoot_f,
-            self.params.hp_water_range_f[1],
-        )
+        level = self._stop_level(self.sp)
         scale, confidence = 1.0, 1.0
         why: tuple[str, ...] = ()
         under_way = start.cause == "running" and not self.running_starts
@@ -1434,14 +1419,7 @@ class _Engine:
         (``controller.upper_on_crossing``)."""
         while self.cycle is not None and self.t < end:
             cycle = self.cycle
-            now = self._take_draws(self.t, self.t + _INSTANT)
-            if now:
-                for _, gal, undiluted in now:
-                    self._set(
-                        self.physics.draw(
-                            self.t, self.tank_state, gal, undiluted
-                        )
-                    )
+            if self._draw_now():
                 self._step_point()
                 # A draw can take the lower zone out of the heat pump's
                 # range, which stops it.
@@ -1517,22 +1495,25 @@ class _Engine:
                 )
             )
 
+    def _mark(self, heating: bool) -> PathPoint:
+        """The path's point at ``self.t``: the tank as it stands, with
+        no electricity charged to it."""
+        return PathPoint(
+            self.t,
+            self.upper,
+            self.lower,
+            self.sp,
+            heating,
+            0.0,
+            mode=self.mode,
+            layers_f=_layers_of(self.tank_state),
+            heating_disabled=ctl.disabled(self.state, self.settings),
+        )
+
     def _step_point(self) -> None:
         """The state just after a draw, at the draw's instant, so the
         path shows the step rather than a slide into it."""
-        self.path.append(
-            PathPoint(
-                self.t,
-                self.upper,
-                self.lower,
-                self.sp,
-                True,
-                0.0,
-                mode=self.mode,
-                layers_f=_layers_of(self.tank_state),
-                heating_disabled=ctl.disabled(self.state, self.settings),
-            )
-        )
+        self.path.append(self._mark(True))
 
     # ── entries, raw writes and the heater's mode events ──
 
@@ -1918,26 +1899,20 @@ class _Engine:
                 return stretch
             t, state = part.end, part.state
 
-    def _coast_draw(self) -> None:
-        """The draws at this instant, taken here: the path has the tank
-        before and after."""
-        for _, gal, undiluted in self._take_draws(self.t, self.t + _INSTANT):
+    def _draw_now(self) -> bool:
+        """Take the draws at this instant; whether there were any."""
+        now = self._take_draws(self.t, self.t + _INSTANT)
+        for _, gal, undiluted in now:
             self._set(
                 self.physics.draw(self.t, self.tank_state, gal, undiluted)
             )
-        self.path.append(
-            PathPoint(
-                self.t,
-                self.upper,
-                self.lower,
-                self.sp,
-                self.element is not None,
-                0.0,
-                mode=self.mode,
-                layers_f=_layers_of(self.tank_state),
-                heating_disabled=ctl.disabled(self.state, self.settings),
-            )
-        )
+        return bool(now)
+
+    def _coast_draw(self) -> None:
+        """The draws at this instant, taken here: the path has the tank
+        before and after."""
+        self._draw_now()
+        self.path.append(self._mark(self.element is not None))
 
     def _coast_to(self, at: datetime) -> None:
         """The tank walked to ``at`` exactly, taking the draws before
@@ -2027,30 +2002,8 @@ def simulate(
     (a raw write, ``id`` ``"settings"``). The tank is ``state``'s, or the
     probes', as for any walk.
     """
-    return _Engine(
-        start=start,
-        upper_f=upper_f,
-        lower_f=lower_f,
-        running=running,
-        until=until,
-        setpoint_f=setpoint_f,
-        entries=entries,
-        heater=heater,
-        physics=physics,
-        draws=draws,
-        withheld_windows=withheld_windows,
-        marks=marks,
-        element_running=element_running,
-        element_running_since=element_running_since,
-        raw_writes=raw_writes,
-        stopped_at=stopped_at,
-        start_hold=start_hold,
-        running_hold=running_hold,
-        running_starts=running_starts,
-        controller=controller,
-        state=state,
-        resume=resume,
-    ).run()
+    # Every argument as given, and nothing else bound yet.
+    return _Engine(**locals()).run()
 
 
 def energy_by_slot(

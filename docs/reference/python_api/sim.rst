@@ -214,7 +214,7 @@ Hot water and calibration
       MIN_POWER_W, CHECK_POINTS, HEAT_SLOPE_SIGNS, POWER_SLOPE_SIGNS
 
 .. automodule:: nwp500.sim.history_frame
-   :members: Interval, instants, on_intervals, merge, asof, floats, energy_wh
+   :members: Interval, instants, on_intervals, asof, floats, energy_wh
 
 .. automodule:: nwp500.sim.profile
    :members: heater_profile, mode_sources

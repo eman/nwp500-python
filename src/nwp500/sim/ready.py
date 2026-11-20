@@ -103,8 +103,6 @@ MODES: tuple[HeaterMode, ...] = (
     "electric",
 )
 
-ELEMENT_MODES: tuple[HeaterMode, ...] = MODES[1:]
-
 
 def showers_ready_for(deliverable_gal: float, shower_gal: float) -> float:
     """Showers the tank is ready for, two decimals."""
