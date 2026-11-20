@@ -319,37 +319,6 @@ class MqttDeviceController:
         """Set the device info cache."""
         self._device_info_cache = cache
 
-    async def _ensure_device_info_cached(
-        self, device: Device, timeout: float = 5.0
-    ) -> None:
-        """
-        Ensure device info is cached, requesting if necessary.
-
-        Automatically requests device info if not already cached.
-        Used internally by control commands.
-
-        Args:
-            device: Device to ensure info for
-            timeout: Timeout for waiting for device info response
-
-        Raises:
-            DeviceCapabilityError: If device info cannot be obtained
-        """
-        mac = device.device_info.mac_address
-
-        # Check if already cached
-        cached = await self._device_info_cache.get(mac)
-        if cached is not None:
-            return  # Already cached
-
-        raise DeviceCapabilityError(
-            "device_info",
-            (
-                f"Device info not cached for {mac}. "
-                "Ensure device info request has been made."
-            ),
-        )
-
     async def _auto_request_device_info(self, device: Device) -> None:
         """
         Auto-request device info and wait for response.
