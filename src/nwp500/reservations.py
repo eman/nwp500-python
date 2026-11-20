@@ -25,16 +25,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-# Raw protocol fields for ReservationEntry (used in model_dump include)
-_RAW_RESERVATION_FIELDS = {
-    "enable",
-    "week",
-    "hour",
-    "min",
-    "mode",
-    "param",
-}
-
 
 async def _unsubscribe(
     mqtt: NavienMqttClient,
@@ -88,6 +78,20 @@ async def fetch_reservations(
         return None
     finally:
         await _unsubscribe(mqtt, device, on_schedule)
+
+
+async def _fetch_entries(
+    mqtt: NavienMqttClient, device: Device
+) -> tuple[ReservationSchedule, list[dict[str, Any]]]:
+    """The current schedule and its entries as raw protocol dicts.
+
+    Raises:
+        TimeoutError: If the current schedule cannot be fetched.
+    """
+    schedule = await fetch_reservations(mqtt, device)
+    if schedule is None:
+        raise TimeoutError("Timed out fetching current reservations")
+    return schedule, [e.to_protocol_dict() for e in schedule.reservation]
 
 
 async def update_reservations_confirmed(
@@ -225,14 +229,7 @@ async def add_reservation(
         temperature=temperature,
     )
 
-    schedule = await fetch_reservations(mqtt, device)
-    if schedule is None:
-        raise TimeoutError("Timed out fetching current reservations")
-
-    current_reservations = [
-        e.model_dump(include=_RAW_RESERVATION_FIELDS)
-        for e in schedule.reservation
-    ]
+    _, current_reservations = await _fetch_entries(mqtt, device)
     kept = range(1, len(current_reservations) + 1)
     current_reservations.append(reservation_entry)
 
@@ -261,21 +258,14 @@ async def delete_reservation(
         ValueError: If ``index`` is out of the valid range.
         TimeoutError: If the current schedule cannot be fetched.
     """
-    schedule = await fetch_reservations(mqtt, device)
-    if schedule is None:
-        raise TimeoutError("Timed out fetching current reservations")
-
-    count = len(schedule.reservation)
+    schedule, current_reservations = await _fetch_entries(mqtt, device)
+    count = len(current_reservations)
     if index < 1 or index > count:
         raise ValueError(
             f"Invalid reservation index {index}. "
             f"Valid range: 1-{count} ({count} reservation(s) exist)"
         )
 
-    current_reservations = [
-        e.model_dump(include=_RAW_RESERVATION_FIELDS)
-        for e in schedule.reservation
-    ]
     removed = current_reservations.pop(index - 1)
     _logger.info(f"Removing reservation {index}: {removed}")
 
@@ -328,11 +318,8 @@ async def update_reservation(
         ValidationError: If the updated entry fails model validation.
         TimeoutError: If the current schedule cannot be fetched.
     """
-    schedule = await fetch_reservations(mqtt, device)
-    if schedule is None:
-        raise TimeoutError("Timed out fetching current reservations")
-
-    count = len(schedule.reservation)
+    schedule, current_reservations = await _fetch_entries(mqtt, device)
+    count = len(current_reservations)
     if index < 1 or index > count:
         raise ValueError(
             f"Invalid reservation index {index}. "
@@ -373,10 +360,6 @@ async def update_reservation(
             "param": existing.param,
         }
 
-    current_reservations = [
-        e.model_dump(include=_RAW_RESERVATION_FIELDS)
-        for e in schedule.reservation
-    ]
     current_reservations[index - 1] = new_entry
     kept = [i for i in range(1, count + 1) if i != index]
 
