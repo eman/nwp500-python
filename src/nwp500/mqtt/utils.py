@@ -596,8 +596,8 @@ async def request_reply[T](
         if not future.done() and accept(reply):
             future.set_result(reply)
 
-    await subscribe(device, on_reply)
     try:
+        await subscribe(device, on_reply)
         await send()
         try:
             return await asyncio.wait_for(future, timeout=timeout)
