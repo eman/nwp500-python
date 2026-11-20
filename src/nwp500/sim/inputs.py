@@ -639,6 +639,16 @@ class Scenario(_Value):
         """The span's end: ``start + horizon``."""
         return self.start + self.horizon
 
+    @property
+    def reservation_schedule(self) -> tuple[ReservationEntry, ...]:
+        """The reservations that fire over the span: the commands' when
+        they write a schedule, else the heater's while its switch is on."""
+        if self.commands.reservations is not None:
+            return self.commands.reservations
+        if self.schedules.reservations_enabled:
+            return self.schedules.reservations
+        return ()
+
     @model_validator(mode="after")
     def _in_span(self) -> Self:
         for w in self.commands.writes:

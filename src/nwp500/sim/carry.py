@@ -273,17 +273,10 @@ def _over_a_hold(walk: SimulationResult, tail: Scenario) -> Commands:
 
 
 def _entry_at_start(tail: Scenario) -> bool:
-    written = tail.commands.reservations
-    if written is not None:
-        schedule = written
-    elif tail.schedules.reservations_enabled:
-        schedule = tail.schedules.reservations
-    else:
-        return False
     return any(
         f.at == tail.start and f.entry.mode in ENGINE_MODE
         for f in reservation_firings(
-            schedule, ZoneInfo(tail.tz), tail.start, tail.until
+            tail.reservation_schedule, ZoneInfo(tail.tz), tail.start, tail.until
         )
     )
 

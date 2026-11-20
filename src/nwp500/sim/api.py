@@ -451,15 +451,10 @@ def _entries(
     """The reservations' firings over the span, as the engine's
     entries: the commands' schedule if they write one, else the
     heater's."""
-    written = scenario.commands.reservations
-    if written is not None:
-        schedule = written
-    elif scenario.schedules.reservations_enabled:
-        schedule = scenario.schedules.reservations
-    else:
-        schedule = ()
     out: list[Entry] = []
-    for f in reservation_firings(schedule, tz, scenario.start, scenario.until):
+    for f in reservation_firings(
+        scenario.reservation_schedule, tz, scenario.start, scenario.until
+    ):
         mode = ENGINE_MODE.get(f.entry.mode)
         if mode is None:
             reasons.append("reservation_mode_not_modelled")
