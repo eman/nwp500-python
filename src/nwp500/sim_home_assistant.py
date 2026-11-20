@@ -117,7 +117,6 @@ async def inline(work: Callable[[], Any]) -> Any:
 
 #: The states Home Assistant reports for a value it does not have.
 _NO_VALUE = frozenset({"unknown", "unavailable", "none", ""})
-_L_PER_GAL = 3.785411784
 
 
 class HomeAssistantError(Nwp500Error):
@@ -682,11 +681,11 @@ def to_gpm(value: float, unit: str | None) -> float:
     if u in ("gal/min", "gpm"):
         return value
     if u in ("l/min", "lpm"):
-        return value / _L_PER_GAL
+        return value / sa.L_PER_GAL
     if u == "l/h":
-        return value / _L_PER_GAL / 60.0
+        return value / sa.L_PER_GAL / 60.0
     if u in ("m³/h", "m3/h"):
-        return value * 1000.0 / _L_PER_GAL / 60.0
+        return value * 1000.0 / sa.L_PER_GAL / 60.0
     raise ValueError(f"{unit!r} is not a flow unit")
 
 
@@ -735,9 +734,9 @@ def to_gal(value: float, unit: str | None) -> float:
     if u in ("gal", "gallons"):
         return value
     if u in ("l", "litres", "liters"):
-        return value / _L_PER_GAL
+        return value / sa.L_PER_GAL
     if u in ("m³", "m3"):
-        return value * 1000.0 / _L_PER_GAL
+        return value * 1000.0 / sa.L_PER_GAL
     if u in ("ft³", "ft3"):
         return value * 7.480519480519
     raise ValueError(f"{unit!r} is not a volume unit")

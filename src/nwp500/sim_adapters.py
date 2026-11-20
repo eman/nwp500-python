@@ -119,7 +119,7 @@ if TYPE_CHECKING:
 # functions and nothing else.
 
 #: Litres in a US gallon.
-_L_PER_GAL = 3.785411784
+L_PER_GAL = 3.785411784
 
 
 def _metric() -> bool:
@@ -141,7 +141,7 @@ def to_sim_temperature(value: float) -> float:
 def to_sim_volume(value: float) -> float:
     """A volume in the preferred unit, in the simulator's (US gallons):
     ``time_to_ready``'s ``bath_gal`` and ``shower_gal``, say."""
-    return value / _L_PER_GAL if _metric() else value
+    return value / L_PER_GAL if _metric() else value
 
 
 def temperature(value_f: float) -> float:
@@ -152,7 +152,7 @@ def temperature(value_f: float) -> float:
 
 def volume(value_gal: float) -> float:
     """A volume from the simulator (US gallons) in the preferred unit."""
-    return value_gal * _L_PER_GAL if _metric() else value_gal
+    return value_gal * L_PER_GAL if _metric() else value_gal
 
 
 def temperature_unit() -> str:
