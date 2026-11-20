@@ -1419,14 +1419,7 @@ class _Engine:
         (``controller.upper_on_crossing``)."""
         while self.cycle is not None and self.t < end:
             cycle = self.cycle
-            now = self._take_draws(self.t, self.t + _INSTANT)
-            if now:
-                for _, gal, undiluted in now:
-                    self._set(
-                        self.physics.draw(
-                            self.t, self.tank_state, gal, undiluted
-                        )
-                    )
+            if self._draw_now():
                 self._step_point()
                 # A draw can take the lower zone out of the heat pump's
                 # range, which stops it.
@@ -1906,13 +1899,19 @@ class _Engine:
                 return stretch
             t, state = part.end, part.state
 
-    def _coast_draw(self) -> None:
-        """The draws at this instant, taken here: the path has the tank
-        before and after."""
-        for _, gal, undiluted in self._take_draws(self.t, self.t + _INSTANT):
+    def _draw_now(self) -> bool:
+        """Take the draws at this instant; whether there were any."""
+        now = self._take_draws(self.t, self.t + _INSTANT)
+        for _, gal, undiluted in now:
             self._set(
                 self.physics.draw(self.t, self.tank_state, gal, undiluted)
             )
+        return bool(now)
+
+    def _coast_draw(self) -> None:
+        """The draws at this instant, taken here: the path has the tank
+        before and after."""
+        self._draw_now()
         self.path.append(self._mark(self.element is not None))
 
     def _coast_to(self, at: datetime) -> None:
