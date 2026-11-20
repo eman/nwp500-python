@@ -1173,17 +1173,6 @@ class NavienMqttClient(
             # Unsubscribe using the specific callback to avoid leaking resources
             await self.unsubscribe_device_feature(device, on_feature)
 
-    @property
-    def _control(self) -> MqttDeviceController:
-        """
-        Get the internal device controller for sending commands.
-
-        Note:
-            This property is now internal. Use the delegated methods on
-            NavienMqttClient directly for device control.
-        """
-        return self._device_controller
-
     async def start_periodic_requests(
         self,
         device: Device,
@@ -1220,14 +1209,6 @@ class NavienMqttClient(
         await self._periodic_manager.stop_periodic_requests(
             device, request_type
         )
-
-    async def _stop_all_periodic_tasks(self) -> None:
-        """
-        Stop all periodic tasks.
-        ...
-        """
-        # Delegate to public method with specific reason
-        await self.stop_all_periodic_tasks(_reason="connection failure")
 
     async def stop_all_periodic_tasks(self, _reason: str | None = None) -> None:
         """
