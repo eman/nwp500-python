@@ -13,12 +13,37 @@ named there. When a change is tried and dropped, add it here.
    :depth: 1
 
 
+The upper element's plume at a set flow (2026-11-18)
+====================================================
+
+**Tried.** The upper element's plume carrying a set 1, 2 or 3 gal/min,
+whatever the water above the element.
+
+**Found.** Over the record's 36 upper-element runs from 2026-02-26,
+walked from their replayed layers with their recorded heating, 2
+gal/min read the upper probe to 7.79 degF RMS, against 8.67 for the
+layer turned over and 6.55 for a plume reaching the top 10 degF over
+the water above (``TankParams.upper_plume_excess_f``); on the 6 runs
+from under 115 degF, 11.25 against 12.81 and 9.24. After a draw the
+water at the element is colder than the top, and a plume of a set flow
+is no warmer than that water and its lift: on 2026-11-15 from 21:38
+UTC it settled under the top, and the 16-minute run ended with the
+upper probe at 125.0 degF against the record's 137.8 (128.5 with the
+plume reaching the top). 1 gal/min read the cold runs closer and the
+mixed ones worse than the layer turned over.
+
+**Why dropped.** The plume reaching the top reads closer on every kind
+of start.
+
+**Account.** :doc:`simulator-methodology`, "The elements".
+
+
 The lower element's heat as a plume (2026-11-18)
 ================================================
 
-**Tried.** The lower element's heat rising as a plume at 2 gal/min, as
-the upper element's now does (``TankParams.upper_plume_gpm``), instead
-of into its layer, which turns over into the cooler layers above it.
+**Tried.** The lower element's heat rising as a plume of 2 gal/min,
+the upper element's plume as first fitted, instead of into its layer,
+which turns over into the cooler layers above it.
 
 **Found.** The record's 10 lower-element runs of 3 minutes or more from
 2026-02-02, each walked from its replayed layers with the record's

@@ -65,7 +65,7 @@ def test_two_days_in_electric_keep_the_upper_zone_in_its_band(
     assert all(h.source == "element" for h in got.heating)
     # Past the first stint, the band holds to the probe's step, and over
     # the setpoint to the coast: the heat in transit when the element
-    # stops lands in the top the plume heats (``upper_plume_gpm``).
+    # stops lands in the top the plume heats (``upper_plume_excess_f``).
     settled = got.points[len(got.points) // 4 :]
     assert min(p.upper_f for p in settled) >= RESTARTS_AT - 0.1
     assert max(p.upper_f for p in settled) <= SETPOINT + 3.5

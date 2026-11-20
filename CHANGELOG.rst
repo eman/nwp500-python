@@ -106,17 +106,19 @@ Changed
   profile" in :doc:`/how-to/simulate-heater`.
 - **The upper element's heat rises as a plume.** The water it heats
   leaves the element's layer and rises to where the column is as warm,
-  and the water it passes sinks to take its place
-  (``physics.stratified.rise``, ``TankParams.upper_plume_gpm``, 2
-  gal/min). Before, its heat went into its layer and turned over into
-  every cooler layer above, so a short run after a depleting draw warmed
-  21 gal a little where the tank heats a hot top. Over the record's 36
-  upper-element runs, walked with their recorded heating, the upper
-  probe reads 6.97 degF RMS against 7.84, and climbs 2.04 degF/min on
-  the draw-free ones against the record's 1.96 (1.55 before). The lower
-  element keeps its layer. ``upper_plume_gpm=0`` gives the old
-  behaviour. See "The elements" in
-  :doc:`/explanation/simulator-methodology`.
+  and the water it passes sinks to take its place. The plume carries as
+  much water as reaches the top 10 degF warmer than the warmest water
+  above the element (``physics.stratified.rise`` and ``plume_gal``,
+  ``TankParams.upper_plume_excess_f``). Before, its heat went into its
+  layer and turned over into every cooler layer above, so a short run
+  after a depleting draw warmed 21 gal a little where the tank heats a
+  hot top. Over the record's 36 upper-element runs, walked with their
+  recorded heating, the upper probe reads 6.55 degF RMS against 8.67,
+  9.24 against 12.81 on the runs from under 115 degF, and climbs 2.24
+  degF/min on the draw-free ones against the record's 2.10 (1.48
+  before). The lower element keeps its layer.
+  ``upper_plume_excess_f=0`` gives the old behaviour. See "The
+  elements" in :doc:`/explanation/simulator-methodology`.
 
 Fixed
 -----

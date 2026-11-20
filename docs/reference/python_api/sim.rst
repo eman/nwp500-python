@@ -300,7 +300,7 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.physics.stratified
    :members: TankState, Layout, layout, energy_btu, mix, lose, conduct,
-      add_heat, condenser_water_f, condenser_heat, element_heat, rise, flow,
+      add_heat, condenser_water_f, condenser_heat, element_heat, rise, plume_gal, flow,
       Flowed, draw, Drawn, deliverable_gal, observe, estimate,
       assimilate, walk, Walked, Books, Heating, Compressor, Element,
       Flowing, Delivered, IDLE_STEP, ACTIVE_STEP, CUT_RESOLUTION, NO_VALVE

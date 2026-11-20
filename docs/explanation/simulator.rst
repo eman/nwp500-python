@@ -1437,8 +1437,9 @@ the parameters in use (fitted before 2026-09-18, the share at 0.25):
   04-30 the element's energy matched and the miss is the compressor's,
   over a 500 min hold; on 09-21, 04-21 and 04-28 the walk's element ran
   less. These are from before the upper element's heat rose as a plume
-  (``TankParams.upper_plume_gpm``), which climbs the upper probe 2.04
-  degF a minute over the record's draw-free element runs.
+  (``TankParams.upper_plume_excess_f``), which climbs the upper probe
+  2.24 degF a minute over the record's draw-free element runs, against
+  its 2.10.
 - **The time to ready after a switch** is scored only where the tank
   could not already deliver the bath at it: by the record's probes, 3 of
   the 46 at the default 28.7 gal (one 1.5 s after a TOU window's close,

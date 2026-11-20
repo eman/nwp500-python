@@ -224,7 +224,7 @@ a six-minute upper element run took the upper probe from 126 to
 141 degF, and a 10 gal draw from 141.3/89.6 degF took it to 101 degF.
 Two probes can't tell that top from a full tank. The replayed layers
 can: the element's heat rises from it as a plume to the top, over the
-cold the first draw left below (``TankParams.upper_plume_gpm``).
+cold the first draw left below (``TankParams.upper_plume_excess_f``).
 
 
 Reading a cold-supply probe

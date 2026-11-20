@@ -254,51 +254,61 @@ class TankParams:
     #: (2026-11-02, the installation's fitted parameters, the lower
     #: element's minutes replayed in its layer), and the lower is kept.
     #: Those figures are the layer's heat turned over; the upper
-    #: element's now rises as a plume (``upper_plume_gpm``).
+    #: element's now rises as a plume (``upper_plume_excess_f``).
     upper_element_height: float = field(
         default=0.72, metadata=_p(DEFAULT, "fraction")
     )
     lower_element_height: float = field(
         default=0.15, metadata=_p(DEFAULT, "fraction")
     )
-    #: The water the upper element's plume carries up, gal/min
-    #: (``physics.stratified.rise``): the water it heats rises to where
-    #: the column is as warm, and the water between sinks. 0 puts the
-    #: heat in the element's layer, which turns over into every cooler
-    #: layer above it, as the lower element's always does.
+    #: How much warmer than the warmest water above the element the
+    #: upper element's plume reaches the top, °F
+    #: (``physics.stratified.plume_gal``, ``rise``). The plume carries
+    #: as much water as that leaves it, and rises to where the column is
+    #: as warm while the water between sinks: over a zone above the
+    #: element as warm throughout, a few gallons a minute that fill it
+    #: from the top, and under a warmer top, after a draw has left the
+    #: water at the element cold, a thin hot plume that heats the top
+    #: first. 0 puts the heat in the element's
+    #: layer, which turns over into every cooler layer above it, as the
+    #: lower element's always does.
+    #:
+    #: The record has it so: over its draw-free upper-element runs of 4
+    #: to 20 min from 2026-01-01, the measured element heat over the
+    #: upper probe's rise is about 19 gal on runs from 115 °F or more,
+    #: whether 5 or 11 min long, about the zone above the element, and
+    #: 9 to 14 gal
+    #: on the short runs from under 112 °F, in the same mode with the
+    #: compressor on in both.
     #:
     #: Fitted by hand on the record's 36 upper-element runs of 2 min or
     #: more from 2026-02-26 to 2026-11-15, each walked from its replayed
     #: layers with the record's heating, draws and circulation, no
     #: correction after its start, through 30 minutes after it (the
-    #: installation's fitted parameters, 2026-11-18). The upper probe:
+    #: installation's fitted parameters, 2026-11-19). The upper probe:
     #:
-    #: ===========  =========  ==========  ===========  ============
-    #: gal/min      all 36     mixed (14)  strat. (16)  cold (6)
-    #: ===========  =========  ==========  ===========  ============
-    #: 0 (pooled)   7.84       3.91        8.08         12.62
-    #: 1            6.30       4.21        6.33         9.47
-    #: 2            6.97       3.68        7.15         11.10
-    #: 3            7.23       3.59        7.46         11.62
-    #: ===========  =========  ==========  ===========  ============
+    #: ==============  ======  ==========  ===========  ========
+    #: plume           all 36  mixed (14)  strat. (16)  cold (6)
+    #: ==============  ======  ==========  ===========  ========
+    #: none (pooled)   8.67    3.90        9.71         12.81
+    #: 2 gal/min       7.79    3.67        8.80         11.25
+    #: 5 °F            7.09    3.55        7.70         10.66
+    #: 10 °F           6.55    3.87        7.16         9.24
+    #: 15 °F           6.28    4.18        6.87         8.38
+    #: 20 °F           6.15    4.45        6.70         7.80
+    #: ==============  ======  ==========  ===========  ========
     #:
     #: °F RMS; mixed: the probes within 8 °F at the start, cold: the
-    #: upper probe under 115 °F at it, stratified: the rest. On the 14
-    #: runs with no draw the probe climbs 2.04 °F/min at 2 against the
-    #: record's 1.96 (1.55 pooled). 1 reads the stratified runs closer
-    #: but overshoots the mixed ones; 2 is no worse than pooling on any
-    #: of the three. The cold runs, most after a depleting draw, still
-    #: end 8.7 °F under the record on average (10.4 pooled), and one
-    #: probe cannot split that between the plume and the replayed
-    #: layers the run starts from.
+    #: upper probe under 115 °F at it, stratified: the rest. 10 is the
+    #: most that reads the mixed runs no worse than pooling; on the runs
+    #: with no draw the probe climbs 2.24 °F/min at it against the
+    #: record's 2.10 (1.48 pooled). The cold runs still peak 7.1 °F
+    #: under the record on average (10.4 pooled).
     #: The record's 10 lower-element runs from 2026-02-02 read closer
-    #: pooled (at 2, 09-20's run ended with the upper probe 5.6 °F over
-    #: the record and the lower 5.5 under, against 2.2 and 1.3 under),
-    #: so the lower element keeps its layer. After a stop, the 17 draw-free runs coast the probe a
-    #: mean 1.47 °F; the walk 1.89 pooled and 2.30 at 2.
-    upper_plume_gpm: float = field(
-        default=2.0, metadata=_p(FITTED, "gal/min")
-    )
+    #: pooled (a plume of 2 gal/min ended 09-20's run with the upper
+    #: probe 5.6 °F over the record and the lower 5.5 under, against 2.2
+    #: and 1.3 under), so the lower element keeps its layer.
+    upper_plume_excess_f: float = field(default=10.0, metadata=_p(FITTED, "°F"))
     #: The span of the tank the condenser coil wraps, from the bottom.
     #: A prior; fitted on stratified climbs.
     condenser_span: tuple[float, float] = field(
